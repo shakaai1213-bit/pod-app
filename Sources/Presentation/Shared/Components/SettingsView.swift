@@ -152,10 +152,12 @@ struct SettingsView: View {
     @State private var viewModel = SettingsViewModel()
     @State private var showingProfileEditor = false
     @State private var showingAgentPicker = false
+    @State private var showingWallDisplayLauncher = false
 
     var body: some View {
         NavigationStack {
             List {
+                wallDisplaySection
                 profileSection
                 appearanceSection
                 notificationsSection
@@ -169,6 +171,47 @@ struct SettingsView: View {
             .listStyle(.insetGrouped)
             .navigationTitle("Settings")
             .preferredColorScheme(colorScheme)
+            .sheet(isPresented: $showingWallDisplayLauncher) {
+                WallDisplayLauncherView()
+            }
+        }
+    }
+
+    // MARK: - Wall Display Section
+
+    private var wallDisplaySection: some View {
+        Section {
+            Button {
+                showingWallDisplayLauncher = true
+            } label: {
+                HStack(spacing: Theme.sm) {
+                    Image(systemName: "rectangle.on.rectangle.angled")
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundStyle(AppColors.accentElectric)
+                        .frame(width: 32, height: 32)
+                        .background(AppColors.accentElectric.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Ambient Wall Display")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(AppColors.textPrimary)
+                        Text("Full-screen team status for iPad")
+                            .font(.system(size: 12))
+                            .foregroundStyle(AppColors.textSecondary)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(AppColors.textTertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        } header: {
+            Text("iPad Display")
         }
     }
 
