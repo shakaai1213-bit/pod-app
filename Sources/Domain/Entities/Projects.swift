@@ -1,6 +1,14 @@
 import Foundation
 import SwiftUI
 
+// MARK: - Team Member
+
+struct TeamMember: Identifiable, Codable, Hashable {
+    let id: UUID
+    let name: String
+    let avatarColor: String?
+}
+
 // MARK: - Project
 
 struct Project: Identifiable {

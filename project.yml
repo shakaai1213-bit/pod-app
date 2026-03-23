@@ -45,3 +45,4 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: ""
+        SWIFT_STRICT_CONCURRENCY: minimal

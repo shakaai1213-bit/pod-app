@@ -66,6 +66,8 @@
 		EE295B15C305769AAB154AFE /* StandardDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3853FCF809EDAFB9AE5C0021 /* StandardDetailView.swift */; };
 		EEB7FD53570A06DB48B7954B /* Chat.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC020A48B04971EAC26F9937 /* Chat.swift */; };
 		F2BA10B64E34BFE3E8114D23 /* AgentDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 952F2ED4468BC7A6FAAEF442 /* AgentDetailSheet.swift */; };
+		F745CD9C2F7202C7003082F9 /* AppTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = F745CD9B2F7202C6003082F9 /* AppTab.swift */; };
+		F745CD9E2F7202CA003082F9 /* Navigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F745CD9D2F7202CA003082F9 /* Navigation.swift */; };
 		F9774DEACCFE1CAE257BAB9E /* AgentStatusCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7F5808B0A89E2CE05779BF4 /* AgentStatusCard.swift */; };
 		FB8DA55BA89EED1C1CA9FC8D /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A729C35216CFE6E3C3B8A5C5 /* ContentView.swift */; };
 		FDE7B9465CE4220D636B7042 /* WallDisplayViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F4CCB4395C49C6788871A98 /* WallDisplayViewModel.swift */; };
@@ -134,6 +136,8 @@
 		ED6986244E7F194490495D69 /* AvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarView.swift; sourceTree = "<group>"; };
 		F5D15A077B49CD21B9DDADD5 /* StandardEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandardEditorView.swift; sourceTree = "<group>"; };
 		F73FE194ED17E1FF892B715D /* DashboardModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardModels.swift; sourceTree = "<group>"; };
+		F745CD9B2F7202C6003082F9 /* AppTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTab.swift; sourceTree = "<group>"; };
+		F745CD9D2F7202CA003082F9 /* Navigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Navigation.swift; sourceTree = "<group>"; };
 		F92E1097762048180C6B3C9E /* KnowledgeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeViewModel.swift; sourceTree = "<group>"; };
 		FC020A48B04971EAC26F9937 /* Chat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Chat.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -403,6 +407,8 @@
 				52704E1BE41BEF8E97D4B80A /* Info.plist */,
 				4CC5A89E0995E0ECB8ABF610 /* podApp.swift */,
 				46D84285095F4775A6C5813D /* Intents */,
+				F745CD9B2F7202C6003082F9 /* AppTab.swift */,
+				F745CD9D2F7202CA003082F9 /* Navigation.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -577,6 +583,7 @@
 				99EA3523D26347EF51CBB81E /* PersistenceController.swift in Sources */,
 				EC8129D43972E4CE42578BC1 /* PriorityBadge.swift in Sources */,
 				1A5E2C9725EF8D386ABFBE57 /* Projects.swift in Sources */,
+				F745CD9C2F7202C7003082F9 /* AppTab.swift in Sources */,
 				CF8F936E3B4CD83149F70242 /* ProjectsView.swift in Sources */,
 				B31EFEBF84FC7892D2D4F490 /* ProjectsViewModel.swift in Sources */,
 				638892369CE763D406891FA7 /* PushNotificationService.swift in Sources */,
@@ -586,6 +593,7 @@
 				EE295B15C305769AAB154AFE /* StandardDetailView.swift in Sources */,
 				06AF85E590D1677BF0CA067C /* StandardEditorView.swift in Sources */,
 				283E5B81FDD5BEDF1B7E6B17 /* StandardRepository.swift in Sources */,
+				F745CD9E2F7202CA003082F9 /* Navigation.swift in Sources */,
 				1CE5ECB5B90CBAEBF1759980 /* StatusBadge.swift in Sources */,
 				7D73F19AA5F1A62E35E17CAC /* SwiftDataModels.swift in Sources */,
 				CBD4F56F27B316E7080C5790 /* TaskCardView.swift in Sources */,
@@ -689,7 +697,6 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "";
-				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Sources/App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -698,6 +705,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.orcamc.pod;
 				PRODUCT_NAME = pod;
 				SDKROOT = iphoneos;
+				SWIFT_STRICT_CONCURRENCY = minimal;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
@@ -781,7 +789,6 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "";
-				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Sources/App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -790,6 +797,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.orcamc.pod;
 				PRODUCT_NAME = pod;
 				SDKROOT = iphoneos;
+				SWIFT_STRICT_CONCURRENCY = minimal;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;

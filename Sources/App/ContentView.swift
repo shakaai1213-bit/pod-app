@@ -38,31 +38,31 @@ struct ContentView: View {
                 .tabItem {
                     Label(AppTab.dashboard.title, systemImage: AppTab.dashboard.icon)
                 }
-                .tag(AppTab.dashboard.rawValue)
+                .tag(AppTab.dashboard)
 
             ProjectsView()
                 .tabItem {
                     Label(AppTab.projects.title, systemImage: AppTab.projects.icon)
                 }
-                .tag(AppTab.projects.rawValue)
+                .tag(AppTab.projects)
 
             ChatView()
                 .tabItem {
                     Label(AppTab.chat.title, systemImage: AppTab.chat.icon)
                 }
-                .tag(AppTab.chat.rawValue)
+                .tag(AppTab.chat)
 
             KnowledgeView()
                 .tabItem {
                     Label(AppTab.knowledge.title, systemImage: AppTab.knowledge.icon)
                 }
-                .tag(AppTab.knowledge.rawValue)
+                .tag(AppTab.knowledge)
 
             AgentsView()
                 .tabItem {
                     Label(AppTab.agents.title, systemImage: AppTab.agents.icon)
                 }
-                .tag(AppTab.agents.rawValue)
+                .tag(AppTab.agents)
         }
         .tint(AppTheme.primaryAccent)
     }
