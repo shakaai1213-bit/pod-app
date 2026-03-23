@@ -1,0 +1,44 @@
+name: podWidgetExtension
+options:
+  bundleIdPrefix: com.orcamc.pod
+  deploymentTarget:
+    iOS: "17.0"
+  xcodeVersion: "15.0"
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "5.9"
+
+targets:
+  podWidgetExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: .
+        excludes:
+          - "*.yml"
+          - "*.xcodeproj"
+          - "*.xcworkspace"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.orcamc.pod.widget
+        INFOPLIST_KEY_CFBundleDisplayName: "pod Widgets"
+        INFOPLIST_KEY_NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+        SKIP_INSTALL: YES
+        ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME: WidgetBackground
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/Frameworks"
+          - "@executable_path/../../Frameworks"
+    entitlements:
+      path: podWidgetExtension.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.orcamc.pod
