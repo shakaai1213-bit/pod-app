@@ -9,7 +9,7 @@ final class ProjectsViewModel {
     // MARK: - Published State
 
     var boardGroups: [BoardGroup] = []
-    var myTasks: [Task] = []
+    var myTasks: [ProjectTask] = []
     var selectedBoard: Board?
     var isLoading: Bool = false
 
@@ -36,7 +36,7 @@ final class ProjectsViewModel {
 
     // MARK: - My Tasks Sorting
 
-    var sortedMyTasks: [Task] {
+    var sortedMyTasks: [ProjectTask] {
         let now = Date()
         let calendar = Calendar.current
 
@@ -81,7 +81,7 @@ final class ProjectsViewModel {
 
     func loadTasks(boardId: UUID) async {
         do {
-            let tasks: [Task] = try await apiClient.get(path: "/api/v1/boards/\(boardId)/tasks")
+            let tasks: [ProjectTask] = try await apiClient.get(path: "/api/v1/boards/\(boardId)/tasks")
             await MainActor.run {
                 if let idx = self.boardGroups.indices.flatMap({ self.boardGroups[$0].boards.indices }).first(where: { self.boardGroups.flatMap(\.boards)[safe: $0]?.id == boardId }) {
                     // Update tasks on board
@@ -94,7 +94,7 @@ final class ProjectsViewModel {
 
     func loadMyTasks() async {
         do {
-            let tasks: [Task] = try await apiClient.get(path: "/api/v1/tasks/me")
+            let tasks: [ProjectTask] = try await apiClient.get(path: "/api/v1/tasks/me")
             await MainActor.run { self.myTasks = tasks }
         } catch {
             await MainActor.run { self.myTasks = Self.mockTasks }
@@ -106,7 +106,7 @@ final class ProjectsViewModel {
     func createTask(boardId: UUID, title: String, description: String) async {
         do {
             let body = CreateTaskRequest(title: title, description: description)
-            let task: Task = try await apiClient.post(path: "/api/v1/boards/\(boardId)/tasks", body: body)
+            let task: ProjectTask = try await apiClient.post(path: "/api/v1/boards/\(boardId)/tasks", body: body)
             await MainActor.run {
                 self.myTasks.append(task)
             }
@@ -115,15 +115,15 @@ final class ProjectsViewModel {
         }
     }
 
-    func updateTask(_ task: Task) async {
+    func updateTask(_ task: ProjectTask) async {
         do {
-            let updated: Task = try await apiClient.put(
+            let updated: ProjectTask = try await apiClient.put(
                 path: "/api/v1/tasks/\(task.id)",
                 body: task
             )
             await MainActor.run {
-                if let idx = self.myTasks.indices.first(where: { self.myTasks[idx].id == task.id }) {
-                    self.myTasks[idx] = updated
+                if let index = self.myTasks.firstIndex(where: { $0.id == task.id }) {
+                    self.myTasks[index] = updated
                 }
             }
         } catch {
@@ -134,7 +134,7 @@ final class ProjectsViewModel {
     func moveTask(_ taskId: UUID, toStage: ProjectStage) async {
         do {
             let body = MoveTaskRequest(stage: toStage.rawValue)
-            let _: Task = try await apiClient.patch(
+            let _: ProjectTask = try await apiClient.patch(
                 path: "/api/v1/tasks/\(taskId)/move",
                 body: body
             )
@@ -156,7 +156,7 @@ final class ProjectsViewModel {
 
     func archiveTask(_ taskId: UUID) async {
         do {
-            try await apiClient.post(path: "/api/v1/tasks/\(taskId)/archive", body: EmptyBody())
+            try await apiClient.postVoid(path: "/api/v1/tasks/\(taskId)/archive", body: EmptyBody())
         } catch {
             // Handle error
         }
@@ -178,6 +178,14 @@ struct BoardGroup: Identifiable, Codable {
     var taskCount: Int
     var completedTaskCount: Int
 
+    init(id: UUID, name: String, boards: [Board], taskCount: Int, completedTaskCount: Int) {
+        self.id = id
+        self.name = name
+        self.boards = boards
+        self.taskCount = taskCount
+        self.completedTaskCount = completedTaskCount
+    }
+
     var completionPercentage: Double {
         guard taskCount > 0 else { return 0 }
         return Double(completedTaskCount) / Double(taskCount) * 100
@@ -186,7 +194,7 @@ struct BoardGroup: Identifiable, Codable {
 
 // MARK: - Board
 
-struct Board: Identifiable, Codable {
+struct Board: Identifiable, Codable, Hashable {
     let id: UUID
     var name: String
     var description: String
@@ -194,6 +202,16 @@ struct Board: Identifiable, Codable {
     var taskCount: Int
     var completedTaskCount: Int
     var lastActivity: Date
+
+    init(id: UUID, name: String, description: String, stageCounts: [ProjectStage: Int], taskCount: Int, completedTaskCount: Int, lastActivity: Date) {
+        self.id = id
+        self.name = name
+        self.description = description
+        self.stageCounts = stageCounts
+        self.taskCount = taskCount
+        self.completedTaskCount = completedTaskCount
+        self.lastActivity = lastActivity
+    }
 
     var completionPercentage: Double {
         guard taskCount > 0 else { return 0 }
@@ -225,17 +243,6 @@ struct Board: Identifiable, Codable {
         try container.encode(completedTaskCount, forKey: .completedTaskCount)
         try container.encode(lastActivity, forKey: .lastActivity)
     }
-}
-
-// MARK: - TeamMember
-
-struct TeamMember: Identifiable, Codable, Hashable {
-    let id: UUID
-    let name: String
-    let avatarColor: String
-
-    static func == (lhs: TeamMember, rhs: TeamMember) -> Bool { lhs.id == rhs.id }
-    func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
 
 // MARK: - Request / Response Types
@@ -295,8 +302,8 @@ extension ProjectsViewModel {
         ),
     ]
 
-    static let mockTasks: [Task] = [
-        Task(
+    static let mockTasks: [ProjectTask] = [
+        ProjectTask(
             id: UUID(),
             projectId: UUID(),
             title: "Implement JWT refresh token flow",
@@ -308,7 +315,7 @@ extension ProjectsViewModel {
             priority: .high,
             tags: ["security", "backend"]
         ),
-        Task(
+        ProjectTask(
             id: UUID(),
             projectId: UUID(),
             title: "Fix iOS push notification badge count",
@@ -320,7 +327,7 @@ extension ProjectsViewModel {
             priority: .critical,
             tags: ["ios", "bug"]
         ),
-        Task(
+        ProjectTask(
             id: UUID(),
             projectId: UUID(),
             title: "Add rate limiting to message API",
@@ -332,7 +339,7 @@ extension ProjectsViewModel {
             priority: .medium,
             tags: ["api", "performance"]
         ),
-        Task(
+        ProjectTask(
             id: UUID(),
             projectId: UUID(),
             title: "Design onboarding flow screens",
@@ -344,7 +351,7 @@ extension ProjectsViewModel {
             priority: .low,
             tags: ["design", "ux"]
         ),
-        Task(
+        ProjectTask(
             id: UUID(),
             projectId: UUID(),
             title: "Write unit tests for auth module",

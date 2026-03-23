@@ -4,8 +4,8 @@ import SwiftUI
 
 extension Color {
     /// Initialize a Color from a hex string (e.g., "3B82F6" or "#3B82F6")
-    init(hex: String) {
-        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+    init(hexString: String) {
+        let hex = hexString.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
         var int: UInt64 = 0
         Scanner(string: hex).scanHexInt64(&int)
         let a, r, g, b: UInt64
@@ -34,28 +34,28 @@ extension Color {
 struct AppColors {
     // MARK: - Backgrounds
 
-    static let backgroundPrimary   = Color(hex: "0A0A0F")
-    static let backgroundSecondary = Color(hex: "141419")
-    static let backgroundTertiary  = Color(hex: "1C1C24")
+    static let backgroundPrimary   = Color(hexString: "0A0A0F")
+    static let backgroundSecondary = Color(hexString: "141419")
+    static let backgroundTertiary  = Color(hexString: "1C1C24")
 
     // MARK: - Accents
 
-    static let accentElectric = Color(hex: "3B82F6")
-    static let accentSuccess  = Color(hex: "22C55E")
-    static let accentWarning  = Color(hex: "F59E0B")
-    static let accentDanger   = Color(hex: "EF4444")
-    static let accentAgent    = Color(hex: "A855F7")
-    static let accentCaptain   = Color(hex: "F97316")
+    static let accentElectric = Color(hexString: "3B82F6")
+    static let accentSuccess  = Color(hexString: "22C55E")
+    static let accentWarning  = Color(hexString: "F59E0B")
+    static let accentDanger   = Color(hexString: "EF4444")
+    static let accentAgent    = Color(hexString: "A855F7")
+    static let accentCaptain   = Color(hexString: "F97316")
 
     // MARK: - Text
 
-    static let textPrimary   = Color(hex: "F8FAFC")
-    static let textSecondary = Color(hex: "94A3B8")
-    static let textTertiary  = Color(hex: "475569")
-    static let textMuted      = Color(hex: "2D3748")
+    static let textPrimary   = Color(hexString: "F8FAFC")
+    static let textSecondary = Color(hexString: "94A3B8")
+    static let textTertiary  = Color(hexString: "475569")
+    static let textMuted      = Color(hexString: "2D3748")
 
     // MARK: - Borders
 
-    static let border       = Color(hex: "1E293B")
-    static let borderActive = Color(hex: "334155")
+    static let border       = Color(hexString: "1E293B")
+    static let borderActive = Color(hexString: "334155")
 }

@@ -120,7 +120,7 @@ struct KnowledgeView: View {
                     count: viewModel.categoryCounts[category] ?? 0,
                     isSelected: viewModel.selectedCategory == category
                 ) {
-                    withAnimation(Theme.Animation.easeInOut) {
+                    withAnimation(Animation.easeInOut) {
                         if viewModel.selectedCategory == category {
                             viewModel.selectedCategory = nil
                         } else {
@@ -226,7 +226,7 @@ struct KnowledgeView: View {
                 .frame(width: 56, height: 56)
                 .background(AppColors.accentElectric)
                 .clipShape(Circle())
-                .podShadow(Theme.Shadow.medium)
+                .podShadow(Theme.ShadowConfig.medium)
         }
         .padding(.trailing, Theme.md)
         .padding(.bottom, Theme.md)
@@ -277,14 +277,14 @@ private struct CategoryCard: View {
                 HStack {
                     Image(systemName: category.icon)
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(isSelected ? Color(hex: category.color) : AppColors.textSecondary)
+                        .foregroundColor(isSelected ? Color(hexString: category.color) : AppColors.textSecondary)
 
                     Spacer()
 
                     Text("\(count)")
                         .font(.caption)
                         .fontWeight(.semibold)
-                        .foregroundColor(isSelected ? Color(hex: category.color) : AppColors.textTertiary)
+                        .foregroundColor(isSelected ? Color(hexString: category.color) : AppColors.textTertiary)
                 }
 
                 Text(category.displayName)
@@ -296,11 +296,11 @@ private struct CategoryCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: Theme.radiusMedium)
-                    .fill(isSelected ? Color(hex: category.color).opacity(0.15) : AppColors.backgroundSecondary)
+                    .fill(isSelected ? Color(hexString: category.color).opacity(0.15) : AppColors.backgroundSecondary)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.radiusMedium)
-                    .stroke(isSelected ? Color(hex: category.color) : AppColors.border, lineWidth: 1)
+                    .stroke(isSelected ? Color(hexString: category.color) : AppColors.border, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -319,7 +319,7 @@ private struct RecentStandardCard: View {
                 HStack(spacing: Theme.xxs) {
                     Image(systemName: standard.category.icon)
                         .font(.system(size: 10))
-                        .foregroundColor(Color(hex: standard.category.color))
+                        .foregroundColor(Color(hexString: standard.category.color))
 
                     Text(standard.category.displayName)
                         .font(.caption2)
@@ -358,7 +358,7 @@ private struct FavoriteStandardCard: View {
                 HStack(spacing: Theme.xxs) {
                     Image(systemName: standard.category.icon)
                         .font(.system(size: 10))
-                        .foregroundColor(Color(hex: standard.category.color))
+                        .foregroundColor(Color(hexString: standard.category.color))
 
                     Text(standard.category.displayName)
                         .font(.caption2)
@@ -403,7 +403,7 @@ struct StandardRowView: View {
             HStack(spacing: Theme.sm) {
                 // Category indicator
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(Color(hex: standard.category.color))
+                    .fill(Color(hexString: standard.category.color))
                     .frame(width: 4, height: 44)
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -488,10 +488,10 @@ struct CategoryBadge: View {
                 .font(.caption2)
                 .fontWeight(.semibold)
         }
-        .foregroundColor(Color(hex: category.color))
+        .foregroundColor(Color(hexString: category.color))
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
-        .background(Color(hex: category.color).opacity(0.15))
+        .background(Color(hexString: category.color).opacity(0.15))
         .clipShape(Capsule())
     }
 }

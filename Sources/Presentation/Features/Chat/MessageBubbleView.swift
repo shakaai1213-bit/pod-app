@@ -17,8 +17,8 @@ struct MessageBubbleView: View {
         AppColors.accentAgent,
         AppColors.accentSuccess,
         AppColors.accentCaptain,
-        Color(hex: "06B6D4"),
-        Color(hex: "EC4899"),
+        Color(hexString: "06B6D4"),
+        Color(hexString: "EC4899"),
     ]
 
     private var avatarColor: Color {
@@ -606,8 +606,8 @@ struct CodeBlockView: View {
     VStack(spacing: 0) {
         MessageBubbleView(
             message: Message(
-                channelId: "ch-general",
-                authorId: "user-1",
+                channelId: UUID(),
+                authorId: UUID(),
                 authorName: "Alex Chen",
                 authorRole: .human,
                 content: "Hey team! **Bold** and *italic* text, with `inline code`.",
@@ -621,8 +621,8 @@ struct CodeBlockView: View {
 
         MessageBubbleView(
             message: Message(
-                channelId: "ch-general",
-                authorId: "current-user",
+                channelId: UUID(),
+                authorId: UUID(),
                 authorName: "You",
                 authorRole: .human,
                 content: "Got it! I'll push the fix now.",
@@ -636,8 +636,8 @@ struct CodeBlockView: View {
 
         MessageBubbleView(
             message: Message(
-                channelId: "ch-agents",
-                authorId: "agent-maui",
+                channelId: UUID(),
+                authorId: UUID(),
                 authorName: "Maui",
                 authorRole: .agent,
                 content: "Here's a code snippet:\n\n```swift\nlet result = await fetchData()\nprint(result)\n```",

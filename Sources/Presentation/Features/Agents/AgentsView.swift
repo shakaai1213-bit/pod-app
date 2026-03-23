@@ -36,7 +36,7 @@ struct AgentsView: View {
                     onViewLogs: { showingLogStream = agent },
                     onStatusChanged: { newStatus in
                         Task {
-                            await viewModel.updateAgentStatus(agent.id, newStatus)
+                            await viewModel.updateAgentState(agent.id, newStatus)
                         }
                     },
                     onPause: {
@@ -52,7 +52,7 @@ struct AgentsView: View {
             }
             .task {
                 await viewModel.loadAgents()
-                viewModel.subscribeToAgentStatus()
+                viewModel.subscribeToAgentState()
             }
             .onDisappear {
                 viewModel.disconnectSSE()
@@ -154,7 +154,7 @@ struct AgentsView: View {
             } else if filtered.isEmpty {
                 emptySearchView
             } else {
-                ForEach(AgentStatus.displayOrder, id: \.self) { status in
+                ForEach(AgentState.displayOrder, id: \.self) { status in
                     if let agents = grouped[status], !agents.isEmpty {
                         statusSection(status: status, agents: agents)
                     }
@@ -163,7 +163,7 @@ struct AgentsView: View {
         }
     }
 
-    private func statusSection(status: AgentStatus, agents: [Agent]) -> some View {
+    private func statusSection(status: AgentState, agents: [Agent]) -> some View {
         VStack(alignment: .leading, spacing: Theme.xs) {
             statusHeader(status)
 
@@ -183,7 +183,7 @@ struct AgentsView: View {
         }
     }
 
-    private func statusHeader(_ status: AgentStatus) -> some View {
+    private func statusHeader(_ status: AgentState) -> some View {
         HStack(spacing: Theme.xs) {
             Circle()
                 .fill(status.color)
@@ -202,7 +202,7 @@ struct AgentsView: View {
         }
     }
 
-    private func agentsForStatus(_ status: AgentStatus) -> [Agent] {
+    private func agentsForStatus(_ status: AgentState) -> [Agent] {
         viewModel.agents.filter { $0.status == status }
     }
 
@@ -273,7 +273,7 @@ struct AgentsView: View {
 
 // MARK: - Agent Status Extension
 
-extension AgentStatus {
+extension AgentState {
     var color: Color {
         switch self {
         case .online: return AppColors.accentSuccess
@@ -285,7 +285,7 @@ extension AgentStatus {
     }
 
     /// Display order for section grouping
-    static var displayOrder: [AgentStatus] {
+    static var displayOrder: [AgentState] {
         [.online, .busy, .idle, .error, .offline]
     }
 }
@@ -355,7 +355,7 @@ struct AgentRow: View {
 
     private func rowContent() -> some View {
         HStack(spacing: Theme.sm) {
-            agentAvatar(size: 44)
+            AgentAvatar(agent: agent, size: 44)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(agent.name)
@@ -382,7 +382,7 @@ struct AgentRow: View {
                     .fill(agent.status.color)
                     .frame(width: 8, height: 8)
 
-                Text(agent.lastActive.relativeFormatted)
+                Text((agent.lastActivity ?? Date()).relativeFormatted)
                     .podTextStyle(.caption, color: AppColors.textTertiary)
                     .lineLimit(1)
             }
@@ -404,11 +404,11 @@ private struct AgentAvatar: View {
     var body: some View {
         ZStack {
             Circle()
-                .fill(Color(hex: agent.avatarColor).opacity(0.2))
+                .fill(Color(hexString: agent.avatarColor ?? "#6B46C1").opacity(0.2))
                 .frame(width: size, height: size)
 
             Circle()
-                .fill(Color(hex: agent.avatarColor))
+                .fill(Color(hexString: agent.avatarColor ?? "#6B46C1"))
                 .frame(width: size, height: size)
 
             Text(agent.name.prefix(1).uppercased())

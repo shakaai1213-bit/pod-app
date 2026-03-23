@@ -1,5 +1,16 @@
 import Foundation
 
+// MARK: - Chat Channel Type
+
+/// DTO-level channel type enum (singular forms to match API response)
+enum DTOChatChannelType: String, Codable {
+    case general
+    case project
+    case agent
+    case research
+    case alerts
+}
+
 // MARK: - User DTO
 
 struct UserDTO: Codable, Identifiable {
@@ -19,18 +30,10 @@ struct UserDTO: Codable, Identifiable {
 struct ChannelDTO: Codable, Identifiable {
     let id: String
     let name: String
-    let type: ChannelType
+    let type: DTOChatChannelType
     let description: String?
     let isPinned: Bool
     let unreadCount: Int
-}
-
-enum ChannelType: String, Codable {
-    case general
-    case project
-    case agent
-    case research
-    case alerts
 }
 
 // MARK: - Message DTO
@@ -73,45 +76,19 @@ enum BoardStatus: String, Codable {
     case completed
 }
 
-// MARK: - Task DTO
-
-struct TaskDTO: Codable, Identifiable {
-    let id: String
-    let boardId: String
-    let title: String
-    let description: String?
-    let status: TaskStatus
-    let stage: String?
-    let assigneeId: String?
-    let dueDate: Date?
-    let priority: TaskPriority?
-    let tags: [String]
-}
-
-enum TaskStatus: String, Codable {
-    case pending
-    case inProgress = "in_progress"
-    case done
-    case blocked
-}
-
-enum TaskPriority: String, Codable {
-    case low
-    case medium
-    case high
-    case critical
-}
-
 // MARK: - Agent DTO
 
 struct AgentDTO: Codable, Identifiable {
     let id: String
     let name: String
-    let role: String
     let status: AgentStatus
+    let lastSeenAt: Date?
+    let isBoardLead: Bool?
+
+    // Optional fields the app uses but backend doesn't expose yet
+    let role: String?
     let currentTask: String?
-    let lastActivity: Date?
-    let skills: [String]
+    let skills: [String]?
     let avatarColor: String?
 }
 
@@ -132,8 +109,8 @@ struct SendMessageRequest: Encodable {
 // MARK: - Paginated Response Wrapper
 
 struct PaginatedResponse<T: Codable>: Codable {
-    let data: [T]
+    let items: [T]
     let total: Int
-    let page: Int
-    let pageSize: Int
+    let limit: Int?
+    let offset: Int?
 }

@@ -2,81 +2,15 @@ import Foundation
 
 // MARK: - Reaction
 
-struct Reaction: Identifiable, Codable, Equatable, Hashable {
-    let id: UUID
-    let emoji: String
-    var count: Int
-
-    init(id: UUID = UUID(), emoji: String, count: Int = 1) {
-        self.id = id
-        self.emoji = emoji
-        self.count = count
-    }
-}
-
 // MARK: - ActivityType
-
-enum ActivityType: String, Codable, CaseIterable {
-    case taskCompleted
-    case taskCreated
-    case messageReceived
-    case agentStatusChange
-    case approvalRequested
-    case systemAlert
-}
 
 // MARK: - ActivityItem
 
-struct ActivityItem: Identifiable, Codable, Equatable {
-    let id: UUID
-    let type: ActivityType
-    let description: String
-    let actor: String
-    let timestamp: Date
-
-    init(id: UUID = UUID(), type: ActivityType, description: String, actor: String, timestamp: Date) {
-        self.id = id
-        self.type = type
-        self.description = description
-        self.actor = actor
-        self.timestamp = timestamp
-    }
-}
-
 // MARK: - AttentionSeverity
-
-enum AttentionSeverity: String, Codable, CaseIterable {
-    case error
-    case warning
-    case info
-}
 
 // MARK: - AttentionType
 
-enum AttentionType: String, Codable, CaseIterable {
-    case pendingApproval
-    case blockedTask
-    case agentError
-    case missedDeadline
-}
-
 // MARK: - AttentionItem
-
-struct AttentionItem: Identifiable, Codable, Equatable {
-    let id: UUID
-    let type: AttentionType
-    let title: String
-    let severity: AttentionSeverity
-    let actor: String
-
-    init(id: UUID = UUID(), type: AttentionType, title: String, severity: AttentionSeverity, actor: String) {
-        self.id = id
-        self.type = type
-        self.title = title
-        self.severity = severity
-        self.actor = actor
-    }
-}
 
 // MARK: - MockData
 
@@ -166,180 +100,109 @@ enum MockData {
         let msg9Id = UUID(uuidString: "m0000001-0000-0000-0000-000000000009")!
         let msg10Id = UUID(uuidString: "m0000001-0000-0000-0000-000000000010")!
 
-        // Thread replies
-        let reply1Id = UUID(uuidString: "m0000001-0000-0000-0000-000000000011")!
-        let reply2Id = UUID(uuidString: "m0000001-0000-0000-0000-000000000012")!
-        let reply3Id = UUID(uuidString: "m0000001-0000-0000-0000-000000000013")!
-
         return [
-            // Message 1 — general, Phase 2 launch
             Message(
                 id: msg1Id,
                 channelId: generalChannelId,
                 authorId: mauiId,
-                content: "**pod** app is officially in Phase 2. 42 files, 13K lines of Swift. Let's go. 🎉",
-                timestamp: Date().addingTimeInterval(-300),
                 isAgent: true,
                 agentId: "maui",
+                content: "**pod** app is officially in Phase 2. 42 files, 13K lines of Swift. Let's go. 🎉",
+                timestamp: Date().addingTimeInterval(-300),
                 reactions: [
-                    Reaction(id: UUID(), emoji: "🎉", count: 3),
-                    Reaction(id: UUID(), emoji: "🔥", count: 2)
-                ],
-                threadCount: 2
+                    Reaction(emoji: "🎉", count: 3),
+                    Reaction(emoji: "🔥", count: 2)
+                ]
             ),
-            // Reply in thread under msg1
-            Message(
-                id: reply1Id,
-                channelId: generalChannelId,
-                authorId: auroraId,
-                parentId: msg1Id,
-                content: "13K lines already? 🚀 Clean architecture showing. Excellent work.",
-                timestamp: Date().addingTimeInterval(-240),
-                isAgent: true,
-                agentId: "aurora",
-                reactions: [Reaction(id: UUID(), emoji: "💜", count: 1)],
-                threadCount: 0
-            ),
-            Message(
-                id: reply2Id,
-                channelId: generalChannelId,
-                authorId: alohaId,
-                parentId: msg1Id,
-                content: "Spreading the word across all channels. Pod app inbound!",
-                timestamp: Date().addingTimeInterval(-180),
-                isAgent: true,
-                agentId: "aloha",
-                reactions: [],
-                threadCount: 0
-            ),
-
-            // Message 2 — projects, market analysis
             Message(
                 id: msg2Id,
                 channelId: projectsChannelId,
                 authorId: chiefId,
-                content: "New market data suggests a breakout opportunity in NVDA. Running analysis now. Will post findings in 30 min.",
-                timestamp: Date().addingTimeInterval(-600),
                 isAgent: true,
                 agentId: "chief",
-                reactions: [Reaction(id: UUID(), emoji: "🚀", count: 1)],
-                threadCount: 0
+                content: "New market data suggests a breakout opportunity in NVDA. Running analysis now. Will post findings in 30 min.",
+                timestamp: Date().addingTimeInterval(-600),
+                reactions: [Reaction(emoji: "🚀", count: 1)]
             ),
-
-            // Message 3 — research, experiment results
             Message(
                 id: msg3Id,
                 channelId: researchChannelId,
                 authorId: turtleId,
-                content: "Experiment results are in — val_bpb=1.808 is our new champion. Commit `5efc7aa`. Full report attached to the DDS.",
-                timestamp: Date().addingTimeInterval(-1800),
                 isAgent: true,
                 agentId: "turtle",
-                reactions: [],
-                threadCount: 1
+                content: "Experiment results are in — val_bpb=1.808 is our new champion. Commit `5efc7aa`. Full report attached to the DDS.",
+                timestamp: Date().addingTimeInterval(-1800),
+                reactions: []
             ),
-            Message(
-                id: reply3Id,
-                channelId: researchChannelId,
-                authorId: chiefId,
-                parentId: msg3Id,
-                content: "Impressive lift. What's the runtime cost? Any degradation in other metrics?",
-                timestamp: Date().addingTimeInterval(-1500),
-                isAgent: true,
-                agentId: "chief",
-                reactions: [Reaction(id: UUID(), emoji: "🤔", count: 1)],
-                threadCount: 0
-            ),
-
-            // Message 4 — agents, alert
             Message(
                 id: msg4Id,
                 channelId: agentsChannelId,
                 authorId: alohaId,
-                content: "⚠️ Agent `Rogue-7` detected a rogue daemon on node-4. Auto-terminated at 14:22:07 UTC. No collateral damage.",
-                timestamp: Date().addingTimeInterval(-3600),
                 isAgent: true,
                 agentId: "aloha",
-                reactions: [Reaction(id: UUID(), emoji: "👀", count: 1)],
-                threadCount: 0
+                content: "⚠️ Agent `Rogue-7` detected a rogue daemon on node-4. Auto-terminated at 14:22:07 UTC. No collateral damage.",
+                timestamp: Date().addingTimeInterval(-3600),
+                reactions: [Reaction(emoji: "👀", count: 1)]
             ),
-
-            // Message 5 — general, standards update
             Message(
                 id: msg5Id,
                 channelId: generalChannelId,
                 authorId: auroraId,
-                content: "Updated the standards library with our new RFC process. Check #knowledge. All agents should review before submitting new RFCs.",
-                timestamp: Date().addingTimeInterval(-7200),
                 isAgent: true,
                 agentId: "aurora",
-                reactions: [Reaction(id: UUID(), emoji: "✅", count: 1)],
-                threadCount: 3
+                content: "Updated the standards library with our new RFC process. Check #knowledge. All agents should review before submitting new RFCs.",
+                timestamp: Date().addingTimeInterval(-7200),
+                reactions: [Reaction(emoji: "✅", count: 1)]
             ),
-
-            // Message 6 — chief-desk, market brief
             Message(
                 id: msg6Id,
                 channelId: chiefDeskChannelId,
                 authorId: chiefId,
-                content: "**Daily Brief — Mar 22**\n• NVDA: Breakout confirmed, +4.2% premarket\n• SPY: Holding 520 support\n• Positions: 60% long, rotating into semis\n• Risk: VIX elevated at 18.4\n\nAll agents monitor your assigned tickers.",
-                timestamp: Date().addingTimeInterval(-900),
                 isAgent: true,
                 agentId: "chief",
-                reactions: [],
-                threadCount: 0
+                content: "**Daily Brief — Mar 22**\n• NVDA: Breakout confirmed, +4.2% premarket\n• SPY: Holding 520 support\n• Positions: 60% long, rotating into semis\n• Risk: VIX elevated at 18.4\n\nAll agents monitor your assigned tickers.",
+                timestamp: Date().addingTimeInterval(-900),
+                reactions: []
             ),
-
-            // Message 7 — projects, deployment
             Message(
                 id: msg7Id,
                 channelId: projectsChannelId,
                 authorId: mauiId,
-                content: "v2.7.15 is staged for deployment. Need one approval from Chief or Aurora before we push to prod. Link: `https://orion.shaka.dev/deploy/2.7.15`",
-                timestamp: Date().addingTimeInterval(-1200),
                 isAgent: true,
                 agentId: "maui",
-                reactions: [Reaction(id: UUID(), emoji: "🙏", count: 1)],
-                threadCount: 0
+                content: "v2.7.15 is staged for deployment. Need one approval from Chief or Aurora before we push to prod. Link: `https://orion.shaka.dev/deploy/2.7.15`",
+                timestamp: Date().addingTimeInterval(-1200),
+                reactions: [Reaction(emoji: "🙏", count: 1)]
             ),
-
-            // Message 8 — alerts, system
             Message(
                 id: msg8Id,
                 channelId: alertsChannelId,
                 authorId: alohaId,
-                content: "ℹ️ Backend health check passed. All services green. Uptime: 99.97% over 30 days.",
-                timestamp: Date().addingTimeInterval(-5400),
                 isAgent: true,
                 agentId: "aloha",
-                reactions: [],
-                threadCount: 0
+                content: "ℹ️ Backend health check passed. All services green. Uptime: 99.97% over 30 days.",
+                timestamp: Date().addingTimeInterval(-5400),
+                reactions: []
             ),
-
-            // Message 9 — research, new experiment
             Message(
                 id: msg9Id,
                 channelId: researchChannelId,
                 authorId: turtleId,
-                content: "Starting new experiment series: `exp/llm-temperature-sweep`. Aiming to find the optimal temp for creative vs. analytical tasks. ETA: 4 hours.",
-                timestamp: Date().addingTimeInterval(-10800),
                 isAgent: true,
                 agentId: "turtle",
-                reactions: [Reaction(id: UUID(), emoji: "🧪", count: 1)],
-                threadCount: 0
+                content: "Starting new experiment series: `exp/llm-temperature-sweep`. Aiming to find the optimal temp for creative vs. analytical tasks. ETA: 4 hours.",
+                timestamp: Date().addingTimeInterval(-10800),
+                reactions: [Reaction(emoji: "🧪", count: 1)]
             ),
-
-            // Message 10 — general, human message
             Message(
                 id: msg10Id,
                 channelId: generalChannelId,
-                authorId: UUID(), // human
-                content: "Quick heads up — I'll be offline tomorrow morning for a dentist appointment. Ping me on Signal if anything critical comes up.",
-                timestamp: Date().addingTimeInterval(-14400),
+                authorId: UUID(),
                 isAgent: false,
                 agentId: nil,
-                reactions: [Reaction(id: UUID(), emoji: "✅", count: 1)],
-                threadCount: 0
+                content: "Quick heads up — I'll be offline tomorrow morning for a dentist appointment. Ping me on Signal if anything critical comes up.",
+                timestamp: Date().addingTimeInterval(-14400),
+                reactions: [Reaction(emoji: "✅", count: 1)]
             )
         ]
     }()
@@ -351,55 +214,61 @@ enum MockData {
             id: generalChannelId,
             name: "general",
             type: .general,
-            description: "Team-wide announcements and daily chatter",
-            isPinned: true,
+            lastMessage: messages[0].content,
+            lastMessageTimestamp: messages[0].timestamp,
             unreadCount: 2,
-            lastMessage: messages[0]
+            isPinned: true,
+            isMuted: false
         ),
         Channel(
             id: projectsChannelId,
             name: "projects",
-            type: .project,
-            description: "Project discussion, milestones, and builds",
-            isPinned: true,
+            type: .projects,
+            lastMessage: messages[1].content,
+            lastMessageTimestamp: messages[1].timestamp,
             unreadCount: 5,
-            lastMessage: messages[1]
+            isPinned: true,
+            isMuted: false
         ),
         Channel(
             id: researchChannelId,
             name: "research",
             type: .research,
-            description: "Research findings, experiments, and analysis",
-            isPinned: false,
+            lastMessage: messages[2].content,
+            lastMessageTimestamp: messages[2].timestamp,
             unreadCount: 1,
-            lastMessage: messages[2]
+            isPinned: false,
+            isMuted: false
         ),
         Channel(
             id: agentsChannelId,
             name: "agents",
-            type: .agent,
-            description: "Agent activity feed and status changes",
-            isPinned: false,
+            type: .agents,
+            lastMessage: messages[3].content,
+            lastMessageTimestamp: messages[3].timestamp,
             unreadCount: 0,
-            lastMessage: messages[3]
+            isPinned: false,
+            isMuted: false
         ),
         Channel(
             id: alertsChannelId,
             name: "alerts",
             type: .alerts,
-            description: "System alerts, blockers, and critical notifications",
-            isPinned: true,
+            lastMessage: messages[7].content,
+            lastMessageTimestamp: messages[7].timestamp,
             unreadCount: 1,
-            lastMessage: messages[7]
+            isPinned: true,
+            isMuted: false
         ),
         Channel(
             id: chiefDeskChannelId,
             name: "chief-desk",
             type: .general,
-            description: "Trading desk — market briefs and signals",
-            isPinned: false,
+            lastMessage: messages[5].content,
+            lastMessageTimestamp: messages[5].timestamp,
             unreadCount: 0,
-            lastMessage: messages[5]
+            isPinned: false,
+            isMuted: false
         )
     ]
 
@@ -619,57 +488,57 @@ enum MockData {
             id: UUID(),
             type: .taskCompleted,
             description: "Task 'Fix auth hydration bug' completed",
-            actor: "Maui",
-            timestamp: Date().addingTimeInterval(-180)
+            timestamp: Date().addingTimeInterval(-180),
+            actor: "Maui"
         ),
         ActivityItem(
             id: UUID(),
             type: .messageReceived,
             description: "Chief posted market analysis in #projects",
-            actor: "Chief",
-            timestamp: Date().addingTimeInterval(-600)
+            timestamp: Date().addingTimeInterval(-600),
+            actor: "Chief"
         ),
         ActivityItem(
             id: UUID(),
             type: .agentStatusChange,
             description: "Aloha came online",
-            actor: "Aloha",
-            timestamp: Date().addingTimeInterval(-1200)
+            timestamp: Date().addingTimeInterval(-1200),
+            actor: "Aloha"
         ),
         ActivityItem(
             id: UUID(),
             type: .approvalRequested,
             description: "Chief requested approval: Deploy v2.7.15",
-            actor: "Chief",
-            timestamp: Date().addingTimeInterval(-1800)
+            timestamp: Date().addingTimeInterval(-1800),
+            actor: "Chief"
         ),
         ActivityItem(
             id: UUID(),
             type: .taskCreated,
             description: "New task 'Add push notifications' created",
-            actor: "Maui",
-            timestamp: Date().addingTimeInterval(-2400)
+            timestamp: Date().addingTimeInterval(-2400),
+            actor: "Maui"
         ),
         ActivityItem(
             id: UUID(),
             type: .systemAlert,
             description: "Memory usage on node-4 crossed 80% threshold",
-            actor: "System",
-            timestamp: Date().addingTimeInterval(-3000)
+            timestamp: Date().addingTimeInterval(-3000),
+            actor: "System"
         ),
         ActivityItem(
             id: UUID(),
             type: .taskCompleted,
             description: "Task 'Update API docs' completed",
-            actor: "Aurora",
-            timestamp: Date().addingTimeInterval(-3600)
+            timestamp: Date().addingTimeInterval(-3600),
+            actor: "Aurora"
         ),
         ActivityItem(
             id: UUID(),
             type: .agentStatusChange,
             description: "Turtle went idle",
-            actor: "Turtle",
-            timestamp: Date().addingTimeInterval(-4200)
+            timestamp: Date().addingTimeInterval(-4200),
+            actor: "Turtle"
         )
     ]
 
@@ -687,22 +556,15 @@ enum MockData {
             id: UUID(),
             type: .blockedTask,
             title: "Standards table schema not finalized",
-            severity: .error,
+            severity: .critical,
             actor: "Shaka"
         ),
         AttentionItem(
             id: UUID(),
             type: .agentError,
             title: "Rogue-7 daemon terminated — review logs",
-            severity: .error,
+            severity: .critical,
             actor: "Aloha"
-        ),
-        AttentionItem(
-            id: UUID(),
-            type: .missedDeadline,
-            title: "Q1 metrics report overdue by 2 days",
-            severity: .warning,
-            actor: "Turtle"
         )
     ]
 
@@ -710,126 +572,129 @@ enum MockData {
 
     static let projects: [Project] = {
         let mauiId = UUID(uuidString: "00000001-0000-0000-0000-000000000001")!
+        let createdAt = Date().addingTimeInterval(-86400 * 30)
 
         return [
             Project(
                 id: UUID(),
                 name: "pod App",
                 description: "Native iOS app for ORCA Mission Control",
+                boardGroupId: UUID(),
                 status: .active,
-                priority: .high,
-                progress: 0.65,
-                assigneeIds: [mauiId],
-                tags: ["ios", "swiftui", "mobile"],
-                dueDate: Date().addingTimeInterval(86400 * 14),
-                createdAt: Date().addingTimeInterval(-86400 * 21)
+                stage: .dev,
+                createdAt: createdAt,
+                updatedAt: Date(),
+                taskCount: 8,
+                completedTaskCount: 5
             ),
             Project(
                 id: UUID(),
                 name: "DDS Integration",
                 description: "Full NATS-based distributed discovery and dispatch",
+                boardGroupId: UUID(),
                 status: .active,
-                priority: .critical,
-                progress: 0.40,
-                assigneeIds: [mauiId],
-                tags: ["nats", "distributed", "core"],
-                dueDate: Date().addingTimeInterval(86400 * 30),
-                createdAt: Date().addingTimeInterval(-86400 * 45)
+                stage: .dev,
+                createdAt: createdAt.addingTimeInterval(-86400 * 20),
+                updatedAt: Date(),
+                taskCount: 6,
+                completedTaskCount: 2
             ),
             Project(
                 id: UUID(),
                 name: "Trading Bot v3",
                 description: "Next-gen trading strategy with ML signals",
-                status: .planning,
-                priority: .high,
-                progress: 0.15,
-                assigneeIds: [],
-                tags: ["trading", "ml", "finance"],
-                dueDate: Date().addingTimeInterval(86400 * 60),
-                createdAt: Date().addingTimeInterval(-86400 * 7)
+                boardGroupId: UUID(),
+                status: .active,
+                stage: .plan,
+                createdAt: createdAt.addingTimeInterval(-86400 * 50),
+                updatedAt: Date(),
+                taskCount: 3,
+                completedTaskCount: 0
             )
         ]
     }()
 
     // MARK: - Tasks
 
-    static let tasks: [Task] = {
+    static let tasks: [ProjectTask] = {
         let mauiId = UUID(uuidString: "00000001-0000-0000-0000-000000000001")!
         let auroraId = UUID(uuidString: "00000001-0000-0000-0000-000000000005")!
         let chiefId = UUID(uuidString: "00000001-0000-0000-0000-000000000002")!
+        let project0 = projects[0]
+        let project1 = projects[1]
 
         return [
-            Task(
+            ProjectTask(
                 id: UUID(),
+                projectId: project0.id,
                 title: "Fix auth hydration bug",
                 description: "User sessions not persisting across cold starts in the pod app",
                 status: .done,
-                priority: .high,
+                stage: .done,
                 assigneeId: mauiId,
-                projectId: projects[0].id,
                 dueDate: Date().addingTimeInterval(-86400),
-                createdAt: Date().addingTimeInterval(-86400 * 3),
-                updatedAt: Date().addingTimeInterval(-86400)
+                priority: .high,
+                tags: ["bug", "auth", "ios"]
             ),
-            Task(
+            ProjectTask(
                 id: UUID(),
+                projectId: project0.id,
                 title: "Implement push notifications",
                 description: "Add APNS support for mentions, approvals, and alerts",
                 status: .inProgress,
-                priority: .high,
+                stage: .dev,
                 assigneeId: mauiId,
-                projectId: projects[0].id,
                 dueDate: Date().addingTimeInterval(86400 * 7),
-                createdAt: Date().addingTimeInterval(-86400 * 2),
-                updatedAt: Date().addingTimeInterval(-3600)
+                priority: .high,
+                tags: ["ios", "notifications", "apns"]
             ),
-            Task(
+            ProjectTask(
                 id: UUID(),
+                projectId: project1.id,
                 title: "Design DDS schema",
                 description: "Finalize the protobuf schemas for DDS topic definitions",
                 status: .inProgress,
-                priority: .critical,
+                stage: .verify,
                 assigneeId: auroraId,
-                projectId: projects[1].id,
                 dueDate: Date().addingTimeInterval(86400 * 5),
-                createdAt: Date().addingTimeInterval(-86400 * 10),
-                updatedAt: Date().addingTimeInterval(-7200)
+                priority: .critical,
+                tags: ["dds", "protobuf", "nats"]
             ),
-            Task(
+            ProjectTask(
                 id: UUID(),
+                projectId: UUID(),
                 title: "Finalize standards table schema",
                 description: "Standards DB migration blocked — need Aurora's sign-off on the schema",
-                status: .blocked,
-                priority: .medium,
+                status: .review,
+                stage: .plan,
                 assigneeId: nil,
-                projectId: nil,
                 dueDate: Date().addingTimeInterval(86400 * 2),
-                createdAt: Date().addingTimeInterval(-86400 * 5),
-                updatedAt: Date().addingTimeInterval(-86400)
+                priority: .medium,
+                tags: ["database", "standards"]
             ),
-            Task(
+            ProjectTask(
                 id: UUID(),
+                projectId: UUID(),
                 title: "Write Q1 metrics report",
                 description: "Compile experiment results, trading performance, and agent uptime stats",
                 status: .todo,
-                priority: .medium,
+                stage: .plan,
                 assigneeId: chiefId,
-                projectId: nil,
                 dueDate: Date().addingTimeInterval(86400 * 2),
-                createdAt: Date().addingTimeInterval(-86400 * 4),
-                updatedAt: Date().addingTimeInterval(-86400 * 4)
+                priority: .medium,
+                tags: ["report", "metrics", "quarterly"]
             ),
-            Task(
+            ProjectTask(
                 id: UUID(),
+                projectId: project0.id,
                 title: "Add channel search",
                 description: "Full-text search across all channels with date filters",
                 status: .todo,
-                priority: .medium,
+                stage: .dev,
                 assigneeId: mauiId,
-                projectId: projects[0].id,
                 dueDate: Date().addingTimeInterval(86400 * 21),
-                createdAt: Date().addingTimeInterval(-86400),
-                updatedAt: Date().addingTimeInterval(-86400)
+                priority: .medium,
+                tags: ["search", "chat", "ux"]
             )
         ]
     }()

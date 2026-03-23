@@ -194,48 +194,48 @@ final class WallDisplayViewModel {
                 type: .taskCompleted,
                 description: "PR #42 approved and merged to main",
                 timestamp: now.addingTimeInterval(-45),
-                actorName: "Builder",
-                isActorAgent: true
+                actor: "Builder",
+                isAgent: true
             ),
             ActivityItem(
                 id: UUID(),
                 type: .messageSent,
                 description: "New message in #projects channel",
                 timestamp: now.addingTimeInterval(-180),
-                actorName: "Maui",
-                isActorAgent: false
+                actor: "Maui",
+                isAgent: false
             ),
             ActivityItem(
                 id: UUID(),
                 type: .agentMilestone,
                 description: "Sentinel ran 1,000 security checks",
                 timestamp: now.addingTimeInterval(-600),
-                actorName: "Sentinel",
-                isActorAgent: true
+                actor: "Sentinel",
+                isAgent: true
             ),
             ActivityItem(
                 id: UUID(),
                 type: .taskCreated,
                 description: "Task created: Implement wall display mode",
                 timestamp: now.addingTimeInterval(-1800),
-                actorName: "Maui",
-                isActorAgent: false
+                actor: "Maui",
+                isAgent: false
             ),
             ActivityItem(
                 id: UUID(),
                 type: .taskCompleted,
                 description: "API rate limiting completed",
                 timestamp: now.addingTimeInterval(-3600),
-                actorName: "Researcher",
-                isActorAgent: true
+                actor: "Researcher",
+                isAgent: true
             ),
             ActivityItem(
                 id: UUID(),
                 type: .fileUploaded,
                 description: "Architecture diagram updated",
                 timestamp: now.addingTimeInterval(-7200),
-                actorName: "Maui",
-                isActorAgent: false
+                actor: "Maui",
+                isAgent: false
             ),
         ]
     }

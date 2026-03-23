@@ -1,13 +1,26 @@
 import SwiftUI
 
+// MARK: - AppState Environment Key
+
+private struct AppStateKey: EnvironmentKey {
+    static let defaultValue: AppState = AppState()
+}
+
+extension EnvironmentValues {
+    var appState: AppState {
+        get { self[AppStateKey.self] }
+        set { self[AppStateKey.self] = newValue }
+    }
+}
+
 @main
 struct podApp: App {
-    @StateObject private var appState = AppState()
+    @State private var appState = AppState()
 
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environmentObject(appState)
+                .environment(\.appState, appState)
                 .preferredColorScheme(.dark)
                 .onAppear {
                     configureAppearance()

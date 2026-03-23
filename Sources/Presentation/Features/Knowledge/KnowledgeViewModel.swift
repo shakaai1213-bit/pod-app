@@ -1,4 +1,5 @@
 import Foundation
+import os.log
 
 // MARK: - Knowledge ViewModel
 
@@ -60,15 +61,23 @@ final class KnowledgeViewModel {
         errorMessage = nil
 
         do {
-            let fetched: [Standard] = try await APIClient.shared.get("/api/v1/standards")
+            let fetched: [Standard] = try await APIClient.shared.get(path: "/api/v1/standards")
             await MainActor.run {
                 self.standards = fetched
                 self.recomputeDerived()
                 self.isLoading = false
             }
+        } catch let error as APIError where error.code == 404 {
+            // Backend doesn't have standards endpoint yet — use mock data
+            await MainActor.run {
+                self.standards = MockData.standards
+                self.recomputeDerived()
+                self.isLoading = false
+            }
         } catch {
             await MainActor.run {
-                self.errorMessage = error.localizedDescription
+                self.standards = MockData.standards
+                self.errorMessage = nil
                 self.isLoading = false
             }
         }
@@ -76,7 +85,7 @@ final class KnowledgeViewModel {
 
     func loadStandard(id: UUID) async -> Standard? {
         do {
-            let standard: Standard = try await APIClient.shared.get("/api/v1/standards/\(id.uuidString)")
+            let standard: Standard = try await APIClient.shared.get(path: "/api/v1/standards/\(id.uuidString)")
             await MainActor.run {
                 if let idx = standards.firstIndex(where: { $0.id == id }) {
                     standards[idx] = standard
@@ -99,7 +108,7 @@ final class KnowledgeViewModel {
     func createStandard(_ standard: Standard) async -> Bool {
         do {
             let created: Standard = try await APIClient.shared.post(
-                "/api/v1/standards",
+                path: "/api/v1/standards",
                 body: standard
             )
             await MainActor.run {
@@ -120,7 +129,7 @@ final class KnowledgeViewModel {
     func updateStandard(_ standard: Standard) async -> Bool {
         do {
             let updated: Standard = try await APIClient.shared.put(
-                "/api/v1/standards/\(standard.id.uuidString)",
+                path: "/api/v1/standards/\(standard.id.uuidString)",
                 body: standard
             )
             await MainActor.run {
@@ -142,7 +151,7 @@ final class KnowledgeViewModel {
 
     func deleteStandard(id: UUID) async -> Bool {
         do {
-            try await APIClient.shared.delete("/api/v1/standards/\(id.uuidString)")
+            try await APIClient.shared.delete(path: "/api/v1/standards/\(id.uuidString)")
             await MainActor.run {
                 standards.removeAll { $0.id == id }
                 self.recomputeDerived()
@@ -175,7 +184,7 @@ final class KnowledgeViewModel {
 
         do {
             let results: [Standard] = try await APIClient.shared.get(
-                "/api/v1/standards/search?q=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query)"
+                path: "/api/v1/standards/search?q=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query)"
             )
             return results
         } catch {

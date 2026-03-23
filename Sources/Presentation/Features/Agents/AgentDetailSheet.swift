@@ -6,12 +6,12 @@ struct AgentDetailSheet: View {
 
     let agent: Agent
     var onViewLogs: (() -> Void)?
-    var onStatusChanged: ((AgentStatus) -> Void)?
+    var onStatusChanged: ((AgentState) -> Void)?
     var onPause: (() -> Void)?
     var onRestart: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedStatus: AgentStatus
+    @State private var selectedStatus: AgentState
     @State private var showingPauseConfirmation = false
     @State private var showingRestartConfirmation = false
     @State private var showingConfigureSheet = false
@@ -20,7 +20,7 @@ struct AgentDetailSheet: View {
     init(
         agent: Agent,
         onViewLogs: (() -> Void)? = nil,
-        onStatusChanged: ((AgentStatus) -> Void)? = nil,
+        onStatusChanged: ((AgentState) -> Void)? = nil,
         onPause: (() -> Void)? = nil,
         onRestart: (() -> Void)? = nil
     ) {
@@ -105,7 +105,7 @@ struct AgentDetailSheet: View {
                     .frame(width: 92, height: 92)
 
                 Circle()
-                    .fill(Color(hex: agent.avatarColor))
+                    .fill(Color(hexString: agent.avatarColor ?? "3B82F6"))
                     .frame(width: 88, height: 88)
 
                 Text(agent.name.prefix(1).uppercased())
@@ -137,10 +137,10 @@ struct AgentDetailSheet: View {
             sectionHeader("Status")
 
             VStack(spacing: 0) {
-                ForEach(AgentStatus.allCases, id: \.self) { status in
+                ForEach(AgentState.allCases, id: \.self) { status in
                     statusRow(status)
 
-                    if status != AgentStatus.allCases.last {
+                    if status != AgentState.allCases.last {
                         Divider()
                             .background(AppColors.border)
                     }
@@ -150,7 +150,7 @@ struct AgentDetailSheet: View {
         }
     }
 
-    private func statusRow(_ status: AgentStatus) -> some View {
+    private func statusRow(_ status: AgentState) -> some View {
         HStack {
             Circle()
                 .fill(status.color)
@@ -223,7 +223,7 @@ struct AgentDetailSheet: View {
                     .padding(Theme.md)
                     .podCard()
             } else {
-                FlowLayout(spacing: Theme.xs) {
+                AgentDetailFlowLayout(spacing: Theme.xs) {
                     ForEach(agent.skills, id: \.self) { skill in
                         Text(skill)
                             .font(.system(size: 12, weight: .medium))
@@ -459,7 +459,7 @@ enum ActivityEventType {
 
 // MARK: - Flow Layout
 
-struct FlowLayout: Layout {
+struct AgentDetailFlowLayout: Layout {
     var spacing: CGFloat = 8
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {

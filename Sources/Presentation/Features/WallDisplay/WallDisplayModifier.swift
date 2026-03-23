@@ -72,7 +72,14 @@ struct WallDisplayModifier: ViewModifier {
 
     private func hideStatusBar(_ hidden: Bool) {
         guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return }
-        windowScene.statusBarManager?.statusBarWindow?.isHidden = hidden
+        // Set status bar via window level
+        windowScene.windows.forEach { window in
+            if hidden {
+                window.windowLevel = UIWindow.Level.statusBar + 1
+            } else {
+                window.windowLevel = UIWindow.Level.normal
+            }
+        }
     }
 }
 

@@ -9,7 +9,7 @@ struct OnboardingView: View {
     var body: some View {
         ZStack {
             // Dark background
-            Color.appBackground
+            AppColors.backgroundPrimary
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -54,7 +54,7 @@ private struct WelcomePage: View {
                     Circle()
                         .fill(
                             LinearGradient(
-                                colors: [Color.podGreen, Color.podGreen.opacity(0.6)],
+                                colors: [AppColors.accentElectric, AppColors.accentElectric.opacity(0.6)],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
@@ -63,15 +63,15 @@ private struct WelcomePage: View {
 
                     Image(systemName: "antenna.radiowaves.left.and.right")
                         .font(.system(size: 40, weight: .semibold))
-                        .foregroundColor(.appBackground)
+                        .foregroundColor(AppColors.backgroundPrimary)
                 }
-                .shadow(color: Color.podGreen.opacity(0.3), radius: 20, x: 0, y: 10)
+                .shadow(color: AppColors.accentElectric.opacity(0.3), radius: 20, x: 0, y: 10)
 
                 // App name
                 Text("pod")
                     .font(.system(size: 72, weight: .heavy, design: .rounded))
-                    .foregroundColor(.appPrimary)
-                    .shadow(color: Color.podGreen.opacity(0.2), radius: 10, x: 0, y: 5)
+                    .foregroundColor(AppColors.accentElectric)
+                    .shadow(color: AppColors.accentElectric.opacity(0.2), radius: 10, x: 0, y: 5)
             }
 
             Spacer()
@@ -82,12 +82,12 @@ private struct WelcomePage: View {
                 Text("Where the pod comes together.")
                     .font(.title2)
                     .fontWeight(.semibold)
-                    .foregroundColor(.appTextPrimary)
+                    .foregroundColor(AppColors.textPrimary)
                     .multilineTextAlignment(.center)
 
                 Text("Your team's command center.")
                     .font(.body)
-                    .foregroundColor(.appTextSecondary)
+                    .foregroundColor(AppColors.textSecondary)
                     .multilineTextAlignment(.center)
             }
             .padding(.horizontal, 40)
@@ -111,11 +111,11 @@ private struct FeaturesPage: View {
                 Text("Everything you need")
                     .font(.title)
                     .fontWeight(.bold)
-                    .foregroundColor(.appTextPrimary)
+                    .foregroundColor(AppColors.textPrimary)
 
                 Text("One app. Your whole team.")
                     .font(.subheadline)
-                    .foregroundColor(.appTextSecondary)
+                    .foregroundColor(AppColors.textSecondary)
             }
             .padding(.bottom, 32)
 
@@ -123,21 +123,21 @@ private struct FeaturesPage: View {
             VStack(spacing: 16) {
                 FeatureCard(
                     icon: "gauge.with.dots.needle.bottom.50percent",
-                    iconColor: Color.podGreen,
+                    iconColor: AppColors.accentElectric,
                     title: "Real-time awareness",
                     description: "See your team at a glance."
                 )
 
                 FeatureCard(
                     icon: "bubble.left.and.bubble.right.fill",
-                    iconColor: Color.blue400,
+                    iconColor: AppColors.accentElectric,
                     title: "Unified chat",
                     description: "One place for every conversation."
                 )
 
                 FeatureCard(
                     icon: "cpu.fill",
-                    iconColor: Color.podPurple,
+                    iconColor: AppColors.accentAgent,
                     title: "Agent control",
                     description: "Manage your AI team, instantly."
                 )
@@ -175,26 +175,26 @@ private struct FeatureCard: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.headline)
-                    .foregroundColor(.appTextPrimary)
+                    .foregroundColor(AppColors.textPrimary)
 
                 Text(description)
                     .font(.subheadline)
-                    .foregroundColor(.appTextSecondary)
+                    .foregroundColor(AppColors.textSecondary)
             }
 
             Spacer()
 
             Image(systemName: "chevron.right")
                 .font(.caption)
-                .foregroundColor(.appTextTertiary)
+                .foregroundColor(AppColors.textTertiary)
         }
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(Color.appSurface)
+                .fill(AppColors.backgroundSecondary)
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.appBorder, lineWidth: 1)
+                        .stroke(AppColors.border, lineWidth: 1)
                 )
         )
     }
@@ -215,22 +215,22 @@ private struct ConnectPage: View {
             VStack(spacing: 12) {
                 ZStack {
                     Circle()
-                        .fill(Color.podGreen.opacity(0.15))
+                        .fill(AppColors.accentElectric.opacity(0.15))
                         .frame(width: 80, height: 80)
 
                     Image(systemName: "link.circle.fill")
                         .font(.system(size: 40))
-                        .foregroundColor(.podGreen)
+                        .foregroundColor(AppColors.accentElectric)
                 }
 
                 Text("Connect to your team")
                     .font(.title)
                     .fontWeight(.bold)
-                    .foregroundColor(.appTextPrimary)
+                    .foregroundColor(AppColors.textPrimary)
 
                 Text("Sign in with your ORCA Mission Control token")
                     .font(.subheadline)
-                    .foregroundColor(.appTextSecondary)
+                    .foregroundColor(AppColors.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
             }
@@ -242,7 +242,7 @@ private struct ConnectPage: View {
             VStack(spacing: 16) {
                 HStack(spacing: 12) {
                     Image(systemName: "key.fill")
-                        .foregroundColor(.appTextSecondary)
+                        .foregroundColor(AppColors.textSecondary)
                         .frame(width: 20)
 
                     SecureField("Enter your token", text: $viewModel.token)
@@ -255,11 +255,11 @@ private struct ConnectPage: View {
                 .padding(16)
                 .background(
                     RoundedRectangle(cornerRadius: 14)
-                        .fill(Color.appSurface)
+                        .fill(AppColors.backgroundSecondary)
                         .overlay(
                             RoundedRectangle(cornerRadius: 14)
                                 .stroke(
-                                    isTokenFieldFocused ? Color.podGreen : Color.appBorder,
+                                    isTokenFieldFocused ? AppColors.accentElectric : AppColors.border,
                                     lineWidth: isTokenFieldFocused ? 2 : 1
                                 )
                         )
@@ -269,11 +269,11 @@ private struct ConnectPage: View {
                 if let error = viewModel.errorMessage {
                     HStack(spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.red400)
+                            .foregroundColor(AppColors.accentDanger)
 
                         Text(error)
                             .font(.subheadline)
-                            .foregroundColor(.red400)
+                            .foregroundColor(AppColors.accentDanger)
                     }
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 }
@@ -294,7 +294,7 @@ private struct ConnectPage: View {
                 HStack(spacing: 10) {
                     if viewModel.isConnecting {
                         ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .appBackground))
+                            .progressViewStyle(CircularProgressViewStyle(tint: AppColors.backgroundPrimary))
                             .scaleEffect(0.9)
                     } else {
                         Image(systemName: "antenna.radiowaves.left.and.right")
@@ -308,12 +308,12 @@ private struct ConnectPage: View {
                 .background(
                     viewModel.canProceed
                         ? LinearGradient(
-                            colors: [Color.podGreen, Color.podGreen.opacity(0.8)],
+                            colors: [AppColors.accentElectric, AppColors.accentElectric.opacity(0.8)],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
                         : LinearGradient(
-                            colors: [Color.appDisabled, Color.appDisabled],
+                            colors: [AppColors.textTertiary, AppColors.textTertiary],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
@@ -321,7 +321,7 @@ private struct ConnectPage: View {
                 .foregroundColor(.white)
                 .clipShape(RoundedRectangle(cornerRadius: 14))
                 .shadow(
-                    color: viewModel.canProceed ? Color.podGreen.opacity(0.3) : .clear,
+                    color: viewModel.canProceed ? AppColors.accentElectric.opacity(0.3) : .clear,
                     radius: 8,
                     x: 0,
                     y: 4
@@ -341,7 +341,7 @@ private struct ConnectPage: View {
                 Text("Find your token in ORCA Mission Control")
                     .font(.caption)
             }
-            .foregroundColor(.appTextTertiary)
+            .foregroundColor(AppColors.textTertiary)
             .padding(.bottom, 60)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -362,20 +362,20 @@ private struct ReadyPage: View {
             // Animated checkmark
             ZStack {
                 Circle()
-                    .fill(Color.podGreen.opacity(0.15))
+                    .fill(AppColors.accentElectric.opacity(0.15))
                     .frame(width: 140, height: 140)
                     .scaleEffect(showCheckmark ? 1 : 0.5)
                     .opacity(showCheckmark ? 1 : 0)
 
                 Circle()
-                    .fill(Color.podGreen.opacity(0.3))
+                    .fill(AppColors.accentElectric.opacity(0.3))
                     .frame(width: 110, height: 110)
                     .scaleEffect(showCheckmark ? 1 : 0.5)
                     .opacity(showCheckmark ? 1 : 0)
 
                 Image(systemName: "checkmark")
                     .font(.system(size: 50, weight: .heavy))
-                    .foregroundColor(.podGreen)
+                    .foregroundColor(AppColors.accentElectric)
                     .scaleEffect(showCheckmark ? 1 : 0)
                     .opacity(showCheckmark ? 1 : 0)
             }
@@ -388,13 +388,13 @@ private struct ReadyPage: View {
             VStack(spacing: 12) {
                 Text("You're in.")
                     .font(.system(size: 36, weight: .heavy, design: .rounded))
-                    .foregroundColor(.appTextPrimary)
+                    .foregroundColor(AppColors.textPrimary)
                     .opacity(showContent ? 1 : 0)
                     .offset(y: showContent ? 0 : 20)
 
                 Text("Welcome to pod, \(viewModel.userName ?? "Captain").")
                     .font(.title3)
-                    .foregroundColor(.appTextSecondary)
+                    .foregroundColor(AppColors.textSecondary)
                     .multilineTextAlignment(.center)
                     .opacity(showContent ? 1 : 0)
                     .offset(y: showContent ? 0 : 20)
@@ -414,14 +414,14 @@ private struct ReadyPage: View {
                     .frame(height: 52)
                     .background(
                         LinearGradient(
-                            colors: [Color.podGreen, Color.podGreen.opacity(0.8)],
+                            colors: [AppColors.accentElectric, AppColors.accentElectric.opacity(0.8)],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
                     )
                     .foregroundColor(.white)
                     .clipShape(RoundedRectangle(cornerRadius: 14))
-                    .shadow(color: Color.podGreen.opacity(0.3), radius: 8, x: 0, y: 4)
+                    .shadow(color: AppColors.accentElectric.opacity(0.3), radius: 8, x: 0, y: 4)
             }
             .padding(.horizontal, 32)
             .opacity(showContent ? 1 : 0)

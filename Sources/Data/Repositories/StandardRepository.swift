@@ -1,6 +1,6 @@
 import Foundation
 
-@Observable
+@MainActor
 final class StandardRepository {
     private let api = APIClient.shared
     private let cache = PersistenceController.shared
@@ -19,10 +19,9 @@ final class StandardRepository {
         defer { isLoading = false }
 
         do {
-            let dtos: [KnowledgeEntry] = try await api.get("/api/v1/knowledge")
-            let remote = dtos.map { mapKnowledgeEntryToStandard($0) }
-            standards = remote
-            await cache.syncStandards(remote)
+            let fetched: [Standard] = try await api.get(path: "/api/v1/standards")
+            standards = fetched
+            await cache.syncStandards(fetched)
         } catch {
             lastError = error
             let cached = cache.fetchRecentStandards(limit: 50)
@@ -38,13 +37,12 @@ final class StandardRepository {
         defer { isLoading = false }
 
         do {
-            let dtos: [KnowledgeEntry] = try await api.get(
-                "/api/v1/knowledge?category=\(category.rawValue)"
+            let fetched: [Standard] = try await api.get(
+                path: "/api/v1/standards?category=\(category.rawValue)"
             )
-            let remote = dtos.map { mapKnowledgeEntryToStandard($0) }
 
             // Merge: replace matching IDs, append new ones
-            for item in remote {
+            for item in fetched {
                 if let index = standards.firstIndex(where: { $0.id == item.id }) {
                     standards[index] = item
                 } else {
@@ -52,7 +50,7 @@ final class StandardRepository {
                 }
             }
 
-            await cache.syncStandards(remote)
+            await cache.syncStandards(fetched)
         } catch {
             lastError = error
             let cached = cache.fetchStandardsByCategory(category.rawValue)
@@ -66,20 +64,17 @@ final class StandardRepository {
 
     func fetchStandard(id: UUID) async -> Standard? {
         do {
-            let dto: KnowledgeEntry = try await api.get("/api/v1/knowledge/\(id.uuidString)")
-            let standard = mapKnowledgeEntryToStandard(dto)
+            let fetched: Standard = try await api.get(path: "/api/v1/standards/\(id.uuidString)")
 
             if let index = standards.firstIndex(where: { $0.id == id }) {
-                standards[index] = standard
+                standards[index] = fetched
             } else {
-                standards.append(standard)
+                standards.append(fetched)
             }
-            await cache.syncStandards([standard])
-            return standard
+            await cache.syncStandards([fetched])
+            return fetched
         } catch {
-            return cache.fetchCachedAgent(id: id).map { _ in
-                standards.first { $0.id == id } ?? standards.first { $0.id == id }!
-            }
+            return standards.first { $0.id == id }
         }
     }
 
@@ -88,22 +83,19 @@ final class StandardRepository {
     func loadFavorites() async {
         isLoading = true
         defer { isLoading = false }
-        // Favorites are cached locally; merge with remote if available
         let cached = cache.fetchFavorites().map { $0.toStandard() }
-        let cachedIds = Set(cached.map { $0.id })
 
         do {
-            let dtos: [KnowledgeEntry] = try await api.get("/api/v1/knowledge?favorites=true")
-            let remote = dtos.map { mapKnowledgeEntryToStandard($0) }
-            await cache.syncStandards(remote)
-            standards = remote
+            let fetched: [Standard] = try await api.get(path: "/api/v1/standards?favorites=true")
+            await cache.syncStandards(fetched)
+            standards = fetched
         } catch {
             standards = cached
             lastError = error
         }
     }
 
-    func toggleFavorite(standardId: UUID) async {
+    func toggleFavorite(standardId: UUID) {
         cache.toggleFavorite(standardId: standardId)
         if let index = standards.firstIndex(where: { $0.id == standardId }) {
             standards[index].isFavorite.toggle()
@@ -148,26 +140,5 @@ final class StandardRepository {
 
     var favoriteStandards: [Standard] {
         standards.filter { $0.isFavorite }
-    }
-
-    // MARK: - Mapping
-
-    private func mapKnowledgeEntryToStandard(_ dto: KnowledgeEntry) -> Standard {
-        Standard(
-            id: UUID(uuidString: dto.id) ?? UUID(),
-            title: dto.title,
-            category: StandardCategory(rawValue: dto.category) ?? .standards,
-            content: dto.content,
-            authorId: UUID(uuidString: dto.authorId) ?? UUID(),
-            authorName: dto.authorName,
-            tags: dto.tags,
-            version: dto.version,
-            createdAt: dto.createdAt,
-            updatedAt: dto.updatedAt,
-            isFavorite: false,
-            readingPosition: nil,
-            relatedStandardIds: [],
-            versions: []
-        )
     }
 }

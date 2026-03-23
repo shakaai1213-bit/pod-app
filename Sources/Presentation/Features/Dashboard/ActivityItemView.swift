@@ -45,14 +45,14 @@ struct ActivityItemView: View {
                 .lineLimit(2)
 
             HStack(spacing: 4) {
-                if item.isActorAgent {
+                if item.isAgent {
                     Image(systemName: "cpu")
                         .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(AppColors.accentAgent)
                 }
 
-                Text(item.actorName)
-                    .podTextStyle(.caption, color: item.isActorAgent ? AppColors.accentAgent : AppColors.textSecondary)
+                Text(item.actor)
+                    .podTextStyle(.caption, color: item.isAgent ? AppColors.accentAgent : AppColors.textSecondary)
             }
         }
     }

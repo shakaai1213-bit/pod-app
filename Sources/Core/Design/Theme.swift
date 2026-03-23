@@ -2,117 +2,80 @@ import SwiftUI
 
 // MARK: - Theme
 
-/// Core design constants for the Pod app.
-/// Follows an 8pt spacing grid and defines reusable visual tokens.
-enum Theme {
-
-    // MARK: - Spacing (8pt grid)
-
+/// Design system spacing, radii, animation, and shadow tokens
+struct Theme {
+    // MARK: Spacing (8pt grid)
     static let xxs: CGFloat = 4
-    static let xs:  CGFloat = 8
-    static let sm:  CGFloat = 12
-    static let md:  CGFloat = 16
-    static let lg:  CGFloat = 24
-    static let xl:  CGFloat = 32
+    static let xs: CGFloat = 8
+    static let sm: CGFloat = 12
+    static let md: CGFloat = 16
+    static let lg: CGFloat = 24
+    static let xl: CGFloat = 32
     static let xxl: CGFloat = 48
 
-    // MARK: - Corner Radii
-
+    // MARK: Corner Radii
     static let radiusSmall: CGFloat = 8
     static let radiusMedium: CGFloat = 12
     static let radiusLarge: CGFloat = 16
-    static let radiusPill:  CGFloat = 999
+    static let radiusPill: CGFloat = 999
 
-    // MARK: - Animation
+    // MARK: Animation
+    static let springBounce: CGFloat = 0.3
+    static let springResponse: Double = 0.4
+    static let durationDefault: Double = 0.2
+    static let durationFast: Double = 0.15
+    static let durationSlow: Double = 0.3
 
-    enum Animation {
-        /// Default short transition duration (e.g., opacity changes)
-        static let duration: Double = 0.2
+    // MARK: Shadows
+    struct ShadowConfig {
+        let radius: CGFloat
+        let x: CGFloat
+        let y: CGFloat
+        let opacity: CGFloat
 
-        /// Spring animation: bounce = 0.3, response = 0.4
-        static let spring = SwiftUI.Animation.spring(
-            response: 0.4,
-            dampingFraction: 0.3
-        )
-
-        /// Snappier spring for micro-interactions
-        static let springBouncy = SwiftUI.Animation.spring(
-            response: 0.3,
-            dampingFraction: 0.3
-        )
-
-        /// Ease-in-out for standard transitions
-        static let easeInOut = SwiftUI.Animation.easeInOut(
-            duration: Self.duration
-        )
-
-        /// Immediate / no animation
-        static let immediate = SwiftUI.Animation.linear(duration: 0)
+        static let small = ShadowConfig(radius: 4, x: 0, y: 2, opacity: 0.1)
+        static let medium = ShadowConfig(radius: 8, x: 0, y: 4, opacity: 0.15)
+        static let large = ShadowConfig(radius: 16, x: 0, y: 8, opacity: 0.2)
+        static let glow = ShadowConfig(radius: 12, x: 0, y: 0, opacity: 0.3)
     }
 
-    // MARK: - Shadows
+    // MARK: - Surface & Text (back-compat for podApp.swift)
 
-    enum Shadow {
-        /// Small shadow — used for cards, subtle elevation
-        static let small = ShadowConfig(
-            color: .black.opacity(0.25),
-            radius: 4,
-            x: 0,
-            y: 2
-        )
-
-        /// Medium shadow — used for modals, floating elements
-        static let medium = ShadowConfig(
-            color: .black.opacity(0.35),
-            radius: 8,
-            x: 0,
-            y: 4
-        )
-
-        /// Large shadow — used for overlays, drag-and-drop lift
-        static let large = ShadowConfig(
-            color: .black.opacity(0.45),
-            radius: 16,
-            x: 0,
-            y: 8
-        )
-    }
-}
-
-// MARK: - ShadowConfig
-
-struct ShadowConfig {
-    let color: Color
-    let radius: CGFloat
-    let x: CGFloat
-    let y: CGFloat
-
-    func apply(to shape: some View) -> some View {
-        shape.shadow(
-            color: color,
-            radius: radius,
-            x: x,
-            y: y
-        )
-    }
+    static let surface: Color = AppColors.backgroundSecondary
+    static let primaryText: Color = AppColors.textPrimary
+    static let inverseText: Color = AppColors.textPrimary
+    static let errorColor: Color = AppColors.accentDanger
+    static let glow: Color = AppColors.accentElectric.opacity(0.4)
 }
 
 // MARK: - View Helpers
 
 extension View {
-    func podShadow(_ config: ShadowConfig) -> some View {
+    func podCard(padding: CGFloat = Theme.md) -> some View {
+        self
+            .padding(padding)
+            .background(AppColors.backgroundSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+            .shadow(
+                color: .black.opacity(Theme.ShadowConfig.small.opacity),
+                radius: Theme.ShadowConfig.small.radius,
+                x: Theme.ShadowConfig.small.x,
+                y: Theme.ShadowConfig.small.y
+            )
+    }
+
+    func podGlow(color: Color = AppColors.accentElectric) -> some View {
+        self.shadow(color: color.opacity(0.4), radius: 8, x: 0, y: 0)
+    }
+
+    func podShadow(_ config: Theme.ShadowConfig) -> some View {
         self.shadow(
-            color: config.color,
+            color: .black.opacity(config.opacity),
             radius: config.radius,
             x: config.x,
             y: config.y
         )
     }
-
-    func podCard() -> some View {
-        self
-            .background(AppColors.backgroundSecondary)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
-            .podShadow(Theme.Shadow.small)
-    }
 }
+
+

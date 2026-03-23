@@ -3,9 +3,9 @@ import Foundation
 // MARK: - Channel
 
 struct Channel: Identifiable, Hashable, Sendable {
-    let id: String
+    let id: UUID
     let name: String
-    let type: ChannelType
+    let type: ChatChannelType
     var lastMessage: String?
     var lastMessageTimestamp: Date?
     var unreadCount: Int
@@ -25,7 +25,7 @@ struct Channel: Identifiable, Hashable, Sendable {
     var displayName: String { type.rawValue }
 }
 
-enum ChannelType: String, CaseIterable, Sendable {
+enum ChatChannelType: String, CaseIterable, Sendable {
     case general  = "general"
     case projects = "projects"
     case agents   = "agents"
@@ -36,22 +36,26 @@ enum ChannelType: String, CaseIterable, Sendable {
 // MARK: - Message
 
 struct Message: Identifiable, Hashable, Sendable {
-    let id: String
-    let channelId: String
-    let authorId: String
+    let id: UUID
+    let channelId: UUID
+    let authorId: UUID
     let authorName: String
     let authorRole: AuthorRole
+    var isAgent: Bool
+    var agentId: String?
     let content: String
     let timestamp: Date
     var reactions: [Reaction]
     var isHighlighted: Bool
 
     init(
-        id: String = UUID().uuidString,
-        channelId: String,
-        authorId: String,
-        authorName: String,
+        id: UUID = UUID(),
+        channelId: UUID,
+        authorId: UUID,
+        authorName: String = "",
         authorRole: AuthorRole = .human,
+        isAgent: Bool = false,
+        agentId: String? = nil,
         content: String,
         timestamp: Date = Date(),
         reactions: [Reaction] = [],
@@ -62,6 +66,8 @@ struct Message: Identifiable, Hashable, Sendable {
         self.authorId = authorId
         self.authorName = authorName
         self.authorRole = authorRole
+        self.isAgent = isAgent
+        self.agentId = agentId
         self.content = content
         self.timestamp = timestamp
         self.reactions = reactions
@@ -101,7 +107,7 @@ struct MessageGroup: Identifiable, Sendable {
     let messages: [Message]
 
     init(messages: [Message]) {
-        self.id = messages.first?.id ?? UUID().uuidString
+        self.id = messages.first?.id.uuidString ?? UUID().uuidString
         self.date = messages.first?.timestamp ?? Date()
         self.messages = messages
     }
@@ -114,6 +120,20 @@ import SwiftUI
 @Observable
 final class ChatViewModel: Sendable {
 
+    // MARK: - Mock IDs (replace with real auth/API data)
+
+    static let mockUserId = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+    private static let chGeneral = UUID(uuidString: "00000000-0000-0000-0001-000000000001")!
+    private static let chAgents  = UUID(uuidString: "00000000-0000-0000-0001-000000000002")!
+    private static let chProjects = UUID(uuidString: "00000000-0000-0000-0001-000000000003")!
+    private static let chResearch = UUID(uuidString: "00000000-0000-0000-0001-000000000004")!
+    private static let chAlerts  = UUID(uuidString: "00000000-0000-0000-0001-000000000005")!
+    private static let userAlexId = UUID(uuidString: "00000000-0000-0000-0002-000000000001")!
+    private static let userSamId  = UUID(uuidString: "00000000-0000-0000-0002-000000000002")!
+    private static let agentMauiId = UUID(uuidString: "00000000-0000-0000-0002-000000000010")!
+    private static let agentClioId = UUID(uuidString: "00000000-0000-0000-0002-000000000011")!
+    private static let systemId   = UUID(uuidString: "00000000-0000-0000-0002-000000000100")!
+
     // MARK: - State
 
     var channels: [Channel] = []
@@ -121,11 +141,8 @@ final class ChatViewModel: Sendable {
     var messages: [Message] = []
     var isLoading = false
     var isSending = false
-    var highlightedAuthorId: String?
+    var highlightedAuthorId: UUID?
     var errorMessage: String?
-
-    // Current user (mock — replace with real auth)
-    private let currentUserId = "current-user"
 
     // MARK: - Computed
 
@@ -195,7 +212,7 @@ final class ChatViewModel: Sendable {
 
         channels = [
             Channel(
-                id: "ch-general",
+                id: Self.chGeneral,
                 name: "general",
                 type: .general,
                 lastMessage: "Morning standup in 10 mins",
@@ -205,7 +222,7 @@ final class ChatViewModel: Sendable {
                 isMuted: false
             ),
             Channel(
-                id: "ch-agents",
+                id: Self.chAgents,
                 name: "agents",
                 type: .agents,
                 lastMessage: "Maui: Build pipeline complete",
@@ -215,7 +232,7 @@ final class ChatViewModel: Sendable {
                 isMuted: false
             ),
             Channel(
-                id: "ch-projects",
+                id: Self.chProjects,
                 name: "projects",
                 type: .projects,
                 lastMessage: "New PR merged: Chat tab UI",
@@ -225,7 +242,7 @@ final class ChatViewModel: Sendable {
                 isMuted: false
             ),
             Channel(
-                id: "ch-research",
+                id: Self.chResearch,
                 name: "research",
                 type: .research,
                 lastMessage: "LLM context window benchmarks updated",
@@ -235,7 +252,7 @@ final class ChatViewModel: Sendable {
                 isMuted: true
             ),
             Channel(
-                id: "ch-alerts",
+                id: Self.chAlerts,
                 name: "alerts",
                 type: .alerts,
                 lastMessage: "Build failed on main branch",
@@ -250,7 +267,7 @@ final class ChatViewModel: Sendable {
     }
 
     @MainActor
-    func loadMessages(channelId: String) async {
+    func loadMessages(channelId: UUID) async {
         isLoading = true
         errorMessage = nil
 
@@ -258,12 +275,11 @@ final class ChatViewModel: Sendable {
         try? await Task.sleep(for: .milliseconds(400))
 
         // Load mock messages based on channel
-        switch channelId {
-        case "ch-general":
+        if channelId == Self.chGeneral {
             messages = [
                 Message(
                     channelId: channelId,
-                    authorId: "user-1",
+                    authorId: Self.userAlexId,
                     authorName: "Alex Chen",
                     authorRole: .human,
                     content: "Morning standup in 10 mins, everyone. Let's keep it quick today.",
@@ -271,7 +287,7 @@ final class ChatViewModel: Sendable {
                 ),
                 Message(
                     channelId: channelId,
-                    authorId: "agent-maui",
+                    authorId: Self.agentMauiId,
                     authorName: "Maui",
                     authorRole: .agent,
                     content: "On it. I'll share the sprint metrics snapshot in the thread.",
@@ -279,7 +295,7 @@ final class ChatViewModel: Sendable {
                 ),
                 Message(
                     channelId: channelId,
-                    authorId: "user-2",
+                    authorId: Self.userSamId,
                     authorName: "Sam Rivera",
                     authorRole: .human,
                     content: "Quick update: the API migration is done, tests are green.",
@@ -287,7 +303,7 @@ final class ChatViewModel: Sendable {
                 ),
                 Message(
                     channelId: channelId,
-                    authorId: "agent-maui",
+                    authorId: Self.agentMauiId,
                     authorName: "Maui",
                     authorRole: .agent,
                     content: "Nice. Want me to deploy to staging? I can run the smoke tests automatically.",
@@ -295,27 +311,27 @@ final class ChatViewModel: Sendable {
                 ),
                 Message(
                     channelId: channelId,
-                    authorId: "user-1",
+                    authorId: Self.userAlexId,
                     authorName: "Alex Chen",
                     authorRole: .human,
                     content: "Yes please, go ahead.",
                     timestamp: Date().addingTimeInterval(-60)
                 ),
             ]
-        case "ch-agents":
+        } else if channelId == Self.chAgents {
             messages = [
                 Message(
                     channelId: channelId,
-                    authorId: "agent-maui",
+                    authorId: Self.agentMauiId,
                     authorName: "Maui",
                     authorRole: .agent,
                     content: "Build pipeline complete. All 47 tests passing.",
                     timestamp: Date().addingTimeInterval(-1800),
-                    reactions: [Reaction(emoji: "✅", count: 3, userIds: ["user-1", "user-2"], isReactedByMe: true)]
+                    reactions: [Reaction(emoji: "✅", count: 3, userIds: [], isReactedByMe: true)]
                 ),
                 Message(
                     channelId: channelId,
-                    authorId: "agent-clio",
+                    authorId: Self.agentClioId,
                     authorName: "Clio",
                     authorRole: .agent,
                     content: "Docs updated with the new API endpoints. Here's a code example:\n\n```swift\nlet result = await client.fetch(endpoint: \"/api/v2/status\")\nprint(result)\n```",
@@ -323,18 +339,18 @@ final class ChatViewModel: Sendable {
                 ),
                 Message(
                     channelId: channelId,
-                    authorId: "agent-maui",
+                    authorId: Self.agentMauiId,
                     authorName: "Maui",
                     authorRole: .agent,
                     content: "Looks good. I've synced it to the knowledge base.",
                     timestamp: Date().addingTimeInterval(-1200)
                 ),
             ]
-        case "ch-alerts":
+        } else if channelId == Self.chAlerts {
             messages = [
                 Message(
                     channelId: channelId,
-                    authorId: "system",
+                    authorId: Self.systemId,
                     authorName: "CI System",
                     authorRole: .system,
                     content: "Build failed on `main` branch — 3 test failures in `AuthServiceTests`",
@@ -342,18 +358,18 @@ final class ChatViewModel: Sendable {
                 ),
                 Message(
                     channelId: channelId,
-                    authorId: "agent-maui",
+                    authorId: Self.agentMauiId,
                     authorName: "Maui",
                     authorRole: .agent,
                     content: "Investigating now. Looks like a token refresh edge case.",
                     timestamp: Date().addingTimeInterval(-240)
                 ),
             ]
-        default:
+        } else {
             messages = [
                 Message(
                     channelId: channelId,
-                    authorId: "user-1",
+                    authorId: Self.userAlexId,
                     authorName: "Alex Chen",
                     authorRole: .human,
                     content: "Hey team, what's the status on this channel?",
@@ -375,7 +391,7 @@ final class ChatViewModel: Sendable {
     }
 
     @MainActor
-    func sendMessage(channelId: String, content: String) async {
+    func sendMessage(channelId: UUID, content: String) async {
         guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
 
         isSending = true
@@ -383,7 +399,7 @@ final class ChatViewModel: Sendable {
         // Optimistically add the message
         let newMessage = Message(
             channelId: channelId,
-            authorId: currentUserId,
+            authorId: Self.mockUserId,
             authorName: "You",
             authorRole: .human,
             content: content,
@@ -405,13 +421,13 @@ final class ChatViewModel: Sendable {
         }
     }
 
-    func toggleMute(channelId: String) {
+    func toggleMute(channelId: UUID) {
         if let idx = channels.firstIndex(where: { $0.id == channelId }) {
             channels[idx].isMuted.toggle()
         }
     }
 
-    func highlightAgent(authorId: String) {
+    func highlightAgent(authorId: UUID) {
         highlightedAuthorId = authorId
         messages = messages.map { msg in
             var m = msg
@@ -429,7 +445,7 @@ final class ChatViewModel: Sendable {
         }
     }
 
-    func addReaction(to messageId: String, emoji: String) {
+    func addReaction(to messageId: UUID, emoji: String) {
         if let idx = messages.firstIndex(where: { $0.id == messageId }) {
             var reactions = messages[idx].reactions
             if let rIdx = reactions.firstIndex(where: { $0.emoji == emoji }) {

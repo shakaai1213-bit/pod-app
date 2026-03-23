@@ -156,7 +156,7 @@ struct StandardDetailView: View {
     private var tagsSection: some View {
         Group {
             if !currentStandard.tags.isEmpty {
-                FlowLayout(spacing: Theme.xs) {
+                StandardFlowLayout(spacing: Theme.xs) {
                     ForEach(currentStandard.tags, id: \.self) { tag in
                         Text(tag)
                             .font(.caption)
@@ -343,94 +343,15 @@ struct MarkdownRenderer: View {
     }
 
     private func attributedText(_ text: String, isCode: Bool) -> AttributedString {
-        var result = AttributedString(text)
-
-        // Inline code: `code`
-        let codePattern = "`([^`]+)`"
-        if let regex = try? NSRegularExpression(pattern: codePattern) {
-            let nsRange = NSRange(text.startIndex..., in: text)
-            let matches = regex.matches(in: text, range: nsRange).reversed()
-
-            for match in matches {
-                if let range = Range(match.range(at: 1), in: text) {
-                    let codeStr = String(text[range])
-                    let startIndex = text.index(text.startIndex, offsetBy: match.range(at: 0).location)
-                    let endIndex = text.index(text.startIndex, offsetBy: match.range(at: 0).location + match.range(at: 0).length)
-
-                    if let attrStart = AttributedString.Index(startIndex, within: result),
-                       let attrEnd = AttributedString.Index(endIndex, within: result) {
-                        var code = AttributedString(codeStr)
-                        code.foregroundColor = AppColors.accentSuccess
-                        code.font = .system(.footnote, design: .monospaced)
-                        result.replaceSubrange(attrStart..<attrEnd, with: code)
-                    }
-                }
-            }
+        do {
+            var opts = AttributedString.MarkdownParsingOptions()
+            opts.interpretedSyntax = .inlineOnlyPreservingWhitespace
+            var attributed = try AttributedString(markdown: text, options: opts)
+            attributed.foregroundColor = AppColors.textPrimary
+            return attributed
+        } catch {
+            return AttributedString(text)
         }
-
-        // Bold: **text**
-        let boldPattern = "\\*\\*([^*]+)\\*\\*"
-        if let regex = try? NSRegularExpression(pattern: boldPattern) {
-            let nsRange = NSRange(result.characters.startIndex..., in: String(result.characters))
-            let matches = regex.matches(in: String(result.characters), range: nsRange).reversed()
-
-            for match in matches {
-                if let range = Range(match.range(at: 1), in: String(result.characters)) {
-                    let boldText = String(String(result.characters)[range])
-                    if let attrStart = AttributedString.Index(range.lowerBound, within: result),
-                       let attrEnd = AttributedString.Index(range.upperBound, within: result) {
-                        var bold = AttributedString(boldText)
-                        bold.foregroundColor = AppColors.textPrimary
-                        bold.font = .subheadline.weight(.bold)
-                        result.replaceSubrange(attrStart..<attrEnd, with: bold)
-                    }
-                }
-            }
-        }
-
-        // Italic: *text*
-        let italicPattern = "(?<!\\*)\\*([^*]+)\\*(?!\\*)"
-        if let regex = try? NSRegularExpression(pattern: italicPattern) {
-            let nsRange = NSRange(result.characters.startIndex..., in: String(result.characters))
-            let matches = regex.matches(in: String(result.characters), range: nsRange).reversed()
-
-            for match in matches {
-                if let range = Range(match.range(at: 1), in: String(result.characters)) {
-                    let italicText = String(String(result.characters)[range])
-                    if let attrStart = AttributedString.Index(range.lowerBound, within: result),
-                       let attrEnd = AttributedString.Index(range.upperBound, within: result) {
-                        var italic = AttributedString(italicText)
-                        italic.foregroundColor = AppColors.textSecondary
-                        italic.font = .subheadline.italic()
-                        result.replaceSubrange(attrStart..<attrEnd, with: italic)
-                    }
-                }
-            }
-        }
-
-        // Links: [text](url)
-        let linkPattern = "\\[([^\\]]+)\\]\\(([^)]+)\\)"
-        if let regex = try? NSRegularExpression(pattern: linkPattern) {
-            let nsRange = NSRange(String(result.characters).startIndex..., in: String(result.characters))
-            let matches = regex.matches(in: String(result.characters), range: nsRange).reversed()
-
-            for match in matches {
-                if let textRange = Range(match.range(at: 1), in: String(result.characters)),
-                   let urlRange = Range(match.range(at: 2), in: String(result.characters)) {
-                    let linkText = String(String(result.characters)[textRange])
-                    let urlString = String(String(result.characters)[urlRange])
-                    if let attrStart = AttributedString.Index(textRange.lowerBound, within: result),
-                       let attrEnd = AttributedString.Index(textRange.upperBound, within: result) {
-                        var link = AttributedString(linkText)
-                        link.foregroundColor = AppColors.accentElectric
-                        link.link = URL(string: urlString)
-                        result.replaceSubrange(attrStart..<attrEnd, with: link)
-                    }
-                }
-            }
-        }
-
-        return result
     }
 }
 
@@ -504,7 +425,7 @@ struct RelatedStandardCard: View {
         NavigationLink(value: standard) {
             HStack(spacing: Theme.sm) {
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(Color(hex: standard.category.color))
+                    .fill(Color(hexString: standard.category.color))
                     .frame(width: 3, height: 36)
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -517,7 +438,7 @@ struct RelatedStandardCard: View {
                     HStack(spacing: Theme.xxs) {
                         Image(systemName: standard.category.icon)
                             .font(.system(size: 9))
-                            .foregroundColor(Color(hex: standard.category.color))
+                            .foregroundColor(Color(hexString: standard.category.color))
 
                         Text(standard.category.displayName)
                             .font(.caption2)
@@ -574,7 +495,7 @@ struct VersionRow: View {
 
 // MARK: - Flow Layout
 
-struct FlowLayout: Layout {
+struct StandardFlowLayout: Layout {
     var spacing: CGFloat = 8
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {

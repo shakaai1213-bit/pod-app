@@ -102,27 +102,5 @@ enum ScreenDestination: Hashable {
     }
 }
 
-enum AppTab: Int, CaseIterable {
-    case chat = 0
-    case projects = 1
-    case dashboard = 2
-    case agents = 3
+// NOTE: AppTab is defined in App/AppState.swift (the canonical version)
 
-    var title: String {
-        switch self {
-        case .chat: return "Chat"
-        case .projects: return "Projects"
-        case .dashboard: return "Dashboard"
-        case .agents: return "Agents"
-        }
-    }
-
-    var iconName: String {
-        switch self {
-        case .chat: return "bubble.left.and.bubble.right"
-        case .projects: return "list.bullet.clipboard"
-        case .dashboard: return "chart.bar"
-        case .agents: return "cpu"
-        }
-    }
-}

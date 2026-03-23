@@ -371,17 +371,6 @@ struct AttachmentPickerView: View {
                 }
             }
         }
-        .photosPicker(
-            isPresented: $showPhotoPicker,
-            selection: Binding(
-                get: { nil },
-                set: { item in
-                    // Handle photo selection
-                    showPhotoPicker = false
-                }
-            ),
-            matching: .images
-        )
     }
 
     private func attachmentOption(

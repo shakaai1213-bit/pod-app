@@ -4,7 +4,7 @@ import SwiftUI
 
 struct TaskCardView: View {
 
-    let task: Task
+    let task: ProjectTask
     let members: [TeamMember]
 
     // MARK: - State
@@ -15,7 +15,7 @@ struct TaskCardView: View {
     // MARK: - Computed
 
     private var assignee: TeamMember? {
-        members.first { $0.id == task.assigneeId }
+        members.first { task.assigneeId == $0.id }
     }
 
     private var isOverdue: Bool {
@@ -199,7 +199,7 @@ struct TaskCardView: View {
 
     private func avatarView(_ member: TeamMember) -> some View {
         Circle()
-            .fill(Color(hex: member.avatarColor))
+            .fill(Color(hexString: member.avatarColor ?? "#6B46C1"))
             .frame(width: 16, height: 16)
             .overlay(
                 Text(member.name.prefix(1))
@@ -208,28 +208,27 @@ struct TaskCardView: View {
             )
     }
 
+    @ViewBuilder
     private func dueDateView(_ date: Date) -> some View {
-        let formatter = DateFormatter()
         if Calendar.current.isDateInToday(date) {
-            return Text("Today")
+            Text("Today")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(AppColors.accentWarning)
         } else if Calendar.current.isDateInTomorrow(date) {
-            return Text("Tomorrow")
+            Text("Tomorrow")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(AppColors.textSecondary)
         } else if isOverdue {
-            formatter.dateFormat = "MMM d"
-            return HStack(spacing: 2) {
+            HStack(spacing: 2) {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 9))
-                Text(formatter.string(from: date))
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(AppColors.accentDanger)
+                Text(date, format: Date.FormatStyle().month(.abbreviated).day())
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(AppColors.accentDanger)
             }
-            .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(AppColors.accentDanger)
         } else {
-            formatter.dateFormat = "MMM d"
-            return Text(formatter.string(from: date))
+            Text(date, format: Date.FormatStyle().month(.abbreviated).day())
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(AppColors.textSecondary)
         }

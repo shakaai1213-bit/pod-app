@@ -10,7 +10,7 @@ struct AgentStatusCard: View {
     // MARK: - Computed Properties
 
     private var avatarColor: Color {
-        Color(hex: agent.avatarColor)
+        Color(hexString: agent.avatarColor ?? "3B82F6")
     }
 
     private var statusDotColor: Color {
@@ -24,7 +24,7 @@ struct AgentStatusCard: View {
     }
 
     private var lastActivityText: String {
-        RelativeTimeFormatter.shared.string(from: agent.lastActivity)
+        RelativeTimeFormatter.shared.string(from: agent.lastActivity ?? Date())
     }
 
     private var initials: String {
@@ -123,12 +123,12 @@ final class RelativeTimeFormatter {
 
 // MARK: - Agent Detail Sheet
 
-struct AgentDetailSheet: View {
+struct AgentDetailStatusCard: View {
     let agent: Agent
     @Environment(\.dismiss) private var dismiss
 
     private var avatarColor: Color {
-        Color(hex: agent.avatarColor)
+        Color(hexString: agent.avatarColor ?? "3B82F6")
     }
 
     private var statusDotColor: Color {
@@ -211,7 +211,7 @@ struct AgentDetailSheet: View {
 
                 Spacer()
 
-                Text("Last active \(RelativeTimeFormatter.shared.string(from: agent.lastActivity))")
+                Text("Last active \(RelativeTimeFormatter.shared.string(from: agent.lastActivity ?? Date()))")
                     .podTextStyle(.caption, color: AppColors.textSecondary)
             }
             .padding(Theme.sm)
@@ -246,7 +246,7 @@ struct AgentDetailSheet: View {
         VStack(alignment: .leading, spacing: Theme.sm) {
             sectionLabel("Skills")
 
-            FlowLayout(spacing: Theme.xs) {
+            StatusFlowLayout(spacing: Theme.xs) {
                 ForEach(agent.skills, id: \.self) { skill in
                     Text(skill)
                         .podTextStyle(.label, color: AppColors.accentElectric)
@@ -267,7 +267,7 @@ struct AgentDetailSheet: View {
 
 // MARK: - Flow Layout (Simple Wrap)
 
-struct FlowLayout: Layout {
+struct StatusFlowLayout: Layout {
     var spacing: CGFloat = 8
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {

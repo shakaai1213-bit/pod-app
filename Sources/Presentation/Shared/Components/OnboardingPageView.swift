@@ -15,18 +15,18 @@ struct OnboardingPageView<Content: View>: View {
     var onNext: (() -> Void)?
 
     // Styling
-    var indicatorColor: Color = .podGreen
-    var indicatorInactiveColor: Color = .appTextTertiary
-    var buttonBackgroundColor: Color = .podGreen
+    var indicatorColor: Color = AppColors.accentElectric
+    var indicatorInactiveColor: Color = AppColors.textTertiary
+    var buttonBackgroundColor: Color = AppColors.accentElectric
     var buttonForegroundColor: Color = .white
 
     init(
         currentPage: Binding<Int>,
         totalPages: Int,
         showPrevNextButtons: Bool = false,
-        indicatorColor: Color = .podGreen,
-        indicatorInactiveColor: Color = .appTextTertiary,
-        buttonBackgroundColor: Color = .podGreen,
+        indicatorColor: Color = AppColors.accentElectric,
+        indicatorInactiveColor: Color = AppColors.textTertiary,
+        buttonBackgroundColor: Color = AppColors.accentElectric,
         buttonForegroundColor: Color = .white,
         onPrevious: (() -> Void)? = nil,
         onNext: (() -> Void)? = nil,
@@ -78,15 +78,15 @@ struct OnboardingPageView<Content: View>: View {
                         }
                         .font(.subheadline)
                         .fontWeight(.medium)
-                        .foregroundColor(currentPage > 0 ? .appTextPrimary : .appTextTertiary)
+                        .foregroundColor(currentPage > 0 ? AppColors.textPrimary : AppColors.textTertiary)
                         .frame(maxWidth: .infinity)
                         .frame(height: 48)
                         .background(
                             RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.appSurface)
+                                .fill(AppColors.backgroundSecondary)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Color.appBorder, lineWidth: 1)
+                                        .stroke(AppColors.border, lineWidth: 1)
                                 )
                         )
                     }
@@ -119,7 +119,7 @@ struct OnboardingPageView<Content: View>: View {
                                             endPoint: .trailing
                                         )
                                         : LinearGradient(
-                                            colors: [.appDisabled, .appDisabled],
+                                            colors: [AppColors.textTertiary, AppColors.textTertiary],
                                             startPoint: .leading,
                                             endPoint: .trailing
                                         )
@@ -151,8 +151,8 @@ struct PageControlView: View {
 
     let currentPage: Int
     let totalPages: Int
-    var activeColor: Color = .podGreen
-    var inactiveColor: Color = .appTextTertiary
+    var activeColor: Color = AppColors.accentElectric
+    var inactiveColor: Color = AppColors.textTertiary
     var dotSize: CGFloat = 8
     var spacing: CGFloat = 6
 
@@ -173,7 +173,7 @@ struct PageControlView: View {
 
 #Preview("OnboardingPageView with dots") {
     ZStack {
-        Color.appBackground
+        AppColors.backgroundPrimary
             .ignoresSafeArea()
 
         OnboardingPageView(

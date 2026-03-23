@@ -187,7 +187,7 @@ struct LogStreamView: View {
     // MARK: - Theme
 
     private var logBackground: Color {
-        Color(hex: "0A0A0F")
+        Color(hexString: "0A0A0F")
     }
 }
 
@@ -390,7 +390,8 @@ final class LogStreamViewModel {
 
         // Keep last 500 entries
         if entries.count > 500 {
-            let removed = entries.removeFirst(entries.count - 500)
+            let removed = Array(entries.prefix(entries.count - 500))
+            entries.removeFirst(entries.count - 500)
             if removed.contains(where: { $0.level == .error }) {
                 errorCount = entries.filter { $0.level == .error }.count
             }

@@ -1,16 +1,17 @@
 import Foundation
+import SwiftUI
 
 // MARK: - Agent
 
 struct Agent: Identifiable {
-    let id: UUID
-    let name: String
-    let role: String
-    let status: AgentStatus
-    let currentTask: String?
-    let lastActivity: Date
-    let skills: [String]
-    let avatarColor: String
+    var id: UUID
+    var name: String
+    var role: String
+    var status: AgentState
+    var currentTask: String?
+    var lastActivity: Date?
+    var skills: [String]
+    var avatarColor: String?
 }
 
 extension Agent: Codable {}
@@ -18,7 +19,7 @@ extension Agent: Hashable {}
 
 // MARK: - Agent Status
 
-enum AgentStatus: String, Codable, CaseIterable {
+enum AgentState: String, Codable, CaseIterable {
     case online
     case busy
     case idle

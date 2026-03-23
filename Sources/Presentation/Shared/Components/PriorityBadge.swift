@@ -1,31 +1,7 @@
 import SwiftUI
 
-enum Priority: String, CaseIterable, Codable, Hashable {
-    case low
-    case medium
-    case high
-    case critical
-
-    var label: String { rawValue.capitalized }
-
-    var color: Color {
-        switch self {
-        case .low:      return .gray
-        case .medium:   return .yellow
-        case .high:     return .orange
-        case .critical: return .red
-        }
-    }
-
-    var icon: String? {
-        switch self {
-        case .low:      return nil
-        case .medium:   return nil
-        case .high:     return "exclamationmark"
-        case .critical: return "exclamationmark.triangle.fill"
-        }
-    }
-}
+/// Priority is defined in Domain/Entities/Projects.swift
+/// This file re-exports it for convenience in the Presentation layer.
 
 enum PriorityBadgeSize: String, CaseIterable {
     case small, medium, large

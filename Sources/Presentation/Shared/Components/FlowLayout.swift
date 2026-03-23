@@ -6,6 +6,11 @@ struct FlowLayout: Layout {
     var horizontalSpacing: CGFloat = 8
     var verticalSpacing: CGFloat = 8
 
+    init(horizontalSpacing: CGFloat = 8, verticalSpacing: CGFloat = 8) {
+        self.horizontalSpacing = horizontalSpacing
+        self.verticalSpacing = verticalSpacing
+    }
+
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let result = compute(in: proposal.replacingUnspecifiedDimensions().width, subviews: subviews)
         return result.bounds
@@ -61,7 +66,11 @@ struct FlowLayout: Layout {
 
 /// Standard tag flow layout with 6pt spacing
 struct TagFlowLayout: Layout {
-    private let inner = FlowLayout(horizontalSpacing: 6, verticalSpacing: 6)
+    private let inner: FlowLayout
+
+    init() {
+        self.inner = FlowLayout(horizontalSpacing: 6, verticalSpacing: 6)
+    }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         inner.sizeThatFits(proposal: proposal, subviews: subviews, cache: &cache)
@@ -74,7 +83,11 @@ struct TagFlowLayout: Layout {
 
 /// Compact flow layout with zero spacing
 struct CompactFlowLayout: Layout {
-    private let inner = FlowLayout(horizontalSpacing: 0, verticalSpacing: 0)
+    private let inner: FlowLayout
+
+    init() {
+        self.inner = FlowLayout(horizontalSpacing: 0, verticalSpacing: 0)
+    }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         inner.sizeThatFits(proposal: proposal, subviews: subviews, cache: &cache)

@@ -13,7 +13,7 @@ final class AgentsViewModel {
     var isLoading: Bool = false
     var error: String?
 
-    private(set) var sseClient: SSEClient?
+    private(set) var sseClient: LocalSSEClient?
 
     // MARK: - Private
 
@@ -33,16 +33,16 @@ final class AgentsViewModel {
         error = nil
 
         do {
-            let dtos: [AgentDTO] = try await apiClient.request(.agents)
-            agents = dtos.map { dto in
+            let response: PaginatedResponse<AgentDTO> = try await apiClient.request(.agents)
+            agents = response.items.map { dto in
                 Agent(
                     id: UUID(uuidString: dto.id) ?? UUID(),
                     name: dto.name,
-                    role: dto.role,
-                    status: AgentStatus(rawValue: dto.status.rawValue) ?? .offline,
+                    role: dto.role ?? "Agent",
+                    status: AgentState(rawValue: dto.status.rawValue) ?? .offline,
                     currentTask: dto.currentTask,
-                    lastActivity: dto.lastActivity ?? Date(),
-                    skills: dto.skills,
+                    lastActivity: dto.lastSeenAt ?? Date(),
+                    skills: dto.skills ?? [],
                     avatarColor: dto.avatarColor ?? "#3B82F6"
                 )
             }
@@ -57,14 +57,14 @@ final class AgentsViewModel {
     // MARK: - Update Agent Status
 
     @MainActor
-    func updateAgentStatus(_ agentId: UUID, _ newStatus: AgentStatus) async {
+    func updateAgentState(_ agentId: UUID, _ newStatus: AgentState) async {
         guard let index = agents.firstIndex(where: { $0.id == agentId }) else { return }
 
         // Optimistic update
         agents[index].status = newStatus
 
         do {
-            let body = AgentStatusUpdateRequest(status: newStatus.rawValue)
+            let body = AgentStateUpdateRequest(status: newStatus.rawValue)
             let _: AgentDTO = try await apiClient.request(
                 .agentStatus(agentId: agentId.uuidString),
                 body: body
@@ -98,11 +98,11 @@ final class AgentsViewModel {
 
     // MARK: - SSE Subscription
 
-    func subscribeToAgentStatus() {
-        sseClient = SSEClient(baseURL: "http://192.168.4.243:8000")
+    func subscribeToAgentState() {
+        sseClient = LocalSSEClient(baseURL: "http://192.168.4.243:8000")
         sseClient?.connect(to: "/api/v1/events/agents") { [weak self] event in
             Task { @MainActor in
-                self?.onAgentStatusUpdate(event)
+                self?.onAgentStateUpdate(event)
             }
         }
     }
@@ -115,12 +115,12 @@ final class AgentsViewModel {
     // MARK: - SSE Event Handler
 
     @MainActor
-    func onAgentStatusUpdate(_ event: SSEEvent) {
+    func onAgentStateUpdate(_ event: SSEEvent) {
         guard event.type == "agent.status" else { return }
         guard let agentIdString = event.data["agent_id"] as? String,
               let agentId = UUID(uuidString: agentIdString),
               let statusString = event.data["status"] as? String,
-              let newStatus = AgentStatus(rawValue: statusString)
+              let newStatus = AgentState(rawValue: statusString)
         else { return }
 
         if let index = agents.firstIndex(where: { $0.id == agentId }) {
@@ -258,7 +258,7 @@ struct SSEEvent {
 
 // MARK: - SSE Client
 
-final class SSEClient: NSObject, URLSessionDataDelegate {
+final class LocalSSEClient: NSObject, URLSessionDataDelegate {
     private let baseURL: String
     private var session: URLSession!
     private var task: URLSessionDataTask?
@@ -309,18 +309,27 @@ final class SSEClient: NSObject, URLSessionDataDelegate {
 
 // MARK: - Agent Status Update Request
 
-private struct AgentStatusUpdateRequest: Encodable {
+private struct AgentStateUpdateRequest: Encodable {
     let status: String
 }
 
 // MARK: - APIClient Extended Request
 
 extension APIClient {
+    /// Request with a body (POST/PUT)
     func request<T: Decodable>(
         _ endpoint: Endpoint,
         body: some Encodable
     ) async throws -> T {
-        var request = try buildRequest(path: endpoint.path, method: endpoint.method, body: body)
+        var request = try buildRequest(path: endpoint.path, method: endpoint.method.rawValue, body: body)
+        return try await perform(request)
+    }
+
+    /// Request without a body (GET/DELETE)
+    func request<T: Decodable>(
+        _ endpoint: Endpoint
+    ) async throws -> T {
+        let request = try buildRequest(path: endpoint.path, method: endpoint.method.rawValue)
         return try await perform(request)
     }
 }

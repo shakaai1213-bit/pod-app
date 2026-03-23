@@ -1,11 +1,11 @@
 import SwiftUI
 
 struct ContentView: View {
-    @EnvironmentObject var appState: AppState
+    @Environment(\.appState) private var appState: AppState
 
     var body: some View {
         ZStack {
-            Theme.background
+            AppTheme.background
                 .ignoresSafeArea()
 
             if appState.isAuthenticated {
@@ -19,7 +19,10 @@ struct ContentView: View {
                 loadingOverlay
             }
         }
-        .sheet(isPresented: $appState.showError) {
+        .sheet(isPresented: Binding(
+            get: { appState.showError },
+            set: { appState.showError = $0 }
+        )) {
             errorSheet
         }
     }
@@ -27,7 +30,10 @@ struct ContentView: View {
     // MARK: - Tab View
 
     private var mainTabView: some View {
-        TabView(selection: $appState.selectedTab) {
+        TabView(selection: Binding(
+            get: { appState.selectedTab },
+            set: { appState.selectedTab = $0 }
+        )) {
             DashboardView()
                 .tabItem {
                     Label(AppTab.dashboard.title, systemImage: AppTab.dashboard.icon)
@@ -58,7 +64,7 @@ struct ContentView: View {
                 }
                 .tag(AppTab.agents.rawValue)
         }
-        .tint(Theme.primaryAccent)
+        .tint(AppTheme.primaryAccent)
     }
 
     // MARK: - Loading Overlay
@@ -68,22 +74,22 @@ struct ContentView: View {
             Color.black.opacity(0.6)
                 .ignoresSafeArea()
 
-            VStack(spacing: Theme.spacingMD) {
+            VStack(spacing: AppTheme.spacingMD) {
                 ProgressView()
                     .progressViewStyle(.circular)
-                    .tint(Theme.primaryAccent)
+                    .tint(AppTheme.primaryAccent)
                     .scaleEffect(1.4)
 
                 if let message = appState.loadingMessage {
                     Text(message)
-                        .font(.bodyMedium)
-                        .foregroundColor(Theme.secondaryText)
+                        .font(.body)
+                        .foregroundColor(AppTheme.secondaryText)
                 }
             }
-            .padding(Theme.spacingXL)
-            .background(Theme.surfaceElevated)
-            .cornerRadius(Theme.radiusLarge)
-            .shadow(color: Theme.glowAccent, radius: 20)
+            .padding(AppTheme.spacingXL)
+            .background(AppTheme.surfaceElevated)
+            .cornerRadius(AppTheme.radiusLarge)
+            .shadow(color: AppTheme.glowAccent, radius: 20)
         }
     }
 
@@ -91,37 +97,37 @@ struct ContentView: View {
 
     private var errorSheet: some View {
         NavigationStack {
-            VStack(spacing: Theme.spacingLG) {
+            VStack(spacing: AppTheme.spacingLG) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: 48))
-                    .foregroundColor(Theme.error)
+                    .foregroundColor(AppTheme.error)
 
                 Text(appState.errorMessage ?? "Something went wrong")
-                    .font(.titleMedium)
-                    .foregroundColor(Theme.primaryText)
+                    .font(.title2)
+                    .foregroundColor(AppTheme.primaryText)
                     .multilineTextAlignment(.center)
 
                 if let details = appState.errorDetails, !details.isEmpty {
                     Text(details)
                         .font(.caption)
-                        .foregroundColor(Theme.secondaryText)
+                        .foregroundColor(AppTheme.secondaryText)
                         .multilineTextAlignment(.center)
                 }
 
                 Button(action: { appState.dismissError() }) {
                     Text("Dismiss")
-                        .font(.bodyLarge.bold())
-                        .foregroundColor(Theme.inverseText)
+                        .font(.body.bold())
+                        .foregroundColor(AppTheme.inverseText)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, Theme.spacingSM)
-                        .background(Theme.primaryAccent)
-                        .cornerRadius(Theme.radiusMedium)
+                        .padding(.vertical, AppTheme.spacingSM)
+                        .background(AppTheme.primaryAccent)
+                        .cornerRadius(AppTheme.radiusMedium)
                 }
-                .padding(.horizontal, Theme.spacingXL)
+                .padding(.horizontal, AppTheme.spacingXL)
             }
-            .padding(Theme.spacingXL)
+            .padding(AppTheme.spacingXL)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Theme.surface)
+            .background(AppTheme.surface)
             .navigationTitle("Error")
             .navigationBarTitleDisplayMode(.inline)
         }
@@ -132,46 +138,46 @@ struct ContentView: View {
 // MARK: - Login View
 
 struct LoginView: View {
-    @EnvironmentObject var appState: AppState
+    @Environment(\.appState) private var appState: AppState
     @State private var token: String = ""
     @FocusState private var isTokenFocused: Bool
 
     var body: some View {
-        VStack(spacing: Theme.spacingXL) {
+        VStack(spacing: AppTheme.spacingXL) {
             Spacer()
 
             // Logo / Brand
-            VStack(spacing: Theme.spacingSM) {
+            VStack(spacing: AppTheme.spacingSM) {
                 Image(systemName: "cpu")
                     .font(.system(size: 64))
-                    .foregroundColor(Theme.primaryAccent)
-                    .shadow(color: Theme.glowAccent, radius: 20)
+                    .foregroundColor(AppTheme.primaryAccent)
+                    .shadow(color: AppTheme.glowAccent, radius: 20)
 
                 Text("ORCA")
                     .font(.system(size: 40, weight: .bold, design: .default))
-                    .foregroundColor(Theme.primaryText)
+                    .foregroundColor(AppTheme.primaryText)
 
                 Text("Mission Control")
-                    .font(.titleSmall)
-                    .foregroundColor(Theme.secondaryText)
+                    .font(.title3)
+                    .foregroundColor(AppTheme.secondaryText)
             }
 
             Spacer()
 
             // Token input
-            VStack(spacing: Theme.spacingMD) {
-                VStack(alignment: .leading, spacing: Theme.spacingXS) {
+            VStack(spacing: AppTheme.spacingMD) {
+                VStack(alignment: .leading, spacing: AppTheme.spacingXS) {
                     Text("API Token")
                         .font(.caption)
-                        .foregroundColor(Theme.secondaryText)
+                        .foregroundColor(AppTheme.secondaryText)
 
                     HStack {
                         Image(systemName: "key.fill")
-                            .foregroundColor(Theme.secondaryText)
+                            .foregroundColor(AppTheme.secondaryText)
 
                         SecureField("Paste your token", text: $token)
                             .textFieldStyle(.plain)
-                            .foregroundColor(Theme.primaryText)
+                            .foregroundColor(AppTheme.primaryText)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
                             .focused($isTokenFocused)
@@ -180,12 +186,12 @@ struct LoginView: View {
                                 submitToken()
                             }
                     }
-                    .padding(Theme.spacingSM)
-                    .background(Theme.surface)
-                    .cornerRadius(Theme.radiusMedium)
+                    .padding(AppTheme.spacingSM)
+                    .background(AppTheme.surface)
+                    .cornerRadius(AppTheme.radiusMedium)
                     .overlay(
-                        RoundedRectangle(cornerRadius: Theme.radiusMedium)
-                            .stroke(Theme.border, lineWidth: 1)
+                        RoundedRectangle(cornerRadius: AppTheme.radiusMedium)
+                            .stroke(AppTheme.border, lineWidth: 1)
                     )
                 }
 
@@ -194,39 +200,39 @@ struct LoginView: View {
                         if appState.isLoading {
                             ProgressView()
                                 .progressViewStyle(.circular)
-                                .tint(Theme.inverseText)
+                                .tint(AppTheme.inverseText)
                                 .scaleEffect(0.8)
                         } else {
                             Text("Connect")
-                                .font(.bodyLarge.bold())
+                                .font(.body.bold())
                         }
                     }
-                    .foregroundColor(Theme.inverseText)
+                    .foregroundColor(AppTheme.inverseText)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, Theme.spacingSM + 4)
+                    .padding(.vertical, AppTheme.spacingSM + 4)
                     .background(
                         token.isEmpty
-                            ? Theme.surfaceOverlay
-                            : Theme.primaryAccent
+                            ? AppTheme.surfaceOverlay
+                            : AppTheme.primaryAccent
                     )
-                    .cornerRadius(Theme.radiusMedium)
+                    .cornerRadius(AppTheme.radiusMedium)
                     .shadow(
-                        color: token.isEmpty ? .clear : Theme.glowAccent,
+                        color: token.isEmpty ? .clear : AppTheme.glowAccent,
                         radius: 12
                     )
                 }
                 .disabled(token.isEmpty || appState.isLoading)
             }
-            .padding(.horizontal, Theme.spacingXL)
+            .padding(.horizontal, AppTheme.spacingXL)
 
             Spacer()
 
             Text("Connecting to \(URL(string: "http://192.168.4.243:8000")!.host!)")
                 .font(.caption)
-                .foregroundColor(Theme.tertiaryText)
-                .padding(.bottom, Theme.spacingLG)
+                .foregroundColor(AppTheme.tertiaryText)
+                .padding(.bottom, AppTheme.spacingLG)
         }
-        .background(Theme.background)
+        .background(AppTheme.background)
     }
 
     private func submitToken() {
@@ -241,5 +247,5 @@ struct LoginView: View {
 
 #Preview {
     ContentView()
-        .environmentObject(AppState())
+        .environment(\.appState, AppState())
 }

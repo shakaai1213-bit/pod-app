@@ -10,9 +10,9 @@ final class CachedAgent {
     var role: String
     var status: String
     var currentTask: String?
-    var lastActivity: Date
+    var lastActivity: Date?
     var skills: [String]
-    var avatarColor: String
+    var avatarColor: String?
     var cachedAt: Date
 
     init(
@@ -21,9 +21,9 @@ final class CachedAgent {
         role: String,
         status: String,
         currentTask: String?,
-        lastActivity: Date,
+        lastActivity: Date?,
         skills: [String],
-        avatarColor: String,
+        avatarColor: String?,
         cachedAt: Date = Date()
     ) {
         self.id = id
@@ -56,7 +56,7 @@ final class CachedAgent {
             id: id,
             name: name,
             role: role,
-            status: AgentStatus(rawValue: status) ?? .offline,
+            status: AgentState(rawValue: status) ?? .offline,
             currentTask: currentTask,
             lastActivity: lastActivity,
             skills: skills,
@@ -104,39 +104,23 @@ final class CachedChannel {
             name: channel.name,
             type: channel.type.rawValue,
             unreadCount: channel.unreadCount,
-            lastMessagePreview: channel.lastMessage?.content,
-            lastMessageTime: channel.lastMessage?.timestamp,
+            lastMessagePreview: channel.lastMessage,
+            lastMessageTime: channel.lastMessageTimestamp,
             isPinned: channel.isPinned,
             cachedAt: Date()
         )
     }
 
     func toChannel() -> Channel {
-        let message: Message? = {
-            guard let preview = lastMessagePreview, let time = lastMessageTime else {
-                return nil
-            }
-            return Message(
-                id: UUID(),
-                channelId: id,
-                authorId: UUID(),
-                content: preview,
-                timestamp: time,
-                isAgent: false,
-                agentId: nil,
-                reactions: [],
-                threadCount: 0
-            )
-        }()
-
         return Channel(
             id: id,
             name: name,
-            type: ChannelType(rawValue: type) ?? .general,
-            description: "",
-            isPinned: isPinned,
+            type: ChatChannelType(rawValue: type) ?? .general,
+            lastMessage: lastMessagePreview,
+            lastMessageTimestamp: lastMessageTime,
             unreadCount: unreadCount,
-            lastMessage: message
+            isPinned: isPinned,
+            isMuted: false
         )
     }
 }
@@ -192,12 +176,10 @@ final class CachedMessage {
             id: id,
             channelId: channelId,
             authorId: authorId,
-            content: content,
-            timestamp: timestamp,
             isAgent: isAgent,
             agentId: agentId,
-            reactions: [],
-            threadCount: 0
+            content: content,
+            timestamp: timestamp
         )
     }
 }

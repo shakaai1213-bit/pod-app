@@ -232,7 +232,7 @@ struct SettingsView: View {
             HStack(spacing: 16) {
                 AvatarView(
                     name: viewModel.userName,
-                    status: viewModel.userStatus,
+                    status: nil,
                     size: .xl,
                     showRing: true
                 )

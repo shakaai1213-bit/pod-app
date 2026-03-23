@@ -122,7 +122,7 @@ struct WallDisplayView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: Theme.sm) {
                 ForEach(viewModel.agents) { agent in
-                    AgentStatusCard(agent: agent)
+                    AgentStatusCard(agent: agent, onTap: {})
                 }
             }
             .padding(.horizontal, Theme.lg)
@@ -237,70 +237,6 @@ struct WallDisplayView: View {
     }
 }
 
-// MARK: - Agent Status Card
-
-private struct AgentStatusCard: View {
-
-    let agent: Agent
-
-    private var statusColor: Color {
-        switch agent.status {
-        case .online:  return AppColors.accentSuccess
-        case .busy:   return AppColors.accentWarning
-        case .idle:   return AppColors.textTertiary
-        case .offline: return AppColors.textMuted
-        case .error:  return AppColors.accentDanger
-        }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.xs) {
-            // Avatar + Name + Status dot
-            HStack(spacing: Theme.xs) {
-                AvatarView(
-                    name: agent.name,
-                    status: nil,
-                    size: .lg,
-                    image: nil
-                )
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(agent.name)
-                        .podTextStyle(.caption, color: AppColors.textPrimary)
-                        .fontWeight(.medium)
-
-                    // Status dot + label
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(statusColor)
-                            .frame(width: 6, height: 6)
-                        Text(agent.status.displayName)
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundStyle(AppColors.textTertiary)
-                    }
-                }
-            }
-
-            // Current task
-            if let task = agent.currentTask {
-                Text(task)
-                    .podTextStyle(.caption, color: AppColors.textSecondary)
-                    .lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else {
-                Text("Idle")
-                    .font(.system(size: 10))
-                    .foregroundStyle(AppColors.textTertiary)
-                    .italic()
-            }
-        }
-        .padding(Theme.sm)
-        .frame(width: 160)
-        .background(AppColors.backgroundTertiary)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
-    }
-}
-
 // MARK: - Wall Activity Item View
 
 private struct WallActivityItemView: View {
@@ -334,13 +270,13 @@ private struct WallActivityItemView: View {
             // Actor + Timestamp
             VStack(alignment: .trailing, spacing: 4) {
                 HStack(spacing: 4) {
-                    if item.isActorAgent {
+                    if item.isAgent {
                         Image(systemName: "cpu")
                             .font(.system(size: 9, weight: .bold))
                             .foregroundStyle(AppColors.accentAgent)
                     }
-                    Text(item.actorName)
-                        .podTextStyle(.caption, color: item.isActorAgent ? AppColors.accentAgent : AppColors.textSecondary)
+                    Text(item.actor)
+                        .podTextStyle(.caption, color: item.isAgent ? AppColors.accentAgent : AppColors.textSecondary)
                 }
 
                 Text(timestampText)

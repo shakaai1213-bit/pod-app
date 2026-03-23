@@ -155,19 +155,19 @@ struct StandardEditorView: View {
                                 .font(.caption)
                                 .fontWeight(.medium)
                         }
-                        .foregroundColor(category == cat ? Color(hex: cat.color) : AppColors.textSecondary)
+                        .foregroundColor(category == cat ? Color(hexString: cat.color) : AppColors.textSecondary)
                         .padding(.horizontal, Theme.sm)
                         .padding(.vertical, Theme.xs)
                         .background(
                             category == cat
-                                ? Color(hex: cat.color).opacity(0.15)
+                                ? Color(hexString: cat.color).opacity(0.15)
                                 : AppColors.backgroundTertiary
                         )
                         .clipShape(Capsule())
                         .overlay(
                             Capsule()
                                 .stroke(
-                                    category == cat ? Color(hex: cat.color) : AppColors.border,
+                                    category == cat ? Color(hexString: cat.color) : AppColors.border,
                                     lineWidth: 1
                                 )
                         )
@@ -190,7 +190,7 @@ struct StandardEditorView: View {
             VStack(alignment: .leading, spacing: Theme.xs) {
                 // Existing tags
                 if !tags.isEmpty {
-                    FlowLayout(spacing: Theme.xs) {
+                    FlowLayout(horizontalSpacing: Theme.xs, verticalSpacing: Theme.xs) {
                         ForEach(tags, id: \.self) { tag in
                             TagChip(tag: tag) {
                                 withAnimation { tags.removeAll { $0 == tag } }
@@ -477,14 +477,14 @@ struct StandardEditorView: View {
 
         var standard = buildStandard()
         if mode.isEditing {
-            let updated = await MainActor.run { viewModel.updateStandard(standard) }
+            let updated = await viewModel.updateStandard(standard)
             await MainActor.run {
                 isPublishing = false
                 if updated { dismiss() }
                 else { errorMessage = viewModel.errorMessage ?? "Failed to publish" }
             }
         } else {
-            let created = await MainActor.run { viewModel.createStandard(standard) }
+            let created = await viewModel.createStandard(standard)
             await MainActor.run {
                 isPublishing = false
                 if created { dismiss() }
@@ -634,7 +634,7 @@ struct RelatedEditorRow: View {
     var body: some View {
         HStack(spacing: Theme.sm) {
             RoundedRectangle(cornerRadius: 3)
-                .fill(Color(hex: standard.category.color))
+                .fill(Color(hexString: standard.category.color))
                 .frame(width: 3, height: 30)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -755,7 +755,7 @@ struct RelatedPickerRow: View {
                     .foregroundColor(isSelected ? AppColors.accentElectric : AppColors.textTertiary)
 
                 RoundedRectangle(cornerRadius: 3)
-                    .fill(Color(hex: standard.category.color))
+                    .fill(Color(hexString: standard.category.color))
                     .frame(width: 3, height: 36)
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -768,7 +768,7 @@ struct RelatedPickerRow: View {
                     HStack(spacing: 4) {
                         Image(systemName: standard.category.icon)
                             .font(.system(size: 9))
-                            .foregroundColor(Color(hex: standard.category.color))
+                            .foregroundColor(Color(hexString: standard.category.color))
 
                         Text(standard.category.displayName)
                             .font(.caption2)

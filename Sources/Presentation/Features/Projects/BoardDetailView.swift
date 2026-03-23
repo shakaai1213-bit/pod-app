@@ -11,29 +11,29 @@ struct BoardDetailView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     @State private var selectedStage: ProjectStage = .dev
-    @State private var tasks: [Task] = []
+    @State private var tasks: [ProjectTask] = []
     @State private var isLoading = false
     @State private var searchText = ""
     @State private var filterPriority: Priority?
     @State private var filterTag: String?
     @State private var showingNewTask = false
-    @State private var draggingTask: Task?
-    @State private var selectedTask: Task?
+    @State private var draggingTask: ProjectTask?
+    @State private var selectedTask: ProjectTask?
     @State private var collapsedStages: Set<ProjectStage> = []
 
     private var isIPad: Bool { horizontalSizeClass == .regular }
 
     // MARK: - Tasks by Stage
 
-    private var tasksByStage: [ProjectStage: [Task]] {
-        var grouped: [ProjectStage: [Task]] = [:]
+    private var tasksByStage: [ProjectStage: [ProjectTask]] {
+        var grouped: [ProjectStage: [ProjectTask]] = [:]
         for stage in ProjectStage.allCases {
             grouped[stage] = tasksForDisplay.filter { $0.stage == stage }
         }
         return grouped
     }
 
-    private var tasksForDisplay: [Task] {
+    private var tasksForDisplay: [ProjectTask] {
         var result = tasks
 
         if !searchText.isEmpty {
@@ -107,8 +107,8 @@ struct BoardDetailView: View {
             }
             .sheet(item: $selectedTask) { task in
                 TaskDetailSheet(task: task, viewModel: viewModel) { updated in
-                    if let idx = tasks.indices.first(where: { tasks[idx].id == updated.id }) {
-                        tasks[idx] = updated
+                    if let foundIdx = tasks.indices.first(where: { tasks[$0].id == updated.id }) {
+                        tasks[foundIdx] = updated
                     }
                 }
             }
@@ -266,7 +266,7 @@ struct BoardDetailView: View {
                         .frame(width: 56, height: 56)
                         .background(AppColors.accentElectric)
                         .clipShape(Circle())
-                        .podShadow(Theme.Shadow.medium)
+                        .podShadow(Theme.ShadowConfig.medium)
                 }
                 .padding(.trailing, Theme.lg)
                 .padding(.bottom, Theme.lg)
@@ -285,20 +285,20 @@ struct BoardDetailView: View {
     }
 
     private func moveTask(_ taskId: UUID, to stage: ProjectStage) {
-        if let idx = tasks.indices.first(where: { tasks[idx].id == taskId }) {
-            tasks[idx].stage = stage
+        if let foundIdx = tasks.indices.first(where: { tasks[$0].id == taskId }) {
+            tasks[foundIdx].stage = stage
             Task {
                 await viewModel.moveTask(taskId, toStage: stage)
             }
         }
     }
 
-    private static func mockTasksForBoard(boardId: UUID) -> [Task] {
+    private static func mockTasksForBoard(boardId: UUID) -> [ProjectTask] {
         let members = ProjectsViewModel.mockMembers
         return ProjectStage.allCases.flatMap { stage in
             let count = Int.random(in: 2...5)
             return (0..<count).map { i in
-                Task(
+                ProjectTask(
                     id: UUID(),
                     projectId: boardId,
                     title: "\(stage.displayName) task \(i + 1)",
@@ -319,10 +319,10 @@ struct BoardDetailView: View {
 
 private struct KanbanColumn: View {
     let stage: ProjectStage
-    let tasks: [Task]
+    let tasks: [ProjectTask]
     let isCollapsed: Bool
     let onToggleCollapse: () -> Void
-    let onTaskTap: (Task) -> Void
+    let onTaskTap: (ProjectTask) -> Void
     let onTaskDrop: (UUID) -> Void
 
     var body: some View {
@@ -429,7 +429,7 @@ private struct NewBoardTaskSheet: View {
     @Environment(\.dismiss) private var dismiss
     let boardId: UUID
     let viewModel: ProjectsViewModel
-    let onCreated: (Task) -> Void
+    let onCreated: (ProjectTask) -> Void
 
     @State private var title = ""
     @State private var description = ""

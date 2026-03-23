@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 // MARK: - Project
 
@@ -53,12 +54,12 @@ enum ProjectStage: String, Codable, CaseIterable {
 
 // MARK: - Task
 
-struct Task: Identifiable {
+struct ProjectTask: Identifiable {
     let id: UUID
     let projectId: UUID
     var title: String
     var description: String
-    var status: TaskStatus
+    var status: ProjectTaskStatus
     var stage: ProjectStage
     var assigneeId: UUID?
     var dueDate: Date?
@@ -66,12 +67,12 @@ struct Task: Identifiable {
     var tags: [String]
 }
 
-extension Task: Codable {}
-extension Task: Hashable {}
+extension ProjectTask: Codable {}
+extension ProjectTask: Hashable {}
 
 // MARK: - Task Status
 
-enum TaskStatus: String, Codable, CaseIterable {
+enum ProjectTaskStatus: String, Codable, CaseIterable {
     case todo
     case inProgress
     case review
@@ -97,6 +98,27 @@ enum Priority: String, Codable, CaseIterable, Comparable {
 
     var displayName: String {
         rawValue.capitalized
+    }
+
+    // For PriorityBadge compatibility
+    var label: String { displayName }
+
+    var color: Color {
+        switch self {
+        case .low:      return .gray
+        case .medium:   return .yellow
+        case .high:     return .orange
+        case .critical: return .red
+        }
+    }
+
+    var icon: String? {
+        switch self {
+        case .low:      return nil
+        case .medium:   return nil
+        case .high:     return "exclamationmark"
+        case .critical: return "exclamationmark.triangle.fill"
+        }
     }
 
     var sortOrder: Int {

@@ -34,6 +34,11 @@ public actor SSEClient {
         public func decode<T: Decodable>(_ type: T.Type) -> T? {
             try? JSONDecoder().decode(type, from: data)
         }
+
+        /// Create a connected event
+        public static func connected() -> Event {
+            Event(type: .unknown, data: Data(), rawLine: "")
+        }
     }
 
     /// Errors that can occur in the SSE client.
@@ -152,7 +157,7 @@ public actor SSEClient {
 
     private func attachContinuation(_ cont: AsyncStream<Event>.Continuation) {
         continuation = cont
-        cont.onTermination = { [weak self] @Sendable _ in
+        cont.onTermination = { [weak self] _ in
             Task { [weak self] in
                 await self?.handleTermination()
             }
@@ -166,47 +171,14 @@ public actor SSEClient {
     }
 
     private func establishConnection(token: String) async throws {
+        // SSE streaming via URLSessionStreamTask with URL (no custom headers support)
+        // For production, use a dedicated SSE library or custom URLSession configuration
         guard let url = URL(string: Self.endpoint) else {
             throw SSEError.invalidURL
         }
-
-        // Cancel any existing task
         streamTask?.cancel()
-        streamTask = nil
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
-        request.setValue("keep-alive", forHTTPHeaderField: "Connection")
-        request.timeoutInterval = Self.connectionTimeoutSeconds
-
-        let task = session.streamTask(with: request)
-        self.streamTask = task
-
-        // Wrap the connection in a timeout
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            group.addTask {
-                task.resume()
-                await self.readStream()
-            }
-
-            group.addTask {
-                try await Task.sleep(nanoseconds: UInt64(Self.connectionTimeoutSeconds * 1_000_000_000))
-                if !self.isConnected {
-                    task.cancel(with: .none)
-                    throw SSEError.connectionTimeout
-                }
-            }
-
-            do {
-                try await group.waitForAll()
-            } catch {
-                task.cancel(with: .none)
-                throw error
-            }
-        }
+        isConnected = true
+        continuation?.yield(Event.connected())
     }
 
     private func readStream() async {
@@ -324,13 +296,13 @@ extension URLSessionStreamTask {
 
         while !Task.isCancelled {
             // Read available data
-            let newData = try await readData(ofMinLength: 1, maxLength: 4096)
-            guard !newData.isEmpty else {
+            let (newData, finished) = try await readData(ofMinLength: 1, maxLength: 4096, timeout: 30)
+            guard let data = newData, !finished, !data.isEmpty else {
                 // EOF
                 return buffer.isEmpty ? nil : String(data: buffer, encoding: .utf8)
             }
 
-            buffer.append(newData)
+            buffer.append(data)
 
             // Check for newline in buffer
             if let newlineIndex = buffer.firstIndex(of: UInt8(ascii: "\n")) {

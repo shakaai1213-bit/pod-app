@@ -1,6 +1,24 @@
 import Foundation
 import SwiftUI
 
+// MARK: - Team Member
+
+struct TeamMember: Identifiable, Hashable, Codable {
+    var id: UUID
+    var name: String
+    var email: String?
+    var role: String?
+    var avatarColor: String?
+
+    init(id: UUID = UUID(), name: String, email: String? = nil, role: String? = nil, avatarColor: String? = nil) {
+        self.id = id
+        self.name = name
+        self.email = email
+        self.role = role
+        self.avatarColor = avatarColor
+    }
+}
+
 @Observable
 final class AppState {
     // MARK: - Authentication
@@ -25,7 +43,7 @@ final class AppState {
     // MARK: - Initialization
 
     init() {
-        loadStoredToken()
+        // Don't auto-load stored token — always require explicit login to avoid stale token issues
     }
 
     // MARK: - Token Management
@@ -44,7 +62,7 @@ final class AppState {
 
     func clearToken() {
         UserDefaults.standard.removeObject(forKey: tokenKey)
-        APIClient.shared.setToken(nil)
+        Task { await APIClient.shared.setToken(nil) }
     }
 
     // MARK: - Authentication
@@ -53,34 +71,77 @@ final class AppState {
         await MainActor.run {
             isLoading = true
             errorMessage = nil
-            loadingMessage = "Authenticating..."
+            loadingMessage = "Connecting..."
         }
 
-        do {
-            let response = try await APIClient.shared.login(token: token)
+        // Step 1: Can we reach the backend at all? (no auth needed)
+        let reachable = await checkBackendReachable()
+        guard reachable else {
             await MainActor.run {
+                self.isAuthenticated = false
+                self.isLoading = false
+                self.loadingMessage = nil
+                self.showError(
+                    message: "Cannot reach ORCA MC",
+                    details: "Check your network connection to the Mac Mini at 192.168.4.243."
+                )
+            }
+            return
+        }
+
+        await MainActor.run {
+            loadingMessage = "Verifying token..."
+        }
+
+        // Atomically set token and verify in one actor call
+        let valid = await APIClient.shared.verifyAndSetToken(token)
+        await MainActor.run {
+            if valid {
+                await APIClient.shared.setToken(token)
                 self.isAuthenticated = true
-                self.currentUser = response.user
+                self.currentUser = TeamMember(id: UUID(), name: "User")
                 self.isLoading = false
                 self.loadingMessage = nil
                 self.storeToken(token)
-            }
-        } catch let error as APIError {
-            await MainActor.run {
+            } else {
                 self.isAuthenticated = false
-                self.currentUser = nil
                 self.isLoading = false
                 self.loadingMessage = nil
-                self.showError(message: error.message, details: error.localizedDescription)
+                self.showError(
+                    message: "Invalid token",
+                    details: "Token rejected. Make sure you're using the exact token from the ORCA MC .env file (LOCAL_AUTH_TOKEN)."
+                )
             }
+        }
+    }
+
+    /// Tests if ORCA MC backend is reachable from this device.
+    private func checkBackendReachable() async -> Bool {
+        guard let url = URL(string: "http://192.168.4.243:8000/health") else { return false }
+        do {
+            let (_, response) = try await URLSession.shared.data(from: url)
+            return (response as? HTTPURLResponse)?.statusCode == 200
         } catch {
-            await MainActor.run {
-                self.isAuthenticated = false
-                self.currentUser = nil
-                self.isLoading = false
-                self.loadingMessage = nil
-                self.showError(message: "Authentication failed", details: error.localizedDescription)
-            }
+            return false
+        }
+    }
+
+    /// Verifies token by making a direct URLSession call with no actor overhead.
+    private func verifyTokenDirectly(_ token: String) async -> Bool {
+        guard let url = URL(string: "http://192.168.4.243:8000/api/v1/agents") else { return false }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue(token, forHTTPHeaderField: "X-Api-Key")
+        request.timeoutInterval = 10
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else { return false }
+            print("[AppState] verifyTokenDirectly: status=\(httpResponse.statusCode) data=\(String(data: data.prefix(100), encoding: .utf8) ?? "")")
+            return httpResponse.statusCode == 200
+        } catch {
+            print("[AppState] verifyTokenDirectly ERROR: \(error)")
+            return false
         }
     }
 
@@ -158,11 +219,11 @@ enum AppTab: Int, CaseIterable, Identifiable {
 
     var accentColor: Color {
         switch self {
-        case .dashboard: return Theme.electricBlue
-        case .projects:  return Theme.electricPurple
-        case .chat:      return Theme.electricGreen
-        case .knowledge: return Theme.electricOrange
-        case .agents:    return Theme.primaryAccent
+        case .dashboard: return AppTheme.electricBlue
+        case .projects:  return AppTheme.electricPurple
+        case .chat:      return AppTheme.electricGreen
+        case .knowledge: return AppTheme.electricOrange
+        case .agents:    return AppTheme.primaryAccent
         }
     }
 }

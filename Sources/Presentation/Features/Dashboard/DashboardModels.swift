@@ -7,23 +7,23 @@ struct ActivityItem: Identifiable {
     let type: ActivityType
     let description: String
     let timestamp: Date
-    let actorName: String
-    let isActorAgent: Bool
+    let actor: String
+    var isAgent: Bool
 
     init(
         id: UUID = UUID(),
         type: ActivityType,
         description: String,
         timestamp: Date,
-        actorName: String,
-        isActorAgent: Bool
+        actor: String,
+        isAgent: Bool = false
     ) {
         self.id = id
         self.type = type
         self.description = description
         self.timestamp = timestamp
-        self.actorName = actorName
-        self.isActorAgent = isActorAgent
+        self.actor = actor
+        self.isAgent = isAgent
     }
 }
 
@@ -31,27 +31,39 @@ struct ActivityItem: Identifiable {
 
 enum ActivityType: String, CaseIterable {
     case taskCompleted = "task_completed"
-    case messageSent   = "message_sent"
+    case taskCreated = "task_created"
+    case messageReceived = "message_received"
+    case messageSent = "message_sent"
+    case agentStatusChange = "agent_status_change"
     case agentMilestone = "agent_milestone"
-    case taskCreated   = "task_created"
-    case fileUploaded  = "file_uploaded"
+    case approvalRequested = "approval_requested"
+    case systemAlert = "system_alert"
+    case fileUploaded = "file_uploaded"
 
     var icon: String {
         switch self {
         case .taskCompleted:  return "checkmark.circle.fill"
-        case .messageSent:    return "bubble.left.and.bubble.right.fill"
-        case .agentMilestone: return "star.fill"
         case .taskCreated:    return "plus.circle.fill"
-        case .fileUploaded:   return "paperclip"
+        case .messageReceived: return "bubble.left.fill"
+        case .messageSent:    return "bubble.right.fill"
+        case .agentStatusChange: return "wifi"
+        case .agentMilestone: return "star.fill"
+        case .approvalRequested: return "checkmark.seal.fill"
+        case .systemAlert:    return "exclamationmark.triangle.fill"
+        case .fileUploaded:  return "paperclip"
         }
     }
 
     var iconColor: Color {
         switch self {
         case .taskCompleted:  return AppColors.accentSuccess
-        case .messageSent:    return AppColors.accentElectric
-        case .agentMilestone: return AppColors.accentAgent
         case .taskCreated:    return AppColors.accentWarning
+        case .messageReceived: return AppColors.accentElectric
+        case .messageSent:    return AppColors.textSecondary
+        case .agentStatusChange: return AppColors.accentAgent
+        case .agentMilestone: return AppColors.accentAgent
+        case .approvalRequested: return AppColors.accentWarning
+        case .systemAlert:    return AppColors.accentDanger
         case .fileUploaded:   return AppColors.textSecondary
         }
     }
@@ -63,21 +75,21 @@ struct AttentionItem: Identifiable {
     let id: UUID
     let type: AttentionType
     let title: String
-    let subtitle: String?
     let severity: AttentionSeverity
+    let actor: String
 
     init(
         id: UUID = UUID(),
         type: AttentionType,
         title: String,
-        subtitle: String? = nil,
-        severity: AttentionSeverity = .warning
+        severity: AttentionSeverity = .warning,
+        actor: String = ""
     ) {
         self.id = id
         self.type = type
         self.title = title
-        self.subtitle = subtitle
         self.severity = severity
+        self.actor = actor
     }
 }
 

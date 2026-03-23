@@ -8,7 +8,7 @@ struct ProjectsView: View {
     @State private var selectedBoard: Board?
     @State private var showingFilters = false
     @State private var showingNewTask = false
-    @State private var contextMenuTask: Task?
+    @State private var contextMenuTask: Any?
     @State private var quickActionBoard: Board?
 
     var body: some View {
@@ -116,16 +116,16 @@ struct ProjectsView: View {
                     }
                 }
             }
-        }
 
-        if viewModel.isLoading && viewModel.boardGroups.isEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: Theme.sm) {
-                    ForEach(0..<3, id: \.self) { _ in
-                        RoundedRectangle(cornerRadius: Theme.radiusMedium)
-                            .fill(AppColors.backgroundTertiary)
-                            .frame(width: 200, height: 90)
-                            .shimmer()
+            if viewModel.isLoading && viewModel.boardGroups.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: Theme.sm) {
+                        ForEach(0..<3, id: \.self) { _ in
+                            RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                                .fill(AppColors.backgroundTertiary)
+                                .frame(width: 200, height: 90)
+                                .shimmer()
+                        }
                     }
                 }
             }
@@ -191,7 +191,7 @@ struct ProjectsView: View {
 
     private func sectionLabel(_ text: String) -> some View {
         Text(text.uppercased())
-            .podTextStyle(.label, color: AppColors.textTertrial)
+            .podTextStyle(.label, color: AppColors.textTertiary)
     }
 
     private var myTasksEmpty: some View {
@@ -271,10 +271,10 @@ struct ProjectsView: View {
     }
 }
 
-// MARK: - My Task Row
+// MARK: - My ProjectTask Row
 
 private struct MyTaskRow: View {
-    let task: Task
+    let task: ProjectTask
     let members: [TeamMember]
     let onTap: () -> Void
 
@@ -464,7 +464,7 @@ private extension Text {
     }
 }
 
-// MARK: - New Task Sheet
+// MARK: - New ProjectTask Sheet
 
 private struct NewTaskSheet: View {
     @Environment(\.dismiss) private var dismiss
@@ -495,12 +495,14 @@ private struct NewTaskSheet: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") {
+                    Button {
                         guard let board = selectedBoard, !title.isEmpty else { return }
                         Task {
                             await viewModel.createTask(boardId: board.id, title: title, description: description)
                             dismiss()
                         }
+                    } label: {
+                        Text("Create")
                     }
                     .disabled(title.isEmpty || selectedBoard == nil)
                 }

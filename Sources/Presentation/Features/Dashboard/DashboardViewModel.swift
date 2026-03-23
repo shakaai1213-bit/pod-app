@@ -32,16 +32,16 @@ final class DashboardViewModel {
         error = nil
 
         do {
-            let agentDTOs: [AgentDTO] = try await apiClient.request(.agents)
-            agents = agentDTOs.map { dto in
+            let response: PaginatedResponse<AgentDTO> = try await apiClient.request(.agents)
+            agents = response.items.map { dto in
                 Agent(
                     id: UUID(uuidString: dto.id) ?? UUID(),
                     name: dto.name,
-                    role: dto.role,
-                    status: AgentStatus(rawValue: dto.status.rawValue) ?? .offline,
+                    role: dto.role ?? "Agent",
+                    status: mapAgentStatus(dto.status),
                     currentTask: dto.currentTask,
-                    lastActivity: dto.lastActivity ?? Date(),
-                    skills: dto.skills,
+                    lastActivity: dto.lastSeenAt ?? Date(),
+                    skills: dto.skills ?? [],
                     avatarColor: dto.avatarColor ?? "#3B82F6"
                 )
             }
@@ -120,36 +120,36 @@ final class DashboardViewModel {
                 type: .taskCompleted,
                 description: "Completed sprint planning board setup",
                 timestamp: now.addingTimeInterval(-300),
-                actorName: "Kai",
-                isActorAgent: true
+                actor: "Kai",
+                isAgent: true
             ),
             ActivityItem(
                 type: .messageSent,
                 description: "Posted weekly status update in #general",
                 timestamp: now.addingTimeInterval(-900),
-                actorName: "Nova",
-                isActorAgent: true
+                actor: "Nova",
+                isAgent: true
             ),
             ActivityItem(
                 type: .agentMilestone,
                 description: "Orca deployed v2.3.1 to staging",
                 timestamp: now.addingTimeInterval(-1800),
-                actorName: "Orca",
-                isActorAgent: true
+                actor: "Orca",
+                isAgent: true
             ),
             ActivityItem(
                 type: .taskCreated,
                 description: "Created task: Implement auth token refresh",
                 timestamp: now.addingTimeInterval(-3600),
-                actorName: "Shaka",
-                isActorAgent: false
+                actor: "Shaka",
+                isAgent: false
             ),
             ActivityItem(
                 type: .fileUploaded,
                 description: "Uploaded architecture_diagram_v3.pdf",
                 timestamp: now.addingTimeInterval(-7200),
-                actorName: "Pulse",
-                isActorAgent: true
+                actor: "Pulse",
+                isAgent: true
             ),
         ]
     }
@@ -159,21 +159,34 @@ final class DashboardViewModel {
             AttentionItem(
                 type: .blockedTask,
                 title: "Auth token refresh blocked",
-                subtitle: "Waiting on backend API changes",
-                severity: .warning
+                severity: .warning,
+                actor: "Waiting on backend API changes"
             ),
             AttentionItem(
                 type: .pendingApproval,
                 title: "PR #41 pending review",
-                subtitle: "From Kai · 3h ago",
-                severity: .warning
+                severity: .warning,
+                actor: "From Kai · 3h ago"
             ),
             AttentionItem(
                 type: .agentError,
                 title: "Beacon encountered an error",
-                subtitle: "Knowledge base indexing failed",
-                severity: .critical
+                severity: .critical,
+                actor: "Knowledge base indexing failed"
             ),
         ]
+    }
+
+    // MARK: - Helpers
+
+    /// Maps DTO AgentStatus → Domain AgentState
+    private func mapAgentStatus(_ status: AgentStatus) -> AgentState {
+        switch status {
+        case .online:  return .online
+        case .busy:    return .busy
+        case .idle:    return .idle
+        case .offline: return .offline
+        case .error:   return .error
+        }
     }
 }

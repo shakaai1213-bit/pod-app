@@ -4,15 +4,15 @@ import SwiftUI
 
 struct TaskDetailSheet: View {
 
-    let task: Task
+    let task: ProjectTask
     @Bindable var viewModel: ProjectsViewModel
-    let onUpdate: (Task) -> Void
+    let onUpdate: (ProjectTask) -> Void
 
     @Environment(\.dismiss) private var dismiss
 
     @State private var editedTitle: String
     @State private var editedDescription: String
-    @State private var editedStatus: TaskStatus
+    @State private var editedStatus: ProjectTaskStatus
     @State private var editedStage: ProjectStage
     @State private var editedPriority: Priority
     @State private var editedDueDate: Date?
@@ -27,7 +27,7 @@ struct TaskDetailSheet: View {
 
     private let members = ProjectsViewModel.mockMembers
 
-    init(task: Task, viewModel: ProjectsViewModel, onUpdate: @escaping (Task) -> Void) {
+    init(task: ProjectTask, viewModel: ProjectsViewModel, onUpdate: @escaping (ProjectTask) -> Void) {
         self.task = task
         self.viewModel = viewModel
         self.onUpdate = onUpdate
@@ -137,7 +137,7 @@ struct TaskDetailSheet: View {
             VStack(spacing: Theme.sm) {
                 // Task Status (Todo / In Progress / Review / Done)
                 HStack(spacing: Theme.xs) {
-                    ForEach(TaskStatus.allCases, id: \.self) { status in
+                    ForEach(ProjectTaskStatus.allCases, id: \.self) { status in
                         Button {
                             editedStatus = status
                         } label: {
@@ -362,7 +362,7 @@ struct TaskDetailSheet: View {
                 }
                 .buttonStyle(.plain)
             } else {
-                FlowLayout(spacing: Theme.xs) {
+                TaskFlowLayout(spacing: Theme.xs) {
                     ForEach(editedTags, id: \.self) { tag in
                         HStack(spacing: 4) {
                             Text(tag)
@@ -547,7 +547,7 @@ struct TaskDetailSheet: View {
         }
     }
 
-    private func statusBackgroundColor(_ status: TaskStatus) -> Color {
+    private func statusBackgroundColor(_ status: ProjectTaskStatus) -> Color {
         switch status {
         case .todo:       return AppColors.backgroundTertiary
         case .inProgress: return AppColors.accentElectric.opacity(0.2)
@@ -556,7 +556,7 @@ struct TaskDetailSheet: View {
         }
     }
 
-    private func statusBorderColor(_ status: TaskStatus) -> Color {
+    private func statusBorderColor(_ status: ProjectTaskStatus) -> Color {
         switch status {
         case .todo:       return AppColors.border
         case .inProgress: return AppColors.accentElectric.opacity(0.4)
@@ -583,7 +583,7 @@ struct TaskDetailSheet: View {
         }
     }
 
-    private static func mockActivity(for task: Task) -> [ActivityEntry] {
+    private static func mockActivity(for task: ProjectTask) -> [ActivityEntry] {
         [
             ActivityEntry(
                 id: UUID(),
@@ -657,7 +657,7 @@ private struct AssigneePickerSheet: View {
                     } label: {
                         HStack {
                             Circle()
-                                .fill(Color(hex: member.avatarColor))
+                                .fill(Color(hexString: member.avatarColor ?? "#6B46C1"))
                                 .frame(width: 32, height: 32)
                                 .overlay(
                                     Text(member.name.prefix(1))
@@ -771,7 +771,7 @@ private struct TagEditorSheet: View {
 
 // MARK: - Flow Layout
 
-struct FlowLayout: Layout {
+struct TaskFlowLayout: Layout {
     var spacing: CGFloat = 8
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {

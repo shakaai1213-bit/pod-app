@@ -1,66 +1,37 @@
 import SwiftUI
 
-// MARK: - Typography
+// MARK: - Typography Namespace
 
-/// Typography scale for the Pod app.
-/// Each token maps to a system font with a defined size and weight.
 enum Typography {
+    /// Large Title / Bold / 34pt
+    static let display = FontTextStyle(.largeTitle, weight: .bold)
 
-    // MARK: - Font Definitions
+    /// Title / Bold / 28pt
+    static let title1 = FontTextStyle(.title, weight: .bold)
 
-    /// .largeTitle / bold / 34pt
-    static let display = FontTextStyle(
-        .largeTitle,
-        weight: .bold
-    )
+    /// Title 2 / Semibold / 22pt
+    static let title2 = FontTextStyle(.title2, weight: .semibold)
 
-    /// .title / bold / 28pt
-    static let title1 = FontTextStyle(
-        .title,
-        weight: .bold
-    )
+    /// Title 3 / Semibold / 17pt
+    static let title3 = FontTextStyle(.title3, weight: .semibold)
 
-    /// .title2 / semibold / 22pt
-    static let title2 = FontTextStyle(
-        .title2,
-        weight: .semibold
-    )
+    /// Headline / Semibold / 17pt
+    static let headline = FontTextStyle(.headline, weight: .semibold)
 
-    /// .headline / semibold / 17pt
-    static let title3 = FontTextStyle(
-        .headline,
-        weight: .semibold
-    )
+    /// Subheadline / Regular / 15pt
+    static let subheadline = FontTextStyle(.subheadline, weight: .regular)
 
-    /// .subheadline / medium / 15pt
-    static let headline = FontTextStyle(
-        .subheadline,
-        weight: .medium
-    )
+    /// Body / Regular / 17pt
+    static let body = FontTextStyle(.body, weight: .regular)
 
-    /// .body / regular / 15pt
-    static let body = FontTextStyle(
-        .body,
-        weight: .regular
-    )
+    /// Caption / Regular / 12pt
+    static let caption = FontTextStyle(.caption, weight: .regular)
 
-    /// .caption / regular / 13pt
-    static let caption = FontTextStyle(
-        .caption,
-        weight: .regular
-    )
+    /// Label / Medium / 11pt
+    static let label = FontTextStyle(.caption2, weight: .medium)
 
-    /// .caption2 / medium / 11pt
-    static let label = FontTextStyle(
-        .caption2,
-        weight: .medium
-    )
-
-    /// Monospaced / regular / 13pt
-    static let mono: FontTextStyle = .monospaced(
-        size: 13,
-        weight: .regular
-    )
+    /// Monospaced / Regular / 13pt
+    static var mono: FontTextStyle { .monospaced(size: 13, weight: .regular) }
 }
 
 // MARK: - FontTextStyle
@@ -78,11 +49,17 @@ struct FontTextStyle: Equatable {
         self.weight = weight
     }
 
+    private init(swiftUIFont: Font, pointSize: CGFloat, weight: Font.Weight) {
+        self.swiftUIFont = swiftUIFont
+        self.pointSize = pointSize
+        self.weight = weight
+    }
+
     // MARK: - Monospaced
 
     static func monospaced(size: CGFloat, weight: Font.Weight) -> FontTextStyle {
         FontTextStyle(
-            swiftUIFont: Font.system(size, design: .monospaced),
+            swiftUIFont: Font.system(size: size, weight: weight, design: .monospaced),
             pointSize: size,
             weight: weight
         )
@@ -91,7 +68,6 @@ struct FontTextStyle: Equatable {
     // MARK: - Helpers
 
     /// Resolves the actual UIFont point size for a given SwiftUI text style.
-    /// Used for modifiers like `.minimumScaleFactor` and line spacing calculations.
     private static func pointSize(for style: Font.TextStyle) -> CGFloat {
         switch style {
         case .largeTitle:   return 34
@@ -99,27 +75,30 @@ struct FontTextStyle: Equatable {
         case .title2:       return 22
         case .title3:       return 17
         case .headline:     return 17
-        case .subheadline:  return 15
+        case .subheadline:   return 15
         case .body:         return 17
         case .callout:      return 16
         case .footnote:     return 13
         case .caption:      return 12
         case .caption2:     return 11
-        @unknown default:   return 17
+        @unknown default:  return 17
         }
     }
+
+    // MARK: - Style aliases (forwarded from Typography for convenience)
+
+    static let display: FontTextStyle = Typography.display
+    static let title1: FontTextStyle = Typography.title1
+    static let title2: FontTextStyle = Typography.title2
+    static let title3: FontTextStyle = Typography.title3
+    static let headline: FontTextStyle = Typography.headline
+    static let subheadline: FontTextStyle = Typography.subheadline
+    static let body: FontTextStyle = Typography.body
+    static let caption: FontTextStyle = Typography.caption
+    static let label: FontTextStyle = Typography.label
 }
 
-// MARK: - Font Extension
-
-extension Font {
-    /// Returns the Font wrapped in a FontTextStyle for consistency.
-    static func pod(_ style: FontTextStyle) -> Font {
-        style.swiftUIFont
-    }
-}
-
-// MARK: - View Modifier
+// MARK: - View Extension
 
 extension View {
     /// Apply a Pod typography style with an optional color.

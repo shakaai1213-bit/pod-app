@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct ChatView: View {
+    // Match ChatViewModel.mockUserId
+    private static let currentUserId = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+
     @State private var viewModel = ChatViewModel()
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
@@ -254,18 +257,19 @@ struct ChannelListRowContent: View {
         .listRowBackground(AppColors.backgroundSecondary)
     }
 
+    @ViewBuilder
     private var channelIcon: some View {
         switch channel.type {
         case .general:
-            return Text("#")
+            Text("#")
         case .projects:
-            return Image(systemName: "folder")
+            Image(systemName: "folder")
         case .agents:
-            return Image(systemName: "cpu")
+            Image(systemName: "cpu")
         case .research:
-            return Image(systemName: "magnifyingglass")
+            Image(systemName: "magnifyingglass")
         case .alerts:
-            return Image(systemName: "bell")
+            Image(systemName: "bell")
         }
     }
 
@@ -463,7 +467,7 @@ struct MessageThreadView: View {
 
             // Compose bar
             ComposeBarView(
-                channelId: channel.id,
+                channelId: channel.id.uuidString,
                 isSending: viewModel.isSending,
                 onSend: { content in
                     Task {
@@ -557,7 +561,7 @@ struct MessageThreadView: View {
                             MessageBubbleView(
                                 message: message,
                                 showAvatar: showAvatar,
-                                isCurrentUser: message.authorId == "current-user",
+                                isCurrentUser: message.authorId == ChatViewModel.mockUserId,
                                 onAgentTapped: {
                                     if message.authorRole == .agent {
                                         viewModel.highlightAgent(authorId: message.authorId)

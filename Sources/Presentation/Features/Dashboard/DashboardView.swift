@@ -288,8 +288,8 @@ struct AttentionItemRow: View {
                     .podTextStyle(.headline, color: AppColors.textPrimary)
                     .lineLimit(1)
 
-                if let subtitle = item.subtitle {
-                    Text(subtitle)
+                if !item.actor.isEmpty {
+                    Text(item.actor)
                         .podTextStyle(.caption, color: AppColors.textSecondary)
                         .lineLimit(1)
                 }
@@ -318,7 +318,9 @@ struct QuickActionButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            action()
+        } label: {
             VStack(spacing: Theme.sm) {
                 ZStack {
                     Circle()
@@ -343,70 +345,5 @@ struct QuickActionButton: View {
             )
         }
         .buttonStyle(.plain)
-    }
-}
-
-// MARK: - Shimmer Modifier
-
-struct ShimmerModifier: ViewModifier {
-    @State private var phase: CGFloat = 0
-
-    func body(content: Content) -> some View {
-        content
-            .overlay(
-                GeometryReader { geometry in
-                    LinearGradient(
-                        colors: [
-                            .clear,
-                            AppColors.textMuted.opacity(0.3),
-                            .clear
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                    .frame(width: geometry.size.width * 2)
-                    .offset(x: phase * geometry.size.width * 2 - geometry.size.width)
-                }
-                .mask(content)
-            )
-            .onAppear {
-                withAnimation(
-                    .linear(duration: 1.5)
-                    .repeatForever(autoreverses: false)
-                ) {
-                    phase = 1
-                }
-            }
-    }
-}
-
-extension View {
-    func shimmer() -> some View {
-        modifier(ShimmerModifier())
-    }
-}
-
-// MARK: - Settings View (Stub)
-
-struct SettingsView: View {
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section("Account") {
-                    LabeledContent("Version", value: "1.0.0")
-                }
-            }
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
-                        .foregroundStyle(AppColors.accentElectric)
-                }
-            }
-        }
-        .presentationDetents([.medium])
     }
 }

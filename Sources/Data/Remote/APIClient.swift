@@ -1,5 +1,31 @@
 import Foundation
 
+// MARK: - Supporting Types
+
+struct AuthResponse: Codable {
+    let token: String
+    let userId: String?
+    let expiresAt: Date?
+}
+
+struct APIError: Error {
+    let code: Int
+    let message: String
+    
+    static let unknown = APIError(code: 0, message: "Unknown error")
+    static let unauthorized = APIError(code: 401, message: "Unauthorized")
+    static let serverError = APIError(code: 500, message: "Server error")
+    static let decodingError = APIError(code: 0, message: "Decoding error")
+    
+    static func message(_ msg: String, code: Int?) -> APIError {
+        APIError(code: code ?? 0, message: msg)
+    }
+}
+
+struct EmptyResponse: Codable {}
+
+// MARK: - API Client
+
 actor APIClient {
     static let shared = APIClient()
 
@@ -31,6 +57,23 @@ actor APIClient {
         self.authToken = token
     }
 
+    /// Atomically sets the token and verifies it by fetching agents.
+    /// Returns true if the token is valid, false otherwise.
+    func verifyAndSetToken(_ token: String) async -> Bool {
+        self.authToken = token
+        do {
+            // Try multiple endpoints to verify token
+            let _: PaginatedResponse<AgentDTO> = try await request(.agents)
+            return true
+        } catch let error as APIError {
+            print("[APIClient] verifyAndSetToken FAILED: code=\(error.code) msg=\(error.message)")
+            return false
+        } catch {
+            print("[APIClient] verifyAndSetToken FAILED: \(error)")
+            return false
+        }
+    }
+
     func login(token: String) async throws -> AuthResponse {
         let endpoint = "\(baseURL)/api/v1/auth/login"
         var request = URLRequest(url: URL(string: endpoint)!)
@@ -48,7 +91,7 @@ actor APIClient {
 
     // MARK: - Generic Request
 
-    private func buildRequest(
+    func buildRequest(
         path: String,
         method: String = "GET",
         body: Encodable? = nil,
@@ -59,14 +102,16 @@ actor APIClient {
             components?.queryItems = queryItems
         }
         guard let url = components?.url else {
-            throw APIError(message: "Invalid URL", code: nil)
+            throw APIError(code: 0, message: "Invalid URL")
         }
 
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        if let token = authToken {
+        // Read token directly from actor state at request-build time
+        let currentToken = self.authToken
+        if let token = currentToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             request.setValue(token, forHTTPHeaderField: "X-Api-Key")
         }
@@ -91,40 +136,51 @@ actor APIClient {
         case 500...599:
             throw APIError.serverError
         default:
-            throw APIError(message: "Request failed with status \(httpResponse.statusCode)", code: httpResponse.statusCode)
+            throw APIError(code: httpResponse.statusCode, message: "Request failed with status \(httpResponse.statusCode)")
         }
     }
 
     // MARK: - Public API Methods
 
-    func get<T: Decodable>(_ path: String) async throws -> T {
+    func get<T: Decodable>(path: String) async throws -> T {
         let request = try buildRequest(path: path, method: "GET")
         return try await perform(request)
     }
 
-    func post<T: Decodable>(_ path: String, body: some Encodable) async throws -> T {
+    func post<T: Decodable>(path: String, body: some Encodable) async throws -> T {
         let request = try buildRequest(path: path, method: "POST", body: AnyEncodable(body))
         return try await perform(request)
     }
 
-    func put<T: Decodable>(_ path: String, body: some Encodable) async throws -> T {
+    func put<T: Decodable>(path: String, body: some Encodable) async throws -> T {
         let request = try buildRequest(path: path, method: "PUT", body: AnyEncodable(body))
         return try await perform(request)
     }
 
-    func delete(_ path: String) async throws {
+    func patch<T: Decodable>(path: String, body: some Encodable) async throws -> T {
+        let request = try buildRequest(path: path, method: "PATCH", body: AnyEncodable(body))
+        return try await perform(request)
+    }
+
+    func delete(path: String) async throws {
         let request = try buildRequest(path: path, method: "DELETE")
         let _: EmptyResponse = try await perform(request)
     }
 
-    private func perform<T: Decodable>(_ request: URLRequest) async throws -> T {
+    func postVoid(path: String, body: some Encodable) async throws {
+        let request = try buildRequest(path: path, method: "POST", body: AnyEncodable(body))
+        let _: EmptyResponse = try await perform(request)
+    }
+
+    func perform<T: Decodable>(_ request: URLRequest) async throws -> T {
         let (data, response) = try await session.data(for: request)
         try validateResponse(response)
 
         do {
             return try decoder.decode(T.self, from: data)
         } catch {
-            throw APIError.decodingError
+            let body = String(data: data.prefix(500), encoding: .utf8) ?? "<\(data.count) bytes>"
+            throw APIError(code: 0, message: "Decoding failed: \(error) | Response: \(body)")
         }
     }
 }
@@ -142,168 +198,5 @@ private struct AnyEncodable: Encodable {
 
     func encode(to encoder: Encoder) throws {
         try _encode(encoder)
-    }
-}
-
-// MARK: - Project Model
-
-struct Project: Codable, Identifiable, Sendable {
-    let id: String
-    let name: String
-    let description: String?
-    let status: ProjectStatus
-    let priority: Priority
-    let ownerId: String
-    let teamIds: [String]
-    let createdAt: Date?
-    let updatedAt: Date?
-    let dueDate: Date?
-    let tags: [String]
-
-    enum ProjectStatus: String, Codable, Sendable, CaseIterable {
-        case active
-        case paused
-        case completed
-        case archived
-
-        var displayName: String {
-            rawValue.capitalized
-        }
-
-        var color: String {
-            switch self {
-            case .active:    return "00FF9D"
-            case .paused:    return "FFB800"
-            case .completed: return "00D4FF"
-            case .archived:  return "55556A"
-            }
-        }
-    }
-
-    enum Priority: String, Codable, Sendable, CaseIterable {
-        case low, medium, high, critical
-
-        var displayName: String { rawValue.capitalized }
-
-        var color: String {
-            switch self {
-            case .low:      return "55556A"
-            case .medium:   return "00D4FF"
-            case .high:     return "FF6B35"
-            case .critical: return "FF3B5C"
-            }
-        }
-    }
-}
-
-// MARK: - Chat Models
-
-struct ChatMessage: Codable, Identifiable, Sendable {
-    let id: String
-    let channelId: String
-    let authorId: String
-    let authorName: String
-    let content: String
-    let createdAt: Date
-    let updatedAt: Date?
-    let attachments: [Attachment]?
-    let isEdited: Bool
-}
-
-struct Attachment: Codable, Sendable {
-    let id: String
-    let filename: String
-    let url: String
-    let mimeType: String
-    let sizeBytes: Int?
-}
-
-struct Channel: Codable, Identifiable, Sendable {
-    let id: String
-    let name: String
-    let description: String?
-    let channelType: ChannelType
-    let unreadCount: Int
-    let lastMessage: ChatMessage?
-
-    enum ChannelType: String, Codable, Sendable {
-        case general
-        case project
-        case research
-        case alert
-        case direct
-    }
-}
-
-// MARK: - Knowledge Models
-
-struct KnowledgeEntry: Codable, Identifiable, Sendable {
-    let id: String
-    let title: String
-    let content: String
-    let category: String
-    let tags: [String]
-    let authorId: String
-    let authorName: String
-    let createdAt: Date
-    let updatedAt: Date
-    let version: Int
-    let isPinned: Bool
-}
-
-// MARK: - Agent Models
-
-struct Agent: Codable, Identifiable, Sendable {
-    let id: String
-    let name: String
-    let description: String
-    let model: String
-    let status: AgentStatus
-    let capabilities: [String]
-    let config: AgentConfig?
-    let lastActive: Date?
-}
-
-enum AgentStatus: String, Codable, Sendable {
-    case running
-    case idle
-    case error
-    case stopped
-}
-
-struct AgentConfig: Codable, Sendable {
-    let temperature: Double?
-    let maxTokens: Int?
-    let systemPrompt: String?
-}
-
-// MARK: - Dashboard Stats
-
-struct DashboardStats: Codable, Sendable {
-    let activeProjects: Int
-    let openTasks: Int
-    let teamOnline: Int
-    let unreadMessages: Int
-    let recentActivity: [ActivityItem]
-}
-
-// MARK: - Empty Response
-
-struct EmptyResponse: Decodable {}
-
-// MARK: - Activity Item
-
-struct ActivityItem: Codable, Identifiable, Sendable {
-    let id: String
-    let type: ActivityType
-    let title: String
-    let description: String?
-    let actorName: String
-    let timestamp: Date
-    let projectId: String?
-    let channelId: String?
-
-    enum ActivityType: String, Codable, Sendable {
-        case projectCreated, projectUpdated, taskCompleted, messagePosted, agentRan, memberJoined
     }
 }

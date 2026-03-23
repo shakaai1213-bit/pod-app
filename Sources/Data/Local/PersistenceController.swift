@@ -65,8 +65,9 @@ final class PersistenceController {
     func syncChannels(_ channels: [Channel]) async {
         let ctx = context
         for channel in channels {
+            let channelId = channel.id
             let descriptor = FetchDescriptor<CachedChannel>(
-                predicate: #Predicate { $0.id == channel.id }
+                predicate: #Predicate { $0.id == channelId }
             )
             let existing = (try? ctx.fetch(descriptor)) ?? []
 
@@ -74,8 +75,8 @@ final class PersistenceController {
                 cached.name = channel.name
                 cached.type = channel.type.rawValue
                 cached.unreadCount = channel.unreadCount
-                cached.lastMessagePreview = channel.lastMessage?.content
-                cached.lastMessageTime = channel.lastMessage?.timestamp
+                cached.lastMessagePreview = channel.lastMessage
+                cached.lastMessageTime = channel.lastMessageTimestamp
                 cached.isPinned = channel.isPinned
                 cached.cachedAt = Date()
             } else {
@@ -93,8 +94,9 @@ final class PersistenceController {
 
         // Upsert each message
         for message in messages {
+            let messageId = message.id
             let descriptor = FetchDescriptor<CachedMessage>(
-                predicate: #Predicate { $0.id == message.id }
+                predicate: #Predicate { $0.id == messageId }
             )
             let existing = (try? ctx.fetch(descriptor)) ?? []
 
@@ -159,12 +161,7 @@ final class PersistenceController {
     // MARK: - Fetch: Channels
 
     func fetchCachedChannels() -> [CachedChannel] {
-        let descriptor = FetchDescriptor<CachedChannel>(
-            sortBy: [
-                SortDescriptor(\.isPinned, order: .reverse),
-                SortDescriptor(\.lastMessageTime, order: .reverse)
-            ]
-        )
+        let descriptor = FetchDescriptor<CachedChannel>()
         return (try? context.fetch(descriptor)) ?? []
     }
 
