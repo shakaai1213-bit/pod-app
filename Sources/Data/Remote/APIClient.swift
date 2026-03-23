@@ -95,6 +95,28 @@ actor APIClient {
         }
     }
 
+    // MARK: - Public API Methods
+
+    func get<T: Decodable>(_ path: String) async throws -> T {
+        let request = try buildRequest(path: path, method: "GET")
+        return try await perform(request)
+    }
+
+    func post<T: Decodable>(_ path: String, body: some Encodable) async throws -> T {
+        let request = try buildRequest(path: path, method: "POST", body: AnyEncodable(body))
+        return try await perform(request)
+    }
+
+    func put<T: Decodable>(_ path: String, body: some Encodable) async throws -> T {
+        let request = try buildRequest(path: path, method: "PUT", body: AnyEncodable(body))
+        return try await perform(request)
+    }
+
+    func delete(_ path: String) async throws {
+        let request = try buildRequest(path: path, method: "DELETE")
+        let _: EmptyResponse = try await perform(request)
+    }
+
     private func perform<T: Decodable>(_ request: URLRequest) async throws -> T {
         let (data, response) = try await session.data(for: request)
         try validateResponse(response)
@@ -264,6 +286,12 @@ struct DashboardStats: Codable, Sendable {
     let unreadMessages: Int
     let recentActivity: [ActivityItem]
 }
+
+// MARK: - Empty Response
+
+struct EmptyResponse: Decodable {}
+
+// MARK: - Activity Item
 
 struct ActivityItem: Codable, Identifiable, Sendable {
     let id: String
