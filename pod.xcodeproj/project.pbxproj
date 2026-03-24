@@ -15,6 +15,7 @@
 		209B9A40C499167327D250B2 /* WallDisplayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101F632FCD32C5AB7EF9C54B /* WallDisplayView.swift */; };
 		24501CEA7E83F6EE14EACE06 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A28A4672374ACF545BD664A8 /* APIClient.swift */; };
 		283E5B81FDD5BEDF1B7E6B17 /* StandardRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AB0691F93E9F5494A3A79B1 /* StandardRepository.swift */; };
+		2C0F9BDAFA4025431D6952B6 /* AppTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84961F81D6C2F51B1A1EC335 /* AppTab.swift */; };
 		38A4AD8CE06D7BDB153DB923 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1695C8CD499CB511B0C11D94 /* ChatView.swift */; };
 		3A579D796D053AEF7F48A93B /* Typography.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0905CC7645A277BCFB4D4211 /* Typography.swift */; };
 		3AB34F50F3630DA8760A6CFA /* Colors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A10B6FE95332F160D3E227C /* Colors.swift */; };
@@ -50,6 +51,7 @@
 		BB77E2B8C7E1D40AF2F8F601 /* AgentsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADC952C3EB865B3AE6D68D0 /* AgentsViewModel.swift */; };
 		BFAA01EF640B83F68B6F31B7 /* TaskDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BC89BE77403D8AA46EA84D4 /* TaskDetailSheet.swift */; };
 		C034834CB36EB1EC8B5AEE25 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49A69CF51ACDCD9D554A9BA5 /* DashboardView.swift */; };
+		C2595E99C59F93D07A054964 /* Navigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 187E28435D0A3606280B6AD0 /* Navigation.swift */; };
 		C8BA82A7E103175379551AB4 /* AgentRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C828D5C39A08FAA8E8C6F7E /* AgentRepository.swift */; };
 		CBD4F56F27B316E7080C5790 /* TaskCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61E316898E420DEC290715F7 /* TaskCardView.swift */; };
 		CDB89B8862BF3230B668C3FC /* Endpoints.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12D22773AD8CA83A56A417C3 /* Endpoints.swift */; };
@@ -66,8 +68,6 @@
 		EE295B15C305769AAB154AFE /* StandardDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3853FCF809EDAFB9AE5C0021 /* StandardDetailView.swift */; };
 		EEB7FD53570A06DB48B7954B /* Chat.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC020A48B04971EAC26F9937 /* Chat.swift */; };
 		F2BA10B64E34BFE3E8114D23 /* AgentDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 952F2ED4468BC7A6FAAEF442 /* AgentDetailSheet.swift */; };
-		F745CD9C2F7202C7003082F9 /* AppTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = F745CD9B2F7202C6003082F9 /* AppTab.swift */; };
-		F745CD9E2F7202CA003082F9 /* Navigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F745CD9D2F7202CA003082F9 /* Navigation.swift */; };
 		F9774DEACCFE1CAE257BAB9E /* AgentStatusCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7F5808B0A89E2CE05779BF4 /* AgentStatusCard.swift */; };
 		FB8DA55BA89EED1C1CA9FC8D /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A729C35216CFE6E3C3B8A5C5 /* ContentView.swift */; };
 		FDE7B9465CE4220D636B7042 /* WallDisplayViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F4CCB4395C49C6788871A98 /* WallDisplayViewModel.swift */; };
@@ -81,6 +81,7 @@
 		12D22773AD8CA83A56A417C3 /* Endpoints.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Endpoints.swift; sourceTree = "<group>"; };
 		130933CBCC9FDA9087DA6467 /* DashboardViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardViewModel.swift; sourceTree = "<group>"; };
 		1695C8CD499CB511B0C11D94 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		187E28435D0A3606280B6AD0 /* Navigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Navigation.swift; sourceTree = "<group>"; };
 		1932CDA880453D8F89A4F55F /* MockData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockData.swift; sourceTree = "<group>"; };
 		2036DE57828AAAECDE776245 /* NotificationAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationAction.swift; sourceTree = "<group>"; };
 		21631C3CC9A1DF3FB91BE6F0 /* WallDisplayModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallDisplayModifier.swift; sourceTree = "<group>"; };
@@ -113,6 +114,7 @@
 		7A10B6FE95332F160D3E227C /* Colors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Colors.swift; sourceTree = "<group>"; };
 		7BC89BE77403D8AA46EA84D4 /* TaskDetailSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskDetailSheet.swift; sourceTree = "<group>"; };
 		7F46573C102E73A66AA6431C /* SSEClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSEClient.swift; sourceTree = "<group>"; };
+		84961F81D6C2F51B1A1EC335 /* AppTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTab.swift; sourceTree = "<group>"; };
 		8974E1454949E877F3566950 /* ShimmerModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShimmerModifier.swift; sourceTree = "<group>"; };
 		8DAAD8A63CB713714666FEE9 /* ComposeBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeBar.swift; sourceTree = "<group>"; };
 		916EBD9D032E8F9FE9864379 /* pod.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = pod.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -136,8 +138,6 @@
 		ED6986244E7F194490495D69 /* AvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarView.swift; sourceTree = "<group>"; };
 		F5D15A077B49CD21B9DDADD5 /* StandardEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandardEditorView.swift; sourceTree = "<group>"; };
 		F73FE194ED17E1FF892B715D /* DashboardModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardModels.swift; sourceTree = "<group>"; };
-		F745CD9B2F7202C6003082F9 /* AppTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTab.swift; sourceTree = "<group>"; };
-		F745CD9D2F7202CA003082F9 /* Navigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Navigation.swift; sourceTree = "<group>"; };
 		F92E1097762048180C6B3C9E /* KnowledgeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeViewModel.swift; sourceTree = "<group>"; };
 		FC020A48B04971EAC26F9937 /* Chat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Chat.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -401,14 +401,14 @@
 			isa = PBXGroup;
 			children = (
 				A2D290EE8D7D2034F520F37F /* AppState.swift */,
+				84961F81D6C2F51B1A1EC335 /* AppTab.swift */,
 				E0AA356201992C4B685F6B8E /* AppTheme.swift */,
 				DBE261A9A40BC12CBB2C0F78 /* Assets.xcassets */,
 				A729C35216CFE6E3C3B8A5C5 /* ContentView.swift */,
 				52704E1BE41BEF8E97D4B80A /* Info.plist */,
+				187E28435D0A3606280B6AD0 /* Navigation.swift */,
 				4CC5A89E0995E0ECB8ABF610 /* podApp.swift */,
 				46D84285095F4775A6C5813D /* Intents */,
-				F745CD9B2F7202C6003082F9 /* AppTab.swift */,
-				F745CD9D2F7202CA003082F9 /* Navigation.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -553,6 +553,7 @@
 				AADDFD64686449D8343A6080 /* AppIntents.swift in Sources */,
 				A181B4D7C45780A5CA3ECDA0 /* AppShortcuts.swift in Sources */,
 				43C5E6069CFE09916C866EF0 /* AppState.swift in Sources */,
+				2C0F9BDAFA4025431D6952B6 /* AppTab.swift in Sources */,
 				90237BF2A2CDD9B9FD1A2858 /* AppTheme.swift in Sources */,
 				8D0426542E7D0012AA56D433 /* AvatarView.swift in Sources */,
 				D439E78BEF02D909FBEA8FAD /* BoardDetailView.swift in Sources */,
@@ -575,6 +576,7 @@
 				8703A17F3CEAFF881EA6F5CA /* LogStreamView.swift in Sources */,
 				E887DC0291327FDCA8E3A7D2 /* MessageBubbleView.swift in Sources */,
 				B47D435E2BDD530CC9A6CC36 /* MockData.swift in Sources */,
+				C2595E99C59F93D07A054964 /* Navigation.swift in Sources */,
 				8C4E5E174E5677C44ED74BCC /* NotificationAction.swift in Sources */,
 				AFA32AEFFC89649770ED335E /* NotificationRouter.swift in Sources */,
 				A119987125AF2585A9FF89CC /* OnboardingPageView.swift in Sources */,
@@ -583,7 +585,6 @@
 				99EA3523D26347EF51CBB81E /* PersistenceController.swift in Sources */,
 				EC8129D43972E4CE42578BC1 /* PriorityBadge.swift in Sources */,
 				1A5E2C9725EF8D386ABFBE57 /* Projects.swift in Sources */,
-				F745CD9C2F7202C7003082F9 /* AppTab.swift in Sources */,
 				CF8F936E3B4CD83149F70242 /* ProjectsView.swift in Sources */,
 				B31EFEBF84FC7892D2D4F490 /* ProjectsViewModel.swift in Sources */,
 				638892369CE763D406891FA7 /* PushNotificationService.swift in Sources */,
@@ -593,7 +594,6 @@
 				EE295B15C305769AAB154AFE /* StandardDetailView.swift in Sources */,
 				06AF85E590D1677BF0CA067C /* StandardEditorView.swift in Sources */,
 				283E5B81FDD5BEDF1B7E6B17 /* StandardRepository.swift in Sources */,
-				F745CD9E2F7202CA003082F9 /* Navigation.swift in Sources */,
 				1CE5ECB5B90CBAEBF1759980 /* StatusBadge.swift in Sources */,
 				7D73F19AA5F1A62E35E17CAC /* SwiftDataModels.swift in Sources */,
 				CBD4F56F27B316E7080C5790 /* TaskCardView.swift in Sources */,
@@ -668,11 +668,11 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Sources/App/Info.plist;
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "pod connects to ORCA Mission Control over your local network.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -761,11 +761,11 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Sources/App/Info.plist;
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "pod connects to ORCA Mission Control over your local network.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;

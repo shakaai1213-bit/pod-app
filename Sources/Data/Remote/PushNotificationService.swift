@@ -195,8 +195,12 @@ final class PushNotificationService {
     // MARK: - Badge Management
 
     func updateBadgeCount(_ count: Int) async {
-        await MainActor.run {
-            UIApplication.shared.applicationIconBadgeNumber = count
+        if #available(iOS 17.0, *) {
+            try? await UNUserNotificationCenter.current().setBadgeCount(count)
+        } else {
+            await MainActor.run {
+                UIApplication.shared.applicationIconBadgeNumber = count
+            }
         }
     }
 

@@ -173,7 +173,7 @@ public actor SSEClient {
     private func establishConnection(token: String) async throws {
         // SSE streaming via URLSessionStreamTask with URL (no custom headers support)
         // For production, use a dedicated SSE library or custom URLSession configuration
-        guard let url = URL(string: Self.endpoint) else {
+        guard URL(string: Self.endpoint) != nil else {
             throw SSEError.invalidURL
         }
         streamTask?.cancel()
@@ -231,7 +231,7 @@ public actor SSEClient {
                 }
 
                 // Attempt reconnect unless we've given up
-                let shouldReconnect = await shouldAttemptReconnect()
+                let shouldReconnect = shouldAttemptReconnect()
 
                 if shouldReconnect {
                     await performReconnect()

@@ -44,10 +44,6 @@ struct StandardEditorView: View {
     init(mode: StandardEditorMode, viewModel: KnowledgeViewModel) {
         self.mode = mode
         self.viewModel = viewModel
-
-        if let s = (mode.isEditing ? (mode as? StandardEditorMode) : nil) {
-            // Will be handled in onAppear
-        }
     }
 
     // MARK: - Body
@@ -475,7 +471,7 @@ struct StandardEditorView: View {
         isPublishing = true
         errorMessage = nil
 
-        var standard = buildStandard()
+        let standard = buildStandard()
         if mode.isEditing {
             let updated = await viewModel.updateStandard(standard)
             await MainActor.run {

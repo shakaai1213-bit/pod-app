@@ -117,8 +117,9 @@ struct MessageGroup: Identifiable, Sendable {
 
 import SwiftUI
 
+@MainActor
 @Observable
-final class ChatViewModel: Sendable {
+final class ChatViewModel {
 
     // MARK: - Mock IDs (replace with real auth/API data)
 

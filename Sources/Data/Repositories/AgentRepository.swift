@@ -3,6 +3,7 @@ import Foundation
 // AgentState is defined in Domain/Entities/Agents.swift (same module)
 
 
+@MainActor
 @Observable
 final class AgentRepository {
     private let api = APIClient.shared
@@ -40,7 +41,7 @@ final class AgentRepository {
         } catch {
             lastError = error
             // Fall back to cache
-            let cached = await MainActor.run { cache.fetchCachedAgents() }
+            let cached = cache.fetchCachedAgents()
             agents = cached.map { $0.toAgent() }
         }
     }

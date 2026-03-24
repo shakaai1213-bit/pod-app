@@ -96,7 +96,7 @@ struct AvatarView: View {
             .background(backgroundColor)
             .clipShape(Circle())
             .overlay {
-                if showRing, let status = status {
+                if showRing, status != nil {
                     Circle()
                         .stroke(ringColor, lineWidth: size.ringWidth)
                 }

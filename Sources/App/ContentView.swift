@@ -2,22 +2,34 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(\.appState) private var appState: AppState
+    // Force SwiftUI to recompose when auth state changes — breaks view identity
+    // so LoginView is fully torn down before mainTabView appears
+    @State private var authStateKey: Int = 0
 
     var body: some View {
         ZStack {
             AppTheme.background
                 .ignoresSafeArea()
 
+            // Use authStateKey to force SwiftUI to treat as new identity on change
+            // This prevents the LoginView from "sticking" during render cycles
             if appState.isAuthenticated {
                 mainTabView
+                    .id("main-\(authStateKey)")
             } else {
                 LoginView()
+                    .id("login-\(authStateKey)")
             }
 
-            // Global loading overlay
+            // Global loading overlay — separate from auth state
             if appState.isLoading {
                 loadingOverlay
             }
+        }
+        .onChange(of: appState.isAuthenticated) { _, newValue in
+            // Bump the key to force fresh view identity when auth changes
+            authStateKey += 1
+            print("[ContentView] auth state changed to \(newValue), key now \(authStateKey)")
         }
         .sheet(isPresented: Binding(
             get: { appState.showError },
@@ -74,7 +86,7 @@ struct ContentView: View {
             Color.black.opacity(0.6)
                 .ignoresSafeArea()
 
-            VStack(spacing: AppTheme.spacingMD) {
+            VStack(spacing: AppTheme.spacingLG) {
                 ProgressView()
                     .progressViewStyle(.circular)
                     .tint(AppTheme.primaryAccent)
@@ -84,6 +96,18 @@ struct ContentView: View {
                     Text(message)
                         .font(.body)
                         .foregroundColor(AppTheme.secondaryText)
+                }
+
+                // Escape hatch so user is never locked out
+                Button {
+                    appState.isLoading = false
+                    appState.showError = false
+                    appState.isAuthenticated = false
+                } label: {
+                    Text("Reset / Retry")
+                        .font(.caption)
+                        .foregroundColor(AppTheme.secondaryText)
+                        .underline()
                 }
             }
             .padding(AppTheme.spacingXL)
@@ -244,7 +268,7 @@ struct LoginView: View {
 
             Spacer()
 
-            Text("Connecting to 127.0.0.1:9000")
+            Text("Connecting via localhost.cloud:8000")
                 .font(.caption)
                 .foregroundColor(AppTheme.tertiaryText)
                 .padding(.bottom, AppTheme.spacingLG)
@@ -263,7 +287,7 @@ struct LoginView: View {
     @MainActor
     private func checkNetwork() async {
         networkStatus = "Checking network..."
-        guard let url = URL(string: "http://127.0.0.1:9000/health") else {
+        guard let url = URL(string: "\(AppState.backendURL)/health") else {
             networkStatus = "❌ Invalid URL"
             return
         }

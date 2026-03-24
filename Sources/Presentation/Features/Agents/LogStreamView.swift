@@ -264,8 +264,9 @@ extension Date {
 
 // MARK: - Log Stream ViewModel
 
+@MainActor
 @Observable
-final class LogStreamViewModel {
+final class LogStreamViewModel: @unchecked Sendable {
 
     var entries: [LogEntry] = []
     var isConnected: Bool = false
@@ -294,7 +295,7 @@ final class LogStreamViewModel {
         eventSource = session.dataTask(with: request) { [weak self] data, _, error in
             guard let self = self else { return }
 
-            if let error = error {
+            if error != nil {
                 Task { @MainActor in
                     self.isConnected = false
                 }

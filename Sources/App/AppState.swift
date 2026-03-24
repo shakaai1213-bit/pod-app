@@ -20,7 +20,9 @@ final class AppState: ObservableObject {
 
     // MARK: - Backend URL
 
-    static let backendURL = "http://127.0.0.1:9000"
+    // iOS Simulator → proxy → Docker backend
+    // iPad/real device → can reach Mac Mini directly
+    static let backendURL = "http://192.168.4.243:8000"
 
     // MARK: - Initialization
 
@@ -34,44 +36,80 @@ final class AppState: ObservableObject {
         errorMessage = nil
         errorDetails = nil
         loadingMessage = "Connecting..."
-        print("[AppState] Loading state set, calling checkBackendReachable()")
+        print("[AppState] isLoading=\(isLoading)")
 
-        // Check if backend is reachable (5 second timeout)
+        // Wrap the entire auth flow in a timeout task
+        do {
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                // Auth task
+                group.addTask {
+                    await self.performAuth(token: token)
+                }
+                // Timeout task (30 seconds)
+                group.addTask {
+                    try await Task.sleep(nanoseconds: 30_000_000_000)
+                    print("[AppState] Auth timed out after 30s")
+                }
+                // Wait for whichever finishes first
+                try await group.next()
+                group.cancelAll()
+            }
+        } catch {
+            // Timeout or cancellation
+            print("[AppState] Auth aborted: \(error)")
+            await MainActor.run {
+                isLoading = false
+                loadingMessage = nil
+                if !isAuthenticated {
+                    errorMessage = "Connection timed out"
+                    errorDetails = "The request took too long. Check your network and try again."
+                    showError = true
+                }
+            }
+        }
+    }
+
+    /// Actual auth logic — called inside the timeout wrapper.
+    /// All state mutations are @MainActor by virtue of the class being @MainActor.
+    private func performAuth(token: String) async {
+        print("[AppState] performAuth: calling checkBackendReachable()")
         let reachable = await checkBackendReachable()
-        print("[AppState] checkBackendReachable() returned: \(reachable)")
+        print("[AppState] performAuth: checkBackendReachable() = \(reachable)")
+
         if !reachable {
-            print("[AppState] Backend unreachable, showing error")
             isAuthenticated = false
             isLoading = false
             loadingMessage = nil
             errorMessage = "Cannot reach ORCA MC"
             errorDetails = "Check your network connection to the Mac Mini."
             showError = true
+            print("[AppState] performAuth: backend unreachable, error shown")
             return
         }
 
         loadingMessage = "Verifying token..."
-        print("[AppState] Backend reachable, calling verifyTokenDirectly()")
-
-        // Verify token with direct URLSession (10 second timeout)
+        print("[AppState] performAuth: backend reachable, verifying token")
         let valid = await verifyTokenDirectly(token)
-        print("[AppState] verifyTokenDirectly() returned: \(valid)")
+        print("[AppState] performAuth: verifyTokenDirectly() = \(valid)")
+
         if valid {
-            print("[AppState] Token valid! Setting authenticated=true")
-            isAuthenticated = true
-            currentUser = TeamMember(id: UUID(), name: "User", avatarColor: "#6B46C1")
+            print("[AppState] performAuth: SUCCESS")
+            // Set both at once — no delay, avoids SwiftUI render timing issues
             isLoading = false
             loadingMessage = nil
+            isAuthenticated = true
+            currentUser = TeamMember(id: UUID(), name: "User", avatarColor: "#6B46C1")
             storeToken(token)
             Task { await APIClient.shared.setToken(token) }
+            print("[AppState] performAuth: DONE — isAuthenticated=\(isAuthenticated)")
         } else {
-            print("[AppState] Token invalid, showing error")
             isAuthenticated = false
             isLoading = false
             loadingMessage = nil
             errorMessage = "Invalid token"
             errorDetails = "Token rejected. Make sure you're using the exact token from the ORCA MC .env file."
             showError = true
+            print("[AppState] performAuth: invalid token, error shown")
         }
     }
 
@@ -161,7 +199,7 @@ final class AppState: ObservableObject {
             pendingApprovalId = approvalId
             showApprovalSheet = true
             navigationState = .dashboard
-        case .agentError(let agentId, _):
+        case .agentError(agentId: let agentId, error: _):
             selectedTab = .agents
             navigationState = .agents(agentId: agentId)
         case .unknown:

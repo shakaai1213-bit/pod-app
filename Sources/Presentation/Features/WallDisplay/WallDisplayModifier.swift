@@ -50,13 +50,17 @@ struct WallDisplayModifier: ViewModifier {
         #if targetEnvironment(simulator)
         // Allow all orientations in simulator for easier testing
         UIDevice.current.setValue(UIInterfaceOrientation.landscapeRight.rawValue, forKey: "orientation")
-        UIViewController.attemptRotationToDeviceOrientation()
+        requestOrientationUpdate()
         #else
         // Lock to landscape on physical device
         UIDevice.current.setValue(UIInterfaceOrientation.landscapeRight.rawValue, forKey: "orientation")
-        UIDevice.current.setValue(UIInterfaceOrientation.landscapeRight.rawValue, forKey: "orientation")
-        UIViewController.attemptRotationToDeviceOrientation()
+        requestOrientationUpdate()
         #endif
+    }
+
+    private func requestOrientationUpdate() {
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return }
+        windowScene.windows.first?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
     }
 
     // MARK: - Full Screen

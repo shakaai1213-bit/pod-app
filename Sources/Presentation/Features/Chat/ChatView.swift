@@ -493,7 +493,7 @@ struct MessageThreadView: View {
 
             Spacer()
 
-            if let highlightId = viewModel.highlightedAuthorId {
+            if viewModel.highlightedAuthorId != nil {
                 Button {
                     viewModel.clearHighlight()
                 } label: {

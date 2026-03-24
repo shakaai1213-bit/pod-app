@@ -321,7 +321,7 @@ extension APIClient {
         _ endpoint: Endpoint,
         body: some Encodable
     ) async throws -> T {
-        var request = try buildRequest(path: endpoint.path, method: endpoint.method.rawValue, body: body)
+        let request = try buildRequest(path: endpoint.path, method: endpoint.method.rawValue, body: body)
         return try await perform(request)
     }
 

@@ -133,8 +133,6 @@ struct TaskCardView: View {
     // MARK: - Swipe Background
 
     private func swipeBackground(direction: SwipeDirection, color: Color, icon: String) -> some View {
-        let isCorrectDirection = direction == .right
-        let threshold: CGFloat = 60
         let showThreshold: CGFloat = 40
 
         return ZStack(alignment: direction == .right ? .leading : .trailing) {

@@ -81,12 +81,7 @@ final class ProjectsViewModel {
 
     func loadTasks(boardId: UUID) async {
         do {
-            let tasks: [ProjectTask] = try await apiClient.get(path: "/api/v1/boards/\(boardId)/tasks")
-            await MainActor.run {
-                if let idx = self.boardGroups.indices.flatMap({ self.boardGroups[$0].boards.indices }).first(where: { self.boardGroups.flatMap(\.boards)[safe: $0]?.id == boardId }) {
-                    // Update tasks on board
-                }
-            }
+            let _: [ProjectTask] = try await apiClient.get(path: "/api/v1/boards/\(boardId)/tasks")
         } catch {
             // Use mock tasks
         }

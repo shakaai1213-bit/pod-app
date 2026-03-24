@@ -295,30 +295,32 @@ struct SettingsView: View {
     // MARK: - Notifications Section
 
     private var notificationsSection: some View {
-        Section {
-            ForEach($viewModel.channels) { $channel in
-                Toggle(isOn: $channel.enabled) {
-                    Label(channel.name, systemImage: channel.icon)
+        Group {
+            Section {
+                ForEach($viewModel.channels) { $channel in
+                    Toggle(isOn: $channel.enabled) {
+                        Label(channel.name, systemImage: channel.icon)
+                    }
+                    .tint(.blue)
                 }
-                .tint(.blue)
+            } header: {
+                Text("Channels")
+            } footer: {
+                Text("Choose which channels send push notifications.")
             }
-        } header: {
-            Text("Channels")
-        } footer: {
-            Text("Choose which channels send push notifications.")
-        }
 
-        return Section {
-            ForEach($viewModel.events) { $event in
-                Toggle(isOn: $event.enabled) {
-                    Text(event.name)
+            Section {
+                ForEach($viewModel.events) { $event in
+                    Toggle(isOn: $event.enabled) {
+                        Text(event.name)
+                    }
+                    .tint(.blue)
                 }
-                .tint(.blue)
+            } header: {
+                Text("Events")
+            } footer: {
+                Text("Get notified for these events across all channels.")
             }
-        } header: {
-            Text("Events")
-        } footer: {
-            Text("Get notified for these events across all channels.")
         }
     }
 
