@@ -140,7 +140,7 @@ struct ContentView: View {
 struct LoginView: View {
     @Environment(\.appState) private var appState: AppState
     @State private var token: String = ""
-    @State private var tapped: Bool = false
+    @State private var networkStatus: String = ""   // live network diagnostic
     @FocusState private var isTokenFocused: Bool
 
     var body: some View {
@@ -174,7 +174,7 @@ struct LoginView: View {
                             .foregroundColor(AppTheme.secondaryText)
                         Spacer()
                         if !token.isEmpty {
-                            Text("\(token.count) chars entered")
+                            Text("\(token.count) chars")
                                 .font(.caption2)
                                 .foregroundColor(AppTheme.primaryAccent)
                         }
@@ -202,19 +202,23 @@ struct LoginView: View {
                         RoundedRectangle(cornerRadius: AppTheme.radiusMedium)
                             .stroke(token.isEmpty ? AppTheme.border : AppTheme.primaryAccent, lineWidth: 1)
                     )
+                }
 
-                    if !token.isEmpty {
-                        Text("Token ready — tap Connect below")
-                            .font(.caption2)
-                            .foregroundColor(AppTheme.secondaryText)
-                    }
+                // Live network status
+                if !networkStatus.isEmpty {
+                    Text(networkStatus)
+                        .font(.caption.monospaced())
+                        .foregroundColor(AppTheme.secondaryText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(AppTheme.spacingSM)
+                        .background(AppTheme.surface)
+                        .cornerRadius(AppTheme.radiusMedium)
                 }
 
                 Button {
-                    print("[Login] Button tapped! tapped set to true")
-                    tapped = true
+                    networkStatus = "Testing..."
                     Task {
-                        await submitTokenAsync()
+                        await testAndAuth()
                     }
                 } label: {
                     HStack {
@@ -223,56 +227,107 @@ struct LoginView: View {
                                 .progressViewStyle(.circular)
                                 .tint(AppTheme.inverseText)
                                 .scaleEffect(0.8)
-                        } else if tapped {
-                            Text("TAPPED! token=\(token.prefix(4))...")
-                                .font(.body.bold())
-                                .foregroundColor(.yellow)
                         } else {
                             Text("Connect")
                                 .font(.body.bold())
                         }
                     }
-                    .foregroundColor(appState.isLoading ? AppTheme.inverseText : (tapped ? Color.yellow : AppTheme.inverseText))
+                    .foregroundColor(AppTheme.inverseText)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, AppTheme.spacingSM + 4)
-                    .background(tapped ? Color.orange : AppTheme.primaryAccent)
+                    .background(AppTheme.primaryAccent)
                     .cornerRadius(AppTheme.radiusMedium)
                 }
                 .buttonStyle(.plain)
-                .disabled(appState.isLoading)
+                .disabled(appState.isLoading || token.isEmpty)
             }
             .padding(.horizontal, AppTheme.spacingXL)
 
             Spacer()
 
-            Text("Connecting to \(URL(string: "http://192.168.4.243:8000")!.host!)")
+            Text("Connecting to 127.0.0.1:8000")
                 .font(.caption)
                 .foregroundColor(AppTheme.tertiaryText)
                 .padding(.bottom, AppTheme.spacingLG)
         }
         .background(AppTheme.background)
+        .onAppear {
+            // Run quick network check on appear
+            Task {
+                await checkNetwork()
+            }
+        }
+    }
+
+    // MARK: - Network Check
+
+    @MainActor
+    private func checkNetwork() async {
+        networkStatus = "Checking network..."
+        guard let url = URL(string: "http://127.0.0.1:8000/health") else {
+            networkStatus = "❌ Invalid URL"
+            return
+        }
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 5
+        do {
+            let (_, resp) = try await URLSession.shared.data(for: req)
+            if let http = resp as? HTTPURLResponse {
+                networkStatus = "✅ Backend reachable (HTTP \(http.statusCode))"
+            } else {
+                networkStatus = "✅ Backend responded"
+            }
+        } catch {
+            networkStatus = "❌ Cannot reach backend: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - Test + Auth
+
+    @MainActor
+    private func testAndAuth() async {
+        guard !token.isEmpty else { return }
+
+        // Step 1: Test health
+        networkStatus = "Step 1: Checking backend..."
+        guard let healthURL = URL(string: "http://127.0.0.1:8000/health") else { return }
+        var healthReq = URLRequest(url: healthURL)
+        healthReq.timeoutInterval = 5
+        do {
+            let (_, healthResp) = try await URLSession.shared.data(for: healthReq)
+            let code = (healthResp as? HTTPURLResponse)?.statusCode ?? -1
+            networkStatus = "Step 1: HTTP \(code)"
+        } catch {
+            networkStatus = "❌ Step 1 failed: \(error.localizedDescription)"
+            return
+        }
+
+        // Step 2: Test auth
+        networkStatus = "Step 2: Testing token..."
+        guard let agentsURL = URL(string: "http://127.0.0.1:8000/api/v1/agents") else { return }
+        var authReq = URLRequest(url: agentsURL)
+        authReq.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        authReq.setValue(token, forHTTPHeaderField: "X-Api-Key")
+        authReq.timeoutInterval = 10
+        do {
+            let (data, authResp) = try await URLSession.shared.data(for: authReq)
+            let code = (authResp as? HTTPURLResponse)?.statusCode ?? -1
+            let body = String(data: data.prefix(100), encoding: .utf8) ?? ""
+            networkStatus = "Step 2: HTTP \(code) — \(body.prefix(50))"
+            if code == 200 {
+                await appState.authenticate(token: token)
+            }
+        } catch {
+            networkStatus = "❌ Step 2 failed: \(error.localizedDescription)"
+        }
     }
 
     private func submitToken() {
         guard !token.isEmpty else { return }
-        // Capture values to avoid struct mutation issues
         let enteredToken = token
-        let state = appState
         Task { @MainActor in
-            await state.authenticate(token: enteredToken)
+            await appState.authenticate(token: enteredToken)
         }
-    }
-
-    @MainActor
-    private func submitTokenAsync() async {
-        guard !token.isEmpty else { return }
-        // Set loading state immediately
-        appState.isLoading = true
-        appState.loadingMessage = "Connecting..."
-        // Capture values for background work
-        let enteredToken = token
-        // Run auth in background
-        await appState.authenticate(token: enteredToken)
     }
 }
 

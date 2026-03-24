@@ -20,7 +20,7 @@ final class AppState: ObservableObject {
 
     // MARK: - Backend URL
 
-    static let backendURL = "http://192.168.4.243:8000"
+    static let backendURL = "http://docker.for.mac.localhost:8000"
 
     // MARK: - Initialization
 
@@ -29,14 +29,18 @@ final class AppState: ObservableObject {
     // MARK: - Authentication
 
     func authenticate(token: String) async {
+        print("[AppState] authenticate() called with token: \(token.prefix(8))...")
         isLoading = true
         errorMessage = nil
         errorDetails = nil
         loadingMessage = "Connecting..."
+        print("[AppState] Loading state set, calling checkBackendReachable()")
 
         // Check if backend is reachable (5 second timeout)
         let reachable = await checkBackendReachable()
+        print("[AppState] checkBackendReachable() returned: \(reachable)")
         if !reachable {
+            print("[AppState] Backend unreachable, showing error")
             isAuthenticated = false
             isLoading = false
             loadingMessage = nil
@@ -47,10 +51,13 @@ final class AppState: ObservableObject {
         }
 
         loadingMessage = "Verifying token..."
+        print("[AppState] Backend reachable, calling verifyTokenDirectly()")
 
         // Verify token with direct URLSession (10 second timeout)
         let valid = await verifyTokenDirectly(token)
+        print("[AppState] verifyTokenDirectly() returned: \(valid)")
         if valid {
+            print("[AppState] Token valid! Setting authenticated=true")
             isAuthenticated = true
             currentUser = TeamMember(id: UUID(), name: "User", avatarColor: "#6B46C1")
             isLoading = false
@@ -58,6 +65,7 @@ final class AppState: ObservableObject {
             storeToken(token)
             Task { await APIClient.shared.setToken(token) }
         } else {
+            print("[AppState] Token invalid, showing error")
             isAuthenticated = false
             isLoading = false
             loadingMessage = nil
@@ -67,30 +75,49 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Tests if the ORCA MC backend is reachable. 5 second timeout.
-    private func checkBackendReachable() async -> Bool {
-        guard let url = URL(string: "\(Self.backendURL)/health") else { return false }
+    /// Tests if the ORCA MC backend is reachable. 5 second timeout. Public for diagnostics.
+    func checkBackendReachable() async -> Bool {
+        guard let url = URL(string: "\(Self.backendURL)/health") else {
+            print("[AppState] checkBackendReachable: invalid URL")
+            return false
+        }
         var request = URLRequest(url: url)
         request.timeoutInterval = 5
+        print("[AppState] checkBackendReachable: GET \(url.absoluteString)")
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let body = String(data: data, encoding: .utf8) ?? "(no body)"
+            print("[AppState] checkBackendReachable: got response, status=\((response as? HTTPURLResponse)?.statusCode ?? -1), body=\(body.prefix(100))")
             return (response as? HTTPURLResponse)?.statusCode == 200
         } catch {
+            print("[AppState] checkBackendReachable: ERROR = \(error.localizedDescription)")
             return false
         }
     }
 
+    /// Public diagnostic: verify a token and return true/false without changing auth state.
+    func checkTokenValid(_ token: String) async -> Bool {
+        await verifyTokenDirectly(token)
+    }
+
     /// Verifies token by fetching agents. 10 second timeout.
     private func verifyTokenDirectly(_ token: String) async -> Bool {
-        guard let url = URL(string: "\(Self.backendURL)/api/v1/agents") else { return false }
+        guard let url = URL(string: "\(Self.backendURL)/api/v1/agents") else {
+            print("[AppState] verifyTokenDirectly: invalid URL")
+            return false
+        }
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue(token, forHTTPHeaderField: "X-Api-Key")
         request.timeoutInterval = 10
+        print("[AppState] verifyTokenDirectly: GET \(url.absoluteString) Bearer=\(token.prefix(8))...")
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let body = String(data: data, encoding: .utf8) ?? "(no body)"
+            print("[AppState] verifyTokenDirectly: status=\((response as? HTTPURLResponse)?.statusCode ?? -1), body=\(body.prefix(200))")
             return (response as? HTTPURLResponse)?.statusCode == 200
         } catch {
+            print("[AppState] verifyTokenDirectly: ERROR = \(error.localizedDescription)")
             return false
         }
     }
