@@ -67,7 +67,7 @@ final class ProjectsViewModel {
         await MainActor.run { isLoading = true }
 
         do {
-            let groups: [BoardGroup] = try await apiClient.get(path: "/api/v1/boards/groups")
+            let groups: [BoardGroup] = try await apiClient.get(path: "/api/v1/board-groups")
             await MainActor.run {
                 self.boardGroups = groups
                 self.isLoading = false
