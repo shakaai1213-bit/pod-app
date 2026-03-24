@@ -192,7 +192,7 @@ struct LoginView: View {
                             .focused($isTokenFocused)
                             .submitLabel(.go)
                             .onSubmit {
-                                submitToken()
+                                Task { await submitToken() }
                             }
                     }
                     .padding(AppTheme.spacingSM)
@@ -216,9 +216,8 @@ struct LoginView: View {
                 }
 
                 Button {
-                    networkStatus = "Testing..."
                     Task {
-                        await testAndAuth()
+                        await submitToken()
                     }
                 } label: {
                     HStack {
@@ -245,7 +244,7 @@ struct LoginView: View {
 
             Spacer()
 
-            Text("Connecting to 127.0.0.1:8000")
+            Text("Connecting to 127.0.0.1:9000")
                 .font(.caption)
                 .foregroundColor(AppTheme.tertiaryText)
                 .padding(.bottom, AppTheme.spacingLG)
@@ -264,7 +263,7 @@ struct LoginView: View {
     @MainActor
     private func checkNetwork() async {
         networkStatus = "Checking network..."
-        guard let url = URL(string: "http://127.0.0.1:8000/health") else {
+        guard let url = URL(string: "http://127.0.0.1:9000/health") else {
             networkStatus = "❌ Invalid URL"
             return
         }
@@ -282,51 +281,21 @@ struct LoginView: View {
         }
     }
 
-    // MARK: - Test + Auth
+    // MARK: - Auth
 
     @MainActor
-    private func testAndAuth() async {
+    private func submitToken() async {
         guard !token.isEmpty else { return }
-
-        // Step 1: Test health
-        networkStatus = "Step 1: Checking backend..."
-        guard let healthURL = URL(string: "http://127.0.0.1:8000/health") else { return }
-        var healthReq = URLRequest(url: healthURL)
-        healthReq.timeoutInterval = 5
-        do {
-            let (_, healthResp) = try await URLSession.shared.data(for: healthReq)
-            let code = (healthResp as? HTTPURLResponse)?.statusCode ?? -1
-            networkStatus = "Step 1: HTTP \(code)"
-        } catch {
-            networkStatus = "❌ Step 1 failed: \(error.localizedDescription)"
-            return
-        }
-
-        // Step 2: Test auth
-        networkStatus = "Step 2: Testing token..."
-        guard let agentsURL = URL(string: "http://127.0.0.1:8000/api/v1/agents") else { return }
-        var authReq = URLRequest(url: agentsURL)
-        authReq.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        authReq.setValue(token, forHTTPHeaderField: "X-Api-Key")
-        authReq.timeoutInterval = 10
-        do {
-            let (data, authResp) = try await URLSession.shared.data(for: authReq)
-            let code = (authResp as? HTTPURLResponse)?.statusCode ?? -1
-            let body = String(data: data.prefix(100), encoding: .utf8) ?? ""
-            networkStatus = "Step 2: HTTP \(code) — \(body.prefix(50))"
-            if code == 200 {
-                await appState.authenticate(token: token)
-            }
-        } catch {
-            networkStatus = "❌ Step 2 failed: \(error.localizedDescription)"
-        }
-    }
-
-    private func submitToken() {
-        guard !token.isEmpty else { return }
-        let enteredToken = token
-        Task { @MainActor in
-            await appState.authenticate(token: enteredToken)
+        networkStatus = "Authenticating..."
+        // authenticate() sets isAuthenticated=true on success
+        await appState.authenticate(token: token)
+        // After authenticate() returns, SwiftUI will re-render because AppState is @MainActor @Published
+        if appState.isAuthenticated {
+            networkStatus = "✅ Authenticated! Loading..."
+        } else if let err = appState.errorMessage {
+            networkStatus = "❌ \(err)"
+        } else {
+            networkStatus = "Auth complete"
         }
     }
 }
