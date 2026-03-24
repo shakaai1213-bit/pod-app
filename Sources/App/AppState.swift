@@ -134,9 +134,11 @@ final class AppState: ObservableObject {
             pendingApprovalId = approvalId
             showApprovalSheet = true
             navigationState = .dashboard
-        case .agentError(let agentId):
+        case .agentError(let agentId, _):
             selectedTab = .agents
             navigationState = .agents(agentId: agentId)
+        case .unknown:
+            break
         }
     }
 

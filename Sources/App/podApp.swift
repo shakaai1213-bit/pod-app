@@ -24,7 +24,31 @@ struct podApp: App {
                 .preferredColorScheme(.dark)
                 .onAppear {
                     configureAppearance()
+                    // Auto-login if token exists in UserDefaults
+                    if let savedToken = UserDefaults.standard.string(forKey: "orca_auth_token") {
+                        Task { @MainActor in
+                            await appState.authenticate(token: savedToken)
+                        }
+                    }
                 }
+                .onOpenURL { url in
+                    handleURL(url)
+                }
+        }
+    }
+
+    private func handleURL(_ url: URL) {
+        print("[podApp] URL received: \(url)")
+        // pod://connect/<token> — bypasses the login form
+        guard url.scheme == "pod",
+              url.host == "connect",
+              let token = url.pathComponents.last,
+              !token.isEmpty else { return }
+        print("[podApp] Token length: \(token.count)")
+        Task { @MainActor in
+            print("[podApp] Authenticating via URL scheme...")
+            await appState.authenticate(token: token)
+            print("[podApp] Auth complete. isAuthenticated=\(appState.isAuthenticated)")
         }
     }
 

@@ -140,6 +140,7 @@ struct ContentView: View {
 struct LoginView: View {
     @Environment(\.appState) private var appState: AppState
     @State private var token: String = ""
+    @State private var tapped: Bool = false
     @FocusState private var isTokenFocused: Bool
 
     var body: some View {
@@ -167,9 +168,17 @@ struct LoginView: View {
             // Token input
             VStack(spacing: AppTheme.spacingMD) {
                 VStack(alignment: .leading, spacing: AppTheme.spacingXS) {
-                    Text("API Token")
-                        .font(.caption)
-                        .foregroundColor(AppTheme.secondaryText)
+                    HStack {
+                        Text("API Token")
+                            .font(.caption)
+                            .foregroundColor(AppTheme.secondaryText)
+                        Spacer()
+                        if !token.isEmpty {
+                            Text("\(token.count) chars entered")
+                                .font(.caption2)
+                                .foregroundColor(AppTheme.primaryAccent)
+                        }
+                    }
 
                     HStack {
                         Image(systemName: "key.fill")
@@ -191,37 +200,46 @@ struct LoginView: View {
                     .cornerRadius(AppTheme.radiusMedium)
                     .overlay(
                         RoundedRectangle(cornerRadius: AppTheme.radiusMedium)
-                            .stroke(AppTheme.border, lineWidth: 1)
+                            .stroke(token.isEmpty ? AppTheme.border : AppTheme.primaryAccent, lineWidth: 1)
                     )
+
+                    if !token.isEmpty {
+                        Text("Token ready — tap Connect below")
+                            .font(.caption2)
+                            .foregroundColor(AppTheme.secondaryText)
+                    }
                 }
 
-                Button(action: submitToken) {
+                Button {
+                    print("[Login] Button tapped! tapped set to true")
+                    tapped = true
+                    Task {
+                        await submitTokenAsync()
+                    }
+                } label: {
                     HStack {
                         if appState.isLoading {
                             ProgressView()
                                 .progressViewStyle(.circular)
                                 .tint(AppTheme.inverseText)
                                 .scaleEffect(0.8)
+                        } else if tapped {
+                            Text("TAPPED! token=\(token.prefix(4))...")
+                                .font(.body.bold())
+                                .foregroundColor(.yellow)
                         } else {
                             Text("Connect")
                                 .font(.body.bold())
                         }
                     }
-                    .foregroundColor(AppTheme.inverseText)
+                    .foregroundColor(appState.isLoading ? AppTheme.inverseText : (tapped ? Color.yellow : AppTheme.inverseText))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, AppTheme.spacingSM + 4)
-                    .background(
-                        token.isEmpty
-                            ? AppTheme.surfaceOverlay
-                            : AppTheme.primaryAccent
-                    )
+                    .background(tapped ? Color.orange : AppTheme.primaryAccent)
                     .cornerRadius(AppTheme.radiusMedium)
-                    .shadow(
-                        color: token.isEmpty ? .clear : AppTheme.glowAccent,
-                        radius: 12
-                    )
                 }
-                .disabled(token.isEmpty || appState.isLoading)
+                .buttonStyle(.plain)
+                .disabled(appState.isLoading)
             }
             .padding(.horizontal, AppTheme.spacingXL)
 
@@ -237,9 +255,24 @@ struct LoginView: View {
 
     private func submitToken() {
         guard !token.isEmpty else { return }
-        Task {
-            await appState.authenticate(token: token)
+        // Capture values to avoid struct mutation issues
+        let enteredToken = token
+        let state = appState
+        Task { @MainActor in
+            await state.authenticate(token: enteredToken)
         }
+    }
+
+    @MainActor
+    private func submitTokenAsync() async {
+        guard !token.isEmpty else { return }
+        // Set loading state immediately
+        appState.isLoading = true
+        appState.loadingMessage = "Connecting..."
+        // Capture values for background work
+        let enteredToken = token
+        // Run auth in background
+        await appState.authenticate(token: enteredToken)
     }
 }
 
