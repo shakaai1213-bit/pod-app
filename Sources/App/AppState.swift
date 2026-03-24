@@ -38,35 +38,33 @@ final class AppState: ObservableObject {
         loadingMessage = "Connecting..."
         print("[AppState] isLoading=\(isLoading)")
 
-        // Wrap the entire auth flow in a timeout task
-        do {
-            try await withThrowingTaskGroup(of: Void.self) { group in
-                // Auth task
-                group.addTask {
-                    await self.performAuth(token: token)
-                }
-                // Timeout task (10 seconds — fail fast)
-                group.addTask {
-                    try await Task.sleep(nanoseconds: 10_000_000_000)
-                    print("[AppState] Auth timed out after 10s")
-                }
-                // Wait for whichever finishes first
-                try await group.next()
-                group.cancelAll()
+        // Run auth with an independent timeout watcher
+        let authTask = Task {
+            await performAuth(token: token)
+        }
+
+        let timeoutTask = Task {
+            // poll every 500ms to see if auth finished
+            for _ in 0..<20 {  // 20 * 500ms = 10s max
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                if Task.isCancelled { return }
+                if isAuthenticated { return }  // auth finished successfully
+                if showError { return }         // auth finished with error
             }
-        } catch {
-            // Timeout or cancellation — but only show error if we haven't already succeeded
-            print("[AppState] Auth aborted: \(error)")
-            await MainActor.run {
-                if !isAuthenticated {
-                    isLoading = false
-                    loadingMessage = nil
-                    errorMessage = "Connection timed out"
-                    errorDetails = "The request took too long. Check your network and try again."
-                    showError = true
-                }
+            // Timeout reached
+            print("[AppState] Auth timed out after 10s")
+            authTask.cancel()
+            isLoading = false
+            loadingMessage = nil
+            if !isAuthenticated {
+                errorMessage = "Connection timed out"
+                errorDetails = "The request took too long. Check your network and try again."
+                showError = true
             }
         }
+
+        await authTask.value
+        timeoutTask.cancel()
     }
 
     /// Actual auth logic — called inside the timeout wrapper.
