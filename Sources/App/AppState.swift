@@ -20,9 +20,9 @@ final class AppState: ObservableObject {
 
     // MARK: - Backend URL
 
-    // iOS Simulator → proxy → Docker backend
-    // iPad/real device → can reach Mac Mini directly
-    static let backendURL = "http://192.168.4.243:8000"
+    // iOS Simulator → proxy at 127.0.0.1:9000 → Docker backend
+    // Real device (iPad) → http://192.168.4.243:8000 directly
+    static let backendURL = "http://127.0.0.1:9000"
 
     // MARK: - Initialization
 
@@ -45,22 +45,22 @@ final class AppState: ObservableObject {
                 group.addTask {
                     await self.performAuth(token: token)
                 }
-                // Timeout task (30 seconds)
+                // Timeout task (10 seconds — fail fast)
                 group.addTask {
-                    try await Task.sleep(nanoseconds: 30_000_000_000)
-                    print("[AppState] Auth timed out after 30s")
+                    try await Task.sleep(nanoseconds: 10_000_000_000)
+                    print("[AppState] Auth timed out after 10s")
                 }
                 // Wait for whichever finishes first
                 try await group.next()
                 group.cancelAll()
             }
         } catch {
-            // Timeout or cancellation
+            // Timeout or cancellation — but only show error if we haven't already succeeded
             print("[AppState] Auth aborted: \(error)")
             await MainActor.run {
-                isLoading = false
-                loadingMessage = nil
                 if !isAuthenticated {
+                    isLoading = false
+                    loadingMessage = nil
                     errorMessage = "Connection timed out"
                     errorDetails = "The request took too long. Check your network and try again."
                     showError = true
@@ -120,7 +120,7 @@ final class AppState: ObservableObject {
             return false
         }
         var request = URLRequest(url: url)
-        request.timeoutInterval = 5
+        request.timeoutInterval = 3
         print("[AppState] checkBackendReachable: GET \(url.absoluteString)")
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -147,7 +147,7 @@ final class AppState: ObservableObject {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue(token, forHTTPHeaderField: "X-Api-Key")
-        request.timeoutInterval = 10
+        request.timeoutInterval = 5
         print("[AppState] verifyTokenDirectly: GET \(url.absoluteString) Bearer=\(token.prefix(8))...")
         do {
             let (data, response) = try await URLSession.shared.data(for: request)

@@ -98,11 +98,11 @@ struct ContentView: View {
                         .foregroundColor(AppTheme.secondaryText)
                 }
 
-                // Escape hatch so user is never locked out
+                // Escape hatch — dismiss spinner AND show the error so user knows what happened
                 Button {
                     appState.isLoading = false
-                    appState.showError = false
-                    appState.isAuthenticated = false
+                    // Keep isAuthenticated=false and showError=true so the error sheet appears
+                    // and explains WHY the connection failed
                 } label: {
                     Text("Reset / Retry")
                         .font(.caption)
