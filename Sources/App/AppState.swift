@@ -20,7 +20,7 @@ final class AppState: ObservableObject {
 
     // MARK: - Backend URL
 
-    static let backendURL = "http://docker.for.mac.localhost:8000"
+    static let backendURL = "http://127.0.0.1:9000"
 
     // MARK: - Initialization
 
