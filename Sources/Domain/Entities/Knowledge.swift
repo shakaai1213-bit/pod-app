@@ -20,7 +20,18 @@ struct Standard: Identifiable {
 }
 
 extension Standard: Codable {}
-extension Standard: Hashable {}
+
+// Manual Hashable to avoid potential auto-synthesis issues with @Observable macro
+// and nested [StandardVersion] arrays in Swift 6 strict concurrency mode.
+extension Standard: Hashable {
+    static func == (lhs: Standard, rhs: Standard) -> Bool {
+        lhs.id == rhs.id
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+}
 
 // MARK: - Standard Version
 
@@ -31,6 +42,14 @@ struct StandardVersion: Identifiable, Codable, Hashable {
     let authorId: UUID
     let authorName: String
     let updatedAt: Date
+
+    static func == (lhs: StandardVersion, rhs: StandardVersion) -> Bool {
+        lhs.id == rhs.id
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
 }
 
 // MARK: - Standard Category

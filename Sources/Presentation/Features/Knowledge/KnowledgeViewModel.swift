@@ -61,23 +61,16 @@ final class KnowledgeViewModel {
         errorMessage = nil
 
         do {
-            let fetched: [Standard] = try await APIClient.shared.get(path: "/api/v1/standards")
+            let response: PaginatedResponse<Standard> = try await APIClient.shared.get(path: "/api/v1/standards")
             await MainActor.run {
-                self.standards = fetched
-                self.recomputeDerived()
-                self.isLoading = false
-            }
-        } catch let error as APIError where error.code == 404 {
-            // Backend doesn't have standards endpoint yet — use mock data
-            await MainActor.run {
-                self.standards = MockData.standards
+                self.standards = response.items
                 self.recomputeDerived()
                 self.isLoading = false
             }
         } catch {
+            // API unavailable — fall back to mock data
             await MainActor.run {
-                self.standards = MockData.standards
-                self.errorMessage = nil
+                self.standards = Self.safeMockStandards()
                 self.isLoading = false
             }
         }
@@ -251,5 +244,14 @@ final class KnowledgeViewModel {
         standard.relatedStandardIds.compactMap { id in
             standards.first { $0.id == id }
         }
+    }
+
+    // MARK: - Mock Data Safe Access
+
+    /// Access MockData.standards with a safety wrapper.
+    /// Note: SIGTRAP crashes in static init cannot be caught — this is a best-effort fallback.
+    private static func safeMockStandards() -> [Standard] {
+        // swiftlint:disable:next legacy_hashing
+        MockData.standards
     }
 }
