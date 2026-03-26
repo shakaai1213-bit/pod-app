@@ -1,0 +1,16 @@
+{
+  "source": "/Users/shaka/pod-app/Sources/Presentation/Shared/Components/AvatarView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "%@ avatar",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 111
+        }
+      }
+    ]
+  },
+  "version": 1
+}

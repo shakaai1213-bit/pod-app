@@ -1,0 +1,56 @@
+{
+  "source": "/Users/shaka/pod-app/Sources/Presentation/Shared/Components/OnboardingPageView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Back",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 77
+        }
+      },
+      {
+        "comment": "",
+        "key": "Next",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 104
+        }
+      },
+      {
+        "comment": "",
+        "key": "Page 1",
+        "location": {
+          "startingColumn": 1,
+          "startingLine": 174
+        }
+      },
+      {
+        "comment": "",
+        "key": "Page 2",
+        "location": {
+          "startingColumn": 1,
+          "startingLine": 174
+        }
+      },
+      {
+        "comment": "",
+        "key": "Page 3",
+        "location": {
+          "startingColumn": 1,
+          "startingLine": 174
+        }
+      },
+      {
+        "comment": "",
+        "key": "Page 4",
+        "location": {
+          "startingColumn": 1,
+          "startingLine": 174
+        }
+      }
+    ]
+  },
+  "version": 1
+}

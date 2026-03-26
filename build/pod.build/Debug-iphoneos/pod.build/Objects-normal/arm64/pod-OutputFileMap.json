@@ -1,0 +1,649 @@
+{
+  "" : {
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/pod-primary.dia",
+    "emit-module-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/pod-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/pod-primary-emit-module.dia",
+    "pch" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/pod-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/pod-primary.swiftdeps"
+  },
+  "/Users/shaka/pod-app/Sources/App/AppState.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppState.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppState.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppState.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppState.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppState.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppState.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppState.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppState~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/App/AppTab.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppTab.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppTab.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppTab.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppTab.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppTab.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppTab.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppTab.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppTab~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/App/AppTheme.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppTheme.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppTheme.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppTheme.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppTheme.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppTheme.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppTheme.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppTheme.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppTheme~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/App/ContentView.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ContentView.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ContentView.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ContentView.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ContentView.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ContentView.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ContentView.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ContentView.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ContentView~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/App/Intents/AppIntents.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppIntents.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppIntents.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppIntents.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppIntents.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppIntents.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppIntents.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppIntents.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppIntents~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/App/Intents/AppShortcuts.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppShortcuts.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppShortcuts.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppShortcuts.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppShortcuts.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppShortcuts.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppShortcuts.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppShortcuts.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AppShortcuts~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/App/Navigation.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Navigation.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Navigation.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Navigation.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Navigation.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Navigation.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Navigation.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Navigation.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Navigation~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/App/podApp.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/podApp.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/podApp.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/podApp.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/podApp.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/podApp.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/podApp.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/podApp.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/podApp~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Core/Design/Colors.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Colors.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Colors.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Colors.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Colors.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Colors.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Colors.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Colors.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Colors~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Core/Design/Theme.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Theme.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Theme.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Theme.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Theme.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Theme.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Theme.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Theme.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Theme~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Core/Design/Typography.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Typography.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Typography.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Typography.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Typography.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Typography.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Typography.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Typography.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Typography~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Core/Mock/MockData.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/MockData.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/MockData.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/MockData.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/MockData.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/MockData.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/MockData.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/MockData.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/MockData~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Data/Local/PersistenceController.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/PersistenceController.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/PersistenceController.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/PersistenceController.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/PersistenceController.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/PersistenceController.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/PersistenceController.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/PersistenceController.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/PersistenceController~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Data/Local/SwiftDataModels.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SwiftDataModels.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SwiftDataModels.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SwiftDataModels.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SwiftDataModels.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SwiftDataModels.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SwiftDataModels.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SwiftDataModels.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SwiftDataModels~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Data/Remote/APIClient.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/APIClient.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/APIClient.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/APIClient.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/APIClient.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/APIClient.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/APIClient.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/APIClient.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/APIClient~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Data/Remote/DTOs.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DTOs.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DTOs.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DTOs.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DTOs.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DTOs.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DTOs.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DTOs.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DTOs~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Data/Remote/Endpoints.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Endpoints.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Endpoints.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Endpoints.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Endpoints.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Endpoints.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Endpoints.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Endpoints.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Endpoints~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Data/Remote/NotificationAction.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/NotificationAction.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/NotificationAction.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/NotificationAction.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/NotificationAction.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/NotificationAction.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/NotificationAction.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/NotificationAction.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/NotificationAction~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Data/Remote/NotificationRouter.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/NotificationRouter.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/NotificationRouter.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/NotificationRouter.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/NotificationRouter.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/NotificationRouter.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/NotificationRouter.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/NotificationRouter.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/NotificationRouter~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Data/Remote/PushNotificationService.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/PushNotificationService.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/PushNotificationService.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/PushNotificationService.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/PushNotificationService.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/PushNotificationService.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/PushNotificationService.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/PushNotificationService.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/PushNotificationService~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Data/Remote/SSEClient.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SSEClient.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SSEClient.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SSEClient.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SSEClient.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SSEClient.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SSEClient.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SSEClient.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SSEClient~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Data/Repositories/AgentRepository.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentRepository.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentRepository.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentRepository.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentRepository.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentRepository.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentRepository.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentRepository.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentRepository~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Data/Repositories/ChannelRepository.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ChannelRepository.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ChannelRepository.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ChannelRepository.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ChannelRepository.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ChannelRepository.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ChannelRepository.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ChannelRepository.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ChannelRepository~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Data/Repositories/StandardRepository.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardRepository.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardRepository.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardRepository.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardRepository.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardRepository.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardRepository.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardRepository.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardRepository~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Domain/Entities/Agents.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Agents.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Agents.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Agents.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Agents.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Agents.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Agents.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Agents.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Agents~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Domain/Entities/Chat.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Chat.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Chat.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Chat.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Chat.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Chat.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Chat.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Chat.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Chat~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Domain/Entities/Knowledge.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Knowledge.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Knowledge.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Knowledge.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Knowledge.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Knowledge.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Knowledge.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Knowledge.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Knowledge~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Domain/Entities/Projects.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Projects.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Projects.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Projects.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Projects.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Projects.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Projects.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Projects.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Projects~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Agents/AgentDetailSheet.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentDetailSheet.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentDetailSheet.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentDetailSheet.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentDetailSheet.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentDetailSheet.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentDetailSheet.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentDetailSheet.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentDetailSheet~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Agents/AgentsView.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentsView.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentsView.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentsView.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentsView.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentsView.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentsView.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentsView.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentsView~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Agents/AgentsViewModel.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentsViewModel.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentsViewModel.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentsViewModel.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentsViewModel.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentsViewModel.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentsViewModel.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentsViewModel.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentsViewModel~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Agents/LogStreamView.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/LogStreamView.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/LogStreamView.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/LogStreamView.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/LogStreamView.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/LogStreamView.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/LogStreamView.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/LogStreamView.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/LogStreamView~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Chat/ChatView.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ChatView.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ChatView.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ChatView.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ChatView.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ChatView.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ChatView.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ChatView.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ChatView~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Chat/ChatViewModel.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ChatViewModel.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ChatViewModel.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ChatViewModel.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ChatViewModel.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ChatViewModel.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ChatViewModel.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ChatViewModel.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ChatViewModel~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Chat/ComposeBar.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ComposeBar.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ComposeBar.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ComposeBar.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ComposeBar.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ComposeBar.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ComposeBar.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ComposeBar.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ComposeBar~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Chat/MessageBubbleView.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/MessageBubbleView.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/MessageBubbleView.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/MessageBubbleView.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/MessageBubbleView.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/MessageBubbleView.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/MessageBubbleView.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/MessageBubbleView.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/MessageBubbleView~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Dashboard/ActivityItemView.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ActivityItemView.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ActivityItemView.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ActivityItemView.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ActivityItemView.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ActivityItemView.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ActivityItemView.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ActivityItemView.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ActivityItemView~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Dashboard/AgentStatusCard.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentStatusCard.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentStatusCard.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentStatusCard.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentStatusCard.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentStatusCard.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentStatusCard.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentStatusCard.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AgentStatusCard~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Dashboard/DashboardModels.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DashboardModels.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DashboardModels.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DashboardModels.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DashboardModels.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DashboardModels.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DashboardModels.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DashboardModels.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DashboardModels~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Dashboard/DashboardView.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DashboardView.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DashboardView.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DashboardView.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DashboardView.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DashboardView.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DashboardView.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DashboardView.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DashboardView~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Dashboard/DashboardViewModel.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DashboardViewModel.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DashboardViewModel.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DashboardViewModel.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DashboardViewModel.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DashboardViewModel.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DashboardViewModel.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DashboardViewModel.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/DashboardViewModel~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Knowledge/KnowledgeView.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/KnowledgeView.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/KnowledgeView.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/KnowledgeView.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/KnowledgeView.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/KnowledgeView.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/KnowledgeView.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/KnowledgeView.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/KnowledgeView~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Knowledge/KnowledgeViewModel.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/KnowledgeViewModel.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/KnowledgeViewModel.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/KnowledgeViewModel.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/KnowledgeViewModel.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/KnowledgeViewModel.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/KnowledgeViewModel.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/KnowledgeViewModel.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/KnowledgeViewModel~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Knowledge/StandardDetailView.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardDetailView.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardDetailView.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardDetailView.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardDetailView.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardDetailView.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardDetailView.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardDetailView.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardDetailView~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Knowledge/StandardEditorView.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardEditorView.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardEditorView.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardEditorView.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardEditorView.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardEditorView.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardEditorView.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardEditorView.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardEditorView~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Onboarding/OnboardingView.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingView.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingView.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingView.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingView.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingView.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingView.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingView.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingView~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Onboarding/OnboardingViewModel.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingViewModel.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingViewModel.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingViewModel.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingViewModel.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingViewModel.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingViewModel.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingViewModel.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingViewModel~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Projects/BoardDetailView.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/BoardDetailView.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/BoardDetailView.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/BoardDetailView.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/BoardDetailView.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/BoardDetailView.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/BoardDetailView.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/BoardDetailView.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/BoardDetailView~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Projects/ProjectsView.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ProjectsView.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ProjectsView.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ProjectsView.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ProjectsView.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ProjectsView.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ProjectsView.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ProjectsView.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ProjectsView~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Projects/ProjectsViewModel.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ProjectsViewModel.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ProjectsViewModel.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ProjectsViewModel.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ProjectsViewModel.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ProjectsViewModel.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ProjectsViewModel.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ProjectsViewModel.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ProjectsViewModel~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Projects/TaskCardView.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/TaskCardView.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/TaskCardView.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/TaskCardView.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/TaskCardView.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/TaskCardView.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/TaskCardView.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/TaskCardView.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/TaskCardView~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Projects/TaskDetailSheet.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/TaskDetailSheet.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/TaskDetailSheet.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/TaskDetailSheet.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/TaskDetailSheet.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/TaskDetailSheet.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/TaskDetailSheet.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/TaskDetailSheet.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/TaskDetailSheet~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/WallDisplay/WallDisplayLauncherView.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayLauncherView.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayLauncherView.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayLauncherView.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayLauncherView.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayLauncherView.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayLauncherView.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayLauncherView.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayLauncherView~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/WallDisplay/WallDisplayModifier.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayModifier.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayModifier.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayModifier.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayModifier.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayModifier.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayModifier.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayModifier.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayModifier~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/WallDisplay/WallDisplayView.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayView.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayView.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayView.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayView.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayView.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayView.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayView.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayView~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/WallDisplay/WallDisplayViewModel.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayViewModel.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayViewModel.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayViewModel.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayViewModel.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayViewModel.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayViewModel.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayViewModel.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/WallDisplayViewModel~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Shared/Components/AvatarView.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AvatarView.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AvatarView.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AvatarView.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AvatarView.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AvatarView.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AvatarView.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AvatarView.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/AvatarView~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Shared/Components/FlowLayout.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/FlowLayout.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/FlowLayout.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/FlowLayout.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/FlowLayout.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/FlowLayout.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/FlowLayout.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/FlowLayout.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/FlowLayout~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Shared/Components/OnboardingPageView.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingPageView.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingPageView.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingPageView.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingPageView.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingPageView.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingPageView.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingPageView.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingPageView~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Shared/Components/PriorityBadge.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/PriorityBadge.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/PriorityBadge.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/PriorityBadge.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/PriorityBadge.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/PriorityBadge.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/PriorityBadge.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/PriorityBadge.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/PriorityBadge~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Shared/Components/SettingsView.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SettingsView.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SettingsView.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SettingsView.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SettingsView.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SettingsView.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SettingsView.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SettingsView.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SettingsView~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Shared/Components/ShimmerModifier.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ShimmerModifier.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ShimmerModifier.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ShimmerModifier.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ShimmerModifier.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ShimmerModifier.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ShimmerModifier.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ShimmerModifier.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ShimmerModifier~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Shared/Components/StatusBadge.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StatusBadge.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StatusBadge.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StatusBadge.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StatusBadge.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StatusBadge.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StatusBadge.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StatusBadge.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StatusBadge~partial.swiftmodule"
+  },
+  "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/GeneratedAssetSymbols.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/GeneratedAssetSymbols.dia",
+    "index-unit-output-path" : "/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftdeps",
+    "swiftmodule" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/GeneratedAssetSymbols~partial.swiftmodule"
+  }
+}

@@ -22,7 +22,9 @@ final class AppState: ObservableObject {
 
     // iOS Simulator → proxy at 127.0.0.1:9000 → Docker backend
     // Real device (iPad) → http://192.168.4.243:8000 directly
-    static let backendURL = "http://127.0.0.1:9000"
+    // Physical device on LAN: direct to backend
+    // Simulator: use proxy (e.g. 127.0.0.1:9000 → 192.168.4.243:8000)
+    static let backendURL = "http://192.168.4.243:8000"
 
     // MARK: - Initialization
 
@@ -60,6 +62,7 @@ final class AppState: ObservableObject {
                 errorMessage = "Connection timed out"
                 errorDetails = "The request took too long. Check your network and try again."
                 showError = true
+                UserDefaults.standard.removeObject(forKey: "orca_auth_token")
             }
         }
 
@@ -107,6 +110,7 @@ final class AppState: ObservableObject {
             errorMessage = "Invalid token"
             errorDetails = "Token rejected. Make sure you're using the exact token from the ORCA MC .env file."
             showError = true
+            UserDefaults.standard.removeObject(forKey: "orca_auth_token")
             print("[AppState] performAuth: invalid token, error shown")
         }
     }

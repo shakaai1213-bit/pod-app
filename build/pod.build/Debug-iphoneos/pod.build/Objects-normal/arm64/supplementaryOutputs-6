@@ -1,0 +1,44 @@
+{
+  "/Users/shaka/pod-app/Sources/App/Navigation.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Navigation.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Navigation.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Navigation.dia",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Navigation.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Navigation.swiftdeps"
+  },
+  "/Users/shaka/pod-app/Sources/Data/Remote/NotificationAction.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/NotificationAction.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/NotificationAction.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/NotificationAction.dia",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/NotificationAction.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/NotificationAction.swiftdeps"
+  },
+  "/Users/shaka/pod-app/Sources/Data/Remote/NotificationRouter.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/NotificationRouter.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/NotificationRouter.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/NotificationRouter.dia",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/NotificationRouter.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/NotificationRouter.swiftdeps"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Onboarding/OnboardingView.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingView.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingView.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingView.dia",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingView.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingView.swiftdeps"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Onboarding/OnboardingViewModel.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingViewModel.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingViewModel.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingViewModel.dia",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingViewModel.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingViewModel.swiftdeps"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Shared/Components/OnboardingPageView.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingPageView.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingPageView.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingPageView.dia",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingPageView.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/OnboardingPageView.swiftdeps"
+  }
+}

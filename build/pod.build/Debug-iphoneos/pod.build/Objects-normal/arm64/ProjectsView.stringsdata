@@ -1,0 +1,184 @@
+{
+  "source": "/Users/shaka/pod-app/Sources/Presentation/Features/Projects/ProjectsView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Search boards and tasks",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 35
+        }
+      },
+      {
+        "comment": "",
+        "key": "Projects",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 46
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 68
+        }
+      },
+      {
+        "comment": "",
+        "key": "View all %lld tasks",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 90
+        }
+      },
+      {
+        "comment": "",
+        "key": "No tasks assigned to you. Nice!",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 203
+        }
+      },
+      {
+        "comment": "",
+        "key": "No boards found",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 242
+        }
+      },
+      {
+        "comment": "",
+        "key": "Open Board",
+        "location": {
+          "startingColumn": 19,
+          "startingLine": 255
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add Task",
+        "location": {
+          "startingColumn": 19,
+          "startingLine": 261
+        }
+      },
+      {
+        "comment": "",
+        "key": "Archive Board",
+        "location": {
+          "startingColumn": 19,
+          "startingLine": 269
+        }
+      },
+      {
+        "comment": "",
+        "key": "•",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 310
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld tasks",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 379
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld%%",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 382
+        }
+      },
+      {
+        "comment": "",
+        "key": "•",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 411
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld tasks",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 413
+        }
+      },
+      {
+        "comment": "",
+        "key": "•",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 415
+        }
+      },
+      {
+        "comment": "",
+        "key": "New Task",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 491
+        }
+      },
+      {
+        "comment": "",
+        "key": "Task title",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 480
+        }
+      },
+      {
+        "comment": "",
+        "key": "Description (optional)",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 481
+        }
+      },
+      {
+        "comment": "",
+        "key": "Board",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 484
+        }
+      },
+      {
+        "comment": "",
+        "key": "Select a board",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 485
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 495
+        }
+      },
+      {
+        "comment": "",
+        "key": "Create",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 505
+        }
+      }
+    ]
+  },
+  "version": 1
+}

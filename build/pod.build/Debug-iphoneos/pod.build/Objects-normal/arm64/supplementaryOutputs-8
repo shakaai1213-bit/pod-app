@@ -1,0 +1,44 @@
+{
+  "/Users/shaka/pod-app/Sources/Data/Remote/SSEClient.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SSEClient.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SSEClient.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SSEClient.dia",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SSEClient.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SSEClient.swiftdeps"
+  },
+  "/Users/shaka/pod-app/Sources/Data/Repositories/StandardRepository.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardRepository.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardRepository.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardRepository.dia",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardRepository.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardRepository.swiftdeps"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Knowledge/StandardDetailView.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardDetailView.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardDetailView.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardDetailView.dia",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardDetailView.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardDetailView.swiftdeps"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Knowledge/StandardEditorView.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardEditorView.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardEditorView.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardEditorView.dia",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardEditorView.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/StandardEditorView.swiftdeps"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Shared/Components/SettingsView.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SettingsView.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SettingsView.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SettingsView.dia",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SettingsView.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/SettingsView.swiftdeps"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Shared/Components/ShimmerModifier.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ShimmerModifier.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ShimmerModifier.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ShimmerModifier.dia",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ShimmerModifier.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/ShimmerModifier.swiftdeps"
+  }
+}

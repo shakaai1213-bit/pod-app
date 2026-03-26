@@ -22,7 +22,8 @@ struct ContentView: View {
             }
 
             // Global loading overlay — separate from auth state
-            if appState.isLoading {
+            // Hidden when error is shown so the error sheet can be interacted with
+            if appState.isLoading && !appState.showError {
                 loadingOverlay
             }
         }

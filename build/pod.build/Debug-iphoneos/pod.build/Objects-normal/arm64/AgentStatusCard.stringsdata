@@ -1,0 +1,40 @@
+{
+  "source": "/Users/shaka/pod-app/Sources/Presentation/Features/Dashboard/AgentStatusCard.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Agent Details",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 163
+        }
+      },
+      {
+        "comment": "",
+        "key": "Done",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 167
+        }
+      },
+      {
+        "comment": "",
+        "key": "Last active %@",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 214
+        }
+      },
+      {
+        "comment": "",
+        "key": "No active task",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 235
+        }
+      }
+    ]
+  },
+  "version": 1
+}

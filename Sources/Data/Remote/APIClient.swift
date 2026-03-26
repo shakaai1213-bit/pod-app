@@ -29,9 +29,9 @@ struct EmptyResponse: Codable {}
 actor APIClient {
     static let shared = APIClient()
 
-    // Must match AppState.backendURL so the simulator can reach the backend via proxy
-    // iOS Simulator → 127.0.0.1:9000 (proxy) → Docker backend on Mac Mini
-    private let baseURL = "http://127.0.0.1:19002"
+    // Physical device on LAN: direct to backend
+    // Simulator: use proxy (e.g. 127.0.0.1:9000 → 192.168.4.243:8000)
+    private let baseURL = "http://192.168.4.243:8000"
     private let session: URLSession
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder

@@ -1,0 +1,224 @@
+{
+  "source": "/Users/shaka/pod-app/Sources/Presentation/Features/Projects/TaskDetailSheet.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Task",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 64
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete Task?",
+        "location": {
+          "startingColumn": 17,
+          "startingLine": 88
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 68
+        }
+      },
+      {
+        "comment": "",
+        "key": "Save",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 73
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 92
+        }
+      },
+      {
+        "comment": "",
+        "key": "Archive",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 98
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 104
+        }
+      },
+      {
+        "comment": "",
+        "key": "This action cannot be undone.",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 106
+        }
+      },
+      {
+        "comment": "",
+        "key": "Task title",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 117
+        }
+      },
+      {
+        "comment": "",
+        "key": "STATUS",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 134
+        }
+      },
+      {
+        "comment": "",
+        "key": "Due Date",
+        "location": {
+          "startingColumn": 21,
+          "startingLine": 232
+        }
+      },
+      {
+        "comment": "",
+        "key": "Priority",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 296
+        }
+      },
+      {
+        "comment": "",
+        "key": "TAGS",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 338
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add tags",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 355
+        }
+      },
+      {
+        "comment": "",
+        "key": "Markdown supported",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 425
+        }
+      },
+      {
+        "comment": "",
+        "key": "DESCRIPTION",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 395
+        }
+      },
+      {
+        "comment": "",
+        "key": "ACTIVITY",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 436
+        }
+      },
+      {
+        "comment": "",
+        "key": "Archive Task",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 486
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete Task",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 505
+        }
+      },
+      {
+        "comment": "",
+        "key": "Assign To",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 679
+        }
+      },
+      {
+        "comment": "",
+        "key": "Unassigned",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 642
+        }
+      },
+      {
+        "comment": "",
+        "key": "Done",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 683
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tags",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 752
+        }
+      },
+      {
+        "comment": "",
+        "key": "Suggested",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 718
+        }
+      },
+      {
+        "comment": "",
+        "key": "Current Tags",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 736
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add a tag",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 705
+        }
+      },
+      {
+        "comment": "",
+        "key": "Done",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 756
+        }
+      }
+    ]
+  },
+  "version": 1
+}

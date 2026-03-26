@@ -1,0 +1,44 @@
+{
+  "/Users/shaka/pod-app/Sources/Core/Mock/MockData.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/MockData.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/MockData.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/MockData.dia",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/MockData.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/MockData.swiftdeps"
+  },
+  "/Users/shaka/pod-app/Sources/Domain/Entities/Knowledge.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Knowledge.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Knowledge.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Knowledge.dia",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Knowledge.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/Knowledge.swiftdeps"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Agents/LogStreamView.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/LogStreamView.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/LogStreamView.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/LogStreamView.dia",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/LogStreamView.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/LogStreamView.swiftdeps"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Chat/MessageBubbleView.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/MessageBubbleView.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/MessageBubbleView.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/MessageBubbleView.dia",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/MessageBubbleView.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/MessageBubbleView.swiftdeps"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Knowledge/KnowledgeView.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/KnowledgeView.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/KnowledgeView.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/KnowledgeView.dia",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/KnowledgeView.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/KnowledgeView.swiftdeps"
+  },
+  "/Users/shaka/pod-app/Sources/Presentation/Features/Knowledge/KnowledgeViewModel.swift" : {
+    "const-values" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/KnowledgeViewModel.swiftconstvalues",
+    "dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/KnowledgeViewModel.d",
+    "diagnostics" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/KnowledgeViewModel.dia",
+    "object" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/KnowledgeViewModel.o",
+    "swift-dependencies" : "/Users/shaka/pod-app/build/pod.build/Debug-iphoneos/pod.build/Objects-normal/arm64/KnowledgeViewModel.swiftdeps"
+  }
+}

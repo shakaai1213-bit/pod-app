@@ -1,0 +1,104 @@
+{
+  "source": "/Users/shaka/pod-app/Sources/Presentation/Features/Projects/BoardDetailView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "All Stages",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 85
+        }
+      },
+      {
+        "comment": "",
+        "key": "Search tasks",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 130
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tag",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 174
+        }
+      },
+      {
+        "comment": "",
+        "key": "Stage",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 233
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 376
+        }
+      },
+      {
+        "comment": "",
+        "key": "New Task",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 465
+        }
+      },
+      {
+        "comment": "",
+        "key": "Task title",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 442
+        }
+      },
+      {
+        "comment": "",
+        "key": "Description (optional)",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 444
+        }
+      },
+      {
+        "comment": "",
+        "key": "Priority",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 447
+        }
+      },
+      {
+        "comment": "",
+        "key": "Stage",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 459
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 469
+        }
+      },
+      {
+        "comment": "",
+        "key": "Create",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 472
+        }
+      }
+    ]
+  },
+  "version": 1
+}

@@ -1,0 +1,168 @@
+{
+  "source": "/Users/shaka/pod-app/Sources/Presentation/Features/Knowledge/StandardEditorView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Edit Standard",
+        "location": {
+          "startingColumn": 47,
+          "startingLine": 68
+        }
+      },
+      {
+        "comment": "",
+        "key": "New Standard",
+        "location": {
+          "startingColumn": 65,
+          "startingLine": 68
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 73
+        }
+      },
+      {
+        "comment": "",
+        "key": "Preview",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 80
+        }
+      },
+      {
+        "comment": "",
+        "key": "Edit",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 85
+        }
+      },
+      {
+        "comment": "",
+        "key": "Title",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 113
+        }
+      },
+      {
+        "comment": "",
+        "key": "Enter standard title…",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 118
+        }
+      },
+      {
+        "comment": "",
+        "key": "Category",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 136
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tags",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 181
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add tag…",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 200
+        }
+      },
+      {
+        "comment": "",
+        "key": "Content",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 240
+        }
+      },
+      {
+        "comment": "",
+        "key": "No related standards selected",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 309
+        }
+      },
+      {
+        "comment": "",
+        "key": "Related Standards",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 286
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 300
+        }
+      },
+      {
+        "comment": "",
+        "key": "Save Draft",
+        "location": {
+          "startingColumn": 43,
+          "startingLine": 368
+        }
+      },
+      {
+        "comment": "",
+        "key": "Save Draft",
+        "location": {
+          "startingColumn": 58,
+          "startingLine": 368
+        }
+      },
+      {
+        "comment": "",
+        "key": "Publish",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 395
+        }
+      },
+      {
+        "comment": "",
+        "key": "Related Standards",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 724
+        }
+      },
+      {
+        "comment": "",
+        "key": "Search standards…",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 695
+        }
+      },
+      {
+        "comment": "",
+        "key": "Done",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 729
+        }
+      }
+    ]
+  },
+  "version": 1
+}
