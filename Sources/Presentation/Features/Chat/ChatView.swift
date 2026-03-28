@@ -118,6 +118,9 @@ struct ChannelSidebarView: View {
                 }
                 .padding(.vertical, 8)
             }
+            .refreshable {
+                await viewModel.loadChannels()
+            }
         }
     }
 
@@ -198,6 +201,9 @@ struct ChannelListView: View {
         .navigationTitle("Chat")
         .navigationBarTitleDisplayMode(.large)
         .toolbarBackground(AppColors.backgroundPrimary, for: .navigationBar)
+        .refreshable {
+            await viewModel.loadChannels()
+        }
     }
 
     private var loadingView: some View {
