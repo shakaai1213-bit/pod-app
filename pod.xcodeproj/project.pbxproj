@@ -53,6 +53,7 @@
 		C034834CB36EB1EC8B5AEE25 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49A69CF51ACDCD9D554A9BA5 /* DashboardView.swift */; };
 		C2595E99C59F93D07A054964 /* Navigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 187E28435D0A3606280B6AD0 /* Navigation.swift */; };
 		C8BA82A7E103175379551AB4 /* AgentRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C828D5C39A08FAA8E8C6F7E /* AgentRepository.swift */; };
+		FBB95D02568EF3AEEE6A0BF8 /* BoardRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C86634EC724EF20A8BE0A23 /* BoardRepository.swift */; };
 		CBD4F56F27B316E7080C5790 /* TaskCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61E316898E420DEC290715F7 /* TaskCardView.swift */; };
 		CDB89B8862BF3230B668C3FC /* Endpoints.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12D22773AD8CA83A56A417C3 /* Endpoints.swift */; };
 		CF8F936E3B4CD83149F70242 /* ProjectsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49B691A32B1F1F566C259775 /* ProjectsView.swift */; };
@@ -93,6 +94,7 @@
 		348A3B6C0FA234B66DDC7B35 /* OnboardingViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingViewModel.swift; sourceTree = "<group>"; };
 		3853FCF809EDAFB9AE5C0021 /* StandardDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandardDetailView.swift; sourceTree = "<group>"; };
 		3AB0691F93E9F5494A3A79B1 /* StandardRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandardRepository.swift; sourceTree = "<group>"; };
+		9C86634EC724EF20A8BE0A23 /* BoardRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardRepository.swift; sourceTree = "<group>";};
 		3B0D00C9AD7DFCF672218C0B /* Knowledge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Knowledge.swift; sourceTree = "<group>"; };
 		3C0D215A37D20015C3281815 /* FlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowLayout.swift; sourceTree = "<group>"; };
 		3ECF09C31E0CCB3C58FAA879 /* KnowledgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeView.swift; sourceTree = "<group>"; };
@@ -324,6 +326,7 @@
 				0C828D5C39A08FAA8E8C6F7E /* AgentRepository.swift */,
 				DC9A4A64DB751E8953D363DF /* ChannelRepository.swift */,
 				3AB0691F93E9F5494A3A79B1 /* StandardRepository.swift */,
+				9C86634EC724EF20A8BE0A23 /* BoardRepository.swift */,
 			);
 			path = Repositories;
 			sourceTree = "<group>";
@@ -593,7 +596,8 @@
 				48DC0D4A902E5E25D14427FF /* ShimmerModifier.swift in Sources */,
 				EE295B15C305769AAB154AFE /* StandardDetailView.swift in Sources */,
 				06AF85E590D1677BF0CA067C /* StandardEditorView.swift in Sources */,
-				283E5B81FDD5BEDF1B7E6B17 /* StandardRepository.swift in Sources */,
+			283E5B81FDD5BEDF1B7E6B17 /* StandardRepository.swift in Sources */,
+			FBB95D02568EF3AEEE6A0BF8 /* BoardRepository.swift in Sources */,
 				1CE5ECB5B90CBAEBF1759980 /* StatusBadge.swift in Sources */,
 				7D73F19AA5F1A62E35E17CAC /* SwiftDataModels.swift in Sources */,
 				CBD4F56F27B316E7080C5790 /* TaskCardView.swift in Sources */,

@@ -9,6 +9,20 @@ enum DTOChatChannelType: String, Codable {
     case agent
     case research
     case alerts
+
+    // Handle API's "public" / "group" / "private" types by mapping to name-based type
+    // The API uses channel.name (e.g. "general", "projects", "alerts") to determine type
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+        // Try to match the standard enum cases first
+        if let channelType = DTOChatChannelType(rawValue: rawValue) {
+            self = channelType
+        } else {
+            // API returns "public", "group", "private" — default to general
+            self = .general
+        }
+    }
 }
 
 // MARK: - User DTO
@@ -32,8 +46,13 @@ struct ChannelDTO: Codable, Identifiable {
     let name: String
     let type: DTOChatChannelType
     let description: String?
-    let isPinned: Bool
     let unreadCount: Int
+    // API doesn't return isPinned — default to false
+    var isPinned: Bool = false
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, type, description, unreadCount
+    }
 }
 
 // MARK: - Message DTO
@@ -44,10 +63,31 @@ struct MessageDTO: Codable, Identifiable {
     let authorId: String
     let content: String
     let timestamp: Date
-    let isAgent: Bool
+    var isAgent: Bool
     let agentId: String?
     let reactions: [ReactionDTO]?
     let threadCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id, content, isAgent, agentId, reactions, threadCount
+        case channelId = "channel_id"
+        case authorId = "sender_user_id"
+        case timestamp = "created_at"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        channelId = try container.decode(String.self, forKey: .channelId)
+        authorId = try container.decode(String.self, forKey: .authorId)
+        content = try container.decode(String.self, forKey: .content)
+        timestamp = try container.decode(Date.self, forKey: .timestamp)
+        agentId = try container.decodeIfPresent(String.self, forKey: .agentId)
+        reactions = try container.decodeIfPresent([ReactionDTO].self, forKey: .reactions)
+        threadCount = try container.decodeIfPresent(Int.self, forKey: .threadCount) ?? 0
+        // Infer isAgent from presence of sender_agent_id
+        isAgent = self.agentId != nil
+    }
 }
 
 struct ReactionDTO: Codable {
@@ -68,12 +108,39 @@ struct BoardDTO: Codable, Identifiable {
     let updatedAt: Date
     let taskCount: Int
     let completedTaskCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, status, stage, taskCount, completedTaskCount
+        case description = "objective"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
 }
 
 enum BoardStatus: String, Codable {
     case active
     case archived
     case completed
+}
+
+// MARK: - Task DTO
+
+struct TaskDTO: Codable, Identifiable {
+    let id: String
+    let title: String
+    let description: String?
+    let status: String?
+    let stage: String?
+    let assigneeId: String?
+    let dueDate: Date?
+    let priority: String?
+    let tags: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, description, status, stage, priority, tags
+        case assigneeId = "assignee_id"
+        case dueDate = "due_date"
+    }
 }
 
 // MARK: - Agent DTO

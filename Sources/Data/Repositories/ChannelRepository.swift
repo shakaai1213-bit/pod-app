@@ -9,7 +9,7 @@ final class ChannelRepository {
     var isLoading: Bool = false
     var lastError: Error?
 
-    private init() {}
+    init() {}
 
     // MARK: - Load
 
@@ -24,8 +24,8 @@ final class ChannelRepository {
                 Channel(
                     id: UUID(uuidString: dto.id) ?? UUID(),
                     name: dto.name,
-                    type: mapChannelType(dto.type),
-                    lastMessage: dto.description,
+                    type: channelTypeFromName(dto.name),
+                    lastMessage: nil,
                     lastMessageTimestamp: nil,
                     unreadCount: dto.unreadCount,
                     isPinned: dto.isPinned,
@@ -125,12 +125,25 @@ final class ChannelRepository {
     // MARK: - Mapping
 
     private func mapChannelType(_ dtoType: DTOChatChannelType) -> ChatChannelType {
+        // API returns type: "public" / "group" — use channel name to determine type
+        // The channel.name field contains "general", "projects", "alerts", etc.
         switch dtoType {
         case .general:   return .general
         case .project:   return .projects
         case .agent:     return .agents
         case .research:  return .research
         case .alerts:    return .alerts
+        }
+    }
+
+    private func channelTypeFromName(_ name: String) -> ChatChannelType {
+        switch name.lowercased() {
+        case "general":   return .general
+        case "projects", "project": return .projects
+        case "agents", "agent": return .agents
+        case "research":  return .research
+        case "alerts", "alert": return .alerts
+        default:          return .general
         }
     }
 

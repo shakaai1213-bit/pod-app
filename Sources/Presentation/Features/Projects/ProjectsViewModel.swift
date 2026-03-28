@@ -67,23 +67,94 @@ final class ProjectsViewModel {
         await MainActor.run { isLoading = true }
 
         do {
-            let groups: [BoardGroup] = try await apiClient.get(path: "/api/v1/board-groups")
-            await MainActor.run {
-                self.boardGroups = groups
-                self.isLoading = false
+            let response: PaginatedResponse<BoardDTO> = try await apiClient.get(path: "/api/v1/boards")
+            let boards = response.items.map { dto -> Board in
+                Board(
+                    id: UUID(uuidString: dto.id) ?? UUID(),
+                    name: dto.name,
+                    description: dto.description ?? "",
+                    stageCounts: [:],
+                    taskCount: dto.taskCount,
+                    completedTaskCount: dto.completedTaskCount,
+                    lastActivity: dto.updatedAt
+                )
+            }
+
+            if !boards.isEmpty {
+                let group = BoardGroup(
+                    id: UUID(),
+                    name: "All Projects",
+                    boards: boards,
+                    taskCount: boards.reduce(0) { $0 + $1.taskCount },
+                    completedTaskCount: boards.reduce(0) { $0 + $1.completedTaskCount }
+                )
+                await MainActor.run {
+                    self.boardGroups = [group]
+                    self.isLoading = false
+                }
+            } else {
+                await MainActor.run { self.loadMockData() }
+                await MainActor.run { self.isLoading = false }
             }
         } catch {
-            await MainActor.run { self.isLoading = false }
-            // Load mock data for development
             await MainActor.run { self.loadMockData() }
+            await MainActor.run { self.isLoading = false }
         }
     }
 
     func loadTasks(boardId: UUID) async {
         do {
-            let _: [ProjectTask] = try await apiClient.get(path: "/api/v1/boards/\(boardId)/tasks")
+            let response: PaginatedResponse<TaskDTO> = try await apiClient.get(path: "/api/v1/boards/\(boardId)/tasks")
+            let tasks = response.items.map { dto -> ProjectTask in
+                ProjectTask(
+                    id: UUID(uuidString: dto.id) ?? UUID(),
+                    projectId: boardId,
+                    title: dto.title,
+                    description: dto.description ?? "",
+                    status: mapTaskStatus(dto.status),
+                    stage: mapTaskStage(dto.stage),
+                    assigneeId: dto.assigneeId.flatMap { UUID(uuidString: $0) },
+                    dueDate: dto.dueDate,
+                    priority: mapPriority(dto.priority),
+                    tags: dto.tags ?? []
+                )
+            }
+            await MainActor.run {
+                self.myTasks = tasks
+            }
         } catch {
-            // Use mock tasks
+            // Leave empty on error
+        }
+    }
+
+    private func mapTaskStatus(_ status: String?) -> ProjectTaskStatus {
+        switch status?.lowercased() {
+        case "todo", "open":       return .todo
+        case "in_progress":        return .inProgress
+        case "review", "done":    return .review
+        case "completed":          return .done
+        default:                   return .todo
+        }
+    }
+
+    private func mapTaskStage(_ stage: String?) -> ProjectStage {
+        switch stage?.lowercased() {
+        case "plan":    return .plan
+        case "dev":     return .dev
+        case "verify":  return .verify
+        case "test":    return .test
+        case "done":    return .done
+        default:        return .plan
+        }
+    }
+
+    private func mapPriority(_ priority: String?) -> Priority {
+        switch priority?.lowercased() {
+        case "low":      return .low
+        case "medium":   return .medium
+        case "high":     return .high
+        case "critical": return .critical
+        default:        return .medium
         }
     }
 

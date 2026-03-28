@@ -208,61 +208,13 @@ final class ChatViewModel {
         isLoading = true
         errorMessage = nil
 
-        // Simulate network delay — replace with real API call
-        try? await Task.sleep(for: .milliseconds(600))
+        let repo = ChannelRepository()
+        await repo.loadChannels()
+        channels = repo.channels
 
-        channels = [
-            Channel(
-                id: Self.chGeneral,
-                name: "general",
-                type: .general,
-                lastMessage: "Morning standup in 10 mins",
-                lastMessageTimestamp: Date().addingTimeInterval(-300),
-                unreadCount: 2,
-                isPinned: true,
-                isMuted: false
-            ),
-            Channel(
-                id: Self.chAgents,
-                name: "agents",
-                type: .agents,
-                lastMessage: "Maui: Build pipeline complete",
-                lastMessageTimestamp: Date().addingTimeInterval(-1800),
-                unreadCount: 5,
-                isPinned: true,
-                isMuted: false
-            ),
-            Channel(
-                id: Self.chProjects,
-                name: "projects",
-                type: .projects,
-                lastMessage: "New PR merged: Chat tab UI",
-                lastMessageTimestamp: Date().addingTimeInterval(-7200),
-                unreadCount: 0,
-                isPinned: false,
-                isMuted: false
-            ),
-            Channel(
-                id: Self.chResearch,
-                name: "research",
-                type: .research,
-                lastMessage: "LLM context window benchmarks updated",
-                lastMessageTimestamp: Date().addingTimeInterval(-86400),
-                unreadCount: 0,
-                isPinned: false,
-                isMuted: true
-            ),
-            Channel(
-                id: Self.chAlerts,
-                name: "alerts",
-                type: .alerts,
-                lastMessage: "Build failed on main branch",
-                lastMessageTimestamp: Date().addingTimeInterval(-300),
-                unreadCount: 3,
-                isPinned: false,
-                isMuted: false
-            ),
-        ]
+        if let error = repo.lastError {
+            errorMessage = error.localizedDescription
+        }
 
         isLoading = false
     }
@@ -272,112 +224,9 @@ final class ChatViewModel {
         isLoading = true
         errorMessage = nil
 
-        // Simulate network delay — replace with real API call
-        try? await Task.sleep(for: .milliseconds(400))
-
-        // Load mock messages based on channel
-        if channelId == Self.chGeneral {
-            messages = [
-                Message(
-                    channelId: channelId,
-                    authorId: Self.userAlexId,
-                    authorName: "Alex Chen",
-                    authorRole: .human,
-                    content: "Morning standup in 10 mins, everyone. Let's keep it quick today.",
-                    timestamp: Date().addingTimeInterval(-300)
-                ),
-                Message(
-                    channelId: channelId,
-                    authorId: Self.agentMauiId,
-                    authorName: "Maui",
-                    authorRole: .agent,
-                    content: "On it. I'll share the sprint metrics snapshot in the thread.",
-                    timestamp: Date().addingTimeInterval(-240)
-                ),
-                Message(
-                    channelId: channelId,
-                    authorId: Self.userSamId,
-                    authorName: "Sam Rivera",
-                    authorRole: .human,
-                    content: "Quick update: the API migration is done, tests are green.",
-                    timestamp: Date().addingTimeInterval(-180)
-                ),
-                Message(
-                    channelId: channelId,
-                    authorId: Self.agentMauiId,
-                    authorName: "Maui",
-                    authorRole: .agent,
-                    content: "Nice. Want me to deploy to staging? I can run the smoke tests automatically.",
-                    timestamp: Date().addingTimeInterval(-120)
-                ),
-                Message(
-                    channelId: channelId,
-                    authorId: Self.userAlexId,
-                    authorName: "Alex Chen",
-                    authorRole: .human,
-                    content: "Yes please, go ahead.",
-                    timestamp: Date().addingTimeInterval(-60)
-                ),
-            ]
-        } else if channelId == Self.chAgents {
-            messages = [
-                Message(
-                    channelId: channelId,
-                    authorId: Self.agentMauiId,
-                    authorName: "Maui",
-                    authorRole: .agent,
-                    content: "Build pipeline complete. All 47 tests passing.",
-                    timestamp: Date().addingTimeInterval(-1800),
-                    reactions: [Reaction(emoji: "✅", count: 3, userIds: [], isReactedByMe: true)]
-                ),
-                Message(
-                    channelId: channelId,
-                    authorId: Self.agentClioId,
-                    authorName: "Clio",
-                    authorRole: .agent,
-                    content: "Docs updated with the new API endpoints. Here's a code example:\n\n```swift\nlet result = await client.fetch(endpoint: \"/api/v2/status\")\nprint(result)\n```",
-                    timestamp: Date().addingTimeInterval(-1500)
-                ),
-                Message(
-                    channelId: channelId,
-                    authorId: Self.agentMauiId,
-                    authorName: "Maui",
-                    authorRole: .agent,
-                    content: "Looks good. I've synced it to the knowledge base.",
-                    timestamp: Date().addingTimeInterval(-1200)
-                ),
-            ]
-        } else if channelId == Self.chAlerts {
-            messages = [
-                Message(
-                    channelId: channelId,
-                    authorId: Self.systemId,
-                    authorName: "CI System",
-                    authorRole: .system,
-                    content: "Build failed on `main` branch — 3 test failures in `AuthServiceTests`",
-                    timestamp: Date().addingTimeInterval(-300)
-                ),
-                Message(
-                    channelId: channelId,
-                    authorId: Self.agentMauiId,
-                    authorName: "Maui",
-                    authorRole: .agent,
-                    content: "Investigating now. Looks like a token refresh edge case.",
-                    timestamp: Date().addingTimeInterval(-240)
-                ),
-            ]
-        } else {
-            messages = [
-                Message(
-                    channelId: channelId,
-                    authorId: Self.userAlexId,
-                    authorName: "Alex Chen",
-                    authorRole: .human,
-                    content: "Hey team, what's the status on this channel?",
-                    timestamp: Date().addingTimeInterval(-600)
-                ),
-            ]
-        }
+        let repo = ChannelRepository()
+        let msgs = await repo.loadMessages(channelId: channelId)
+        messages = msgs
 
         // Apply highlighting if set
         if let highlightId = highlightedAuthorId {
@@ -400,7 +249,7 @@ final class ChatViewModel {
         // Optimistically add the message
         let newMessage = Message(
             channelId: channelId,
-            authorId: Self.mockUserId,
+            authorId: UUID(),
             authorName: "You",
             authorRole: .human,
             content: content,
@@ -408,8 +257,9 @@ final class ChatViewModel {
         )
         messages.append(newMessage)
 
-        // Simulate network delay — replace with real API call
-        try? await Task.sleep(for: .milliseconds(300))
+        // Send via API
+        let repo = ChannelRepository()
+        try? await repo.sendMessage(channelId: channelId, content: content)
 
         isSending = false
     }
