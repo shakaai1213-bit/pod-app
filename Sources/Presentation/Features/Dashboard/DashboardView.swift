@@ -7,6 +7,7 @@ struct DashboardView: View {
     @State private var viewModel = DashboardViewModel()
     @State private var selectedAgent: Agent?
     @State private var showingSettings = false
+    @AppStorage("orca_display_name") private var displayName: String = "Captain"
 
     // MARK: - Body
 

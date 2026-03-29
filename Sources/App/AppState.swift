@@ -103,9 +103,10 @@ final class AppState: ObservableObject {
             isLoading = false
             loadingMessage = nil
             isAuthenticated = true
-            currentUser = TeamMember(id: UUID(), name: "User", avatarColor: "#6B46C1")
             storeToken(token)
             Task { await APIClient.shared.setToken(token) }
+            // Fetch real user profile from backend
+            await fetchCurrentUser()
             print("[AppState] performAuth: DONE — isAuthenticated=\(isAuthenticated)")
         } else {
             isAuthenticated = false
@@ -190,6 +191,26 @@ final class AppState: ObservableObject {
         } catch {
             print("[AppState] verifyTokenDirectly: ERROR = \(error.localizedDescription)")
             return false
+        }
+    }
+
+    // MARK: - User Profile
+
+    /// Fetches the authenticated user's profile from the backend and updates currentUser.
+    private func fetchCurrentUser() async {
+        do {
+            let dto: UserDTO = try await APIClient.shared.get(path: Endpoint.me.path)
+            currentUser = TeamMember(
+                id: UUID(uuidString: dto.id) ?? UUID(),
+                name: dto.preferredName ?? dto.name,
+                avatarColor: dto.avatarColor ?? "#6B46C1"
+            )
+            // Persist the display name for the greeting
+            UserDefaults.standard.set(dto.preferredName ?? dto.name, forKey: "orca_display_name")
+            print("[AppState] fetchCurrentUser: got '\(dto.preferredName ?? dto.name)'")
+        } catch {
+            print("[AppState] fetchCurrentUser: FALLBACK to placeholder — \(error.localizedDescription)")
+            currentUser = TeamMember(id: UUID(), name: "Captain", avatarColor: "#6B46C1")
         }
     }
 

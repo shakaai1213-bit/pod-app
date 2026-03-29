@@ -17,11 +17,17 @@ final class DashboardViewModel {
     // MARK: - Private
 
     private let apiClient: APIClient
+    private weak var appState: AppState?
 
     // MARK: - Init
 
-    init(apiClient: APIClient = .shared) {
+    init(apiClient: APIClient = .shared, appState: AppState? = nil) {
         self.apiClient = apiClient
+        self.appState = appState
+    }
+
+    var displayName: String {
+        appState?.currentUser?.name ?? UserDefaults.standard.string(forKey: "orca_display_name") ?? "Captain"
     }
 
     // MARK: - Load
