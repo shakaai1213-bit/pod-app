@@ -20,6 +20,7 @@ struct AgentStatusCard: View {
         case .idle:   return AppColors.textTertiary
         case .offline: return AppColors.textMuted
         case .error:  return AppColors.accentDanger
+        case .provisioning: return AppColors.accentWarning
         }
     }
 
@@ -138,6 +139,7 @@ struct AgentDetailStatusCard: View {
         case .idle:   return AppColors.textTertiary
         case .offline: return AppColors.textMuted
         case .error:  return AppColors.accentDanger
+        case .provisioning: return AppColors.accentWarning
         }
     }
 
