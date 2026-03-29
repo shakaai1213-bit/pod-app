@@ -149,11 +149,18 @@ final class AppState: ObservableObject {
         request.setValue(token, forHTTPHeaderField: "X-Api-Key")
         request.timeoutInterval = 5
         print("[AppState] verifyTokenDirectly: GET \(url.absoluteString) Bearer=\(token.prefix(8))...")
+
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
             let body = String(data: data, encoding: .utf8) ?? "(no body)"
-            print("[AppState] verifyTokenDirectly: status=\((response as? HTTPURLResponse)?.statusCode ?? -1), body=\(body.prefix(200))")
-            return (response as? HTTPURLResponse)?.statusCode == 200
+            print("[AppState] verifyTokenDirectly: status=\(statusCode), body=\(body.prefix(200))")
+
+            if statusCode == 401 {
+                print("[AppState] verifyTokenDirectly: TOKEN REJECTED — check if token matches backend LOCAL_AUTH_TOKEN")
+                return false
+            }
+            return statusCode == 200
         } catch {
             print("[AppState] verifyTokenDirectly: ERROR = \(error.localizedDescription)")
             return false
