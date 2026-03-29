@@ -91,6 +91,7 @@ final class AgentRepository {
         case .idle:    return .idle
         case .offline: return .offline
         case .error:   return .error
+        case .provisioning: return .provisioning
         }
     }
 }

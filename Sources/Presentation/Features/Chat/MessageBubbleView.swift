@@ -122,29 +122,14 @@ struct MessageBubbleView: View {
     // MARK: - Avatar
 
     private var avatarView: some View {
-        ZStack {
-            Circle()
-                .fill(avatarColor.opacity(0.2))
-
+        Group {
             if message.authorRole == .system {
-                Image(systemName: "gearshape.fill")
-                    .font(.system(size: 12))
-                    .foregroundColor(avatarColor)
+                SystemAvatarView(systemImage: "gearshape.fill", size: .sm, color: AppColors.textTertiary)
             } else {
-                Text(initials)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(avatarColor)
+                AvatarView(name: message.authorName, size: .sm, useDiceBear: true)
             }
         }
         .frame(width: 32, height: 32)
-    }
-
-    private var initials: String {
-        let words = message.authorName.split(separator: " ")
-        if words.count >= 2 {
-            return String(words[0].prefix(1) + words[1].prefix(1)).uppercased()
-        }
-        return String(message.authorName.prefix(2)).uppercased()
     }
 
     // MARK: - Bubble

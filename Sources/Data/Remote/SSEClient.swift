@@ -82,7 +82,7 @@ public actor SSEClient {
     #if targetEnvironment(simulator)
     private static let endpoint = "http://127.0.0.1:19002/api/v1/events/stream"
     #else
-    private static let endpoint = "http://100.76.196.40:8000/api/v1/events/stream"
+    private static let endpoint = "http://192.168.4.243:8000/api/v1/events/stream"
     #endif
     private static let connectionTimeoutSeconds: TimeInterval = 30
     private static let maxBackoffSeconds: TimeInterval = 30

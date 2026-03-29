@@ -54,7 +54,7 @@ final class OnboardingViewModel {
     #if targetEnvironment(simulator)
     private let baseURL = "http://127.0.0.1:19002"  // Proxy for simulator (port 19002)
     #else
-    private let baseURL = "http://100.76.196.40:8000"  // Tailscale for physical device
+    private let baseURL = "http://192.168.4.243:8000"  // LAN IP for physical device
     #endif
 
     // MARK: - Navigation

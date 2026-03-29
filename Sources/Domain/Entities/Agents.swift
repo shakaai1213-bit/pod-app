@@ -25,9 +25,13 @@ enum AgentState: String, Codable, CaseIterable {
     case idle
     case offline
     case error
+    case provisioning
 
     var displayName: String {
-        rawValue.capitalized
+        switch self {
+        case .provisioning: return "Provisioning"
+        default: return rawValue.capitalized
+        }
     }
 
     var isAvailable: Bool {

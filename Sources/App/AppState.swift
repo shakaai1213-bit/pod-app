@@ -23,7 +23,7 @@ final class AppState: ObservableObject {
     // iOS Simulator → proxy at 127.0.0.1:19002 → Docker backend
     // Real device (iPad) → Mac Mini Tailscale IP (both on Tailscale VPN)
     // Simulator: use proxy (e.g. 127.0.0.1:19002 → 192.168.4.243:8000)
-    static let backendURL = "http://100.76.196.40:8000"
+    static let backendURL = "http://192.168.4.243:8000"
 
     // MARK: - Initialization
 

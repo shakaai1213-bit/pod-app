@@ -13,7 +13,7 @@ final class PushNotificationService {
     #if targetEnvironment(simulator)
     private let baseURL = URL(string: "http://127.0.0.1:19002")!
     #else
-    private let baseURL = URL(string: "http://100.76.196.40:8000")!
+    private let baseURL = URL(string: "http://192.168.4.243:8000")!
     #endif
     private let authToken = "ebe9a0fdfaf9b7674f4e2b9d0149f881d46111730b780d9e508ad94023c03051"
 
