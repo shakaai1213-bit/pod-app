@@ -135,11 +135,15 @@ struct TaskDTO: Codable, Identifiable {
     let dueDate: Date?
     let priority: String?
     let tags: [String]?
+    let assignedAgentId: String?
+    let dueAt: Date?
 
     enum CodingKeys: String, CodingKey {
         case id, title, description, status, stage, priority, tags
         case assigneeId = "assignee_id"
+        case assignedAgentId = "assigned_agent_id"
         case dueDate = "due_date"
+        case dueAt = "due_at"
     }
 }
 
@@ -165,6 +169,7 @@ enum AgentStatus: String, Codable {
     case idle
     case offline
     case error
+    case provisioning
 }
 
 // MARK: - Send Message Request

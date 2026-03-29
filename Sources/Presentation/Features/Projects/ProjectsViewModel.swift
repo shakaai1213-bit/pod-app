@@ -113,8 +113,8 @@ final class ProjectsViewModel {
                     description: dto.description ?? "",
                     status: mapTaskStatus(dto.status),
                     stage: mapTaskStage(dto.stage),
-                    assigneeId: dto.assigneeId.flatMap { UUID(uuidString: $0) },
-                    dueDate: dto.dueDate,
+                    assigneeId: (dto.assignedAgentId ?? dto.assigneeId).flatMap { UUID(uuidString: $0) },
+                    dueDate: dto.dueAt ?? dto.dueDate,
                     priority: mapPriority(dto.priority),
                     tags: dto.tags ?? []
                 )
@@ -129,7 +129,7 @@ final class ProjectsViewModel {
 
     private func mapTaskStatus(_ status: String?) -> ProjectTaskStatus {
         switch status?.lowercased() {
-        case "todo", "open":       return .todo
+        case "todo", "open", "inbox":  return .todo
         case "in_progress":        return .inProgress
         case "review", "done":    return .review
         case "completed":          return .done
@@ -172,7 +172,19 @@ final class ProjectsViewModel {
     func createTask(boardId: UUID, title: String, description: String) async {
         do {
             let body = CreateTaskRequest(title: title, description: description)
-            let task: ProjectTask = try await apiClient.post(path: "/api/v1/boards/\(boardId)/tasks", body: body)
+            let dto: TaskDTO = try await apiClient.post(path: "/api/v1/boards/\(boardId)/tasks", body: body)
+            let task = ProjectTask(
+                id: UUID(uuidString: dto.id) ?? UUID(),
+                projectId: boardId,
+                title: dto.title,
+                description: dto.description ?? "",
+                status: mapTaskStatus(dto.status),
+                stage: mapTaskStage(dto.stage),
+                assigneeId: (dto.assignedAgentId ?? dto.assigneeId).flatMap { UUID(uuidString: $0) },
+                dueDate: dto.dueAt ?? dto.dueDate,
+                priority: mapPriority(dto.priority),
+                tags: dto.tags ?? []
+            )
             await MainActor.run {
                 self.myTasks.append(task)
             }

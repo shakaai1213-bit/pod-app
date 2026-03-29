@@ -73,6 +73,14 @@ struct ProjectTask: Identifiable {
     var dueDate: Date?
     var priority: Priority
     var tags: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case projectId = "project_id"
+        case title, description, status, stage, priority, tags
+        case assigneeId = "assignee_id"
+        case dueDate = "due_at"
+    }
 }
 
 extension ProjectTask: Codable {}
@@ -92,6 +100,18 @@ enum ProjectTaskStatus: String, Codable, CaseIterable {
         case .inProgress: return "In Progress"
         case .review:     return "Review"
         case .done:       return "Done"
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self).lowercased()
+        switch rawValue {
+        case "todo", "open", "inbox":  self = .todo
+        case "in_progress", "active":  self = .inProgress
+        case "review", "done":         self = .review
+        case "completed":              self = .done
+        default:                       self = .todo
         }
     }
 }
