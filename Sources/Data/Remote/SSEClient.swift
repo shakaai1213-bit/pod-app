@@ -79,7 +79,11 @@ public actor SSEClient {
 
     // MARK: - Constants
 
-    private static let endpoint = "http://192.168.4.243:8000/api/v1/events/stream"
+    #if targetEnvironment(simulator)
+    private static let endpoint = "http://127.0.0.1:19002/api/v1/events/stream"
+    #else
+    private static let endpoint = "http://100.76.196.40:8000/api/v1/events/stream"
+    #endif
     private static let connectionTimeoutSeconds: TimeInterval = 30
     private static let maxBackoffSeconds: TimeInterval = 30
 
@@ -266,7 +270,19 @@ public actor SSEClient {
         let backoffSeconds = min(pow(2.0, Double(reconnectAttempt - 1)), Self.maxBackoffSeconds)
 
         do {
-            try await Task.sleep(nanoseconds: UInt64(backoffSeconds * 1_000_000_000))
+            // Use Timer instead of Task.sleep to avoid iOS 26 bug where
+            // Task.sleep can fire immediately inside task groups.
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                var didResume = false
+                let timer = DispatchSource.makeTimerSource(queue: .global())
+                timer.schedule(deadline: .now() + backoffSeconds)
+                timer.setEventHandler {
+                    guard !didResume else { return }
+                    didResume = true
+                    continuation.resume()
+                }
+                timer.resume()
+            }
             try await establishConnection(token: token)
             isReconnecting = false
         } catch {

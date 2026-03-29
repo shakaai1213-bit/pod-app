@@ -32,7 +32,7 @@ final class DashboardViewModel {
         error = nil
 
         do {
-            let response: PaginatedResponse<AgentDTO> = try await apiClient.request(.agents)
+            let response: PaginatedResponse<AgentDTO> = try await apiClient.get(path: Endpoint.agents.path)
             agents = response.items.map { dto in
                 Agent(
                     id: UUID(uuidString: dto.id) ?? UUID(),
@@ -187,6 +187,7 @@ final class DashboardViewModel {
         case .idle:    return .idle
         case .offline: return .offline
         case .error:   return .error
+        case .provisioning: return .provisioning
         }
     }
 }

@@ -284,7 +284,11 @@ final class LogStreamViewModel: @unchecked Sendable {
 
     @MainActor
     func connect() async {
-        let urlString = "http://192.168.4.243:8000/api/v1/agents/\(agentId.uuidString)/logs/stream"
+        #if targetEnvironment(simulator)
+        let urlString = "http://127.0.0.1:19002/api/v1/agents/\(agentId.uuidString)/logs/stream"
+        #else
+        let urlString = "http://100.76.196.40:8000/api/v1/agents/\(agentId.uuidString)/logs/stream"
+        #endif
         guard let url = URL(string: urlString) else { return }
 
         var request = URLRequest(url: url)

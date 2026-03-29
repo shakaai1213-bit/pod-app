@@ -16,6 +16,7 @@
 		24501CEA7E83F6EE14EACE06 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A28A4672374ACF545BD664A8 /* APIClient.swift */; };
 		283E5B81FDD5BEDF1B7E6B17 /* StandardRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AB0691F93E9F5494A3A79B1 /* StandardRepository.swift */; };
 		2C0F9BDAFA4025431D6952B6 /* AppTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84961F81D6C2F51B1A1EC335 /* AppTab.swift */; };
+		AA00000000000000001BBBB /* UserNameCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000000002CCCC /* UserNameCache.swift */; };
 		38A4AD8CE06D7BDB153DB923 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1695C8CD499CB511B0C11D94 /* ChatView.swift */; };
 		3A579D796D053AEF7F48A93B /* Typography.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0905CC7645A277BCFB4D4211 /* Typography.swift */; };
 		3AB34F50F3630DA8760A6CFA /* Colors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A10B6FE95332F160D3E227C /* Colors.swift */; };
@@ -142,6 +143,7 @@
 		F73FE194ED17E1FF892B715D /* DashboardModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardModels.swift; sourceTree = "<group>"; };
 		F92E1097762048180C6B3C9E /* KnowledgeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeViewModel.swift; sourceTree = "<group>"; };
 		FC020A48B04971EAC26F9937 /* Chat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Chat.swift; sourceTree = "<group>"; };
+		AA00000000000000002CCCC /* UserNameCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserNameCache.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -263,6 +265,7 @@
 				ED25CBDF8C26CA9FED91BA8E /* Extensions */,
 				759264DB99CED0F35B22A2E2 /* Mock */,
 				2559DE5935629A2B911A080A /* Utilities */,
+				AA00000000000000002CCCC /* UserNameCache.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -546,6 +549,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				24501CEA7E83F6EE14EACE06 /* APIClient.swift in Sources */,
+				AA00000000000000001BBBB /* UserNameCache.swift in Sources */,
 				6BA19481514DBF078EB04045 /* ActivityItemView.swift in Sources */,
 				F2BA10B64E34BFE3E8114D23 /* AgentDetailSheet.swift in Sources */,
 				C8BA82A7E103175379551AB4 /* AgentRepository.swift in Sources */,

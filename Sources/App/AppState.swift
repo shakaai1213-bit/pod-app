@@ -20,11 +20,10 @@ final class AppState: ObservableObject {
 
     // MARK: - Backend URL
 
-    // iOS Simulator → proxy at 127.0.0.1:9000 → Docker backend
-    // Real device (iPad) → http://192.168.4.243:8000 directly
-    // Physical device on LAN: direct to backend
-    // Simulator: use proxy (e.g. 127.0.0.1:9000 → 192.168.4.243:8000)
-    static let backendURL = "http://192.168.4.243:8000"
+    // iOS Simulator → proxy at 127.0.0.1:19002 → Docker backend
+    // Real device (iPad) → Mac Mini Tailscale IP (both on Tailscale VPN)
+    // Simulator: use proxy (e.g. 127.0.0.1:19002 → 192.168.4.243:8000)
+    static let backendURL = "http://100.76.196.40:8000"
 
     // MARK: - Initialization
 
@@ -38,22 +37,24 @@ final class AppState: ObservableObject {
         errorMessage = nil
         errorDetails = nil
         loadingMessage = "Connecting..."
-        print("[AppState] isLoading=\(isLoading)")
 
-        // Run auth with an independent timeout watcher
-        let authTask = Task {
+        // Run auth with a reliable 10-second timeout.
+        // Uses DispatchSemaphore as clock source — avoids iOS 26 Task.sleep bug.
+        let authTask = Task { @MainActor in
             await performAuth(token: token)
         }
 
-        let timeoutTask = Task {
-            // poll every 500ms to see if auth finished
-            for _ in 0..<20 {  // 20 * 500ms = 10s max
-                try? await Task.sleep(nanoseconds: 500_000_000)
-                if Task.isCancelled { return }
-                if isAuthenticated { return }  // auth finished successfully
-                if showError { return }         // auth finished with error
+        // Reliable timeout: fires after 10 seconds, works on iOS 26
+        let timedOut = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            DispatchQueue.global().async {
+                let semaphore = DispatchSemaphore(value: 0)
+                DispatchQueue.global().async { semaphore.signal() }
+                _ = semaphore.wait(timeout: .now() + 10)
+                continuation.resume(returning: true)
             }
-            // Timeout reached
+        }
+
+        if timedOut && !Task.isCancelled {
             print("[AppState] Auth timed out after 10s")
             authTask.cancel()
             isLoading = false
@@ -65,9 +66,6 @@ final class AppState: ObservableObject {
                 UserDefaults.standard.removeObject(forKey: "orca_auth_token")
             }
         }
-
-        await authTask.value
-        timeoutTask.cancel()
     }
 
     /// Actual auth logic — called inside the timeout wrapper.

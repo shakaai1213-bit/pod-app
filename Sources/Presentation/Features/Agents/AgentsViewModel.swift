@@ -99,7 +99,11 @@ final class AgentsViewModel {
     // MARK: - SSE Subscription
 
     func subscribeToAgentState() {
-        sseClient = LocalSSEClient(baseURL: "http://192.168.4.243:8000")
+        #if targetEnvironment(simulator)
+        sseClient = LocalSSEClient(baseURL: "http://127.0.0.1:19002")
+        #else
+        sseClient = LocalSSEClient(baseURL: "http://100.76.196.40:8000")
+        #endif
         sseClient?.connect(to: "/api/v1/events/agents") { [weak self] event in
             Task { @MainActor in
                 self?.onAgentStateUpdate(event)

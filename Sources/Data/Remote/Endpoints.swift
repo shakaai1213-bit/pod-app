@@ -66,7 +66,7 @@ extension Endpoint {
             return "\(Endpoint.basePath)/agents/\(agentId)/status"
 
         case .health:
-            return "\(Endpoint.basePath)/healthz"
+            return "\(Endpoint.basePath)/health"
         }
     }
 

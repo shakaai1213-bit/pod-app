@@ -246,11 +246,11 @@ final class ChatViewModel {
 
         isSending = true
 
-        // Optimistically add the message
+        // Optimistically add the message with "Me" — will be corrected after API response
         let newMessage = Message(
             channelId: channelId,
-            authorId: UUID(),
-            authorName: "You",
+            authorId: ChatViewModel.mockUserId,
+            authorName: "Me",
             authorRole: .human,
             content: content,
             timestamp: Date()

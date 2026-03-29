@@ -44,34 +44,55 @@ final class ChannelRepository {
     // MARK: - Load Messages for Channel
 
     func loadMessages(channelId: UUID) async -> [Message] {
+        // Ensure name cache is loaded
+        await UserNameCache.shared.load()
+
         do {
             let dtos: [MessageDTO] = try await api.get(
                 path: Endpoint.channelMessages(channelId: channelId.uuidString).path
             )
-            let messages = dtos.map { dto -> Message in
-                Message(
-                    id: UUID(uuidString: dto.id) ?? UUID(),
-                    channelId: UUID(uuidString: dto.channelId) ?? channelId,
-                    authorId: UUID(uuidString: dto.authorId) ?? UUID(),
-                    isAgent: dto.isAgent,
-                    agentId: dto.agentId,
-                    content: dto.content,
-                    timestamp: dto.timestamp,
-                    reactions: dto.reactions?.map { r in
-                        Reaction(
-                            emoji: r.emoji,
-                            count: r.count,
-                            userIds: r.userIds,
-                            isReactedByMe: false
-                        )
-                    } ?? []
-                )
-            }
+            let messages = await resolveMessageNames(dtos: dtos, channelId: channelId)
             await cache.syncMessages(messages, for: channelId)
             return messages
         } catch {
             let cached = cache.fetchCachedMessages(channelId: channelId)
             return cached.map { $0.toMessage() }
+        }
+    }
+
+    private func resolveMessageNames(dtos: [MessageDTO], channelId: UUID) async -> [Message] {
+        await withTaskGroup(of: Message.self) { group in
+            for dto in dtos {
+                group.addTask {
+                    let authorName = await UserNameCache.shared.displayName(
+                        userId: dto.authorId,
+                        agentId: dto.agentId
+                    )
+                    return Message(
+                        id: UUID(uuidString: dto.id) ?? UUID(),
+                        channelId: channelId,
+                        authorId: UUID(uuidString: dto.authorId) ?? UUID(),
+                        authorName: authorName,
+                        isAgent: dto.isAgent,
+                        agentId: dto.agentId,
+                        content: dto.content,
+                        timestamp: dto.timestamp,
+                        reactions: dto.reactions?.map { r in
+                            Reaction(
+                                emoji: r.emoji,
+                                count: r.count,
+                                userIds: r.userIds,
+                                isReactedByMe: false
+                            )
+                        } ?? []
+                    )
+                }
+            }
+            var results: [Message] = []
+            for await message in group {
+                results.append(message)
+            }
+            return results.sorted { $0.timestamp < $1.timestamp }
         }
     }
 
@@ -83,10 +104,16 @@ final class ChannelRepository {
             body: SendMessageRequest(content: content)
         )
 
+        let authorName = await UserNameCache.shared.displayName(
+            userId: dto.authorId,
+            agentId: dto.agentId
+        )
+
         let message = Message(
             id: UUID(uuidString: dto.id) ?? UUID(),
-            channelId: UUID(uuidString: dto.channelId) ?? channelId,
+            channelId: channelId,
             authorId: UUID(uuidString: dto.authorId) ?? UUID(),
+            authorName: authorName,
             isAgent: dto.isAgent,
             agentId: dto.agentId,
             content: dto.content,

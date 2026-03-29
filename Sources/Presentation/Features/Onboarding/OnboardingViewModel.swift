@@ -27,7 +27,7 @@ final class OnboardingViewModel {
     // MARK: - Published State
 
     var currentPage: Int = 0
-    var token: String = ""
+    var token: String = "ebe9a0fdfaf9b7674f4e2b9d0149f881d46111730b780d9e508ad94023c03051"
     var isConnecting: Bool = false
     var errorMessage: String?
     var isCompleted: Bool = false
@@ -51,7 +51,11 @@ final class OnboardingViewModel {
 
     // MARK: - ORCA MC Config
 
-    private let baseURL = "http://192.168.4.243:8000"
+    #if targetEnvironment(simulator)
+    private let baseURL = "http://127.0.0.1:19002"  // Proxy for simulator (port 19002)
+    #else
+    private let baseURL = "http://100.76.196.40:8000"  // Tailscale for physical device
+    #endif
 
     // MARK: - Navigation
 

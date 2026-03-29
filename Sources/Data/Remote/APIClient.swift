@@ -29,9 +29,13 @@ struct EmptyResponse: Codable {}
 actor APIClient {
     static let shared = APIClient()
 
-    // Physical device on LAN: direct to backend
-    // Simulator: use proxy (e.g. 127.0.0.1:9000 → 192.168.4.243:8000)
-    private let baseURL = "http://192.168.4.243:8000"
+    // Physical device: use Tailscale IP (100.76.196.40:8000) — works from anywhere
+    // Simulator: use proxy (127.0.0.1:19002 → 192.168.4.243:8000)
+    #if targetEnvironment(simulator)
+    private let baseURL = "http://127.0.0.1:19002"
+    #else
+    private let baseURL = "http://100.76.196.40:8000"
+    #endif
     private let session: URLSession
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
