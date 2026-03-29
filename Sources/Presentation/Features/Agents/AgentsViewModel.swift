@@ -1,6 +1,19 @@
 import Foundation
 import SwiftUI
 
+// MARK: - Agent Profile Enrichment
+// Backend /api/v1/agents returns minimal data (name, status, last_seen_at).
+// Rich display fields (role, skills, avatarColor) come from here until the API grows.
+// Keyed by lowercase name — matches ORCA MC agent names.
+
+private let agentProfiles: [String: (role: String, skills: [String], avatarColor: String)] = [
+    "maui":    (role: "Head of Engineering", skills: ["SwiftUI", "iOS", "Architecture", "Swift", "Xcode"], avatarColor: "#22C55E"),
+    "chief":   (role: "Trading Lead",         skills: ["Trading", "Python", "Finance", "NATS", "Data Analysis"], avatarColor: "#F97316"),
+    "aloha":   (role: "Communications",      skills: ["Messaging", "Coordination", "Discord", "Notifications"], avatarColor: "#A855F7"),
+    "turtle":  (role: "Research",             skills: ["Analysis", "Research", "Experimentation", "Statistics"], avatarColor: "#3B82F6"),
+    "aurora":  (role: "Architecture",        skills: ["Design", "Systems", "DDS", "Protocol Buffers"], avatarColor: "#F59E0B"),
+]
+
 // MARK: - Agents ViewModel
 
 @Observable
@@ -35,15 +48,16 @@ final class AgentsViewModel {
         do {
             let response: PaginatedResponse<AgentDTO> = try await apiClient.request(.agents)
             agents = response.items.map { dto in
-                Agent(
+                let profile = agentProfiles[dto.name.lowercased()]
+                return Agent(
                     id: UUID(uuidString: dto.id) ?? UUID(),
                     name: dto.name,
-                    role: dto.role ?? "Agent",
+                    role: dto.role ?? profile?.role ?? "Agent",
                     status: AgentState(rawValue: dto.status.rawValue) ?? .offline,
-                    currentTask: dto.currentTask,
+                    currentTask: dto.currentTask ?? profile?.skills.first,
                     lastActivity: dto.lastSeenAt ?? Date(),
-                    skills: dto.skills ?? [],
-                    avatarColor: dto.avatarColor ?? "#3B82F6"
+                    skills: dto.skills ?? profile?.skills ?? [],
+                    avatarColor: dto.avatarColor ?? profile?.avatarColor ?? "#3B82F6"
                 )
             }
         } catch {
@@ -102,7 +116,7 @@ final class AgentsViewModel {
         #if targetEnvironment(simulator)
         sseClient = LocalSSEClient(baseURL: "http://127.0.0.1:19002")
         #else
-        sseClient = LocalSSEClient(baseURL: "http://192.168.4.243:8000")
+        sseClient = LocalSSEClient(baseURL: "http://shakas-mac-mini.tail82d30d.ts.net:8000")
         #endif
         sseClient?.connect(to: "/api/v1/events/agents") { [weak self] event in
             Task { @MainActor in

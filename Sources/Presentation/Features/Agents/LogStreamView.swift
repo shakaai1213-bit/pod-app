@@ -287,7 +287,7 @@ final class LogStreamViewModel: @unchecked Sendable {
         #if targetEnvironment(simulator)
         let urlString = "http://127.0.0.1:19002/api/v1/agents/\(agentId.uuidString)/logs/stream"
         #else
-        let urlString = "http://192.168.4.243:8000/api/v1/agents/\(agentId.uuidString)/logs/stream"
+        let urlString = "http://shakas-mac-mini.tail82d30d.ts.net:8000/api/v1/agents/\(agentId.uuidString)/logs/stream"
         #endif
         guard let url = URL(string: urlString) else { return }
 

@@ -29,12 +29,12 @@ struct EmptyResponse: Codable {}
 actor APIClient {
     static let shared = APIClient()
 
-    // Physical device: use LAN IP (192.168.4.243:8000) — iPad gets shared IP via USB-C
+    // Physical device: use Tailscale URL (shakas-mac-mini.tail82d30d.ts.net:8000) — works from anywhere
     // Simulator: use proxy (127.0.0.1:19002 → 192.168.4.243:8000)
     #if targetEnvironment(simulator)
     private let baseURL = "http://127.0.0.1:19002"
     #else
-    private let baseURL = "http://192.168.4.243:8000"
+    private let baseURL = "http://shakas-mac-mini.tail82d30d.ts.net:8000"
     #endif
     private let session: URLSession
     private let decoder: JSONDecoder
