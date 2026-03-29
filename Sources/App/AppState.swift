@@ -114,19 +114,22 @@ final class AppState: ObservableObject {
     }
 
     /// Tests if the ORCA MC backend is reachable. 5 second timeout. Public for diagnostics.
+    /// Uses a minimal auth header — no token needed for the check itself.
     func checkBackendReachable() async -> Bool {
-        guard let url = URL(string: "\(Self.backendURL)/health") else {
+        guard let url = URL(string: "\(Self.backendURL)/api/v1/agents") else {
             print("[AppState] checkBackendReachable: invalid URL")
             return false
         }
         var request = URLRequest(url: url)
+        // Don't send any auth — just check if the server responds
         request.timeoutInterval = 3
         print("[AppState] checkBackendReachable: GET \(url.absoluteString)")
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             let body = String(data: data, encoding: .utf8) ?? "(no body)"
             print("[AppState] checkBackendReachable: got response, status=\((response as? HTTPURLResponse)?.statusCode ?? -1), body=\(body.prefix(100))")
-            return (response as? HTTPURLResponse)?.statusCode == 200
+            // Accept any HTTP response (even 401) as "reachable" — server is up
+            return (response as? HTTPURLResponse) != nil
         } catch {
             print("[AppState] checkBackendReachable: ERROR = \(error.localizedDescription)")
             return false
