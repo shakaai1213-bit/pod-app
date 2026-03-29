@@ -80,7 +80,7 @@ final class AppState: ObservableObject {
             isLoading = false
             loadingMessage = nil
             errorMessage = "Cannot reach ORCA MC"
-            errorDetails = "Check your network connection to the Mac Mini."
+            errorDetails = "Check your network connection to the Mac Mini. Both devices must be on the same WiFi network. Backend URL: \(Self.backendURL)"
             showError = true
             print("[AppState] performAuth: backend unreachable, error shown")
             return
@@ -114,24 +114,41 @@ final class AppState: ObservableObject {
     }
 
     /// Tests if the ORCA MC backend is reachable. 5 second timeout. Public for diagnostics.
-    /// Uses a minimal auth header — no token needed for the check itself.
+    /// Uses /api/v1/health — the iPad confirmed this endpoint responds (even 404 is fine).
     func checkBackendReachable() async -> Bool {
-        guard let url = URL(string: "\(Self.backendURL)/api/v1/agents") else {
-            print("[AppState] checkBackendReachable: invalid URL")
+        // Try /health first (confirmed working from iPad via Safari)
+        if await pingEndpoint("\(Self.backendURL)/health") {
+            return true
+        }
+        // Fallback: try /api/v1/health
+        if await pingEndpoint("\(Self.backendURL)/api/v1/health") {
+            return true
+        }
+        // Last resort: try /api/v1/agents with no auth
+        if await pingEndpoint("\(Self.backendURL)/api/v1/agents") {
+            return true
+        }
+        return false
+    }
+
+    /// Makes a HEAD request to check if an endpoint is reachable.
+    /// Any HTTP response (even 404/401) = reachable. Network error = unreachable.
+    private func pingEndpoint(_ urlString: String) async -> Bool {
+        guard let url = URL(string: urlString) else {
+            print("[AppState] pingEndpoint: invalid URL: \(urlString)")
             return false
         }
         var request = URLRequest(url: url)
-        // Don't send any auth — just check if the server responds
+        request.httpMethod = "HEAD"
         request.timeoutInterval = 3
-        print("[AppState] checkBackendReachable: GET \(url.absoluteString)")
+        print("[AppState] pingEndpoint: \(urlString)")
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            let body = String(data: data, encoding: .utf8) ?? "(no body)"
-            print("[AppState] checkBackendReachable: got response, status=\((response as? HTTPURLResponse)?.statusCode ?? -1), body=\(body.prefix(100))")
-            // Accept any HTTP response (even 401) as "reachable" — server is up
-            return (response as? HTTPURLResponse) != nil
+            let (_, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+            print("[AppState] pingEndpoint: status=\(status)")
+            return true  // Any HTTP response = reachable
         } catch {
-            print("[AppState] checkBackendReachable: ERROR = \(error.localizedDescription)")
+            print("[AppState] pingEndpoint: ERROR = \(error.localizedDescription)")
             return false
         }
     }
