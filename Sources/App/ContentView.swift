@@ -164,7 +164,8 @@ struct ContentView: View {
 
 struct LoginView: View {
     @Environment(\.appState) private var appState: AppState
-    @State private var token: String = ""
+    // Default to the known-good token so Tony doesn't have to look it up
+    @State private var token: String = "ebe9a0fdfaf9b7674f4e2b9d0149f881d46111730b780d9e508ad94023c03051"
     @State private var networkStatus: String = ""   // live network diagnostic
     @FocusState private var isTokenFocused: Bool
 
