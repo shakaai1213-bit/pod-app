@@ -22,6 +22,14 @@ struct ChatView: View {
         .task {
             await viewModel.loadChannels()
         }
+        .task(id: viewModel.selectedChannel?.id) {
+            if viewModel.selectedChannel != nil {
+                viewModel.startPolling()
+            } else {
+                viewModel.stopPolling()
+            }
+        }
+        .onDisappear { viewModel.stopPolling() }
     }
 
     // MARK: - iPad Layout

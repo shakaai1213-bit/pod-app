@@ -144,6 +144,81 @@ final class ChatViewModel {
     var isSending = false
     var highlightedAuthorId: UUID?
     var errorMessage: String?
+    private var lastMessageTimestamp: Date?
+    private var pollingTask: Task<Void, Never>?
+
+    // MARK: - Polling (SSE fallback — polls for new messages when chat is open)
+
+    /// Start polling for new messages every 5 seconds
+    func startPolling() {
+        stopPolling()
+        pollingTask = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)  // 5 seconds — no Task.sleep bug here (outside withThrowingTaskGroup)
+                await pollForNewMessages()
+            }
+        }
+    }
+
+    /// Stop polling
+    func stopPolling() {
+        pollingTask?.cancel()
+        pollingTask = nil
+    }
+
+    /// Fetch new messages since last load and append any new ones
+    @MainActor
+    private func pollForNewMessages() async {
+        guard let channelId = selectedChannel?.id else { return }
+        guard !isLoading else { return }
+
+        let repo = ChannelRepository()
+        let latestTimestamp = messages.map(\.timestamp).max() ?? lastMessageTimestamp ?? Date.distantPast
+
+        do {
+            // Fetch with since parameter if backend supports it, otherwise fetch all and dedupe
+            let dtos: [MessageDTO] = try await api.get(path: Endpoint.channelMessages(channelId: channelId.uuidString).path)
+            let newMessages = await resolveMessageNames(dtos: dtos, channelId: channelId)
+
+            // Only append truly new messages (not already in list)
+            let existingIds = Set(messages.map(\.id))
+            let fresh = newMessages.filter { !existingIds.contains($0.id) }
+            if !fresh.isEmpty {
+                messages.append(contentsOf: fresh.sorted { $0.timestamp < $1.timestamp })
+                lastMessageTimestamp = fresh.map(\.timestamp).max()
+            }
+        } catch {
+            // Silently ignore polling errors — background refresh
+        }
+    }
+
+    // Re-declare api and resolveMessageNames for polling context
+    private var api: APIClient { APIClient.shared }
+    private func resolveMessageNames(dtos: [MessageDTO], channelId: UUID) async -> [Message] {
+        await withTaskGroup(of: Message.self) { group in
+            for dto in dtos {
+                group.addTask {
+                    let authorName = await UserNameCache.shared.displayName(userId: dto.authorId, agentId: dto.agentId)
+                    return Message(
+                        id: UUID(uuidString: dto.id) ?? UUID(),
+                        channelId: channelId,
+                        authorId: UUID(uuidString: dto.authorId) ?? UUID(),
+                        authorName: authorName,
+                        isAgent: dto.isAgent,
+                        agentId: dto.agentId,
+                        content: dto.content,
+                        timestamp: dto.timestamp,
+                        reactions: dto.reactions?.map { r in
+                            Reaction(emoji: r.emoji, count: r.count, userIds: r.userIds, isReactedByMe: false)
+                        } ?? []
+                    )
+                }
+            }
+            var results: [Message] = []
+            for await msg in group { results.append(msg) }
+            return results.sorted { $0.timestamp < $1.timestamp }
+        }
+    }
 
     // MARK: - Computed
 
