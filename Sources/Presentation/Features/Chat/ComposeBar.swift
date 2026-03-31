@@ -1,10 +1,51 @@
 import SwiftUI
 
+// MARK: - Typing User
+
+struct TypingUser: Identifiable, Hashable, Sendable {
+    let id: String
+    let name: String
+    let isAgent: Bool
+    var startedAt: Date
+
+    init(id: String, name: String, isAgent: Bool = false) {
+        self.id = id
+        self.name = name
+        self.isAgent = isAgent
+        self.startedAt = Date()
+    }
+}
+
+// MARK: - Typing Dots View
+
+struct TypingDotsView: View {
+    @State private var animating = false
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(0..<3, id: \.self) { index in
+                Circle()
+                    .fill(AppColors.textSecondary.opacity(0.6))
+                    .frame(width: 4, height: 4)
+                    .scaleEffect(animating ? 1.0 : 0.5)
+                    .animation(
+                        .easeInOut(duration: 0.4)
+                        .repeatForever()
+                        .delay(Double(index) * 0.15),
+                        value: animating
+                    )
+            }
+        }
+        .onAppear { animating = true }
+    }
+}
+
 // MARK: - Compose Bar View
 
 struct ComposeBarView: View {
     let channelId: String
     let isSending: Bool
+    let typingUsers: [TypingUser]
     let onSend: (String) -> Void
 
     @State private var text: String = ""
@@ -23,8 +64,47 @@ struct ComposeBarView: View {
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending
     }
 
+    // MARK: - Typing Indicator
+
+    @ViewBuilder
+    private var typingIndicator: some View {
+        let users = typingUsers
+        if !users.isEmpty {
+            HStack(spacing: 6) {
+                // Animated dots
+                TypingDotsView()
+                    .frame(width: 20, height: 12)
+
+                Text(typingText(for: users))
+                    .font(.caption)
+                    .foregroundColor(AppColors.textSecondary)
+                    .lineLimit(1)
+
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
+            .background(AppColors.backgroundPrimary.opacity(0.8))
+        }
+    }
+
+    private func typingText(for users: [TypingUser]) -> String {
+        if users.count == 1 {
+            return "\(users[0].name) is typing"
+        } else if users.count == 2 {
+            return "\(users[0].name) and \(users[1].name) are typing"
+        } else {
+            return "\(users.count) people are typing"
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
+            // Typing indicator
+            if !typingUsers.isEmpty {
+                typingIndicator
+            }
+
             Divider()
                 .background(AppColors.border)
 
@@ -451,6 +531,7 @@ struct VoiceInputIndicator: View {
         ComposeBarView(
             channelId: "ch-general",
             isSending: false,
+            typingUsers: [],
             onSend: { content in
                 print("Send: \(content)")
             }

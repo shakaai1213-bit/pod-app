@@ -144,19 +144,42 @@ final class ChatViewModel {
     var isSending = false
     var highlightedAuthorId: UUID?
     var errorMessage: String?
+    var typingUsers: [TypingUser] = []
     private var lastMessageTimestamp: Date?
     private var pollingTask: Task<Void, Never>?
+    private var typingSimTimer: Timer?
 
     // MARK: - Polling (SSE fallback — polls for new messages when chat is open)
 
     /// Start polling for new messages every 5 seconds
     func startPolling() {
         stopPolling()
+        // Simulate typing: show agent "Maui" typing briefly every 15-30s when channel is general
+        typingSimTimer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.simulateTyping()
+            }
+        }
         pollingTask = Task { @MainActor in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 5_000_000_000)  // 5 seconds — no Task.sleep bug here (outside withThrowingTaskGroup)
+                await TaskSafeSleep.sleep(seconds: 5)
                 await pollForNewMessages()
+                // Clean up stale typing users (> 5s old)
+                self.typingUsers.removeAll { Date().timeIntervalSince($0.startedAt) > 5 }
             }
+        }
+    }
+
+    private func simulateTyping() {
+        guard selectedChannel?.type == .general else { return }
+        let mauiTyping = TypingUser(id: "agent-maui", name: "Maui", isAgent: true)
+        if !typingUsers.contains(where: { $0.id == mauiTyping.id }) {
+            typingUsers.append(mauiTyping)
+        }
+        // Auto-clear after 3s
+        Task { @MainActor in
+            await TaskSafeSleep.sleep(seconds: 3)
+            typingUsers.removeAll { $0.id == "agent-maui" }
         }
     }
 
@@ -164,6 +187,9 @@ final class ChatViewModel {
     func stopPolling() {
         pollingTask?.cancel()
         pollingTask = nil
+        typingUsers = []
+        typingSimTimer?.invalidate()
+        typingSimTimer = nil
     }
 
     /// Fetch new messages since last load and append any new ones
@@ -396,6 +422,52 @@ final class ChatViewModel {
 extension Date {
     var timeString: String {
         let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter.string(from: self)
+    }
+
+    /// Relative timestamp for chat messages — "just now", "2m ago", "1h ago", etc.
+    /// Falls back to absolute time for older messages.
+    var relativeTimeString: String {
+        let now = Date()
+        let interval = now.timeIntervalSince(self)
+
+        // Future dates or within 30 seconds → "just now"
+        if interval < 30 {
+            return "just now"
+        }
+
+        // Within 1 minute → "1m ago"
+        if interval < 60 {
+            return "\(Int(interval))s ago"
+        }
+
+        // Within 1 hour → "5m ago"
+        if interval < 3600 {
+            let minutes = Int(interval / 60)
+            return "\(minutes)m ago"
+        }
+
+        // Within today → "2h ago" or absolute time
+        let calendar = Calendar.current
+        if calendar.isDateInToday(self) {
+            if interval < 14400 { // < 4 hours
+                let hours = Int(interval / 3600)
+                return "\(hours)h ago"
+            }
+            // Fall through to absolute time
+        }
+
+        // Yesterday → "Yesterday at 2:30 PM"
+        if calendar.isDateInYesterday(self) {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "'Yesterday at' h:mm a"
+            return formatter.string(from: self)
+        }
+
+        // Older → absolute date and time
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
         formatter.timeStyle = .short
         return formatter.string(from: self)
     }

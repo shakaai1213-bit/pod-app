@@ -28,11 +28,11 @@ final class AgentRepository {
                 Agent(
                     id: UUID(uuidString: dto.id) ?? UUID(),
                     name: dto.name,
-                    role: dto.role ?? "Agent",
+                    role: dto.role,
                     status: mapStatus(dto.status),
                     currentTask: dto.currentTask,
                     lastActivity: dto.lastSeenAt ?? Date(),
-                    skills: dto.skills ?? [],
+                    skills: dto.skills,
                     avatarColor: dto.avatarColor ?? "#3B82F6"
                 )
             }

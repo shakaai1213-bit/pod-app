@@ -229,7 +229,7 @@ struct WallDisplayView: View {
     private func startAutoRefresh() {
         Task { @MainActor in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 60_000_000_000)
+                await TaskSafeSleep.sleep(seconds: 60)
                 lastRefresh = Date()
                 await viewModel.refresh()
             }

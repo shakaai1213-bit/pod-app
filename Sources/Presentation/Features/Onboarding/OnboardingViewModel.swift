@@ -32,6 +32,7 @@ final class OnboardingViewModel {
     var errorMessage: String?
     var isCompleted: Bool = false
     var userName: String?
+    var isDemoMode: Bool = false
 
     // MARK: - Computed
 
@@ -54,7 +55,7 @@ final class OnboardingViewModel {
     #if targetEnvironment(simulator)
     private let baseURL = "http://127.0.0.1:19002"  // Proxy for simulator (port 19002)
     #else
-    private let baseURL = "http://shakas-mac-mini.tail82d30d.ts.net:8000"  // Tailscale URL for physical device (works from anywhere)
+    private let baseURL = "http://shakas-mac-mini.tail82d30d.ts.net:8000"  // Tailscale direct IP for physical device
     #endif
 
     // MARK: - Navigation
@@ -149,6 +150,12 @@ final class OnboardingViewModel {
     }
 
     func complete() {
+        isCompleted = true
+    }
+
+    /// Enter demo mode - bypass auth and use the app with mock data
+    func enterDemoMode() {
+        isDemoMode = true
         isCompleted = true
     }
 }

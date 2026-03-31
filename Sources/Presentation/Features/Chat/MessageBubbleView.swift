@@ -63,8 +63,8 @@ struct MessageBubbleView: View {
                     reactionsRow
                 }
 
-                // Timestamp
-                Text(message.timestamp.timeString)
+                // Timestamp — relative for recent, absolute for older
+                Text(message.timestamp.relativeTimeString)
                     .font(.caption2)
                     .foregroundColor(AppColors.textTertiary)
                     .padding(.top, 2)

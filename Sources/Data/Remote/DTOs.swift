@@ -147,6 +147,18 @@ struct TaskDTO: Codable, Identifiable {
     }
 }
 
+// MARK: - Identity Profile (nested in AgentDTO)
+
+struct IdentityProfile: Codable {
+    let role: String?
+    let skills: String?   // comma-separated: "swift,swiftui,sqlite"
+
+    /// Parses skills string into array, e.g. "swift,swiftui" → ["swift", "swiftui"]
+    var skillsArray: [String] {
+        skills?.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) } ?? []
+    }
+}
+
 // MARK: - Agent DTO
 
 struct AgentDTO: Codable, Identifiable {
@@ -155,12 +167,30 @@ struct AgentDTO: Codable, Identifiable {
     let status: AgentStatus
     let lastSeenAt: Date?
     let isBoardLead: Bool?
+    let identityProfile: IdentityProfile?
 
     // Optional fields the app uses but backend doesn't expose yet
-    let role: String?
     let currentTask: String?
-    let skills: [String]?
     let avatarColor: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, status, currentTask, avatarColor
+        case lastSeenAt = "last_seen_at"
+        case isBoardLead = "is_board_lead"
+        case identityProfile = "identity_profile"
+    }
+
+    /// Derived role from identity_profile, falling back to name-based defaults
+    var role: String {
+        identityProfile?.role?.replacingOccurrences(of: "_", with: " ").capitalized
+            ?? (name == "maui" ? "Head of Engineering" : nil)
+            ?? "Agent"
+    }
+
+    /// Derived skills from identity_profile (comma-separated → array)
+    var skills: [String] {
+        identityProfile?.skillsArray ?? []
+    }
 }
 
 enum AgentStatus: String, Codable {

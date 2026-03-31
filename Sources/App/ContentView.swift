@@ -265,19 +265,30 @@ struct LoginView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(appState.isLoading || token.isEmpty)
+
+                // Demo mode button
+                Button {
+                    Task { @MainActor in
+                        appState.isAuthenticated = true
+                    }
+                } label: {
+                    Text("Try Demo Mode")
+                        .font(.caption)
+                        .foregroundColor(AppTheme.tertiaryText)
+                }
+                .padding(.top, 4)
             }
             .padding(.horizontal, AppTheme.spacingXL)
 
             Spacer()
 
-            Text("Connecting via localhost.cloud:8000")
+            Text("Connecting via Tailscale: shakas-mac-mini.tail82d30d.ts.net:8000")
                 .font(.caption)
                 .foregroundColor(AppTheme.tertiaryText)
                 .padding(.bottom, AppTheme.spacingLG)
         }
         .background(AppTheme.background)
         .onAppear {
-            // Run quick network check on appear
             Task {
                 await checkNetwork()
             }

@@ -104,7 +104,7 @@ final class AgentsViewModel {
         guard let index = agents.firstIndex(where: { $0.id == agentId }) else { return }
         agents[index].status = .busy
         // Simulate startup delay then go online
-        try? await Task.sleep(nanoseconds: 2_000_000_000)
+        await TaskSafeSleep.sleep(seconds: 2)
         if let i = agents.firstIndex(where: { $0.id == agentId }) {
             agents[i].status = .online
         }

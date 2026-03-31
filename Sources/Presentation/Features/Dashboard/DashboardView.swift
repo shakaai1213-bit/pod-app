@@ -4,9 +4,12 @@ import SwiftUI
 
 struct DashboardView: View {
 
+    @Environment(\.appState) private var appState: AppState
     @State private var viewModel = DashboardViewModel()
     @State private var selectedAgent: Agent?
     @State private var showingSettings = false
+    @State private var showingSearch = false
+    @State private var showingScanSheet = false
     @AppStorage("orca_display_name") private var displayName: String = "Captain"
 
     // MARK: - Body
@@ -33,6 +36,12 @@ struct DashboardView: View {
             }
             .sheet(isPresented: $showingSettings) {
                 SettingsView()
+            }
+            .sheet(isPresented: $showingSearch) {
+                SearchSheet()
+            }
+            .sheet(isPresented: $showingScanSheet) {
+                ScanSheet()
             }
             .task {
                 await viewModel.loadDashboard()
@@ -151,7 +160,7 @@ struct DashboardView: View {
                     label: "New Task",
                     color: AppColors.accentSuccess
                 ) {
-                    // TODO: Navigate to new task
+                    appState.navigateTo(.projects)
                 }
 
                 QuickActionButton(
@@ -159,7 +168,7 @@ struct DashboardView: View {
                     label: "New Message",
                     color: AppColors.accentElectric
                 ) {
-                    // TODO: Open new message composer
+                    appState.navigateTo(.chat)
                 }
 
                 QuickActionButton(
@@ -167,7 +176,7 @@ struct DashboardView: View {
                     label: "Search",
                     color: AppColors.accentWarning
                 ) {
-                    // TODO: Open global search
+                    showingSearch = true
                 }
 
                 QuickActionButton(
@@ -175,7 +184,7 @@ struct DashboardView: View {
                     label: "Scan",
                     color: AppColors.accentAgent
                 ) {
-                    // TODO: Open scanner
+                    showingScanSheet = true
                 }
             }
         }
@@ -251,12 +260,12 @@ struct DashboardView: View {
 
     private var greetingText: String {
         let hour = Calendar.current.component(.hour, from: Date())
-        let captain = "Captain" // TODO: Pull from UserDefaults / AppState
+        let name = displayName.isEmpty ? "Captain" : displayName
         switch hour {
-        case 5..<12:  return "Good morning, \(captain)"
-        case 12..<17: return "Good afternoon, \(captain)"
-        case 17..<21: return "Good evening, \(captain)"
-        default:       return "Good night, \(captain)"
+        case 5..<12:  return "Good morning, \(name)"
+        case 12..<17: return "Good afternoon, \(name)"
+        case 17..<21: return "Good evening, \(name)"
+        default:       return "Good night, \(name)"
         }
     }
 

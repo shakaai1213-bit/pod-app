@@ -26,7 +26,7 @@ final class DashboardViewModel {
         self.appState = appState
     }
 
-    var displayName: String {
+    @MainActor var displayName: String {
         appState?.currentUser?.name ?? UserDefaults.standard.string(forKey: "orca_display_name") ?? "Captain"
     }
 
@@ -43,11 +43,11 @@ final class DashboardViewModel {
                 Agent(
                     id: UUID(uuidString: dto.id) ?? UUID(),
                     name: dto.name,
-                    role: dto.role ?? "Agent",
+                    role: dto.role,
                     status: mapAgentStatus(dto.status),
                     currentTask: dto.currentTask,
                     lastActivity: dto.lastSeenAt ?? Date(),
-                    skills: dto.skills ?? [],
+                    skills: dto.skills,
                     avatarColor: dto.avatarColor ?? "#3B82F6"
                 )
             }

@@ -255,7 +255,7 @@ struct ChannelListRowContent: View {
 
             VStack(alignment: .trailing, spacing: 4) {
                 if let ts = channel.lastMessageTimestamp {
-                    Text(ts.timeString)
+                    Text(ts.relativeTimeString)
                         .font(.caption2)
                         .foregroundColor(AppColors.textTertiary)
                 }
@@ -349,7 +349,7 @@ struct ChannelRowView: View {
 
                 VStack(alignment: .trailing, spacing: 4) {
                     if let ts = channel.lastMessageTimestamp {
-                        Text(ts.timeString)
+                        Text(ts.relativeTimeString)
                             .font(.caption2)
                             .foregroundColor(AppColors.textTertiary)
                     }
@@ -483,6 +483,7 @@ struct MessageThreadView: View {
             ComposeBarView(
                 channelId: channel.id.uuidString,
                 isSending: viewModel.isSending,
+                typingUsers: viewModel.typingUsers,
                 onSend: { content in
                     Task {
                         await viewModel.sendMessage(channelId: channel.id, content: content)
