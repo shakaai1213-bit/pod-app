@@ -8,6 +8,7 @@ struct MessageBubbleView: View {
     let isCurrentUser: Bool
     let onAgentTapped: () -> Void
     let onAddReaction: (String) -> Void
+    let onReply: (Message) -> Void
 
     @State private var showReactionPicker = false
     @State private var copiedCode = false
@@ -49,6 +50,19 @@ struct MessageBubbleView: View {
                 // Author name (only when avatar is shown)
                 if showAvatar && !isCurrentUser {
                     authorNameView
+                }
+
+                // Reply indicator
+                if let replyTo = message.replyTo {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrowshape.turn.up.left.fill")
+                            .font(.system(size: 8))
+                            .foregroundColor(AppColors.textTertiary)
+                        Text("Replying to a message")
+                            .font(.caption2)
+                            .foregroundColor(AppColors.textTertiary)
+                    }
+                    .padding(.bottom, 2)
                 }
 
                 // Bubble
@@ -254,6 +268,12 @@ struct MessageBubbleView: View {
             UIPasteboard.general.string = message.content
         } label: {
             Label("Copy", systemImage: "doc.on.doc")
+        }
+
+        Button {
+            onReply(message)
+        } label: {
+            Label("Reply", systemImage: "arrowshape.turn.up.left")
         }
 
         if message.authorRole == .agent {
@@ -601,7 +621,8 @@ struct CodeBlockView: View {
             showAvatar: true,
             isCurrentUser: false,
             onAgentTapped: {},
-            onAddReaction: { _ in }
+            onAddReaction: { _ in },
+            onReply: { _ in }
         )
 
         MessageBubbleView(
@@ -616,7 +637,8 @@ struct CodeBlockView: View {
             showAvatar: true,
             isCurrentUser: true,
             onAgentTapped: {},
-            onAddReaction: { _ in }
+            onAddReaction: { _ in },
+            onReply: { _ in }
         )
 
         MessageBubbleView(
@@ -632,7 +654,8 @@ struct CodeBlockView: View {
             showAvatar: true,
             isCurrentUser: false,
             onAgentTapped: {},
-            onAddReaction: { _ in }
+            onAddReaction: { _ in },
+            onReply: { _ in }
         )
     }
     .background(AppColors.backgroundPrimary)

@@ -353,11 +353,15 @@ public struct MessageNewPayload: Codable, Sendable {
     public let senderId: String
     public let senderName: String
     public let timestamp: Date?
+    public let replyToId: String?
+    public let isThreadReply: Bool
 
     enum CodingKeys: String, CodingKey {
         case id, channelId, content, timestamp
         case senderId = "sender_id"
         case senderName = "sender_name"
+        case replyToId = "reply_to_id"
+        case isThreadReply = "is_thread_reply"
     }
 }
 

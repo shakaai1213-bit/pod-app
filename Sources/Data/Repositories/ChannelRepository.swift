@@ -98,10 +98,10 @@ final class ChannelRepository {
 
     // MARK: - Send Message
 
-    func sendMessage(channelId: UUID, content: String) async throws -> Message {
+    func sendMessage(channelId: UUID, content: String, replyToId: UUID? = nil) async throws -> Message {
         let dto: MessageDTO = try await api.post(
-            path: Endpoint.sendMessage(channelId: channelId.uuidString, content: content).path,
-            body: SendMessageRequest(content: content)
+            path: Endpoint.sendMessage(channelId: channelId.uuidString, content: content, replyToId: replyToId?.uuidString).path,
+            body: SendMessageRequest(content: content, replyToId: replyToId?.uuidString)
         )
 
         let authorName = await UserNameCache.shared.displayName(
@@ -118,7 +118,8 @@ final class ChannelRepository {
             agentId: dto.agentId,
             content: dto.content,
             timestamp: dto.timestamp,
-            reactions: []
+            reactions: [],
+            replyTo: dto.replyToId.flatMap { UUID(uuidString: $0) }
         )
 
         await cache.syncMessages([message], for: channelId)

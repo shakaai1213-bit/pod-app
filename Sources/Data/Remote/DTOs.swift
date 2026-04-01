@@ -66,6 +66,8 @@ struct MessageDTO: Codable, Identifiable {
     var isAgent: Bool
     let agentId: String?
     let reactions: [ReactionDTO]?
+    let replyToId: String?
+    let isThreadReply: Bool
     let threadCount: Int
 
     enum CodingKeys: String, CodingKey {
@@ -73,6 +75,8 @@ struct MessageDTO: Codable, Identifiable {
         case channelId = "channel_id"
         case authorId = "sender_user_id"
         case timestamp = "created_at"
+        case replyToId = "reply_to_id"
+        case isThreadReply = "is_thread_reply"
     }
 
     init(from decoder: Decoder) throws {
@@ -84,6 +88,8 @@ struct MessageDTO: Codable, Identifiable {
         timestamp = try container.decode(Date.self, forKey: .timestamp)
         agentId = try container.decodeIfPresent(String.self, forKey: .agentId)
         reactions = try container.decodeIfPresent([ReactionDTO].self, forKey: .reactions)
+        replyToId = try container.decodeIfPresent(String.self, forKey: .replyToId)
+        isThreadReply = try container.decodeIfPresent(Bool.self, forKey: .isThreadReply) ?? false
         threadCount = try container.decodeIfPresent(Int.self, forKey: .threadCount) ?? 0
         // Infer isAgent from presence of sender_agent_id
         isAgent = self.agentId != nil
@@ -206,6 +212,12 @@ enum AgentStatus: String, Codable {
 
 struct SendMessageRequest: Encodable {
     let content: String
+    let replyToId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case content
+        case replyToId = "reply_to_id"
+    }
 }
 
 // MARK: - Paginated Response Wrapper

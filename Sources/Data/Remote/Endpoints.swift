@@ -17,7 +17,7 @@ enum Endpoint {
 
     case channels
     case channelMessages(channelId: String)
-    case sendMessage(channelId: String, content: String)
+    case sendMessage(channelId: String, content: String, replyToId: String? = nil)
 
     // MARK: - Boards
 
@@ -50,7 +50,7 @@ extension Endpoint {
         case .channelMessages(let channelId):
             return "\(Endpoint.basePath)/chat/channels/\(channelId)/messages"
 
-        case .sendMessage(let channelId, _):
+        case .sendMessage(let channelId, _, _):
             return "\(Endpoint.basePath)/chat/channels/\(channelId)/messages"
 
         case .boards:
@@ -81,8 +81,8 @@ extension Endpoint {
 
     var body: Data? {
         switch self {
-        case .sendMessage(_, let content):
-            let request = SendMessageRequest(content: content)
+        case .sendMessage(_, let content, let replyToId):
+            let request = SendMessageRequest(content: content, replyToId: replyToId)
             return try? JSONEncoder().encode(request)
         default:
             return nil

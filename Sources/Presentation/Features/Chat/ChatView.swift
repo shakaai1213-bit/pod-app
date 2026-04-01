@@ -484,10 +484,15 @@ struct MessageThreadView: View {
                 channelId: channel.id.uuidString,
                 isSending: viewModel.isSending,
                 typingUsers: viewModel.typingUsers,
-                onSend: { content in
+                replyingTo: viewModel.replyingTo,
+                onSend: { content, replyToId in
                     Task {
-                        await viewModel.sendMessage(channelId: channel.id, content: content)
+                        await viewModel.sendMessage(channelId: channel.id, content: content, replyToId: replyToId ?? viewModel.replyingTo?.id)
+                        viewModel.replyingTo = nil
                     }
+                },
+                onCancelReply: {
+                    viewModel.replyingTo = nil
                 }
             )
         }
@@ -584,6 +589,9 @@ struct MessageThreadView: View {
                                 },
                                 onAddReaction: { emoji in
                                     viewModel.addReaction(to: message.id, emoji: emoji)
+                                },
+                                onReply: { repliedTo in
+                                    viewModel.replyingTo = repliedTo
                                 }
                             )
                             .id(message.id)

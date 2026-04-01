@@ -46,7 +46,9 @@ struct ComposeBarView: View {
     let channelId: String
     let isSending: Bool
     let typingUsers: [TypingUser]
-    let onSend: (String) -> Void
+    let replyingTo: Message?
+    let onSend: (String, UUID?) -> Void
+    let onCancelReply: () -> Void
 
     @State private var text: String = ""
     @FocusState private var isFocused: Bool
@@ -347,7 +349,7 @@ struct ComposeBarView: View {
         Button {
             let message = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !message.isEmpty else { return }
-            onSend(message)
+            onSend(message, replyingTo?.id)
             text = ""
         } label: {
             ZStack {
@@ -532,9 +534,11 @@ struct VoiceInputIndicator: View {
             channelId: "ch-general",
             isSending: false,
             typingUsers: [],
-            onSend: { content in
-                print("Send: \(content)")
-            }
+            replyingTo: nil,
+            onSend: { content, replyToId in
+                print("Send: \(content) (replyTo: \(replyToId?.uuidString ?? "none"))")
+            },
+            onCancelReply: {}
         )
     }
     .background(AppColors.backgroundPrimary)

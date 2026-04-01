@@ -47,6 +47,7 @@ struct Message: Identifiable, Hashable, Sendable {
     let timestamp: Date
     var reactions: [Reaction]
     var isHighlighted: Bool
+    var replyTo: UUID?  // Parent message ID for threading
 
     init(
         id: UUID = UUID(),
@@ -59,7 +60,8 @@ struct Message: Identifiable, Hashable, Sendable {
         content: String,
         timestamp: Date = Date(),
         reactions: [Reaction] = [],
-        isHighlighted: Bool = false
+        isHighlighted: Bool = false,
+        replyTo: UUID? = nil
     ) {
         self.id = id
         self.channelId = channelId
@@ -72,6 +74,7 @@ struct Message: Identifiable, Hashable, Sendable {
         self.timestamp = timestamp
         self.reactions = reactions
         self.isHighlighted = isHighlighted
+        self.replyTo = replyTo
     }
 }
 
@@ -145,6 +148,7 @@ final class ChatViewModel {
     var highlightedAuthorId: UUID?
     var errorMessage: String?
     var typingUsers: [TypingUser] = []
+    var replyingTo: Message?
     private var lastMessageTimestamp: Date?
     private var pollingTask: Task<Void, Never>?
     private var typingSimTimer: Timer?
@@ -342,7 +346,7 @@ final class ChatViewModel {
     }
 
     @MainActor
-    func sendMessage(channelId: UUID, content: String) async {
+    func sendMessage(channelId: UUID, content: String, replyToId: UUID? = nil) async {
         guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
 
         isSending = true
@@ -354,13 +358,14 @@ final class ChatViewModel {
             authorName: "Me",
             authorRole: .human,
             content: content,
-            timestamp: Date()
+            timestamp: Date(),
+            replyTo: replyToId
         )
         messages.append(newMessage)
 
         // Send via API
         let repo = ChannelRepository()
-        try? await repo.sendMessage(channelId: channelId, content: content)
+        try? await repo.sendMessage(channelId: channelId, content: content, replyToId: replyToId)
 
         isSending = false
     }
