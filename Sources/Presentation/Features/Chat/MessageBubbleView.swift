@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 // MARK: - Message Bubble View
 

@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 // MARK: - Channel
 
@@ -48,6 +49,7 @@ struct Message: Identifiable, Hashable, Sendable {
     var reactions: [Reaction]
     var isHighlighted: Bool
     var replyTo: UUID?  // Parent message ID for threading
+    var queueState: CachedQueueMessage.QueueState?  // nil = not cached
 
     init(
         id: UUID = UUID(),
@@ -61,7 +63,8 @@ struct Message: Identifiable, Hashable, Sendable {
         timestamp: Date = Date(),
         reactions: [Reaction] = [],
         isHighlighted: Bool = false,
-        replyTo: UUID? = nil
+        replyTo: UUID? = nil,
+        queueState: CachedQueueMessage.QueueState? = nil
     ) {
         self.id = id
         self.channelId = channelId
@@ -75,6 +78,7 @@ struct Message: Identifiable, Hashable, Sendable {
         self.reactions = reactions
         self.isHighlighted = isHighlighted
         self.replyTo = replyTo
+        self.queueState = queueState
     }
 }
 
@@ -160,6 +164,14 @@ final class ChatViewModel {
     private var sseFallbackTimer: Timer?
     private var sseConnected = false
 
+    // MARK: - Offline Queue
+
+    private let offlineQueue: OfflineQueue
+
+    init() {
+        self.offlineQueue = OfflineQueue(modelContainer: PersistenceController.shared.container)
+    }
+
     // MARK: - Polling (SSE fallback — polls for new messages when chat is open)
 
     /// Start polling for new messages every 5 seconds
@@ -204,6 +216,10 @@ final class ChatViewModel {
                     case .connected:
                         self.sseConnected = true
                         self.stopPollingFallback()
+                        // Flush any messages queued while offline
+                        Task {
+                            let sentIds = await self.offlineQueue.flush()
+                        }
                     case .message(let payload):
                         await self.handleSSEMessage(payload)
                     case .keepalive:
@@ -452,23 +468,61 @@ final class ChatViewModel {
 
         isSending = true
 
-        // Optimistically add the message with "Me" — will be corrected after API response
+        // Enqueue to offline queue and optimistically add to UI
+        let queueEntryId = offlineQueue.enqueue(channelId: channelId, content: content)
         let newMessage = Message(
+            id: queueEntryId,
             channelId: channelId,
             authorId: ChatViewModel.mockUserId,
             authorName: "Me",
             authorRole: .human,
             content: content,
             timestamp: Date(),
-            replyTo: replyToId
+            replyTo: replyToId,
+            queueState: .pending
         )
         messages.append(newMessage)
 
-        // Send via API
+        // Try to send via API; if offline, the message stays queued
         let repo = ChannelRepository()
-        try? await repo.sendMessage(channelId: channelId, content: content, replyToId: replyToId)
+        do {
+            try await repo.sendMessage(channelId: channelId, content: content, replyToId: replyToId)
+            // Mark as sent in queue and update UI
+            offlineQueue.remove(id: queueEntryId)
+            updateMessageQueueState(id: queueEntryId, state: .sent)
+        } catch {
+            // Message stays in queue as .failed; user can retry
+            offlineQueue.markFailed(id: queueEntryId, error: error.localizedDescription)
+            updateMessageQueueState(id: queueEntryId, state: .failed)
+        }
 
         isSending = false
+    }
+
+    /// Updates the queueState of a specific message in the local messages list.
+    private func updateMessageQueueState(id: UUID, state: CachedQueueMessage.QueueState?) {
+        if let idx = messages.firstIndex(where: { $0.id == id }) {
+            messages[idx].queueState = state
+        }
+    }
+
+    /// Retries sending a failed message.
+    @MainActor
+    func retryMessage(id: UUID) async {
+        guard let msg = messages.first(where: { $0.id == id }) else { return }
+        guard msg.queueState == .failed else { return }
+
+        updateMessageQueueState(id: id, state: .sending)
+
+        let repo = ChannelRepository()
+        do {
+            try await repo.sendMessage(channelId: msg.channelId, content: msg.content, replyToId: msg.replyTo)
+            offlineQueue.remove(id: id)
+            updateMessageQueueState(id: id, state: .sent)
+        } catch {
+            offlineQueue.markFailed(id: id, error: error.localizedDescription)
+            updateMessageQueueState(id: id, state: .failed)
+        }
     }
 
     func selectChannel(_ channel: Channel) {

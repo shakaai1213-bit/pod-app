@@ -43,6 +43,7 @@
 		90237BF2A2CDD9B9FD1A2858 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0AA356201992C4B685F6B8E /* AppTheme.swift */; };
 		99367A8E3BC0E7405588837A /* Agents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76BADDD35C506CB08E6BB3A9 /* Agents.swift */; };
 		99EA3523D26347EF51CBB81E /* PersistenceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E72E32FF815FB0AF501BC6D8 /* PersistenceController.swift */; };
+		56F8AB28F8BC43DE928B1C03F69B8304 /* OfflineQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEF248875B3F4F35809EEA2D45AFB6A6 /* OfflineQueue.swift */; };
 		A119987125AF2585A9FF89CC /* OnboardingPageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAC3FB7EBC81243BD3E32D8F /* OnboardingPageView.swift */; };
 		A181B4D7C45780A5CA3ECDA0 /* AppShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05ADDFC32BFD813663C896B5 /* AppShortcuts.swift */; };
 		A38EF93421E11165DA34063C /* FlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C0D215A37D20015C3281815 /* FlowLayout.swift */; };
@@ -144,6 +145,7 @@
 		E0AA356201992C4B685F6B8E /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		E253A244EAB68FD7087A05E0 /* BoardRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardRepository.swift; sourceTree = "<group>"; };
 		E72E32FF815FB0AF501BC6D8 /* PersistenceController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceController.swift; sourceTree = "<group>"; };
+		CEF248875B3F4F35809EEA2D45AFB6A6 /* OfflineQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineQueue.swift; sourceTree = "<group>"; };
 		E86C3336F7FF419C6E67D560 /* WallDisplayLauncherView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallDisplayLauncherView.swift; sourceTree = "<group>"; };
 		ED6986244E7F194490495D69 /* AvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarView.swift; sourceTree = "<group>"; };
 		F5D15A077B49CD21B9DDADD5 /* StandardEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandardEditorView.swift; sourceTree = "<group>"; };
@@ -464,6 +466,7 @@
 			isa = PBXGroup;
 			children = (
 				E72E32FF815FB0AF501BC6D8 /* PersistenceController.swift */,
+			CEF248875B3F4F35809EEA2D45AFB6A6 /* OfflineQueue.swift */,
 				652176F506F2AFBA5504A5DB /* SwiftDataModels.swift */,
 			);
 			path = Local;
@@ -600,6 +603,7 @@
 				7220D0BB4926EC9516B9ADC5 /* OnboardingView.swift in Sources */,
 				115714EE9EE458D6F1609B08 /* OnboardingViewModel.swift in Sources */,
 				99EA3523D26347EF51CBB81E /* PersistenceController.swift in Sources */,
+			56F8AB28F8BC43DE928B1C03F69B8304 /* OfflineQueue.swift in Sources */,
 				EC8129D43972E4CE42578BC1 /* PriorityBadge.swift in Sources */,
 				1A5E2C9725EF8D386ABFBE57 /* Projects.swift in Sources */,
 				CF8F936E3B4CD83149F70242 /* ProjectsView.swift in Sources */,
