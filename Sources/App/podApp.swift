@@ -34,6 +34,15 @@ struct podApp: App {
                             await appState.authenticate(token: savedToken)
                         }
                     }
+                    // TEST MODE: If launched with --auto-login argument, auto-submit the hardcoded token.
+                    // This bypasses the UI automation problem on iOS Simulator (Metal renders outside macOS accessibility).
+                    if CommandLine.arguments.contains("--auto-login") {
+                        let testToken = "ebe9a0fdfaf9b7674f4e2b9d0149f881d46111730b780d9e508ad94023c03051"
+                        print("[podApp] TEST MODE: auto-submitting token via --auto-login")
+                        Task { @MainActor in
+                            await appState.authenticate(token: testToken)
+                        }
+                    }
                 }
                 .onOpenURL { url in
                     handleURL(url)
