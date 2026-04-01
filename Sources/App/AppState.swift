@@ -18,6 +18,10 @@ final class AppState: ObservableObject {
     @Published var pendingApprovalId: UUID?
     @Published var pendingNotification: NotificationAction?
 
+    // MARK: - Auth Manager (Keychain-backed)
+
+    let authManager: AuthManager
+
     // MARK: - Backend URL
 
     // iOS Simulator → proxy at 127.0.0.1:19002 → Docker backend
@@ -33,7 +37,24 @@ final class AppState: ObservableObject {
 
     // MARK: - Initialization
 
-    nonisolated init() {}
+    init() {
+        self.authManager = AuthManager(backendURL: Self.backendURL)
+    }
+
+    // MARK: - Auto Login
+
+    /// Attempts to auto-login using stored Keychain token. Call on app launch.
+    func attemptAutoLogin() async {
+        let success = await authManager.attemptAutoLogin()
+        if success, let user = authManager.currentUser {
+            currentUser = TeamMember(id: user.id, name: user.name, avatarColor: "#6B46C1")
+            isAuthenticated = true
+            await fetchCurrentUser()
+            print("[AppState] Auto-login successful")
+        } else {
+            print("[AppState] Auto-login skipped or failed")
+        }
+    }
 
     // MARK: - Authentication
 
@@ -103,7 +124,12 @@ final class AppState: ObservableObject {
             isLoading = false
             loadingMessage = nil
             isAuthenticated = true
-            storeToken(token)
+            // Store in Keychain via AuthManager
+            do {
+                _ = try await authManager.signInWithToken(token)
+            } catch {
+                print("[AppState] Failed to store token in Keychain: \(error)")
+            }
             Task { await APIClient.shared.setToken(token) }
             // Fetch real user profile from backend
             await fetchCurrentUser()
@@ -262,6 +288,7 @@ final class AppState: ObservableObject {
     }
 
     func logout() {
+        authManager.signOut()
         clearToken()
         isAuthenticated = false
         currentUser = nil

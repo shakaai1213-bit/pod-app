@@ -2,12 +2,16 @@ import SwiftUI
 
 // MARK: - AppState Environment Key
 
+@MainActor private func makeDefaultAppState() -> AppState {
+    AppState()
+}
+
 private struct AppStateKey: EnvironmentKey {
-    static let defaultValue: AppState = AppState()
+    @MainActor static let defaultValue: AppState = makeDefaultAppState()
 }
 
 extension EnvironmentValues {
-    var appState: AppState {
+    @MainActor var appState: AppState {
         get { self[AppStateKey.self] }
         set { self[AppStateKey.self] = newValue }
     }
