@@ -229,14 +229,21 @@ final class ChatViewModel {
         let existingIds = Set(messages.map(\.id))
         guard !existingIds.contains(UUID(uuidString: payload.id) ?? UUID()) else { return }
 
+        // Resolve agent name via UserNameCache when sender is an agent
+        let authorName = await UserNameCache.shared.displayName(
+            userId: payload.senderId,
+            agentId: payload.senderAgentId
+        )
+        let isAgent = payload.senderAgentId != nil
+
         let newMessage = Message(
             id: UUID(uuidString: payload.id) ?? UUID(),
             channelId: channelId,
             authorId: UUID(uuidString: payload.senderId) ?? UUID(),
-            authorName: payload.senderName,
-            authorRole: payload.isThreadReply ? .human : .human,
-            isAgent: false,
-            agentId: nil,
+            authorName: authorName,
+            authorRole: isAgent ? .agent : .human,
+            isAgent: isAgent,
+            agentId: payload.senderAgentId,
             content: payload.content,
             timestamp: payload.timestamp ?? Date(),
             replyTo: payload.replyToId != nil ? UUID(uuidString: payload.replyToId!) : nil

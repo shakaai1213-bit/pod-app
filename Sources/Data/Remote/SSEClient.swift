@@ -531,6 +531,7 @@ public struct MessageNewPayload: Codable, Sendable {
     public let content: String
     public let senderId: String
     public let senderName: String
+    public let senderAgentId: String?
     public let timestamp: Date?
     public let replyToId: String?
     public let isThreadReply: Bool
@@ -539,6 +540,7 @@ public struct MessageNewPayload: Codable, Sendable {
         case id, channelId, content, timestamp
         case senderId = "sender_id"
         case senderName = "sender_name"
+        case senderAgentId = "sender_agent_id"
         case replyToId = "reply_to_id"
         case isThreadReply = "is_thread_reply"
     }
