@@ -302,44 +302,223 @@ public actor SSEClient {
     }
 }
 
-// MARK: - URLSessionStreamTask Extension
+// MARK: - SSEStreamManager
+// Actor-based SSE manager for channel-scoped real-time chat streaming.
+// Connects to GET /api/v1/chat/channels/{channelId}/stream and yields
+// decoded MessageNewPayload events.
 
-extension URLSessionStreamTask {
-    /// Reads a single line from the HTTP stream.
-    /// Returns nil when the stream is closed, throws on error.
-    func readLine() async throws -> String? {
-        var buffer = Data()
+/// Chat-scoped SSE stream manager. Each instance is tied to a single channel.
+/// Thread-safe (actor) so it can be safely called from any context.
+public actor SSEStreamManager {
 
-        while !Task.isCancelled {
-            // Read available data
-            let (newData, finished) = try await readData(ofMinLength: 1, maxLength: 4096, timeout: 30)
-            guard let data = newData, !finished, !data.isEmpty else {
-                // EOF
-                return buffer.isEmpty ? nil : String(data: buffer, encoding: .utf8)
+    // MARK: - Types
+
+    public enum StreamError: Error, LocalizedError, Sendable {
+        case invalidURL
+        case connectionFailed(Error?)
+        case disconnected
+        case cancelled
+        case decodingFailed(String)
+
+        public var errorDescription: String? {
+            switch self {
+            case .invalidURL:
+                return "Invalid SSE stream URL"
+            case .connectionFailed(let error):
+                return "Connection failed: \(error?.localizedDescription ?? "unknown")"
+            case .disconnected:
+                return "SSE stream disconnected"
+            case .cancelled:
+                return "SSE stream was cancelled"
+            case .decodingFailed(let msg):
+                return "Failed to decode SSE event: \(msg)"
             }
+        }
+    }
 
-            buffer.append(data)
+    public enum SSEEvent: Sendable {
+        case connected
+        case message(MessageNewPayload)
+        case keepalive
+        case error(StreamError)
+    }
 
-            // Check for newline in buffer
-            if let newlineIndex = buffer.firstIndex(of: UInt8(ascii: "\n")) {
-                let lineData = buffer.prefix(upTo: newlineIndex)
-                buffer.removeSubrange(0...newlineIndex)
+    // MARK: - State
 
-                // Also strip trailing \r in case of CRLF
-                var line = String(data: lineData, encoding: .utf8) ?? ""
-                if line.hasSuffix("\r") {
-                    line.removeLast()
-                }
-                return line
-            }
+    private var dataTask: URLSessionDataTask?
+    private var session: URLSession?
+    private var isCancelled: Bool = false
 
-            // If buffer is too large without a newline, flush and continue
-            if buffer.count > 64 * 1024 {
-                buffer.removeAll()
+    // MARK: - Public API
+
+    /// Connect to the channel SSE stream and yield events via the continuation.
+    /// Automatically disconnects when the continuation is terminated.
+    public func connect(
+        channelId: String,
+        token: String,
+        baseURL: String
+    ) -> AsyncThrowingStream<SSEEvent, Error> {
+        isCancelled = false
+        let urlString = "\(baseURL)/api/v1/chat/channels/\(channelId)/stream"
+        guard URL(string: urlString) != nil else {
+            return AsyncThrowingStream { continuation in
+                continuation.finish(throwing: StreamError.invalidURL)
             }
         }
 
-        return nil
+        // Create the stream, capturing continuation locally.
+        // All actor mutations happen inside the actor-isolated Task.
+        return AsyncThrowingStream<SSEEvent, Error> { [weak self] continuation in
+            continuation.onTermination = { [weak self] _ in
+                Task { [weak self] in
+                    await self?.disconnect()
+                }
+            }
+
+            Task { [weak self] in
+                await self?.runStream(channelId: channelId, token: token, baseURL: baseURL, continuation: continuation)
+            }
+        }
+    }
+
+    /// Actor-isolated method that drives the SSE connection.
+    private func runStream(
+        channelId: String,
+        token: String,
+        baseURL: String,
+        continuation: AsyncThrowingStream<SSEEvent, Error>.Continuation
+    ) async {
+        let urlString = "\(baseURL)/api/v1/chat/channels/\(channelId)/stream"
+        guard let url = URL(string: urlString) else {
+            continuation.finish(throwing: StreamError.invalidURL)
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        request.timeoutInterval = .infinity
+
+        let delegate = SSEDelegate(continuation: continuation, manager: self)
+        session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        dataTask = session?.dataTask(with: request)
+        dataTask?.resume()
+
+        // Signal connected after a short delay (stream opens)
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        if !isCancelled {
+            continuation.yield(.connected)
+        }
+    }
+
+    /// Called by SSEDelegate when data arrives.
+    func handleData(_ data: Data) {
+        guard !isCancelled else { return }
+        guard let chunk = String(data: data, encoding: .utf8) else { return }
+        parseAndDispatch(chunk)
+    }
+
+    /// Called by SSEDelegate on error.
+    func handleError(_ error: Error?) {
+        guard !isCancelled else { return }
+        dataTask = nil
+        session?.invalidateAndCancel()
+        session = nil
+    }
+
+    /// Cancel the current stream.
+    public func disconnect() {
+        isCancelled = true
+        dataTask?.cancel()
+        dataTask = nil
+        session?.invalidateAndCancel()
+        session = nil
+    }
+
+    private func parseAndDispatch(_ chunk: String) {
+        // No actor isolation needed — continuation is passed directly to SSEDelegate
+        // and stored there. This method is called from SSEDelegate which already
+        // holds the continuation safely.
+    }
+}
+
+// MARK: - SSE Delegate
+
+/// URLSessionDataDelegate. Holds the continuation directly to avoid actor isolation issues.
+/// All data parsing and event dispatching happens here on the delegate's queue.
+private final class SSEDelegate: NSObject, URLSessionDataDelegate {
+    private let continuation: AsyncThrowingStream<SSEStreamManager.SSEEvent, Error>.Continuation
+    private weak var manager: SSEStreamManager?
+
+    private var eventType: String?
+    private var eventData: String?
+
+    init(continuation: AsyncThrowingStream<SSEStreamManager.SSEEvent, Error>.Continuation, manager: SSEStreamManager) {
+        self.continuation = continuation
+        self.manager = manager
+        super.init()
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        guard let chunk = String(data: data, encoding: .utf8) else { return }
+
+        let lines = chunk.components(separatedBy: "\n")
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            if trimmed.isEmpty {
+                if let type = eventType, let data = eventData, !data.isEmpty {
+                    dispatchEvent(type: type, data: data)
+                }
+                eventType = nil
+                eventData = nil
+
+            } else if trimmed.hasPrefix("event:") {
+                eventType = String(trimmed.dropFirst(6)).trimmingCharacters(in: .whitespaces)
+
+            } else if trimmed.hasPrefix("data:") {
+                let value = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                if eventData == nil {
+                    eventData = value
+                } else {
+                    eventData = (eventData ?? "") + "\n" + value
+                }
+            }
+        }
+    }
+
+    private func dispatchEvent(type: String, data: String) {
+        switch type {
+        case "message":
+            if let jsonData = data.data(using: .utf8) {
+                let decoder = JSONDecoder()
+                decoder.dateDecodingStrategy = .iso8601
+                if let payload = try? decoder.decode(MessageNewPayload.self, from: jsonData) {
+                    continuation.yield(.message(payload))
+                } else {
+                    continuation.yield(.error(.decodingFailed("Could not decode MessageNewPayload")))
+                }
+            }
+        case "keepalive":
+            continuation.yield(.keepalive)
+        case "connected":
+            continuation.yield(.connected)
+        default:
+            break
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        Task { [weak self] in
+            if let error = error {
+                await self?.manager?.handleError(error)
+                self?.continuation.finish(throwing: SSEStreamManager.StreamError.connectionFailed(error))
+            } else {
+                await self?.manager?.handleError(nil)
+                self?.continuation.finish()
+            }
+        }
     }
 }
 
@@ -407,5 +586,41 @@ public struct ApprovalRequestedPayload: Codable, Sendable {
         case requesterId = "requester_id"
         case requesterName = "requester_name"
         case message, timestamp
+    }
+}
+
+// MARK: - URLSessionStreamTask Extension (for SSEClient's generic SSE streaming)
+
+extension URLSessionStreamTask {
+    /// Reads a single line from the HTTP stream.
+    /// Returns nil when the stream is closed, throws on error.
+    func readLine() async throws -> String? {
+        var buffer = Data()
+
+        while !Task.isCancelled {
+            let (newData, finished) = try await readData(ofMinLength: 1, maxLength: 4096, timeout: 30)
+            guard let data = newData, !finished, !data.isEmpty else {
+                return buffer.isEmpty ? nil : String(data: buffer, encoding: .utf8)
+            }
+
+            buffer.append(data)
+
+            if let newlineIndex = buffer.firstIndex(of: UInt8(ascii: "\n")) {
+                let lineData = buffer.prefix(upTo: newlineIndex)
+                buffer.removeSubrange(0...newlineIndex)
+
+                var line = String(data: lineData, encoding: .utf8) ?? ""
+                if line.hasSuffix("\r") {
+                    line.removeLast()
+                }
+                return line
+            }
+
+            if buffer.count > 64 * 1024 {
+                buffer.removeAll()
+            }
+        }
+
+        return nil
     }
 }

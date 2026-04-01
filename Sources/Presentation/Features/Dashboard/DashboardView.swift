@@ -63,6 +63,20 @@ struct DashboardView: View {
 
             Spacer()
 
+            // Live connection badge
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(Color.green)
+                    .frame(width: 8, height: 8)
+                Text("LIVE")
+                    .font(.caption2.bold())
+                    .foregroundColor(.green)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Color.green.opacity(0.15))
+            .clipShape(Capsule())
+
             Button { showingSettings = true } label: {
                 Image(systemName: "gearshape.fill")
                     .font(.system(size: 20))

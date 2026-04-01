@@ -153,25 +153,110 @@ final class ChatViewModel {
     private var pollingTask: Task<Void, Never>?
     private var typingSimTimer: Timer?
 
+    // MARK: - SSE Streaming
+
+    private var sseStreamManager: SSEStreamManager?
+    private var sseListenTask: Task<Void, Never>?
+    private var sseFallbackTimer: Timer?
+    private var sseConnected = false
+
     // MARK: - Polling (SSE fallback — polls for new messages when chat is open)
 
     /// Start polling for new messages every 5 seconds
     func startPolling() {
         stopPolling()
+
         // Simulate typing: show agent "Maui" typing briefly every 15-30s when channel is general
         typingSimTimer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.simulateTyping()
             }
         }
+
+        // Start SSE streaming
+        startSSEStreaming()
+
+        // Fallback: if SSE doesn't connect within 5s, fall back to polling
+        sseFallbackTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                if self?.sseConnected == false {
+                    self?.startPollingFallback()
+                }
+                self?.sseFallbackTimer = nil
+            }
+        }
+    }
+
+    private func startSSEStreaming() {
+        guard let channelId = selectedChannel?.id else { return }
+        guard let token = UserDefaults.standard.string(forKey: "orca_auth_token") else { return }
+
+        sseStreamManager = SSEStreamManager()
+        let manager = sseStreamManager!
+
+        sseListenTask = Task { @MainActor in
+            do {
+                let baseURL = AppState.backendURL
+                let events = await manager.connect(channelId: channelId.uuidString, token: token, baseURL: baseURL)
+
+                for try await event in events {
+                    switch event {
+                    case .connected:
+                        self.sseConnected = true
+                        self.stopPollingFallback()
+                    case .message(let payload):
+                        await self.handleSSEMessage(payload)
+                    case .keepalive:
+                        break
+                    case .error(let error):
+                        print("[ChatViewModel] SSE error: \(error.localizedDescription)")
+                        self.sseConnected = false
+                    }
+                }
+            } catch {
+                print("[ChatViewModel] SSE stream ended: \(error.localizedDescription)")
+                self.sseConnected = false
+            }
+        }
+    }
+
+    private func handleSSEMessage(_ payload: MessageNewPayload) async {
+        guard let channelId = selectedChannel?.id else { return }
+        guard let payloadChannelId = UUID(uuidString: payload.channelId),
+              payloadChannelId == channelId else { return }
+
+        // Avoid duplicates
+        let existingIds = Set(messages.map(\.id))
+        guard !existingIds.contains(UUID(uuidString: payload.id) ?? UUID()) else { return }
+
+        let newMessage = Message(
+            id: UUID(uuidString: payload.id) ?? UUID(),
+            channelId: channelId,
+            authorId: UUID(uuidString: payload.senderId) ?? UUID(),
+            authorName: payload.senderName,
+            authorRole: payload.isThreadReply ? .human : .human,
+            isAgent: false,
+            agentId: nil,
+            content: payload.content,
+            timestamp: payload.timestamp ?? Date(),
+            replyTo: payload.replyToId != nil ? UUID(uuidString: payload.replyToId!) : nil
+        )
+        messages.append(newMessage)
+    }
+
+    private func startPollingFallback() {
         pollingTask = Task { @MainActor in
             while !Task.isCancelled {
                 await TaskSafeSleep.sleep(seconds: 5)
                 await pollForNewMessages()
-                // Clean up stale typing users (> 5s old)
                 self.typingUsers.removeAll { Date().timeIntervalSince($0.startedAt) > 5 }
             }
         }
+    }
+
+    private func stopPollingFallback() {
+        pollingTask?.cancel()
+        pollingTask = nil
     }
 
     private func simulateTyping() {
@@ -194,6 +279,15 @@ final class ChatViewModel {
         typingUsers = []
         typingSimTimer?.invalidate()
         typingSimTimer = nil
+        sseFallbackTimer?.invalidate()
+        sseFallbackTimer = nil
+        sseListenTask?.cancel()
+        sseListenTask = nil
+        sseConnected = false
+        if let mgr = sseStreamManager {
+            Task { await mgr.disconnect() }
+        }
+        sseStreamManager = nil
     }
 
     /// Fetch new messages since last load and append any new ones

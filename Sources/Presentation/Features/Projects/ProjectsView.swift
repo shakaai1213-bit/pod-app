@@ -8,6 +8,7 @@ struct ProjectsView: View {
     @State private var selectedBoard: Board?
     @State private var showingFilters = false
     @State private var showingNewTask = false
+    @State private var showingMyTasks = false
     @State private var contextMenuTask: Any?
     @State private var quickActionBoard: Board?
 
@@ -51,6 +52,9 @@ struct ProjectsView: View {
             .sheet(isPresented: $showingNewTask) {
                 NewTaskSheet(viewModel: viewModel)
             }
+            .sheet(isPresented: $showingMyTasks) {
+                MyTasksFullView(tasks: viewModel.sortedMyTasks, members: ProjectsViewModel.mockMembers)
+            }
             .task {
                 await viewModel.loadBoards()
                 await viewModel.loadMyTasks()
@@ -85,7 +89,7 @@ struct ProjectsView: View {
 
                     if viewModel.sortedMyTasks.count > 5 {
                         Button {
-                            // TODO: Navigate to full my tasks view
+                            showingMyTasks = true
                         } label: {
                             Text("View all \(viewModel.sortedMyTasks.count) tasks")
                                 .podTextStyle(.caption, color: AppColors.accentElectric)
@@ -509,5 +513,39 @@ private struct NewTaskSheet: View {
             }
         }
         .presentationDetents([.medium])
+    }
+}
+
+// MARK: - My Tasks Full View
+
+private struct MyTasksFullView: View {
+    let tasks: [ProjectTask]
+    let members: [TeamMember]
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVStack(spacing: Theme.sm) {
+                    ForEach(tasks) { task in
+                        MyTaskRow(task: task, members: members) {
+                            // Future: tap to show task detail
+                        }
+                    }
+                }
+                .padding(.horizontal, Theme.md)
+                .padding(.vertical, Theme.sm)
+            }
+            .background(AppColors.backgroundPrimary)
+            .navigationTitle("My Tasks")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.large])
     }
 }

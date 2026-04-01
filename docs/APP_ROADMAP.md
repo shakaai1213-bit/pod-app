@@ -22,12 +22,26 @@ The app builds and runs on Tony's iPad via Tailscale. Key fixes deployed:
 
 ---
 
-## Phase 2: Agent Integration 🚧 In Progress
+## Phase 2: Agent Integration ✅ Near Complete
+- [x] POST /api/v1/chat/channels/{id}/messages — sendMessage in ChannelRepository ✅ (HTTP 201 confirmed)
+- [x] Real agent status from ORCA MC backend — AgentRepository.loadAgents() calls GET /api/v1/agents ✅
+- [x] Chat read pipeline — ChannelRepository.loadMessages() ✅
+- [x] Chat write pipeline — ChannelRepository.sendMessage() ✅
+- [x] Welcome message to #general on ORCA MC ✅
 - [ ] Connect Maui agent to pod app (NATS or REST)
 - [ ] Agent message threading (reply-to in chat)
 - [ ] Agent task delegation (assign task from app)
-- [ ] Real agent status from ORCA MC backend (not mock data)
-- [x] Welcome message to #general on ORCA MC
+
+### API Discovery (2026-03-31)
+Working endpoints (auth required):
+- `GET /api/v1/chat/channels` — returns 5 channels ✅
+- `GET /api/v1/chat/channels/{id}/messages` — returns paginated message list ✅
+- `POST /api/v1/chat/channels/{id}/messages` — sends message, returns 201 ✅
+- `GET /api/v1/agents` — returns 6 agents with session IDs ✅
+- `GET /api/v1/boards` — returns 18 project boards with status ✅
+- `GET /api/v1/agents/{id}/status` — returns single agent status ✅
+- `GET /openapi.json` — was 500, fixed 2026-03-31 ✅
+- `GET /api/v1/health` — returns 404 (not implemented)
 
 ---
 
