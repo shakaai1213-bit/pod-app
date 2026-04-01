@@ -228,3 +228,75 @@ struct PaginatedResponse<T: Codable>: Codable {
     let limit: Int?
     let offset: Int?
 }
+
+// MARK: - Projects
+
+struct ProjectDTO: Codable, Identifiable {
+    let id: UUID
+    let name: String
+    let goal: String?
+    let description: String?
+    let status: String  // backlog, in-progress, done, archived
+    let priority: Int   // 1 (highest) to 5 (lowest)
+    let projectedCost: Double?
+    let actualCost: Double?
+    let createdBy: UUID?
+    let assignedTo: UUID?
+    let createdAt: Date
+    let updatedAt: Date
+    let startedAt: Date?
+    let completedAt: Date?
+    let dueDate: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, goal, description, status, priority
+        case projectedCost = "projected_cost"
+        case actualCost = "actual_cost"
+        case createdBy = "created_by"
+        case assignedTo = "assigned_to"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case startedAt = "started_at"
+        case completedAt = "completed_at"
+        case dueDate = "due_date"
+    }
+}
+
+struct ProjectTaskDTO: Codable, Identifiable {
+    let id: UUID
+    let projectId: UUID
+    let title: String
+    let description: String?
+    let status: String  // backlog, in-progress, done, blocked, cancelled
+    let priority: Int
+    let parentTaskId: UUID?
+    let createdBy: UUID?
+    let assignedTo: UUID?
+    let createdAt: Date
+    let updatedAt: Date
+    let dueDate: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, description, status, priority
+        case projectId = "project_id"
+        case parentTaskId = "parent_task_id"
+        case createdBy = "created_by"
+        case assignedTo = "assigned_to"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case dueDate = "due_date"
+    }
+}
+
+struct ProjectCreateRequest: Encodable {
+    let name: String
+    let goal: String?
+    let description: String?
+    let priority: Int?
+    let dueDate: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case name, goal, description, priority
+        case dueDate = "due_date"
+    }
+}
