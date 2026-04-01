@@ -36,20 +36,12 @@ final class CachedQueueMessage {
     }
 }
 
-// MARK: - OfflineQueue Actor
+// MARK: - OfflineQueue
 
-/// Offline message queue.
+/// Offline message queue using @MainActor so it can safely access SwiftData's main context.
 /// Messages sent while offline are stored locally and flushed when reconnected.
 @MainActor
 final class OfflineQueue {
-    // Uses CachedQueueMessage.QueueState from the CachedQueueMessage model.
-
-    struct QueueEntry: Sendable {
-        let id: UUID
-        let channelId: UUID
-        let content: String
-        let queueState: CachedQueueMessage.QueueState
-    }
 
     // MARK: - State
 
@@ -64,7 +56,7 @@ final class OfflineQueue {
     // MARK: - Enqueue
 
     /// Stores a message in the offline queue with .pending state.
-    func enqueue(channelId: UUID, content: String) async -> UUID {
+    func enqueue(channelId: UUID, content: String) -> UUID {
         let ctx = modelContainer.mainContext
         let cached = CachedQueueMessage(
             id: UUID(),
@@ -118,13 +110,12 @@ final class OfflineQueue {
     }
 
     /// Returns all pending + sending message IDs so callers can update UI state.
-    func pendingIds() async -> [UUID] {
-        let ctx = modelContainer.mainContext
-        return fetchPending(in: ctx).map(\.id)
+    func pendingIds() -> [UUID] {
+        fetchPending(in: modelContainer.mainContext).map(\.id)
     }
 
     /// Returns the current state for a given message ID, if it's in the cache.
-    func state(for id: UUID) async -> CachedQueueMessage.QueueState? {
+    func state(for id: UUID) -> CachedQueueMessage.QueueState? {
         let ctx = modelContainer.mainContext
         let descriptor = FetchDescriptor<CachedQueueMessage>(
             predicate: #Predicate { $0.id == id }
@@ -134,7 +125,7 @@ final class OfflineQueue {
     }
 
     /// Removes a message from the queue (after successful send).
-    func remove(id: UUID) async {
+    func remove(id: UUID) {
         let ctx = modelContainer.mainContext
         let descriptor = FetchDescriptor<CachedQueueMessage>(
             predicate: #Predicate { $0.id == id }
@@ -145,7 +136,7 @@ final class OfflineQueue {
     }
 
     /// Marks a message as failed manually (for retry).
-    func markFailed(id: UUID, error: String?) async {
+    func markFailed(id: UUID, error: String?) {
         let ctx = modelContainer.mainContext
         let descriptor = FetchDescriptor<CachedQueueMessage>(
             predicate: #Predicate { $0.id == id }
@@ -170,4 +161,3 @@ final class OfflineQueue {
         return (try? ctx.fetch(descriptor)) ?? []
     }
 }
-
