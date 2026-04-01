@@ -82,15 +82,19 @@ final class AppState: ObservableObject {
         }
 
         if timedOut && !Task.isCancelled {
-            print("[AppState] Auth timed out after 10s")
             authTask.cancel()
-            isLoading = false
-            loadingMessage = nil
             if !isAuthenticated {
+                print("[AppState] Auth timed out after 10s — showing error")
+                isLoading = false
+                loadingMessage = nil
                 errorMessage = "Connection timed out"
                 errorDetails = "The request took too long. Check your network and try again."
                 showError = true
                 UserDefaults.standard.removeObject(forKey: "orca_auth_token")
+            } else {
+                print("[AppState] Auth completed successfully (just slow)")
+                isLoading = false
+                loadingMessage = nil
             }
         }
     }
@@ -124,6 +128,8 @@ final class AppState: ObservableObject {
             isLoading = false
             loadingMessage = nil
             isAuthenticated = true
+            // Store in UserDefaults for auto-login on next launch
+            UserDefaults.standard.set(token, forKey: "orca_auth_token")
             // Store in Keychain via AuthManager
             do {
                 _ = try await authManager.signInWithToken(token)
@@ -147,32 +153,31 @@ final class AppState: ObservableObject {
     }
 
     /// Tests if the ORCA MC backend is reachable. 5 second timeout. Public for diagnostics.
-    /// Uses /api/v1/health — the iPad confirmed this endpoint responds (even 404 is fine).
+    /// Uses /health — confirmed working without auth. Also checks /api/v1/ (returns 404 but proves API is up).
+    /// NOTE: Does NOT use /api/v1/agents as it requires auth (returns 401, causing false negatives).
     func checkBackendReachable() async -> Bool {
-        // Try /health first (confirmed working from iPad via Safari)
+        // Try /health first (confirmed working, no auth needed)
         if await pingEndpoint("\(Self.backendURL)/health") {
             return true
         }
-        // Fallback: try /api/v1/health
-        if await pingEndpoint("\(Self.backendURL)/api/v1/health") {
-            return true
-        }
-        // Last resort: try /api/v1/agents with no auth
-        if await pingEndpoint("\(Self.backendURL)/api/v1/agents") {
+        // Fallback: try /api/v1/ — 404 means API is running, which is "reachable"
+        // This catches cases where only /health is blocked but API is up
+        if await pingEndpoint("\(Self.backendURL)/api/v1/") {
             return true
         }
         return false
     }
 
-    /// Makes a HEAD request to check if an endpoint is reachable.
+    /// Makes a GET request to check if an endpoint is reachable.
     /// Any HTTP response (even 404/401) = reachable. Network error = unreachable.
+    /// NOTE: Uses GET instead of HEAD because the ORCA MC backend doesn't support HEAD.
     private func pingEndpoint(_ urlString: String) async -> Bool {
         guard let url = URL(string: urlString) else {
             print("[AppState] pingEndpoint: invalid URL: \(urlString)")
             return false
         }
         var request = URLRequest(url: url)
-        request.httpMethod = "HEAD"
+        request.httpMethod = "GET"
         request.timeoutInterval = 3
         print("[AppState] pingEndpoint: \(urlString)")
         do {
