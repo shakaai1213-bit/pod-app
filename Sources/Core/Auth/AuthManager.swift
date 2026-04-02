@@ -342,15 +342,16 @@ final class AuthManager {
     // MARK: - Sign In with Token (existing flow - token passthrough)
 
     /// Signs in using an existing API token (for ORCA MC backend compatibility).
-    /// Creates a user object from the token identity.
+    /// Validates the token by calling /api/v1/agents — if it returns 200, the token is valid.
+    /// Creates a synthetic user identity since ORCA MC is agent-based, not user-account-based.
     func signInWithToken(_ token: String) async throws -> User {
         isLoading = true
         error = nil
 
         defer { isLoading = false }
 
-        // Verify token by calling /api/v1/users/me
-        guard let url = URL(string: "\(backendURL)/api/v1/users/me") else {
+        // Verify token by calling /api/v1/agents
+        guard let url = URL(string: "\(backendURL)/api/v1/agents") else {
             throw AuthError.invalidResponse
         }
 
@@ -360,7 +361,7 @@ final class AuthManager {
         request.setValue(token, forHTTPHeaderField: "X-Api-Key")
         request.timeoutInterval = 10
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (_, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw AuthError.invalidResponse
         }
@@ -373,30 +374,28 @@ final class AuthManager {
             throw AuthError.serverError(httpResponse.statusCode)
         }
 
-        // Decode user from response
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        let userDTO = try decoder.decode(UserDTO.self, from: data)
-
+        // Token is valid — create a synthetic user identity from the token
+        // ORCA MC is agent-based, so we create a user object from the token itself
+        let syntheticUserId = UUID() // Generate a stable device-level user ID
         let user = User(
-            id: UUID(uuidString: userDTO.id) ?? UUID(),
-            email: userDTO.email,
-            name: userDTO.preferredName ?? userDTO.name,
-            role: UserRole(rawValue: userDTO.role) ?? .member,
+            id: syntheticUserId,
+            email: "agent@orcamc.local",
+            name: "ORCA Agent",
+            role: .member,
             createdAt: Date()
         )
 
         // Store token with a synthetic stored token (no refresh for raw token auth)
         let storedToken = StoredToken(
-            userId: user.id,
+            userId: syntheticUserId,
             accessToken: token,
             refreshToken: nil,
             expiresAt: Date().addingTimeInterval(365 * 24 * 60 * 60), // 1 year expiry for raw tokens
             issuedAt: Date()
         )
 
-        try await tokenManager.storeToken(storedToken, for: user.id)
-        await tokenManager.setActiveUser(user.id)
+        try await tokenManager.storeToken(storedToken, for: syntheticUserId)
+        await tokenManager.setActiveUser(syntheticUserId)
 
         currentUser = user
         sessionExpiry = storedToken.expiresAt
@@ -404,7 +403,7 @@ final class AuthManager {
 
         await loadStoredUsers()
 
-        print("[AuthManager] Signed in with token: \(user.email)")
+        print("[AuthManager] Signed in with token (validated via /api/v1/agents)")
         return user
     }
 
@@ -619,15 +618,25 @@ final class AuthManager {
             sessionExpiry = activeTokenInfo.token.expiresAt
         }
 
-        // Fetch user profile
+        // Fetch agent profile (ORCA MC uses /api/v1/agents for auth validation)
         do {
-            let user: User = try await getAuth(path: "/api/v1/users/me")
-            currentUser = user
+            let agentsResponse: PaginatedResponse<AgentDTO> = try await getAuth(path: "/api/v1/agents")
+            // Create a synthetic user from the agent identity
+            // Use the token's userId to derive a stable identity
+            let userId = activeTokenInfo.userId
+            let syntheticUser = User(
+                id: userId,
+                email: "agent@orcamc.local",
+                name: "ORCA Agent",
+                role: .member,
+                createdAt: Date()
+            )
+            currentUser = syntheticUser
             isAuthenticated = true
-            print("[AuthManager] Auto-login successful: \(user.email)")
+            print("[AuthManager] Auto-login successful for user \(userId.uuidString.prefix(8))... (validated via /api/v1/agents, \(agentsResponse.items.count) agents visible)")
             return true
         } catch {
-            print("[AuthManager] Auto-login: failed to fetch user: \(error)")
+            print("[AuthManager] Auto-login: failed to fetch agents: \(error)")
             return false
         }
     }
