@@ -1,11 +1,52 @@
 import SwiftUI
 
+// MARK: - Lifecycle Stage
+
+enum ProjectLifecycleStage: String, CaseIterable {
+    case blueprint = "blueprint"
+    case dds = "dds"
+    case build = "build"
+    case sop = "sop"
+    case maintain = "maintain"
+
+    var displayName: String {
+        switch self {
+        case .blueprint: return "Blueprint"
+        case .dds:      return "DDS"
+        case .build:    return "Build"
+        case .sop:      return "SOP"
+        case .maintain: return "Maintain"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .blueprint: return Color(hexString: "64748B")  // gray
+        case .dds:      return Color(hexString: "3B82F6")  // blue
+        case .build:    return Color(hexString: "F97316")  // orange
+        case .sop:      return Color(hexString: "9333EA")  // purple
+        case .maintain: return Color(hexString: "22C55E")  // green
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .blueprint: return "doc.text"
+        case .dds:       return "ruler.fill"
+        case .build:     return "hammer"
+        case .sop:       return "book"
+        case .maintain:  return "arrow.triangle.2.circlepath"
+        }
+    }
+}
+
 // MARK: - ORCA Projects View (Kanban)
 
 struct ORCAProjectsView: View {
     @State private var viewModel = ORCAProjectsViewModel()
     @State private var showingNewProject = false
     @State private var selectedProject: ProjectDTO?
+    @State private var selectedStage: ProjectLifecycleStage? = nil
 
     var body: some View {
         NavigationStack {
@@ -16,7 +57,10 @@ struct ORCAProjectsView: View {
                 if viewModel.isLoading && viewModel.projects.isEmpty {
                     loadingView
                 } else {
-                    kanbanContent
+                    VStack(spacing: 0) {
+                        lifecycleFilterBar
+                        kanbanContent
+                    }
                 }
             }
             .navigationTitle("Projects")
@@ -47,15 +91,71 @@ struct ORCAProjectsView: View {
         }
     }
 
+    // MARK: - Lifecycle Filter Bar
+
+    private var lifecycleFilterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: Theme.sm) {
+                filterChip(label: "All", stage: nil)
+
+                ForEach(ProjectLifecycleStage.allCases, id: \.self) { stage in
+                    filterChip(label: stage.displayName, stage: stage)
+                }
+            }
+            .padding(.horizontal, Theme.md)
+            .padding(.vertical, Theme.sm)
+        }
+        .background(AppColors.backgroundPrimary)
+    }
+
+    private func filterChip(label: String, stage: ProjectLifecycleStage?) -> some View {
+        let isSelected = selectedStage == stage
+        let color = stage?.color ?? AppColors.accentElectric
+
+        return Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                if selectedStage == stage {
+                    selectedStage = nil
+                } else {
+                    selectedStage = stage
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                if let stage = stage {
+                    Image(systemName: stage.icon)
+                        .font(.system(size: 10, weight: .medium))
+                }
+                Text(label)
+                    .font(.system(size: 13, weight: .medium))
+            }
+            .foregroundStyle(isSelected ? .white : color)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(isSelected ? color : color.opacity(0.15))
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .strokeBorder(isSelected ? color : color.opacity(0.3), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
     // MARK: - Kanban Content
 
     private var kanbanContent: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        let filtered = selectedStage == nil
+            ? viewModel.projects
+            : viewModel.projects.filter { $0.stage == selectedStage?.rawValue }
+
+        return ScrollView(.horizontal, showsIndicators: false) {
             HStack(alignment: .top, spacing: Theme.md) {
                 ForEach(ORCAProjectsViewModel.KanbanStatus.allCases, id: \.self) { status in
+                    let colProjects = filtered.filter { $0.status == status.rawValue }
                     ORCAKanbanColumn(
                         status: status,
-                        projects: viewModel.projectsByStatus(status.rawValue),
+                        projects: colProjects,
                         onProjectTap: { project in selectedProject = project },
                         onStatusChange: { projectId, newStatus in
                             Task {
@@ -160,14 +260,23 @@ private struct ORCAKanbanColumn: View {
 
     private var emptyColumn: some View {
         VStack(spacing: Theme.sm) {
-            Image(systemName: "tray")
-                .font(.system(size: 24))
-                .foregroundStyle(AppColors.textTertiary)
-            Text("No projects")
-                .podTextStyle(.caption, color: AppColors.textTertiary)
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+                .foregroundStyle(AppColors.textTertiary.opacity(0.4))
+                .frame(height: 80)
+                .overlay(
+                    VStack(spacing: 4) {
+                        Image(systemName: "tray")
+                            .font(.system(size: 20))
+                            .foregroundStyle(AppColors.textTertiary.opacity(0.6))
+                        Text("No projects")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(AppColors.textTertiary.opacity(0.6))
+                    }
+                )
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, Theme.xl)
+        .padding(.vertical, Theme.md)
     }
 }
 
@@ -178,7 +287,7 @@ private struct ORCAProjectCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.sm) {
-            // Priority indicator
+            // Top row: priority dot + priority label
             HStack(spacing: Theme.xs) {
                 priorityDot
                 Spacer(minLength: 0)
@@ -199,8 +308,8 @@ private struct ORCAProjectCard: View {
                     .multilineTextAlignment(.leading)
             }
 
-            // Meta info
-            HStack(spacing: Theme.xs) {
+            // Meta row: due date, cost, assigned agent
+            HStack(spacing: Theme.sm) {
                 if let dueDate = project.dueDate {
                     dueDateView(dueDate)
                 }
@@ -209,12 +318,67 @@ private struct ORCAProjectCard: View {
                     Text("$\(Int(projected))")
                         .podTextStyle(.caption, color: AppColors.textTertiary)
                 }
+
+                Spacer(minLength: 0)
+
+                if project.assignedTo != nil {
+                    assignedAgentView
+                }
             }
         }
         .padding(Theme.md)
         .background(AppColors.backgroundTertiary)
         .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+        .overlay(alignment: .topTrailing) {
+            stageBadge
+                .padding(Theme.xs)
+        }
     }
+
+    // MARK: - Stage Badge
+
+    @ViewBuilder
+    private var stageBadge: some View {
+        if let stage = project.stage,
+           let lifecycleStage = ProjectLifecycleStage(rawValue: stage) {
+            HStack(spacing: 3) {
+                Image(systemName: lifecycleStage.icon)
+                    .font(.system(size: 9, weight: .medium))
+                Text(lifecycleStage.displayName)
+                    .font(.system(size: 9, weight: .semibold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(lifecycleStage.color)
+            .clipShape(Capsule())
+        }
+    }
+
+    // MARK: - Assigned Agent
+
+    private var assignedAgentView: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "person.circle.fill")
+                .font(.system(size: 11))
+                .foregroundStyle(AppColors.accentAgent)
+            Text(agentShortId)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(AppColors.accentAgent)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(AppColors.accentAgent.opacity(0.15))
+        .clipShape(Capsule())
+    }
+
+    private var agentShortId: String {
+        guard let assignedTo = project.assignedTo else { return "" }
+        let str = assignedTo.uuidString
+        return "#\(String(str.suffix(4)).prefix(2))"
+    }
+
+    // MARK: - Priority
 
     private var priorityDot: some View {
         Circle()
@@ -225,9 +389,9 @@ private struct ORCAProjectCard: View {
     private var priorityColor: Color {
         switch project.priority {
         case 1: return AppColors.accentDanger
-        case 2: return Color.orange
+        case 2: return Color(hexString: "F97316")  // orange
         case 3: return AppColors.accentWarning
-        case 4: return Color.blue
+        case 4: return Color(hexString: "3B82F6")  // blue
         default: return AppColors.textTertiary
         }
     }
@@ -242,16 +406,26 @@ private struct ORCAProjectCard: View {
             .clipShape(Capsule())
     }
 
+    // MARK: - Due Date
+
     private func dueDateView(_ date: Date) -> some View {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM d"
-        let isOverdue = date < Date()
+        let now = Date()
+        let isOverdue = date < now
+        let daysUntilDue = Calendar.current.dateComponents([.day], from: now, to: date).day ?? 0
+        let isSoon = !isOverdue && daysUntilDue <= 3
+
+        let color: Color = isOverdue
+            ? AppColors.accentDanger
+            : (isSoon ? Color(hexString: "F97316") : AppColors.textSecondary)
+
         return HStack(spacing: 3) {
-            Image(systemName: "calendar")
+            Image(systemName: isOverdue ? "calendar.badge.exclamationmark" : "calendar")
                 .font(.system(size: 10))
             Text(formatter.string(from: date))
         }
-        .podTextStyle(.caption, color: isOverdue ? AppColors.accentDanger : AppColors.textSecondary)
+        .podTextStyle(.caption, color: color)
     }
 }
 
@@ -318,9 +492,9 @@ private struct NewProjectSheet: View {
     private func priorityColor(_ p: Int) -> Color {
         switch p {
         case 1: return AppColors.accentDanger
-        case 2: return Color.orange
+        case 2: return Color(hexString: "F97316")
         case 3: return AppColors.accentWarning
-        case 4: return Color.blue
+        case 4: return Color(hexString: "3B82F6")
         default: return AppColors.textTertiary
         }
     }
@@ -442,7 +616,7 @@ private struct ORCAProjectDetailView: View {
     private var priorityColor: Color {
         switch project.priority {
         case 1: return AppColors.accentDanger
-        case 2: return Color.orange
+        case 2: return Color(hexString: "F97316")
         case 3: return AppColors.accentWarning
         default: return AppColors.textTertiary
         }

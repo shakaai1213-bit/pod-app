@@ -19,6 +19,7 @@ struct DashboardView: View {
             ScrollView {
                 VStack(spacing: Theme.lg) {
                     headerSection
+                    metricsStrip
                     agentStatusStrip
                     thisMorningSection
                     needsAttentionSection
@@ -84,6 +85,51 @@ struct DashboardView: View {
             }
         }
         .padding(.top, Theme.md)
+        .padding(.horizontal, Theme.md)
+        .padding(.vertical, Theme.md)
+        .background(
+            LinearGradient(
+                gradient: Gradient(colors: [
+                    AppColors.backgroundSecondary.opacity(0.8),
+                    AppColors.backgroundPrimary
+                ]),
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+    }
+
+    // MARK: - Metrics Strip
+
+    private var metricsStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: Theme.sm) {
+                MetricCard(
+                    value: viewModel.activeProjectsCount,
+                    label: "Active Projects",
+                    color: AppColors.accentElectric
+                )
+
+                MetricCard(
+                    value: viewModel.inProgressCount,
+                    label: "In Progress",
+                    color: AppColors.accentWarning
+                )
+
+                MetricCard(
+                    value: viewModel.agentsOnlineCount,
+                    label: "Agents Online",
+                    color: AppColors.accentSuccess
+                )
+
+                MetricCard(
+                    value: viewModel.needsReviewCount,
+                    label: "Needs Review",
+                    color: AppColors.accentDanger
+                )
+            }
+        }
     }
 
     // MARK: - Agent Status Strip
@@ -369,5 +415,40 @@ struct QuickActionButton: View {
             )
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Metric Card
+
+struct MetricCard: View {
+    let value: Int
+    let label: String
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: Theme.sm) {
+            Rectangle()
+                .fill(color)
+                .frame(width: 3)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(value)")
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundStyle(AppColors.textPrimary)
+
+                Text(label)
+                    .podTextStyle(.caption, color: AppColors.textSecondary)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(Theme.sm)
+        .frame(width: 140)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                .strokeBorder(AppColors.border, lineWidth: 1)
+        )
     }
 }

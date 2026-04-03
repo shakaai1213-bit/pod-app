@@ -381,6 +381,13 @@ final class ChatViewModel {
         false
     }
 
+    // MARK: - SSE Connection Status
+
+    /// Whether the SSE stream is currently connected (for UI indicator)
+    var isSSEConnected: Bool {
+        sseConnected
+    }
+
     // MARK: - Grouped Messages
 
     func groupedMessages(_ messages: [Message]) -> [MessageGroup] {

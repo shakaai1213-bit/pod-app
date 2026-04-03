@@ -43,41 +43,81 @@ struct ContentView: View {
     // MARK: - Tab View
 
     private var mainTabView: some View {
-        TabView(selection: Binding(
-            get: { appState.selectedTab },
-            set: { appState.selectedTab = $0 }
-        )) {
-            DashboardView()
-                .tabItem {
-                    Label(AppTab.dashboard.title, systemImage: AppTab.dashboard.icon)
-                }
-                .tag(AppTab.dashboard)
+        ZStack(alignment: .bottom) {
+            // Tab content
+            tabContent
+                .ignoresSafeArea()
 
-            ProjectsView()
-                .tabItem {
-                    Label(AppTab.projects.title, systemImage: AppTab.projects.icon)
-                }
-                .tag(AppTab.projects)
-
-            ChatView()
-                .tabItem {
-                    Label(AppTab.chat.title, systemImage: AppTab.chat.icon)
-                }
-                .tag(AppTab.chat)
-
-            KnowledgeView()
-                .tabItem {
-                    Label(AppTab.knowledge.title, systemImage: AppTab.knowledge.icon)
-                }
-                .tag(AppTab.knowledge)
-
-            AgentsView()
-                .tabItem {
-                    Label(AppTab.agents.title, systemImage: AppTab.agents.icon)
-                }
-                .tag(AppTab.agents)
+            // Custom tab bar
+            customTabBar
         }
-        .tint(AppTheme.primaryAccent)
+    }
+
+    @ViewBuilder
+    private var tabContent: some View {
+        switch appState.selectedTab {
+        case .dashboard:
+            DashboardView()
+        case .projects:
+            ProjectsView()
+        case .chat:
+            ChatView()
+        case .knowledge:
+            KnowledgeView()
+        case .agents:
+            AgentsView()
+        case .wallDisplay:
+            Color.clear
+        }
+    }
+
+    private var customTabBar: some View {
+        HStack(spacing: 0) {
+            ForEach(visibleTabs, id: \.self) { tab in
+                tabBarButton(for: tab)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.top, 8)
+        .padding(.bottom, 24) // Safe area bottom padding
+        .background(AppColors.backgroundSecondary)
+        .overlay(
+            Rectangle()
+                .fill(AppColors.border)
+                .frame(height: 0.5),
+            alignment: .top
+        )
+    }
+
+    private var visibleTabs: [AppTab] {
+        [.dashboard, .projects, .chat, .knowledge, .agents]
+    }
+
+    private func tabBarButton(for tab: AppTab) -> some View {
+        let isSelected = appState.selectedTab == tab
+        return Button {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                appState.selectedTab = tab
+            }
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: tab.icon)
+                    .font(.system(size: 20, weight: isSelected ? .semibold : .medium))
+                    .foregroundColor(isSelected ? AppColors.accentElectric : AppColors.textSecondary)
+
+                Text(tab.title)
+                    .font(.system(size: 10, weight: isSelected ? .semibold : .medium))
+                    .foregroundColor(isSelected ? AppColors.accentElectric : AppColors.textSecondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isSelected ? AppColors.accentElectric.opacity(0.12) : Color.clear)
+            )
+        }
+        .buttonStyle(.plain)
+    }
     }
 
     // MARK: - Loading Overlay

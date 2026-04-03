@@ -9,10 +9,29 @@ final class DashboardViewModel {
     // MARK: - Published State
 
     var agents: [Agent] = []
+    var projects: [Project] = []
     var activities: [ActivityItem] = []
     var attentionItems: [AttentionItem] = []
     var isLoading: Bool = false
     var error: String?
+
+    // MARK: - Metrics
+
+    var activeProjectsCount: Int {
+        projects.filter { $0.status.rawValue != "done" && $0.status.rawValue != "archived" }.count
+    }
+
+    var inProgressCount: Int {
+        projects.filter { $0.status.rawValue == "in-progress" }.count
+    }
+
+    var agentsOnlineCount: Int {
+        agents.filter { $0.status != .offline }.count
+    }
+
+    var needsReviewCount: Int {
+        projects.filter { $0.status.rawValue == "review" }.count
+    }
 
     // MARK: - Private
 
@@ -37,6 +56,7 @@ final class DashboardViewModel {
         isLoading = true
         error = nil
 
+        // Fetch agents
         do {
             let response: PaginatedResponse<AgentDTO> = try await apiClient.get(path: Endpoint.agents.path)
             agents = response.items.map { dto in
@@ -56,10 +76,56 @@ final class DashboardViewModel {
             agents = Self.mockAgents
         }
 
+        // Fetch projects
+        do {
+            let response: PaginatedResponse<ProjectDTO> = try await apiClient.get(path: Endpoint.listProjects().path)
+            projects = response.items.map { dto in
+                Project(
+                    id: dto.id,
+                    name: dto.name,
+                    description: dto.description ?? dto.goal ?? "",
+                    boardGroupId: dto.assignedTo ?? UUID(),
+                    status: mapProjectStatus(dto.status),
+                    stage: .dev,
+                    createdAt: dto.createdAt,
+                    updatedAt: dto.updatedAt,
+                    taskCount: 0,
+                    completedTaskCount: 0
+                )
+            }
+        } catch {
+            // Non-fatal: keep existing projects
+            if projects.isEmpty {
+                projects = Self.mockProjects
+            }
+        }
+
         activities = Self.mockActivities
         attentionItems = Self.mockAttentionItems
 
         isLoading = false
+    }
+
+    // MARK: - Status Mappers
+
+    private func mapProjectStatus(_ status: String) -> ProjectStatus {
+        switch status.lowercased() {
+        case "done", "completed", "archived": return .completed
+        case "paused", "blocked": return .paused
+        default: return .active
+        }
+    }
+
+    /// Maps DTO AgentStatus → Domain AgentState
+    private func mapAgentStatus(_ status: AgentStatus) -> AgentState {
+        switch status {
+        case .online:  return .online
+        case .busy:    return .busy
+        case .idle:    return .idle
+        case .offline: return .offline
+        case .error:   return .error
+        case .provisioning: return .provisioning
+        }
     }
 
     // MARK: - Mock Data
@@ -115,6 +181,47 @@ final class DashboardViewModel {
                 lastActivity: Date().addingTimeInterval(-7200),
                 skills: ["docs", "markdown"],
                 avatarColor: "#EF4444"
+            ),
+        ]
+    }
+
+    private static var mockProjects: [Project] {
+        [
+            Project(
+                id: UUID(),
+                name: "Auth System",
+                description: "Implement token refresh and SSO",
+                boardGroupId: UUID(),
+                status: .active,
+                stage: .dev,
+                createdAt: Date().addingTimeInterval(-86400 * 7),
+                updatedAt: Date().addingTimeInterval(-3600),
+                taskCount: 8,
+                completedTaskCount: 3
+            ),
+            Project(
+                id: UUID(),
+                name: "Dashboard UI",
+                description: "Mission control dashboard",
+                boardGroupId: UUID(),
+                status: .active,
+                stage: .verify,
+                createdAt: Date().addingTimeInterval(-86400 * 3),
+                updatedAt: Date().addingTimeInterval(-7200),
+                taskCount: 12,
+                completedTaskCount: 8
+            ),
+            Project(
+                id: UUID(),
+                name: "API Integration",
+                description: "Connect to ORCA MC backend",
+                boardGroupId: UUID(),
+                status: .completed,
+                stage: .done,
+                createdAt: Date().addingTimeInterval(-86400 * 14),
+                updatedAt: Date().addingTimeInterval(-86400),
+                taskCount: 5,
+                completedTaskCount: 5
             ),
         ]
     }
@@ -181,19 +288,5 @@ final class DashboardViewModel {
                 actor: "Knowledge base indexing failed"
             ),
         ]
-    }
-
-    // MARK: - Helpers
-
-    /// Maps DTO AgentStatus → Domain AgentState
-    private func mapAgentStatus(_ status: AgentStatus) -> AgentState {
-        switch status {
-        case .online:  return .online
-        case .busy:    return .busy
-        case .idle:    return .idle
-        case .offline: return .offline
-        case .error:   return .error
-        case .provisioning: return .provisioning
-        }
     }
 }

@@ -356,9 +356,13 @@ struct ChannelRowView: View {
 
                     HStack(spacing: 4) {
                         if channel.unreadCount > 0 && !channel.isMuted {
-                            Circle()
-                                .fill(AppColors.accentElectric)
-                                .frame(width: 8, height: 8)
+                            Text("\(channel.unreadCount)")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(AppColors.accentElectric)
+                                .clipShape(Capsule())
                         }
 
                         if channel.isMuted {
@@ -373,7 +377,11 @@ struct ChannelRowView: View {
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(isSelected ? AppColors.backgroundTertiary : Color.clear)
+                    .fill(isSelected ? AppColors.accentElectric.opacity(0.18) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(isSelected ? AppColors.accentElectric.opacity(0.4) : Color.clear, lineWidth: 1)
             )
             .contentShape(Rectangle())
             .offset(x: offsetX)
@@ -511,6 +519,9 @@ struct MessageThreadView: View {
                 .font(.headline)
                 .foregroundColor(AppColors.textPrimary)
 
+            // SSE connection indicator
+            sseIndicator
+
             Spacer()
 
             if viewModel.highlightedAuthorId != nil {
@@ -534,6 +545,32 @@ struct MessageThreadView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(AppColors.backgroundTertiary)
+    }
+
+    private var sseIndicator: some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(viewModel.isSSEConnected ? AppColors.accentSuccess : AppColors.accentDanger)
+                .frame(width: 6, height: 6)
+                .overlay {
+                    if viewModel.isSSEConnected {
+                        Circle()
+                            .stroke(AppColors.accentSuccess.opacity(0.4), lineWidth: 2)
+                            .scaleEffect(1.8)
+                    }
+                }
+
+            Text(viewModel.isSSEConnected ? "LIVE" : "OFFLINE")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(viewModel.isSSEConnected ? AppColors.accentSuccess : AppColors.accentDanger)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(
+            (viewModel.isSSEConnected ? AppColors.accentSuccess : AppColors.accentDanger)
+                .opacity(0.12)
+        )
+        .clipShape(Capsule())
     }
 
     @ViewBuilder

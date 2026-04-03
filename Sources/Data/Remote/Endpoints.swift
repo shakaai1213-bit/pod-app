@@ -54,7 +54,7 @@ extension Endpoint {
             return "\(Endpoint.basePath)/users/me"
 
         case .channels:
-            return "\(Endpoint.basePath)/chat/channels"
+            return "\(Endpoint.basePath)/channels"
 
         case .channelMessages(let channelId):
             return "\(Endpoint.basePath)/chat/channels/\(channelId)/messages"

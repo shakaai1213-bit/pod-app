@@ -40,13 +40,18 @@ struct AgentStatusCard: View {
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: Theme.sm) {
+                // Colored left border
+                Rectangle()
+                    .fill(statusDotColor)
+                    .frame(width: 3)
+
                 avatarView
                 agentInfo
                 Spacer(minLength: 0)
                 statusColumn
             }
             .padding(Theme.sm)
-            .frame(width: 200)
+            .frame(width: 220)
             .background(AppColors.backgroundTertiary)
             .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
             .overlay(

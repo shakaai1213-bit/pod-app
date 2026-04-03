@@ -102,7 +102,12 @@ final class AppState: ObservableObject {
     /// Actual auth logic — called inside the timeout wrapper.
     /// All state mutations are @MainActor by virtue of the class being @MainActor.
     private func performAuth(token: String) async {
-        print("[AppState] performAuth: calling checkBackendReachable()")
+        print("[AppState] performAuth: START token=\(token.prefix(8))... backendURL=\(Self.backendURL)")
+        #if targetEnvironment(simulator)
+        print("[AppState] NOTE: Running in SIMULATOR mode, using proxy at 127.0.0.1:19002")
+        #else
+        print("[AppState] NOTE: Running in DEVICE mode, using Tailscale URL")
+        #endif
         let reachable = await checkBackendReachable()
         print("[AppState] performAuth: checkBackendReachable() = \(reachable)")
 
@@ -156,15 +161,20 @@ final class AppState: ObservableObject {
     /// Uses /health — confirmed working without auth. Also checks /api/v1/ (returns 404 but proves API is up).
     /// NOTE: Does NOT use /api/v1/agents as it requires auth (returns 401, causing false negatives).
     func checkBackendReachable() async -> Bool {
+        print("[AppState] checkBackendReachable: trying \(Self.backendURL)/health")
         // Try /health first (confirmed working, no auth needed)
         if await pingEndpoint("\(Self.backendURL)/health") {
+            print("[AppState] checkBackendReachable: /health → reachable!")
             return true
         }
+        print("[AppState] checkBackendReachable: /health failed, trying /api/v1/")
         // Fallback: try /api/v1/ — 404 means API is running, which is "reachable"
         // This catches cases where only /health is blocked but API is up
         if await pingEndpoint("\(Self.backendURL)/api/v1/") {
+            print("[AppState] checkBackendReachable: /api/v1/ → reachable!")
             return true
         }
+        print("[AppState] checkBackendReachable: UNREACHABLE!")
         return false
     }
 
