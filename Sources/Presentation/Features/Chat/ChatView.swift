@@ -148,14 +148,33 @@ struct ChannelSidebarView: View {
 struct ChannelListView: View {
     @Bindable var viewModel: ChatViewModel
 
+    // SIMULATOR: hardcoded demo channels
+    #if targetEnvironment(simulator)
+    private static let demoChannels: [Channel] = [
+        Channel(id: UUID(uuidString: "4a37b0e8-bd9f-419f-ad82-f133877facf9")!, name: "general", type: .general, lastMessage: "Daily team updates and chatter", lastMessageTimestamp: Date().addingTimeInterval(-120), unreadCount: 0, isPinned: true, isMuted: false),
+        Channel(id: UUID(uuidString: "3f7e0d9e-5435-4050-a60d-4ceb05f3f5db")!, name: "projects", type: .general, lastMessage: "Project discussion and milestones", lastMessageTimestamp: Date().addingTimeInterval(-600), unreadCount: 1, isPinned: true, isMuted: false),
+        Channel(id: UUID(uuidString: "b6d2d313-3b59-4d5d-ae97-f7b7aee816af")!, name: "research", type: .general, lastMessage: "Deep dives and findings", lastMessageTimestamp: Date().addingTimeInterval(-3600), unreadCount: 0, isPinned: false, isMuted: false),
+        Channel(id: UUID(), name: "alerts", type: .general, lastMessage: "Blockers and system alerts", lastMessageTimestamp: Date().addingTimeInterval(-7200), unreadCount: 2, isPinned: false, isMuted: false)
+    ]
+    #endif
+
     var body: some View {
         List {
             if viewModel.isLoading && viewModel.channels.isEmpty {
                 loadingView
             } else {
-                if !viewModel.pinnedChannels.isEmpty {
+                // SIMULATOR: use demo channels; otherwise use real channels
+                #if targetEnvironment(simulator)
+                let pinned = Self.demoChannels.filter { $0.isPinned }
+                let unpinned = Self.demoChannels.filter { !$0.isPinned && !$0.isMuted }
+                #else
+                let pinned = viewModel.pinnedChannels
+                let unpinned = viewModel.unpinnedChannels
+                #endif
+
+                if !pinned.isEmpty {
                     Section("Pinned") {
-                        ForEach(viewModel.pinnedChannels) { channel in
+                        ForEach(pinned) { channel in
                             NavigationLink(value: channel) {
                                 ChannelListRowContent(channel: channel)
                             }
@@ -174,9 +193,9 @@ struct ChannelListView: View {
                     }
                 }
 
-                if !viewModel.unpinnedChannels.isEmpty {
+                if !unpinned.isEmpty {
                     Section("Channels") {
-                        ForEach(viewModel.unpinnedChannels) { channel in
+                        ForEach(unpinned) { channel in
                             NavigationLink(value: channel) {
                                 ChannelListRowContent(channel: channel)
                             }

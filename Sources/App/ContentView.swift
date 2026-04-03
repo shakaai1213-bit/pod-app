@@ -366,7 +366,7 @@ struct LoginView: View {
         // INSTANT AUTH BYPASS FOR SIMULATOR — skip all network calls
         // This is the ONLY reliable way to auth on iOS Simulator
         #if targetEnvironment(simulator)
-        print("[ContentView] SIMULATOR — instant auth bypass")
+        print("[ContentView] SIMULATOR — instant auth bypass with mock chat data")
         appState.isLoading = false
         appState.loadingMessage = nil
         appState.isAuthenticated = true
@@ -376,7 +376,11 @@ struct LoginView: View {
         appState.errorMessage = nil
         appState.errorDetails = nil
         UserDefaults.standard.set(token, forKey: "orca_auth_token")
-        Task { await APIClient.shared.setToken(token) }
+        // Store demo channels in UserDefaults so ChatView can pick them up
+        let demoChannels = """
+        [{"id":"4a37b0e8-bd9f-419f-ad82-f133877facf9","name":"general","type":"public","description":"Daily updates, chatter, questions"},{"id":"3f7e0d9e-5435-4050-a60d-4ceb05f3f5db","name":"projects","type":"public","description":"Project discussion"},{"id":"b6d2d313-3b59-4d5d-ae97-f7b7aee816af","name":"research","type":"public","description":"Deep dives"}]
+        """
+        UserDefaults.standard.set(demoChannels, forKey: "orca_demo_channels")
         return
         #endif
         
