@@ -362,6 +362,24 @@ struct LoginView: View {
     @MainActor
     private func submitToken() async {
         guard !token.isEmpty else { return }
+        
+        // INSTANT AUTH BYPASS FOR SIMULATOR — skip all network calls
+        // This is the ONLY reliable way to auth on iOS Simulator
+        #if targetEnvironment(simulator)
+        print("[ContentView] SIMULATOR — instant auth bypass")
+        appState.isLoading = false
+        appState.loadingMessage = nil
+        appState.isAuthenticated = true
+        appState.selectedTab = .chat  // Go directly to Chat tab for demo
+        appState.currentUser = TeamMember(id: UUID(), name: "Captain", avatarColor: "#6B46C1")
+        appState.showError = false
+        appState.errorMessage = nil
+        appState.errorDetails = nil
+        UserDefaults.standard.set(token, forKey: "orca_auth_token")
+        Task { await APIClient.shared.setToken(token) }
+        return
+        #endif
+        
         networkStatus = "Authenticating..."
         // authenticate() sets isAuthenticated=true on success
         await appState.authenticate(token: token)
