@@ -168,6 +168,7 @@ struct SettingsView: View {
                 organizationSection
                 agentPreferencesSection
                 aboutSection
+                aboutOrcaSection
                 if viewModel.showDebugSection {
                     debugSection
                 }
@@ -370,6 +371,17 @@ struct SettingsView: View {
 
     private var aboutSection: some View {
         Section {
+            // Backend URL (read-only)
+            HStack {
+                Text("Backend URL")
+                Spacer()
+                Text(AppState.backendURL)
+                    .font(.system(size: 13, design: .monospaced))
+                    .foregroundStyle(AppColors.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
             HStack {
                 Text("Version")
                 Spacer()
@@ -401,6 +413,40 @@ struct SettingsView: View {
             }
         } header: {
             Text("About")
+        } footer: {
+            Text("ORCA Mission Control — Autonomous agent team management and coordination platform.")
+                .font(.footnote)
+        }
+    }
+
+    // MARK: - About ORCA Section
+
+    private var aboutOrcaSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    Image(systemName: "cpu")
+                        .font(.system(size: 28))
+                        .foregroundStyle(AppColors.accentElectric)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("ORCA Mission Control")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(AppColors.textPrimary)
+                        Text("Version \(viewModel.appVersion)")
+                            .font(.system(size: 12))
+                            .foregroundStyle(AppColors.textSecondary)
+                    }
+                }
+
+                Text("ORCA is an autonomous agent team management and coordination platform. It enables multi-agent collaboration, real-time communication via SSE streaming, project tracking, and knowledge management.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(AppColors.textSecondary)
+                    .padding(.top, 4)
+            }
+            .padding(.vertical, 4)
+        } header: {
+            Text("About ORCA")
         }
     }
 

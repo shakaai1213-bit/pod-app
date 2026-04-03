@@ -21,11 +21,11 @@ enum AppTab: String, CaseIterable, Hashable {
 
     var icon: String {
         switch self {
-        case .dashboard: return "square.grid.2x2.fill"
-        case .projects: return "checklist"
+        case .dashboard: return "house.fill"
+        case .projects: return "rectangle.3.group.fill"
         case .chat: return "bubble.left.and.bubble.right.fill"
-        case .knowledge: return "book.fill"
-        case .agents: return "person.3.fill"
+        case .knowledge: return "books.vertical.fill"
+        case .agents: return "cpu.fill"
         case .wallDisplay: return "tv.fill"
         }
     }

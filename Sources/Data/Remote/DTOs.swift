@@ -247,9 +247,10 @@ struct ProjectDTO: Codable, Identifiable {
     let startedAt: Date?
     let completedAt: Date?
     let dueDate: Date?
+    let stage: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, goal, description, status, priority
+        case id, name, goal, description, status, priority, stage
         case projectedCost = "projected_cost"
         case actualCost = "actual_cost"
         case createdBy = "created_by"

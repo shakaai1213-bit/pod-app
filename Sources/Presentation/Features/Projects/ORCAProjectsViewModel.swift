@@ -93,7 +93,7 @@ final class ORCAProjectsViewModel {
                 assignedTo: old.assignedTo, createdAt: old.createdAt,
                 updatedAt: Date(), startedAt: toStatus == KanbanStatus.inProgress.rawValue ? Date() : old.startedAt,
                 completedAt: toStatus == KanbanStatus.done.rawValue ? Date() : nil,
-                dueDate: old.dueDate
+                dueDate: old.dueDate, stage: old.stage
             )
             projects[idx] = updated
         }

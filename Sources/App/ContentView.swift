@@ -118,7 +118,6 @@ struct ContentView: View {
         }
         .buttonStyle(.plain)
     }
-    }
 
     // MARK: - Loading Overlay
 
