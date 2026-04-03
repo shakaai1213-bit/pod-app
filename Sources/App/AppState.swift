@@ -11,6 +11,7 @@ final class AppState: ObservableObject {
     @Published var showError = false
     @Published var errorMessage: String?
     @Published var errorDetails: String?
+    @Published var authDiagnostics: [String] = []
     @Published var currentUser: TeamMember?
     @Published var selectedTab: AppTab = .dashboard
     @Published var navigationState: NavigationState = .dashboard
@@ -56,6 +57,9 @@ final class AppState: ObservableObject {
 
     func authenticate(token: String) async {
         print("[AppState] authenticate() called with token: \(token.prefix(8))...")
+        authDiagnostics.removeAll()
+        appendDiagnostic("Starting auth against \(Self.backendURL)")
+        appendDiagnostic("Token length: \(token.count)")
         isLoading = true
         errorMessage = nil
         errorDetails = nil
@@ -67,7 +71,8 @@ final class AppState: ObservableObject {
     /// All state mutations are @MainActor by virtue of the class being @MainActor.
     private func performAuth(token: String) async {
         print("[AppState] performAuth: START token=\(token.prefix(8))... backendURL=\(Self.backendURL)")
-        
+        appendDiagnostic("Checking backend reachability")
+
         // Retry reachability check with internet test for iOS Simulator
         var reachable = await checkBackendReachable()
         print("[AppState] performAuth: checkBackendReachable() = \(reachable)")
@@ -80,17 +85,20 @@ final class AppState: ObservableObject {
             _ = s1.wait(timeout: .now() + 3)
             reachable = await checkBackendReachable()
             print("[AppState] performAuth: checkBackendReachable() retry = \(reachable)")
+            appendDiagnostic("Reachability retry 1: \(reachable ? "ok" : "failed")")
             if !reachable {
                 let s2 = DispatchSemaphore(value: 0)
                 DispatchQueue.global().asyncAfter(deadline: .now() + 3) { s2.signal() }
                 _ = s2.wait(timeout: .now() + 4)
                 reachable = await checkBackendReachable()
                 print("[AppState] performAuth: checkBackendReachable() retry2 = \(reachable)")
+                appendDiagnostic("Reachability retry 2: \(reachable ? "ok" : "failed")")
             }
         }
         #endif
 
         if !reachable {
+            appendDiagnostic("Backend unreachable")
             isAuthenticated = false
             isLoading = false
             loadingMessage = nil
@@ -102,6 +110,7 @@ final class AppState: ObservableObject {
         }
 
         loadingMessage = "Verifying token..."
+        appendDiagnostic("Verifying token via /api/v1/agents")
         var valid = await verifyTokenDirectly(token)
         print("[AppState] performAuth: verifyTokenDirectly() = \(valid)")
         
@@ -113,18 +122,21 @@ final class AppState: ObservableObject {
             _ = s1.wait(timeout: .now() + 3)
             valid = await verifyTokenDirectly(token)
             print("[AppState] performAuth: verifyTokenDirectly() retry = \(valid)")
+            appendDiagnostic("Token retry 1: \(valid ? "accepted" : "rejected")")
             if !valid {
                 let s2 = DispatchSemaphore(value: 0)
                 DispatchQueue.global().asyncAfter(deadline: .now() + 3) { s2.signal() }
                 _ = s2.wait(timeout: .now() + 4)
                 valid = await verifyTokenDirectly(token)
                 print("[AppState] performAuth: verifyTokenDirectly() retry2 = \(valid)")
+                appendDiagnostic("Token retry 2: \(valid ? "accepted" : "rejected")")
             }
         }
         #endif
 
         if valid {
             print("[AppState] performAuth: SUCCESS")
+            appendDiagnostic("Token accepted")
             // Set both at once — no delay, avoids SwiftUI render timing issues
             isLoading = false
             loadingMessage = nil
@@ -134,19 +146,23 @@ final class AppState: ObservableObject {
             // Store in Keychain via AuthManager
             do {
                 _ = try await authManager.signInWithToken(token)
+                appendDiagnostic("Stored token in Keychain")
             } catch {
                 print("[AppState] Failed to store token in Keychain: \(error)")
+                appendDiagnostic("Keychain store failed: \(error.localizedDescription)")
             }
             Task { await APIClient.shared.setToken(token) }
             // Fetch real user profile from backend
             await fetchCurrentUser()
+            appendDiagnostic("Auth flow completed")
             print("[AppState] performAuth: DONE — isAuthenticated=\(isAuthenticated)")
         } else {
+            appendDiagnostic("Token rejected by backend")
             isAuthenticated = false
             isLoading = false
             loadingMessage = nil
             errorMessage = "Invalid token"
-            errorDetails = "Token rejected. Make sure you're using the exact token from the ORCA MC .env file."
+            errorDetails = "Token rejected. Make sure you're using the exact token from the ORCA MC .env file.\n\nDiagnostics:\n\(authDiagnostics.joined(separator: "\n"))"
             showError = true
             UserDefaults.standard.removeObject(forKey: "orca_auth_token")
             print("[AppState] performAuth: invalid token, error shown")
@@ -159,11 +175,13 @@ final class AppState: ObservableObject {
         print("[AppState] checkBackendReachable: trying \(Self.backendURL)/health")
         if await pingEndpoint("\(Self.backendURL)/health") {
             print("[AppState] checkBackendReachable: /health → reachable!")
+            appendDiagnostic("/health reachable")
             return true
         }
         // Fallback: try /api/v1/ — 404 means API is running, which is "reachable"
         if await pingEndpoint("\(Self.backendURL)/api/v1/") {
             print("[AppState] checkBackendReachable: /api/v1/ → reachable!")
+            appendDiagnostic("/api/v1/ reachable")
             return true
         }
         print("[AppState] checkBackendReachable: UNREACHABLE!")
@@ -216,6 +234,7 @@ final class AppState: ObservableObject {
             let body = String(data: data, encoding: .utf8) ?? "(no body)"
             print("[AppState] verifyTokenDirectly: status=\(statusCode), body=\(body.prefix(200))")
 
+            appendDiagnostic("/api/v1/agents status: \(statusCode)")
             if statusCode == 401 {
                 print("[AppState] verifyTokenDirectly: TOKEN REJECTED — check if token matches backend LOCAL_AUTH_TOKEN")
                 return false
@@ -223,7 +242,16 @@ final class AppState: ObservableObject {
             return statusCode == 200
         } catch {
             print("[AppState] verifyTokenDirectly: ERROR = \(error.localizedDescription)")
+            appendDiagnostic("Token verification error: \(error.localizedDescription)")
             return false
+        }
+    }
+
+    private func appendDiagnostic(_ message: String) {
+        let stamp = ISO8601DateFormatter().string(from: Date())
+        authDiagnostics.append("[\(stamp)] \(message)")
+        if authDiagnostics.count > 20 {
+            authDiagnostics.removeFirst(authDiagnostics.count - 20)
         }
     }
 

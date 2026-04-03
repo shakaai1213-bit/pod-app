@@ -172,10 +172,14 @@ struct ContentView: View {
                     .multilineTextAlignment(.center)
 
                 if let details = appState.errorDetails, !details.isEmpty {
-                    Text(details)
-                        .font(.caption)
-                        .foregroundColor(AppTheme.secondaryText)
-                        .multilineTextAlignment(.center)
+                    ScrollView {
+                        Text(details)
+                            .font(.caption)
+                            .foregroundColor(AppTheme.secondaryText)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxHeight: 220)
                 }
 
                 Button(action: { appState.dismissError() }) {
@@ -270,14 +274,29 @@ struct LoginView: View {
                 }
 
                 // Live network status
-                if !networkStatus.isEmpty {
-                    Text(networkStatus)
-                        .font(.caption.monospaced())
-                        .foregroundColor(AppTheme.secondaryText)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(AppTheme.spacingSM)
-                        .background(AppTheme.surface)
-                        .cornerRadius(AppTheme.radiusMedium)
+                if !networkStatus.isEmpty || !appState.authDiagnostics.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        if !networkStatus.isEmpty {
+                            Text(networkStatus)
+                                .font(.caption.monospaced())
+                                .foregroundColor(AppTheme.secondaryText)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+
+                        if !appState.authDiagnostics.isEmpty {
+                            Divider()
+                                .overlay(AppTheme.border)
+                            ForEach(Array(appState.authDiagnostics.suffix(6).enumerated()), id: \.offset) { _, line in
+                                Text(line)
+                                    .font(.caption2.monospaced())
+                                    .foregroundColor(AppTheme.tertiaryText)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                    }
+                    .padding(AppTheme.spacingSM)
+                    .background(AppTheme.surface)
+                    .cornerRadius(AppTheme.radiusMedium)
                 }
 
                 Button {
