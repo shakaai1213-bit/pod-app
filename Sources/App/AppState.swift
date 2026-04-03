@@ -60,41 +60,7 @@ final class AppState: ObservableObject {
         errorMessage = nil
         errorDetails = nil
         loadingMessage = "Connecting..."
-
-        // Run auth with a reliable timeout. Uses DispatchSemaphore as clock source — avoids iOS 26 Task.sleep bug.
-        // Wrapping in Task { } so we can cancel it if timeout fires, but run on same actor to avoid race conditions.
-        let authTask = Task { @MainActor in
-            await performAuth(token: token)
-        }
-
-        // Timeout fires after 60s — enough time for proxy retries + simulator bypass to complete
-        let timedOut = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
-            DispatchQueue.global().async {
-                let semaphore = DispatchSemaphore(value: 0)
-                DispatchQueue.global().async { semaphore.signal() }
-                _ = semaphore.wait(timeout: .now() + 60)
-                continuation.resume(returning: true)
-            }
-        }
-
-        if timedOut {
-            if !isAuthenticated {
-                // Timeout fired before auth completed — cancel and show error
-                authTask.cancel()
-                print("[AppState] Auth timed out after 60s — cancelling and showing error")
-                isLoading = false
-                loadingMessage = nil
-                errorMessage = "Connection timed out"
-                errorDetails = "The request took too long. Check your network and try again."
-                showError = true
-                UserDefaults.standard.removeObject(forKey: "orca_auth_token")
-            } else {
-                // Auth completed successfully just as timeout fired — clean up loading state
-                print("[AppState] Auth completed successfully (slow but OK)")
-                isLoading = false
-                loadingMessage = nil
-            }
-        }
+        await performAuth(token: token)
     }
 
     /// Actual auth logic — called inside the timeout wrapper.

@@ -656,7 +656,7 @@ enum MockData {
                 status: .inProgress,
                 stage: .verify,
                 assigneeId: auroraId,
-                dueDate: Date().addingTimeInterval(86400 * 5),
+                dueDate: nil,
                 priority: .critical,
                 tags: ["dds", "protobuf", "nats"]
             ),
