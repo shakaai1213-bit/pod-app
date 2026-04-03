@@ -24,9 +24,7 @@ final class AppState: ObservableObject {
 
     // MARK: - Backend URL
 
-    // iOS Simulator → proxy at 192.168.4.243:19005 (Mac LAN IP, same WiFi network)
-    // Proxy binds to 192.168.4.243 so iOS Simulator can reach it over LAN
-    // Real device (iPad) → Mac Mini Tailscale IP (both on Tailscale VPN)
+    // Simulator can still use the local proxy when available, but must authenticate honestly.
     #if targetEnvironment(simulator)
     static let backendURL = "http://192.168.4.243:19005"
     #else
@@ -37,18 +35,6 @@ final class AppState: ObservableObject {
 
     init() {
         self.authManager = AuthManager(backendURL: Self.backendURL)
-        
-        // SIMULATOR: Auto-authenticate on launch — skip ALL network calls
-        // This is the ONLY reliable way to get the app working on iOS Simulator
-        #if targetEnvironment(simulator)
-        if let token = UserDefaults.standard.string(forKey: "orca_auth_token"), !token.isEmpty {
-            print("[AppState] SIMULATOR INIT — auto-authenticating with stored token")
-            self.isAuthenticated = true
-            self.selectedTab = .chat  // Start on Chat tab for demo
-            self.currentUser = TeamMember(id: UUID(), name: "Captain", avatarColor: "#6B46C1")
-            Task { await APIClient.shared.setToken(token) }
-        }
-        #endif
     }
 
     // MARK: - Auto Login
@@ -135,27 +121,7 @@ final class AppState: ObservableObject {
                 reachable = await checkBackendReachable()
                 print("[AppState] performAuth: checkBackendReachable() retry2 = \(reachable)")
             }
-            // If still unreachable after retries, use instant local auth bypass
-            if !reachable {
-                print("[AppState] performAuth: SIMULATOR — backend unreachable, using instant auth bypass")
-                isLoading = false
-                loadingMessage = nil
-                isAuthenticated = true
-                currentUser = TeamMember(id: UUID(), name: "Captain", avatarColor: "#6B46C1")
-                UserDefaults.standard.set(token, forKey: "orca_auth_token")
-                Task { await APIClient.shared.setToken(token) }
-                return
-            }
         }
-        // For simulator, also skip network auth entirely — use instant bypass
-        print("[AppState] performAuth: SIMULATOR — using instant auth bypass (backend was reachable)")
-        isLoading = false
-        loadingMessage = nil
-        isAuthenticated = true
-        currentUser = TeamMember(id: UUID(), name: "Captain", avatarColor: "#6B46C1")
-        UserDefaults.standard.set(token, forKey: "orca_auth_token")
-        Task { await APIClient.shared.setToken(token) }
-        return
         #endif
 
         if !reachable {
@@ -187,17 +153,6 @@ final class AppState: ObservableObject {
                 _ = s2.wait(timeout: .now() + 4)
                 valid = await verifyTokenDirectly(token)
                 print("[AppState] performAuth: verifyTokenDirectly() retry2 = \(valid)")
-            }
-            // Simulator fallback: if proxy is still flaky, auto-authenticate for testing
-            if !valid {
-                print("[AppState] performAuth: SIMULATOR — proxy flaky, using auth bypass")
-                isLoading = false
-                loadingMessage = nil
-                isAuthenticated = true
-                UserDefaults.standard.set(token, forKey: "orca_auth_token")
-                Task { await APIClient.shared.setToken(token) }
-                await fetchCurrentUser()
-                return
             }
         }
         #endif

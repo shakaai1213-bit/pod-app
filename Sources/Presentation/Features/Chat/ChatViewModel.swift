@@ -155,7 +155,6 @@ final class ChatViewModel {
     var replyingTo: Message?
     private var lastMessageTimestamp: Date?
     private var pollingTask: Task<Void, Never>?
-    private var typingSimTimer: Timer?
 
     // MARK: - SSE Streaming
 
@@ -170,60 +169,6 @@ final class ChatViewModel {
 
     init() {
         self.offlineQueue = OfflineQueue(modelContainer: PersistenceController.shared.container)
-        
-        // SIMULATOR: Always use hardcoded demo channels — no API calls needed
-        #if targetEnvironment(simulator)
-        let demoChs: [Channel] = [
-            Channel(
-                id: UUID(uuidString: "4a37b0e8-bd9f-419f-ad82-f133877facf9")!,
-                name: "general",
-                type: .general,
-                lastMessage: "Daily team updates and chatter",
-                lastMessageTimestamp: Date().addingTimeInterval(-120),
-                unreadCount: 0,
-                isPinned: true,
-                isMuted: false
-            ),
-            Channel(
-                id: UUID(uuidString: "3f7e0d9e-5435-4050-a60d-4ceb05f3f5db")!,
-                name: "projects",
-                type: .general,
-                lastMessage: "Project discussion and milestones",
-                lastMessageTimestamp: Date().addingTimeInterval(-600),
-                unreadCount: 1,
-                isPinned: true,
-                isMuted: false
-            ),
-            Channel(
-                id: UUID(uuidString: "b6d2d313-3b59-4d5d-ae97-f7b7aee816af")!,
-                name: "research",
-                type: .general,
-                lastMessage: "Deep dives and findings",
-                lastMessageTimestamp: Date().addingTimeInterval(-3600),
-                unreadCount: 0,
-                isPinned: false,
-                isMuted: false
-            ),
-            Channel(
-                id: UUID(),
-                name: "alerts",
-                type: .general,
-                lastMessage: "Blockers and system alerts",
-                lastMessageTimestamp: Date().addingTimeInterval(-7200),
-                unreadCount: 2,
-                isPinned: false,
-                isMuted: false
-            )
-        ]
-        self.channels = demoChs
-        // Auto-select general channel
-        if let general = channels.first(where: { $0.name == "general" }) {
-            selectedChannel = general
-        } else if let first = channels.first {
-            selectedChannel = first
-        }
-        print("[ChatViewModel] SIMULATOR: loaded \(channels.count) demo channels")
-        #endif
     }
 
     // MARK: - Polling (SSE fallback — polls for new messages when chat is open)
@@ -231,13 +176,6 @@ final class ChatViewModel {
     /// Start polling for new messages every 5 seconds
     func startPolling() {
         stopPolling()
-
-        // Simulate typing: show agent "Maui" typing briefly every 15-30s when channel is general
-        typingSimTimer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.simulateTyping()
-            }
-        }
 
         // Start SSE streaming
         startSSEStreaming()
@@ -336,26 +274,11 @@ final class ChatViewModel {
         pollingTask = nil
     }
 
-    private func simulateTyping() {
-        guard selectedChannel?.type == .general else { return }
-        let mauiTyping = TypingUser(id: "agent-maui", name: "Maui", isAgent: true)
-        if !typingUsers.contains(where: { $0.id == mauiTyping.id }) {
-            typingUsers.append(mauiTyping)
-        }
-        // Auto-clear after 3s
-        Task { @MainActor in
-            await TaskSafeSleep.sleep(seconds: 3)
-            typingUsers.removeAll { $0.id == "agent-maui" }
-        }
-    }
-
     /// Stop polling
     func stopPolling() {
         pollingTask?.cancel()
         pollingTask = nil
         typingUsers = []
-        typingSimTimer?.invalidate()
-        typingSimTimer = nil
         sseFallbackTimer?.invalidate()
         sseFallbackTimer = nil
         sseListenTask?.cancel()
@@ -507,22 +430,9 @@ final class ChatViewModel {
         isLoading = true
         errorMessage = nil
 
-        // SIMULATOR: Use mock messages instead of API calls
-        #if targetEnvironment(simulator)
-        let mockMessages = [
-            Message(channelId: channelId, authorId: UUID(), authorName: "Aloha", isAgent: true, agentId: "aloha", content: "Hey team! ORCA MC is fully operational. All systems green. 🚀", timestamp: Date().addingTimeInterval(-300)),
-            Message(channelId: channelId, authorId: UUID(), authorName: "Maui", isAgent: true, agentId: "maui", content: "Welcome to the chat! This is a live demo of the ORCA Mission Control app. The backend is connected.", timestamp: Date().addingTimeInterval(-240)),
-            Message(channelId: channelId, authorId: UUID(), authorName: "Chief", isAgent: true, agentId: "chief", content: "Trading bot running. Monitoring market conditions.", timestamp: Date().addingTimeInterval(-180)),
-            Message(channelId: channelId, authorId: UUID(), authorName: "Aloha", isAgent: true, agentId: "aloha", content: "Maui fixed the simulator auth! The pod app is working great on iOS 26.", timestamp: Date().addingTimeInterval(-60)),
-            Message(channelId: channelId, authorId: ChatViewModel.mockUserId, authorName: "Captain", content: "Great work team! This is Tony testing from the simulator. 🎉", timestamp: Date())
-        ]
-        self.messages = mockMessages
-        print("[ChatViewModel] SIMULATOR: loaded \(mockMessages.count) mock messages")
-        #else
         let repo = ChannelRepository()
         let msgs = await repo.loadMessages(channelId: channelId)
         messages = msgs
-        #endif
 
         // Apply highlighting if set
         if let highlightId = highlightedAuthorId {
