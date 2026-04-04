@@ -27,7 +27,7 @@ final class AppState: ObservableObject {
 
     // Simulator can still use the local proxy when available, but must authenticate honestly.
     #if targetEnvironment(simulator)
-    static let backendURL = "http://192.168.4.243:19005"
+    static let backendURL = "http://192.168.4.243:19002"
     #else
     static let backendURL = "http://shakas-mac-mini.tail82d30d.ts.net:8000"
     #endif
