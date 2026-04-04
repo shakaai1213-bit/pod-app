@@ -210,7 +210,7 @@ final class ChatViewModel {
                         self.stopPollingFallback()
                         // Flush any messages queued while offline
                         Task {
-                            let sentIds = await self.offlineQueue.flush()
+                            _ = await self.offlineQueue.flush()
                         }
                     case .message(let payload):
                         await self.handleSSEMessage(payload)
@@ -295,9 +295,6 @@ final class ChatViewModel {
     private func pollForNewMessages() async {
         guard let channelId = selectedChannel?.id else { return }
         guard !isLoading else { return }
-
-        let repo = ChannelRepository()
-        let latestTimestamp = messages.map(\.timestamp).max() ?? lastMessageTimestamp ?? Date.distantPast
 
         do {
             // Fetch with since parameter if backend supports it, otherwise fetch all and dedupe

@@ -54,7 +54,7 @@ struct MessageBubbleView: View {
                 }
 
                 // Reply indicator
-                if let replyTo = message.replyTo {
+                if message.replyTo != nil {
                     HStack(spacing: 4) {
                         Image(systemName: "arrowshape.turn.up.left.fill")
                             .font(.system(size: 8))
