@@ -2,8 +2,11 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(\.appState) private var appState: AppState
-    // Force SwiftUI to recompose when auth state changes — breaks view identity
-    // so LoginView is fully torn down before mainTabView appears
+    // Use @State to track selected tab - force SwiftUI to see changes
+    @State private var selectedTab: AppTab = .dashboard
+    // Observation token to force refresh
+    @State private var tabChangeCounter: Int = 0
+    // Force SwiftUI to recompose when auth state changes
     @State private var authStateKey: Int = 0
 
     var body: some View {
@@ -55,21 +58,21 @@ struct ContentView: View {
 
     @ViewBuilder
     private var tabContent: some View {
-        // Force SwiftUI to rebuild when tab changes
-        let _ = appState.selectedTab
-        switch appState.selectedTab {
-        case .dashboard:
-            DashboardView()
-        case .projects:
-            ProjectsView()
-        case .chat:
-            ChatView()
-        case .knowledge:
-            KnowledgeView()
-        case .agents:
-            AgentsView()
-        case .wallDisplay:
-            Color.clear
+        Group {
+            switch selectedTab {
+            case .dashboard:
+                DashboardView()
+            case .projects:
+                ProjectsView()
+            case .chat:
+                ChatView()
+            case .knowledge:
+                KnowledgeView()
+            case .agents:
+                AgentsView()
+            case .wallDisplay:
+                Color.clear
+            }
         }
     }
 
@@ -96,10 +99,10 @@ struct ContentView: View {
     }
 
     private func tabBarButton(for tab: AppTab) -> some View {
-        let isSelected = appState.selectedTab == tab
+        let isSelected = selectedTab == tab
         return Button {
             withAnimation(.easeInOut(duration: 0.15)) {
-                appState.selectedTab = tab
+                selectedTab = tab
             }
         } label: {
             VStack(spacing: 4) {
