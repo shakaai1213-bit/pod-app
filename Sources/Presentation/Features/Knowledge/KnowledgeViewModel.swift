@@ -251,7 +251,7 @@ final class KnowledgeViewModel {
     /// Access MockData.standards with a safety wrapper.
     /// Note: SIGTRAP crashes in static init cannot be caught — this is a best-effort fallback.
     private static func safeMockStandards() -> [Standard] {
-        // swiftlint:disable:next legacy_hashing
-        MockData.standards
+        // Return empty to avoid crash - real data will load when API is available
+        return []
     }
 }
