@@ -55,6 +55,8 @@ struct ContentView: View {
 
     @ViewBuilder
     private var tabContent: some View {
+        // Force SwiftUI to rebuild when tab changes
+        let _ = appState.selectedTab
         switch appState.selectedTab {
         case .dashboard:
             DashboardView()

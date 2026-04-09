@@ -13,7 +13,7 @@ final class AppState: ObservableObject {
     @Published var errorDetails: String?
     @Published var authDiagnostics: [String] = []
     @Published var currentUser: TeamMember?
-    @Published var selectedTab: AppTab = .dashboard
+    var selectedTab: AppTab = .dashboard
     @Published var navigationState: NavigationState = .dashboard
     @Published var showApprovalSheet = false
     @Published var pendingApprovalId: UUID?
