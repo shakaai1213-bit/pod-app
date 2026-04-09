@@ -93,7 +93,7 @@ final class OnboardingViewModel {
         }
 
         do {
-            guard let url = URL(string: "\(baseURL)/api/v1/users/me") else {
+            guard let url = URL(string: "\(baseURL)/api/v1/agents") else {
                 throw URLError(.badURL)
             }
 
@@ -120,10 +120,11 @@ final class OnboardingViewModel {
             let decoder = JSONDecoder()
             decoder.keyDecodingStrategy = .convertFromSnakeCase
 
-            let userResponse = try decoder.decode(UserResponse.self, from: data)
+            let agentsResponse = try decoder.decode(PaginatedResponse<AgentDTO>.self, from: data)
+            let preferredName = agentsResponse.items.first?.name ?? "ORCA Agent"
 
             await MainActor.run {
-                self.userName = userResponse.name ?? userResponse.username ?? "Captain"
+                self.userName = preferredName
                 self.isConnecting = false
                 self.errorMessage = nil
                 self.currentPage = OnboardingPage.ready.rawValue
