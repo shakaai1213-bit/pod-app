@@ -73,7 +73,7 @@ final class DashboardViewModel {
             }
         } catch {
             self.error = error.localizedDescription
-            agents = Self.mockAgents
+            // No fallback — show empty or error state
         }
 
         // Fetch projects
@@ -95,13 +95,9 @@ final class DashboardViewModel {
             }
         } catch {
             // Non-fatal: keep existing projects
-            if projects.isEmpty {
-                projects = Self.mockProjects
-            }
         }
 
-        activities = Self.mockActivities
-        attentionItems = Self.mockAttentionItems
+        // Don't fall back to mock data — show real data or empty
 
         isLoading = false
     }
