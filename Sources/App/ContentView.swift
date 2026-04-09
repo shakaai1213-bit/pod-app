@@ -58,21 +58,18 @@ struct ContentView: View {
 
     @ViewBuilder
     private var tabContent: some View {
-        Group {
-            switch selectedTab {
-            case .dashboard:
-                DashboardView()
-            case .projects:
-                ProjectsView()
-            case .chat:
-                ChatView()
-            case .knowledge:
-                KnowledgeView()
-            case .agents:
-                AgentsView()
-            case .wallDisplay:
-                Color.clear
-            }
+        if selectedTab == .dashboard {
+            DashboardView()
+        } else if selectedTab == .projects {
+            ProjectsView()
+        } else if selectedTab == .chat {
+            ChatView()
+        } else if selectedTab == .knowledge {
+            KnowledgeView()
+        } else if selectedTab == .agents {
+            AgentsView()
+        } else {
+            Color.clear
         }
     }
 
