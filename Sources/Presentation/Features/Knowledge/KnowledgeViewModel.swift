@@ -251,7 +251,213 @@ final class KnowledgeViewModel {
     /// Access MockData.standards with a safety wrapper.
     /// Note: SIGTRAP crashes in static init cannot be caught — this is a best-effort fallback.
     private static func safeMockStandards() -> [Standard] {
-        // Return empty to avoid crash - real data will load when API is available
-        return []
+        let novaId = UUID(uuidString: "AAAAAAAA-0000-0000-0000-000000000001") ?? UUID()
+        let now = Date()
+
+        return [
+            Standard(
+                id: UUID(uuidString: "BBBBBBBB-0001-0000-0000-000000000001") ?? UUID(),
+                title: "SOP-001: Submitting a Ticket to Maui",
+                category: .playbooks,
+                content: """
+# CHEAT-SOP-001: Submitting a Ticket to Maui
+
+**For:** All agents | **Full SOP:** `docs/SOP/SOP-001-SUBMITTING-TICKETS.md`
+
+---
+
+## What Your Ticket Needs
+
+- **Title** — one line, 80 chars max
+- **Type** — `feature` | `bugfix` | `script` | `data_pipeline` | `research` | `refactor`
+- **Priority** — `critical` | `high` | `normal` | `low`
+- **Description** — what needs to be built or fixed
+- **Acceptance Criteria** — at least 2 checkable conditions that prove it's done
+
+---
+
+## Where the Template Lives
+
+```
+~/.openclaw/workspace/tickets/TEMPLATE.md
+```
+
+Copy it. Name your file: `TICKET-NNN-short-name.md`
+Drop it in: `~/.openclaw/workspace/tickets/`
+
+---
+
+## NATS Subjects
+
+| Direction | Subject |
+|-----------|---------|
+| New ticket → Maui | Drop file + Aloha fires `service-requests.created` |
+| Maui claims it | `service-requests.claimed` |
+| Progress updates | `service-requests.progress` |
+| Direct message to Maui | `agents.maui.query` |
+
+---
+
+## What Happens Next
+
+1. Aloha detects new ticket file → notifies Maui via NATS
+2. Maui reads it and opens a Stage 2 review conversation with you
+3. You confirm scope → Stage 3 approval (you say yes before any code starts)
+4. Maui writes a pre-work doc, then executes
+5. Maui notifies you when done → you test → you sign off → Aloha closes it
+
+---
+
+**Key Rule: No sign-off from you = ticket stays open. Aloha does not close without confirmation.**
+""",
+                authorId: novaId,
+                authorName: "Nova",
+                tags: ["tickets", "workflow", "maui", "sop"],
+                version: 1,
+                createdAt: now,
+                updatedAt: now,
+                isFavorite: false
+            ),
+
+            Standard(
+                id: UUID(uuidString: "BBBBBBBB-0002-0000-0000-000000000001") ?? UUID(),
+                title: "SOP-002: Maui's Engineering Workflow",
+                category: .playbooks,
+                content: """
+# CHEAT-SOP-002: Maui's Engineering Workflow
+
+**For:** Maui (primary) + anyone tracking a ticket | **Full SOP:** `docs/SOP/SOP-ENGINEERING-TICKET-WORKFLOW.md`
+
+---
+
+## The 6-Stage Flow
+
+```
+[1] TICKET CREATED ──▶ [2] MAUI REVIEWS ──▶ [3] REQUESTER APPROVES
+                                                       │
+                              ┌────────────────────────┘
+                              ▼
+                      [4] MAUI DOCUMENTS INTENT
+                              │
+                              ▼
+                          [5] EXECUTE
+                              │
+                              ▼
+                      [6] SIGN-OFF → CLOSED
+```
+
+---
+
+## One Line Per Stage
+
+| Stage | Who Acts | Output |
+|-------|----------|--------|
+| 1 — Ticket Created | Requester | File at `~/.openclaw/workspace/tickets/TICKET-NNN.md` |
+| 2 — Maui Reviews | Maui + Requester | Questions answered, scope confirmed |
+| 3 — Approach Approved | Requester | Explicit go-ahead (NATS or direct) |
+| 4 — Pre-Work Doc | Maui | `~/.openclaw/workspace-maui/docs/WORK-TICKET-NNN.md` |
+| 5 — Execute | Maui | Code + progress updates via NATS |
+| 6 — Sign-Off | Requester | Confirms done → Aloha closes + archives |
+
+---
+
+## Key Rule
+
+> **No code before Stage 3 approval. No exceptions.**
+
+---
+
+## NATS Subjects (Progress Updates)
+
+| Event | Subject |
+|-------|---------|
+| Ticket detected | `service-requests.created` (Aloha publishes) |
+| Maui claims ticket | `service-requests.claimed` |
+| Progress (25/50/75/100%) | `service-requests.progress` |
+| Reach Maui directly | `agents.maui.query` |
+
+---
+
+**Stalled ticket?** Aloha pings if any stage sits >24h without movement. Escalates to Shaka after 48h at `todo`.
+""",
+                authorId: novaId,
+                authorName: "Nova",
+                tags: ["engineering", "maui", "workflow", "sop"],
+                version: 1,
+                createdAt: now,
+                updatedAt: now,
+                isFavorite: false
+            ),
+
+            Standard(
+                id: UUID(uuidString: "BBBBBBBB-0003-0000-0000-000000000001") ?? UUID(),
+                title: "Ticket Lifecycle: Visual Reference",
+                category: .runbooks,
+                content: """
+# CHEAT: Ticket Lifecycle
+
+**For:** Everyone | Visual reference for the full journey of any engineering ticket.
+
+---
+
+## Full Lifecycle
+
+```
+REQUESTER                 MAUI                    ALOHA
+
+Creates ticket            ·                       ·
+TICKET-NNN.md  ─────────────────────────────▶  Detects file
+                          ·                    Fires NATS →
+                          ◀────────────────────────────────
+                  Stage 2: Reviews ticket
+                  Asks clarifying questions ──▶
+Answers questions ◀──────
+
+Stage 3: APPROVAL ───────▶ Maui gets go-ahead
+(sign-off #1)              No code until this happens
+
+                          Stage 4: Writes pre-work doc
+                          WORK-TICKET-NNN.md
+
+                          Stage 5: Executes work
+                          Progress via NATS (25/50/75/100%)
+
+                  "Done. Please review." ───────────────▶
+Reviews + tests ◀──────────────────────────────────────
+
+Stage 6: SIGN-OFF ───────────────────────────▶ Aloha closes
+(sign-off #2)                                  Archives ticket
+                                               Work doc = perm record
+```
+
+---
+
+## Status Flow
+
+```
+todo → in-review → approved → in-progress → done
+                                           (or cancelled)
+```
+
+---
+
+## Sign-Off Requirements
+
+| # | Who Signs | What They're Approving |
+|---|-----------|------------------------|
+| 1 | Requester | Maui's proposed approach (Stage 3) |
+| 2 | Requester | Completed deliverable (Stage 6) |
+
+**Aloha will not close a ticket without sign-off #2 confirmed.**
+""",
+                authorId: novaId,
+                authorName: "Nova",
+                tags: ["tickets", "lifecycle", "workflow", "reference"],
+                version: 1,
+                createdAt: now,
+                updatedAt: now,
+                isFavorite: false
+            ),
+        ]
     }
 }

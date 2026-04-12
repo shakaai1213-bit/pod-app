@@ -122,7 +122,7 @@ final class SettingsViewModel {
             #if targetEnvironment(simulator)
             guard let url = URL(string: "http://127.0.0.1:19002/health") else { return }
             #else
-            guard let url = URL(string: "http://shakas-mac-mini.tail82d30d.ts.net:8000/health") else { return }
+            guard let url = URL(string: "http://100.76.196.40:8000/health") else { return }
             #endif
             var request = URLRequest(url: url)
             request.timeoutInterval = 5

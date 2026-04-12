@@ -1,10 +1,8 @@
 import SwiftUI
 
 struct ChatView: View {
-    // Match ChatViewModel.mockUserId
-    private static let currentUserId = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
-
-    @State private var viewModel = ChatViewModel()
+    // ViewModel passed in from ContentView so it survives tab switches
+    @Bindable var viewModel: ChatViewModel
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private var isIPad: Bool {
@@ -21,6 +19,12 @@ struct ChatView: View {
         }
         .task {
             await viewModel.loadChannels()
+        }
+        .onAppear {
+            // Reload channels every time the tab is shown (in case initial .task fired before auth)
+            if viewModel.channels.isEmpty {
+                Task { await viewModel.loadChannels() }
+            }
         }
         .task(id: viewModel.selectedChannel?.id) {
             if viewModel.selectedChannel != nil {
@@ -468,7 +472,9 @@ struct ChannelRowView: View {
 struct MessageThreadView: View {
     let channel: Channel
     @Bindable var viewModel: ChatViewModel
+    @Environment(\.appState) private var appState
     @State private var scrollProxy: ScrollViewProxy?
+    @State private var isKeyboardVisible = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -490,7 +496,7 @@ struct MessageThreadView: View {
             Divider()
                 .background(AppColors.border)
 
-            // Compose bar
+            // Compose bar — extra bottom padding to clear the custom tab bar overlay
             ComposeBarView(
                 channelId: channel.id.uuidString,
                 isSending: viewModel.isSending,
@@ -498,7 +504,7 @@ struct MessageThreadView: View {
                 replyingTo: viewModel.replyingTo,
                 onSend: { content, replyToId in
                     Task {
-                        await viewModel.sendMessage(channelId: channel.id, content: content, replyToId: replyToId ?? viewModel.replyingTo?.id)
+                        await viewModel.sendMessage(channelId: channel.id, content: content, replyToId: replyToId ?? viewModel.replyingTo?.id, currentUserId: appState.currentUser?.id)
                         viewModel.replyingTo = nil
                     }
                 },
@@ -506,10 +512,22 @@ struct MessageThreadView: View {
                     viewModel.replyingTo = nil
                 }
             )
+            // When keyboard is up, tab bar is hidden so no extra clearance needed
+            .padding(.bottom, isKeyboardVisible ? 8 : 82)
         }
         .background(AppColors.backgroundPrimary)
         .navigationTitle(channel.displayName)
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            for await _ in NotificationCenter.default.notifications(named: UIResponder.keyboardWillShowNotification) {
+                withAnimation(.easeOut(duration: 0.25)) { isKeyboardVisible = true }
+            }
+        }
+        .task {
+            for await _ in NotificationCenter.default.notifications(named: UIResponder.keyboardWillHideNotification) {
+                withAnimation(.easeOut(duration: 0.25)) { isKeyboardVisible = false }
+            }
+        }
     }
 
     private var threadHeader: some View {
@@ -621,7 +639,7 @@ struct MessageThreadView: View {
                             MessageBubbleView(
                                 message: message,
                                 showAvatar: showAvatar,
-                                isCurrentUser: message.authorId == ChatViewModel.mockUserId,
+                                isCurrentUser: message.authorId == (appState.currentUser?.id ?? ChatViewModel.mockUserId),
                                 onAgentTapped: {
                                     if message.authorRole == .agent {
                                         viewModel.highlightAgent(authorId: message.authorId)
@@ -749,6 +767,6 @@ struct EmptyThreadPlaceholder: View {
 // MARK: - Preview
 
 #Preview {
-    ChatView()
+    ChatView(viewModel: ChatViewModel())
         .preferredColorScheme(.dark)
 }

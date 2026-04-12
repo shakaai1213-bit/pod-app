@@ -116,7 +116,7 @@ final class AgentsViewModel {
         #if targetEnvironment(simulator)
         sseClient = LocalSSEClient(baseURL: "http://127.0.0.1:19002")
         #else
-        sseClient = LocalSSEClient(baseURL: "http://shakas-mac-mini.tail82d30d.ts.net:8000")
+        sseClient = LocalSSEClient(baseURL: "http://100.76.196.40:8000")
         #endif
         sseClient?.connect(to: "/api/v1/events/agents") { [weak self] event in
             Task { @MainActor in
@@ -172,72 +172,52 @@ final class AgentsViewModel {
         [
             Agent(
                 id: UUID(),
-                name: "Kai",
-                role: "Code Architect",
+                name: "Maui",
+                role: "Engineering Lead",
                 status: .online,
-                currentTask: "Reviewing PR #42",
+                currentTask: "TICKET-001: Voice Companion Tab",
                 lastActivity: Date().addingTimeInterval(-120),
-                skills: ["swift", "architecture", "swiftui"],
+                skills: ["swift", "swiftui", "ios", "architecture"],
                 avatarColor: "#3B82F6"
             ),
             Agent(
                 id: UUID(),
-                name: "Nova",
-                role: "Research Analyst",
+                name: "Chief",
+                role: "Head of Trading & Research",
                 status: .busy,
-                currentTask: "Gathering market data",
-                lastActivity: Date().addingTimeInterval(-300),
-                skills: ["research", "analysis", "data"],
-                avatarColor: "#A855F7"
-            ),
-            Agent(
-                id: UUID(),
-                name: "Orca",
-                role: "DevOps Engineer",
-                status: .online,
-                currentTask: nil,
+                currentTask: "Running Octopus trading strategy",
                 lastActivity: Date().addingTimeInterval(-60),
-                skills: ["kubernetes", "docker", "ci-cd", "terraform"],
-                avatarColor: "#22C55E"
-            ),
-            Agent(
-                id: UUID(),
-                name: "Pulse",
-                role: "QA Specialist",
-                status: .idle,
-                currentTask: nil,
-                lastActivity: Date().addingTimeInterval(-3600),
-                skills: ["testing", "automation", "playwright"],
+                skills: ["trading", "research", "python", "ml"],
                 avatarColor: "#F59E0B"
             ),
             Agent(
                 id: UUID(),
-                name: "Beacon",
-                role: "Documentation",
-                status: .error,
-                currentTask: "Indexing knowledge base",
-                lastActivity: Date().addingTimeInterval(-7200),
-                skills: ["docs", "markdown", "knowledge"],
-                avatarColor: "#EF4444"
-            ),
-            Agent(
-                id: UUID(),
-                name: "Mako",
-                role: "Security Analyst",
-                status: .offline,
-                currentTask: nil,
-                lastActivity: Date().addingTimeInterval(-86400),
-                skills: ["security", "audit", "compliance"],
-                avatarColor: "#64748B"
-            ),
-            Agent(
-                id: UUID(),
-                name: "Sable",
-                role: "Data Engineer",
+                name: "Aloha",
+                role: "Communications Lead",
                 status: .online,
-                currentTask: "Pipeline optimization",
-                lastActivity: Date().addingTimeInterval(-200),
-                skills: ["python", "sql", "airflow", "spark"],
+                currentTask: nil,
+                lastActivity: Date().addingTimeInterval(-300),
+                skills: ["comms", "documentation", "standards", "nats"],
+                avatarColor: "#22C55E"
+            ),
+            Agent(
+                id: UUID(),
+                name: "Aurora",
+                role: "Mission Control",
+                status: .online,
+                currentTask: "TICKET-003: Mock data sync",
+                lastActivity: Date().addingTimeInterval(-30),
+                skills: ["coordination", "architecture", "pm", "strategy"],
+                avatarColor: "#A855F7"
+            ),
+            Agent(
+                id: UUID(),
+                name: "Luna",
+                role: "Trading Intelligence (Chief's Mac)",
+                status: .idle,
+                currentTask: nil,
+                lastActivity: Date().addingTimeInterval(-3600),
+                skills: ["trading", "research", "analysis", "coordination"],
                 avatarColor: "#06B6D4"
             ),
         ]

@@ -2,12 +2,17 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(\.appState) private var appState: AppState
+    // Persistent ViewModels — survive tab switches
+    @State private var chatViewModel = ChatViewModel()
+    @State private var voiceViewModel = VoiceCompanionViewModel()
     // Use @State to track selected tab - force SwiftUI to see changes
     @State private var selectedTab: AppTab = .dashboard
     // Observation token to force refresh
     @State private var tabChangeCounter: Int = 0
     // Force SwiftUI to recompose when auth state changes
     @State private var authStateKey: Int = 0
+    // Hide tab bar when keyboard is visible
+    @State private var isKeyboardVisible = false
 
     var body: some View {
         ZStack {
@@ -47,12 +52,25 @@ struct ContentView: View {
 
     private var mainTabView: some View {
         ZStack(alignment: .bottom) {
-            // Tab content
+            // Tab content — ignore container safe areas (notch/home indicator) but NOT keyboard
             tabContent
-                .ignoresSafeArea()
+                .ignoresSafeArea(.container, edges: .all)
 
-            // Custom tab bar
-            customTabBar
+            // Custom tab bar — hidden when keyboard is up
+            if !isKeyboardVisible {
+                customTabBar
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .task {
+            for await _ in NotificationCenter.default.notifications(named: UIResponder.keyboardWillShowNotification) {
+                withAnimation(.easeOut(duration: 0.25)) { isKeyboardVisible = true }
+            }
+        }
+        .task {
+            for await _ in NotificationCenter.default.notifications(named: UIResponder.keyboardWillHideNotification) {
+                withAnimation(.easeOut(duration: 0.25)) { isKeyboardVisible = false }
+            }
         }
     }
 
@@ -63,11 +81,17 @@ struct ContentView: View {
         } else if selectedTab == .projects {
             ProjectsView()
         } else if selectedTab == .chat {
-            ChatView()
-        } else if selectedTab == .knowledge {
-            KnowledgeView()
+            ChatView(viewModel: chatViewModel)
+        } else if selectedTab == .tickets {
+            TicketsView()
         } else if selectedTab == .agents {
             AgentsView()
+        } else if selectedTab == .knowledge {
+            KnowledgeView()
+        } else if selectedTab == .voice {
+            VoiceCompanionView(viewModel: voiceViewModel)
+        } else if selectedTab == .trading {
+            TradingView()
         } else {
             Color.clear
         }
@@ -92,7 +116,7 @@ struct ContentView: View {
     }
 
     private var visibleTabs: [AppTab] {
-        [.dashboard, .projects, .chat, .knowledge, .agents]
+        [.dashboard, .chat, .tickets, .agents, .projects, .voice, .trading]
     }
 
     private func tabBarButton(for tab: AppTab) -> some View {
@@ -331,7 +355,7 @@ struct LoginView: View {
 
             Spacer()
 
-            Text("Connecting via Tailscale: shakas-mac-mini.tail82d30d.ts.net:8000")
+            Text("Connecting via Tailscale: 100.76.196.40:8000")
                 .font(.caption)
                 .foregroundColor(AppTheme.tertiaryText)
                 .padding(.bottom, AppTheme.spacingLG)

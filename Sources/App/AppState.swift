@@ -29,12 +29,26 @@ final class AppState: ObservableObject {
     #if targetEnvironment(simulator)
     static let backendURL = "http://192.168.4.243:19002"
     #else
-    static let backendURL = "http://shakas-mac-mini.tail82d30d.ts.net:8000"
+    static let backendURL = "http://100.76.196.40:8000"
     #endif
 
     // MARK: - Initialization
 
     init() {
+        // Force re-auth: clear stale tokens (UserDefaults + Keychain) from previous backend config
+        let resetKey = "token_reset_v3"
+        if !UserDefaults.standard.bool(forKey: resetKey) {
+            UserDefaults.standard.removeObject(forKey: "orca_auth_token")
+            UserDefaults.standard.removeObject(forKey: "stored_user_ids")
+            // Nuke all Keychain items for this app
+            let secClasses = [kSecClassGenericPassword, kSecClassInternetPassword]
+            for secClass in secClasses {
+                let query: [String: Any] = [kSecClass as String: secClass]
+                SecItemDelete(query as CFDictionary)
+            }
+            UserDefaults.standard.set(true, forKey: resetKey)
+            print("[AppState] Cleared ALL stale auth tokens (UserDefaults + Keychain)")
+        }
         self.authManager = AuthManager(backendURL: Self.backendURL)
     }
 
@@ -79,17 +93,13 @@ final class AppState: ObservableObject {
         
         #if targetEnvironment(simulator)
         if !reachable {
-            // Task.sleep is broken on iOS 26 — use DispatchSemaphore for reliable delays
-            let s1 = DispatchSemaphore(value: 0)
-            DispatchQueue.global().asyncAfter(deadline: .now() + 2) { s1.signal() }
-            _ = s1.wait(timeout: .now() + 3)
+            // Task.sleep is broken on iOS 26 — use async dispatch delays instead.
+            await asyncDelay(seconds: 2)
             reachable = await checkBackendReachable()
             print("[AppState] performAuth: checkBackendReachable() retry = \(reachable)")
             appendDiagnostic("Reachability retry 1: \(reachable ? "ok" : "failed")")
             if !reachable {
-                let s2 = DispatchSemaphore(value: 0)
-                DispatchQueue.global().asyncAfter(deadline: .now() + 3) { s2.signal() }
-                _ = s2.wait(timeout: .now() + 4)
+                await asyncDelay(seconds: 3)
                 reachable = await checkBackendReachable()
                 print("[AppState] performAuth: checkBackendReachable() retry2 = \(reachable)")
                 appendDiagnostic("Reachability retry 2: \(reachable ? "ok" : "failed")")
@@ -116,17 +126,13 @@ final class AppState: ObservableObject {
         
         #if targetEnvironment(simulator)
         if !valid {
-            // Task.sleep is broken on iOS 26 — use DispatchSemaphore for reliable delays
-            let s1 = DispatchSemaphore(value: 0)
-            DispatchQueue.global().asyncAfter(deadline: .now() + 2) { s1.signal() }
-            _ = s1.wait(timeout: .now() + 3)
+            // Task.sleep is broken on iOS 26 — use async dispatch delays instead.
+            await asyncDelay(seconds: 2)
             valid = await verifyTokenDirectly(token)
             print("[AppState] performAuth: verifyTokenDirectly() retry = \(valid)")
             appendDiagnostic("Token retry 1: \(valid ? "accepted" : "rejected")")
             if !valid {
-                let s2 = DispatchSemaphore(value: 0)
-                DispatchQueue.global().asyncAfter(deadline: .now() + 3) { s2.signal() }
-                _ = s2.wait(timeout: .now() + 4)
+                await asyncDelay(seconds: 3)
                 valid = await verifyTokenDirectly(token)
                 print("[AppState] performAuth: verifyTokenDirectly() retry2 = \(valid)")
                 appendDiagnostic("Token retry 2: \(valid ? "accepted" : "rejected")")
@@ -138,22 +144,21 @@ final class AppState: ObservableObject {
             print("[AppState] performAuth: SUCCESS")
             appendDiagnostic("Token accepted")
             // Set both at once — no delay, avoids SwiftUI render timing issues
+            // Set token BEFORE isAuthenticated=true so ChatViewModel has it when it loads
+            await APIClient.shared.setToken(token)
+            UserDefaults.standard.set(token, forKey: "orca_auth_token")
             isLoading = false
             loadingMessage = nil
             isAuthenticated = true
-            // Store in UserDefaults for auto-login on next launch
-            UserDefaults.standard.set(token, forKey: "orca_auth_token")
-            // Store in Keychain via AuthManager
-            do {
-                _ = try await authManager.signInWithToken(token)
-                appendDiagnostic("Stored token in Keychain")
-            } catch {
-                print("[AppState] Failed to store token in Keychain: \(error)")
-                appendDiagnostic("Keychain store failed: \(error.localizedDescription)")
+            // Store in Keychain and fetch user profile in background — don't block auth
+            Task {
+                do {
+                    _ = try await authManager.signInWithToken(token)
+                } catch {
+                    print("[AppState] Keychain store failed (non-fatal): \(error)")
+                }
+                await fetchCurrentUser()
             }
-            Task { await APIClient.shared.setToken(token) }
-            // Fetch real user profile from backend
-            await fetchCurrentUser()
             appendDiagnostic("Auth flow completed")
             print("[AppState] performAuth: DONE — isAuthenticated=\(isAuthenticated)")
         } else {
@@ -255,6 +260,14 @@ final class AppState: ObservableObject {
         }
     }
 
+    private func asyncDelay(seconds: TimeInterval) async {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global().asyncAfter(deadline: .now() + seconds) {
+                continuation.resume()
+            }
+        }
+    }
+
     // MARK: - User Profile
 
     /// Fetches the authenticated user's profile from the backend and updates currentUser.
@@ -297,7 +310,9 @@ final class AppState: ObservableObject {
         case .projects: navigationState = .projects(taskId: nil)
         case .knowledge: navigationState = .knowledge(standardId: nil)
         case .agents: navigationState = .agents(agentId: nil)
-        case .wallDisplay: break
+        case .tickets: break
+        case .voice: break
+        case .trading: break
         }
     }
 

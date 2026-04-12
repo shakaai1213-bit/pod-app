@@ -46,12 +46,21 @@ struct ChannelDTO: Codable, Identifiable {
     let name: String
     let type: DTOChatChannelType
     let description: String?
-    let unreadCount: Int
+    var unreadCount: Int = 0
     // API doesn't return isPinned — default to false
     var isPinned: Bool = false
 
     enum CodingKeys: String, CodingKey {
         case id, name, type, description, unreadCount
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        type = try container.decodeIfPresent(DTOChatChannelType.self, forKey: .type) ?? .general
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        unreadCount = try container.decodeIfPresent(Int.self, forKey: .unreadCount) ?? 0
     }
 }
 

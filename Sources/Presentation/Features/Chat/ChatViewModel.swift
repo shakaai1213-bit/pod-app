@@ -23,7 +23,7 @@ struct Channel: Identifiable, Hashable, Sendable {
         }
     }
 
-    var displayName: String { type.rawValue }
+    var displayName: String { name }
 }
 
 enum ChatChannelType: String, CaseIterable, Sendable {
@@ -162,6 +162,8 @@ final class ChatViewModel {
     private var sseListenTask: Task<Void, Never>?
     private var sseFallbackTimer: Timer?
     private var sseConnected = false
+    private var sseReconnectTask: Task<Void, Never>?
+    private var sseLastConnectedAt: Date?
 
     // MARK: - Offline Queue
 
@@ -195,35 +197,51 @@ final class ChatViewModel {
         guard let channelId = selectedChannel?.id else { return }
         guard let token = UserDefaults.standard.string(forKey: "orca_auth_token") else { return }
 
-        sseStreamManager = SSEStreamManager()
-        let manager = sseStreamManager!
-
         sseListenTask = Task { @MainActor in
-            do {
-                let baseURL = AppState.backendURL
-                let events = await manager.connect(channelId: channelId.uuidString, token: token, baseURL: baseURL)
+            var backoffNanos: UInt64 = 2_000_000_000  // start at 2s
 
-                for try await event in events {
-                    switch event {
-                    case .connected:
-                        self.sseConnected = true
-                        self.stopPollingFallback()
-                        // Flush any messages queued while offline
-                        Task {
-                            _ = await self.offlineQueue.flush()
+            while !Task.isCancelled {
+                // Fresh manager each reconnect attempt
+                let manager = SSEStreamManager()
+                self.sseStreamManager = manager
+
+                do {
+                    let baseURL = AppState.backendURL
+                    let events = await manager.connect(channelId: channelId.uuidString, token: token, baseURL: baseURL)
+
+                    for try await event in events {
+                        if Task.isCancelled { return }
+                        switch event {
+                        case .connected:
+                            self.sseConnected = true
+                            self.sseLastConnectedAt = Date()
+                            self.stopPollingFallback()
+                            backoffNanos = 2_000_000_000  // reset on successful connect
+                            Task { _ = await self.offlineQueue.flush() }
+                        case .message(let payload):
+                            await self.handleSSEMessage(payload)
+                        case .keepalive:
+                            break
+                        case .error(let error):
+                            print("[ChatViewModel] SSE error: \(error.localizedDescription)")
                         }
-                    case .message(let payload):
-                        await self.handleSSEMessage(payload)
-                    case .keepalive:
-                        break
-                    case .error(let error):
-                        print("[ChatViewModel] SSE error: \(error.localizedDescription)")
-                        self.sseConnected = false
                     }
+                } catch {
+                    print("[ChatViewModel] SSE stream ended: \(error.localizedDescription)")
                 }
-            } catch {
-                print("[ChatViewModel] SSE stream ended: \(error.localizedDescription)")
-                self.sseConnected = false
+
+                if Task.isCancelled { break }
+
+                // Only flip the indicator to OFFLINE if we've been disconnected longer than the backoff
+                // This prevents the OFFLINE flash during brief reconnects
+                let reconnectDelay = backoffNanos
+                try? await Task.sleep(nanoseconds: reconnectDelay)
+
+                // If still not cancelled after the wait, mark offline briefly then reconnect
+                if !Task.isCancelled {
+                    self.sseConnected = false
+                }
+                backoffNanos = min(backoffNanos * 2, 30_000_000_000)
             }
         }
     }
@@ -283,7 +301,10 @@ final class ChatViewModel {
         sseFallbackTimer = nil
         sseListenTask?.cancel()
         sseListenTask = nil
+        sseReconnectTask?.cancel()
+        sseReconnectTask = nil
         sseConnected = false
+        sseLastConnectedAt = nil
         if let mgr = sseStreamManager {
             Task { await mgr.disconnect() }
         }
@@ -429,14 +450,19 @@ final class ChatViewModel {
 
         let repo = ChannelRepository()
         let msgs = await repo.loadMessages(channelId: channelId)
-        messages = msgs
 
-        // Apply highlighting if set
-        if let highlightId = highlightedAuthorId {
-            messages = messages.map { msg in
-                var m = msg
-                m.isHighlighted = (m.authorId == highlightId)
-                return m
+        // Only replace if we actually got messages back — never wipe existing messages
+        // with an empty result (avoids pull-to-refresh clearing the thread on network hiccup)
+        if !msgs.isEmpty {
+            messages = msgs
+
+            // Apply highlighting if set
+            if let highlightId = highlightedAuthorId {
+                messages = messages.map { msg in
+                    var m = msg
+                    m.isHighlighted = (m.authorId == highlightId)
+                    return m
+                }
             }
         }
 
@@ -444,7 +470,7 @@ final class ChatViewModel {
     }
 
     @MainActor
-    func sendMessage(channelId: UUID, content: String, replyToId: UUID? = nil) async {
+    func sendMessage(channelId: UUID, content: String, replyToId: UUID? = nil, currentUserId: UUID? = nil) async {
         guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
 
         isSending = true
@@ -454,7 +480,7 @@ final class ChatViewModel {
         let newMessage = Message(
             id: queueEntryId,
             channelId: channelId,
-            authorId: ChatViewModel.mockUserId,
+            authorId: currentUserId ?? ChatViewModel.mockUserId,
             authorName: "Me",
             authorRole: .human,
             content: content,

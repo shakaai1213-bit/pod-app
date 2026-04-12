@@ -4,29 +4,35 @@ enum AppTab: String, CaseIterable, Hashable {
     case dashboard
     case projects
     case chat
-    case knowledge
+    case tickets
     case agents
-    case wallDisplay
+    case knowledge
+    case voice
+    case trading
 
     var title: String {
         switch self {
         case .dashboard: return "Dashboard"
-        case .projects: return "Projects"
-        case .chat: return "Chat"
+        case .projects:  return "Projects"
+        case .chat:      return "Chat"
+        case .tickets:   return "Tickets"
+        case .agents:    return "Agents"
         case .knowledge: return "Knowledge"
-        case .agents: return "Agents"
-        case .wallDisplay: return "Wall Display"
+        case .voice:     return "Voice"
+        case .trading:   return "Trading"
         }
     }
 
     var icon: String {
         switch self {
         case .dashboard: return "house.fill"
-        case .projects: return "rectangle.3.group.fill"
-        case .chat: return "bubble.left.and.bubble.right.fill"
+        case .projects:  return "rectangle.3.group.fill"
+        case .chat:      return "bubble.left.and.bubble.right.fill"
+        case .tickets:   return "ticket.fill"
+        case .agents:    return "cpu.fill"
         case .knowledge: return "books.vertical.fill"
-        case .agents: return "cpu.fill"
-        case .wallDisplay: return "tv.fill"
+        case .voice:     return "waveform"
+        case .trading:   return "chart.line.uptrend.xyaxis"
         }
     }
 }

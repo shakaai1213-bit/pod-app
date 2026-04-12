@@ -249,7 +249,7 @@ final class AuthManager {
     #if targetEnvironment(simulator)
     private let baseURL = "http://127.0.0.1:19002"
     #else
-    private let baseURL = "http://shakas-mac-mini.tail82d30d.ts.net:8000"
+    private let baseURL = "http://100.76.196.40:8000"
     #endif
 
     // MARK: - Initialization
@@ -263,7 +263,7 @@ final class AuthManager {
         #if targetEnvironment(simulator)
         return "http://127.0.0.1:19002"
         #else
-        return "http://shakas-mac-mini.tail82d30d.ts.net:8000"
+        return "http://100.76.196.40:8000"
         #endif
     }
 

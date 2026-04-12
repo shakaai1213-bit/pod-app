@@ -34,7 +34,7 @@ actor APIClient {
     #if targetEnvironment(simulator)
     private let baseURL = "http://127.0.0.1:19002"
     #else
-    private let baseURL = "http://shakas-mac-mini.tail82d30d.ts.net:8000"
+    private let baseURL = "http://100.76.196.40:8000"
     #endif
     private let session: URLSession
     private let decoder: JSONDecoder
@@ -115,8 +115,8 @@ actor APIClient {
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        // Read token directly from actor state at request-build time
-        let currentToken = self.authToken
+        // Read token from actor state, fall back to UserDefaults if not set in memory
+        let currentToken = self.authToken ?? UserDefaults.standard.string(forKey: "orca_auth_token")
         if let token = currentToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             request.setValue(token, forHTTPHeaderField: "X-Api-Key")

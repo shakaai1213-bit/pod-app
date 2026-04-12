@@ -1,4 +1,5 @@
 import SwiftUI
+import Speech
 
 // MARK: - Typing User
 
@@ -51,16 +52,14 @@ struct ComposeBarView: View {
     let onCancelReply: () -> Void
 
     @State private var text: String = ""
+    @State private var editorId = UUID()  // force TextEditor to reset on send
     @FocusState private var isFocused: Bool
     @State private var showAgentMentionPicker = false
     @State private var showAttachmentSheet = false
+    @StateObject private var speech = SpeechRecognizer()
 
-    // Agents available for mention
-    private let agents = [
-        MentionCandidate(id: "agent-maui", name: "Maui", icon: "cpu"),
-        MentionCandidate(id: "agent-clio", name: "Clio", icon: "book"),
-        MentionCandidate(id: "agent-orca", name: "Orca", icon: "water.waves"),
-    ]
+    // Agents loaded from the backend
+    @State private var agents: [MentionCandidate] = []
 
     private var canSend: Bool {
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending
@@ -102,9 +101,30 @@ struct ComposeBarView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Agent mention picker — sits ABOVE compose bar, floats up over messages
+            if showAgentMentionPicker {
+                agentMentionPopover
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 4)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+
             // Typing indicator
             if !typingUsers.isEmpty {
                 typingIndicator
+            }
+
+            // Voice recording indicator
+            if speech.isRecording {
+                VoiceInputIndicator(isRecording: $speech.isRecording) {
+                    speech.stopRecording()
+                    if !speech.transcript.isEmpty {
+                        text = speech.transcript
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
 
             Divider()
@@ -119,11 +139,17 @@ struct ComposeBarView: View {
 
                 // Bottom action row
                 HStack(spacing: 4) {
-                    // Agent mention
-                    agentMentionButton
+                    // Agent mention (only show if agents are loaded)
+                    if !agents.isEmpty {
+                        agentMentionButton
+                    }
 
-                    // Send button
-                    sendButton
+                    // Mic or Send
+                    if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending {
+                        micButton
+                    } else {
+                        sendButton
+                    }
                 }
             }
             .padding(.horizontal, 12)
@@ -131,22 +157,26 @@ struct ComposeBarView: View {
             .padding(.bottom, 8)
             .background(AppColors.backgroundSecondary)
         }
-        .overlay(alignment: .top) {
-            if showAgentMentionPicker {
-                agentMentionPopover
-                    .padding(.horizontal, 12)
-                    .padding(.top, 4)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-            }
-        }
         .sheet(isPresented: $showAttachmentSheet) {
             AttachmentPickerView { image in
-                // Handle image attachment
                 showAttachmentSheet = false
             }
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
         }
+        .onChange(of: speech.transcript) { _, newValue in
+            // Live preview while recording
+            if speech.isRecording && !newValue.isEmpty {
+                text = newValue
+            }
+        }
+        .task {
+            await speech.requestPermissions()
+        }
+        .task {
+            await loadAgents()
+        }
+        .animation(.easeInOut(duration: 0.2), value: speech.isRecording)
     }
 
     // MARK: - Attach Button
@@ -187,18 +217,16 @@ struct ComposeBarView: View {
                     .frame(minHeight: 36, maxHeight: 120)
                     .fixedSize(horizontal: false, vertical: true)
                     .focused($isFocused)
+                    .id(editorId)
                     .onChange(of: text) { _, newValue in
                         // Limit to ~5 lines visually by constraining height
                         // TextEditor naturally handles scrolling
                     }
 
-                // Voice input overlay (tap-hold on empty field)
+                // Placeholder — no hit-testing so taps pass through to TextEditor
                 if text.isEmpty {
                     Color.clear
-                        .contentShape(Rectangle())
-                        .onLongPressGesture(minimumDuration: 0.3) {
-                            // Voice input would trigger here
-                        }
+                        .allowsHitTesting(false)
                 }
             }
             .background(AppColors.backgroundTertiary)
@@ -343,6 +371,33 @@ struct ComposeBarView: View {
         .shadow(color: Color.black.opacity(0.3), radius: 12, x: 0, y: 4)
     }
 
+    // MARK: - Mic Button
+
+    private var micButton: some View {
+        Button {
+            if speech.isRecording {
+                speech.stopRecording()
+                if !speech.transcript.isEmpty {
+                    text = speech.transcript
+                }
+            } else {
+                isFocused = false
+                speech.startRecording()
+            }
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(speech.isRecording ? AppColors.accentDanger : AppColors.backgroundTertiary)
+                    .frame(width: 36, height: 36)
+                Image(systemName: speech.isRecording ? "stop.fill" : "mic.fill")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(speech.isRecording ? .white : AppColors.textSecondary)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(speech.permissionDenied)
+    }
+
     // MARK: - Send Button
 
     private var sendButton: some View {
@@ -351,6 +406,8 @@ struct ComposeBarView: View {
             guard !message.isEmpty else { return }
             onSend(message, replyingTo?.id)
             text = ""
+            speech.transcript = ""
+            editorId = UUID()  // force TextEditor to visually clear
         } label: {
             ZStack {
                 Circle()
@@ -376,6 +433,45 @@ struct ComposeBarView: View {
         }
         .buttonStyle(.plain)
         .disabled(!canSend)
+    }
+
+    // MARK: - Agent Loading
+
+    private func loadAgents() async {
+        // Nova is always available as an on-demand assistant
+        let nova = MentionCandidate(id: "nova", name: "Nova", icon: "sparkle")
+
+        do {
+            let response: PaginatedResponse<AgentDTO> = try await APIClient.shared.get(path: "/api/v1/agents")
+            var candidates = response.items.map { dto in
+                MentionCandidate(
+                    id: dto.id,
+                    name: dto.name.prefix(1).uppercased() + dto.name.dropFirst(),
+                    icon: iconForAgent(dto.name)
+                )
+            }
+            // Prepend Nova if not already in the list
+            if !candidates.contains(where: { $0.name.lowercased() == "nova" }) {
+                candidates.insert(nova, at: 0)
+            }
+            agents = candidates
+        } catch {
+            // Fall back to just Nova
+            agents = [nova]
+        }
+    }
+
+    private func iconForAgent(_ name: String) -> String {
+        switch name.lowercased() {
+        case "nova":    return "sparkle"
+        case "maui":    return "wrench.and.screwdriver"
+        case "aloha":   return "doc.text"
+        case "aurora":  return "sparkles"
+        case "shaka":   return "person.circle"
+        case "chief":   return "chart.line.uptrend.xyaxis"
+        case "rooster": return "shield"
+        default:        return "cpu"
+        }
     }
 
     // MARK: - Helpers
