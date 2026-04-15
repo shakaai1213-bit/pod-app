@@ -23,24 +23,33 @@ actor AgentChatService {
         self.agent = agent
     }
 
-    // MARK: - Send message via OpenClaw webhook injection
+    // MARK: - Send message via OpenClaw gateway OpenAI-compatible endpoint
 
-    /// Sends a message to the agent by injecting it into their OpenClaw session.
+    /// Sends a message to the agent via the gateway's /v1/chat/completions endpoint.
     /// Returns an AsyncThrowingStream of response tokens as they arrive via SSE.
     func send(message: String, history: [(role: String, content: String)] = []) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             Task {
                 do {
-                    // Build the enriched prompt with conversation history
-                    var prompt = ""
-                    for msg in history.suffix(20) {  // last 20 messages for context
-                        let prefix = msg.role == "user" ? "Human" : agent.name
-                        prompt += "[\(prefix)]: \(msg.content)\n\n"
+                    // Build messages array with conversation history
+                    var messages: [[String: Any]] = []
+                    
+                    // System prompt for agent context
+                    messages.append([
+                        "role": "system",
+                        "content": "You are \(agent.name), \(agent.role) on the ORCA platform. You are having a 1:1 conversation with Tony (The Captain). Be concise, direct, and helpful. Tony values brevity and execution over narration."
+                    ])
+                    
+                    // Add conversation history (last 20 messages)
+                    for msg in history.suffix(20) {
+                        messages.append(["role": msg.role, "content": msg.content])
                     }
-                    prompt += "[Human]: \(message)"
+                    
+                    // Add the new user message
+                    messages.append(["role": "user", "content": message])
 
-                    // POST to OpenClaw gateway's webhook endpoint
-                    let url = URL(string: "\(agent.endpoint.baseURL)/hooks/agent")!
+                    // POST to OpenClaw gateway's OpenAI-compatible endpoint
+                    let url = URL(string: "\(agent.endpoint.baseURL)/v1/chat/completions")!
                     var request = URLRequest(url: url)
                     request.httpMethod = "POST"
                     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -48,30 +57,30 @@ actor AgentChatService {
                     request.timeoutInterval = 120
 
                     let body: [String: Any] = [
-                        "to": agent.id,
-                        "text": message,
-                        "from": "tony",
-                        "subject": "dm.\(agent.id)"
+                        "model": "openclaw/\(agent.id)",
+                        "messages": messages,
+                        "stream": true
                     ]
                     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-                    let (data, response) = try await URLSession.shared.data(for: request)
+                    let (bytes, response) = try await URLSession.shared.bytes(for: request)
 
                     if let http = response as? HTTPURLResponse, http.statusCode != 200 {
                         continuation.finish(throwing: AgentChatError.httpError(http.statusCode))
                         return
                     }
 
-                    // Parse the response — OpenClaw webhook returns { ok: true, ... }
-                    if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                       let ok = json["ok"] as? Bool, ok {
-                        // Message delivered. Agent will process async.
-                        // For v1, yield a confirmation. In v2, we'll SSE-subscribe for the response.
-                        continuation.yield("Message delivered to \(agent.name). Processing...")
-                        continuation.finish()
-                    } else {
-                        continuation.finish(throwing: AgentChatError.noResponse)
+                    // Parse SSE stream
+                    for try await line in bytes.lines {
+                        if line.hasPrefix("data: ") {
+                            let json = String(line.dropFirst(6))
+                            if json == "[DONE]" { break }
+                            if let content = Self.parseContentDelta(json) {
+                                continuation.yield(content)
+                            }
+                        }
                     }
+                    continuation.finish()
                 } catch {
                     continuation.finish(throwing: error)
                 }
