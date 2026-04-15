@@ -179,7 +179,7 @@ struct ConversationView: View {
             // Compose bar
             composeBar
         }
-        .padding(.bottom, sizeClass == .compact ? tabBarPadding : 0)
+        .padding(.bottom, tabBarPadding)
         .background(AppColors.backgroundPrimary)
         .navigationTitle(agent.name)
         .navigationBarTitleDisplayMode(.inline)
