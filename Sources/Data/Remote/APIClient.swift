@@ -29,13 +29,8 @@ struct EmptyResponse: Codable {}
 actor APIClient {
     static let shared = APIClient()
 
-    // Physical device: use Tailscale direct IP (avoids MagicDNS issues on iPad)
-    // Simulator: use proxy (127.0.0.1:19002 → 192.168.4.243:8000)
-    #if targetEnvironment(simulator)
-    private let baseURL = "http://127.0.0.1:19002"
-    #else
+    // Physical device OR Simulator: use Tailscale URL (works from both)
     private let baseURL = "http://100.76.196.40:8000"
-    #endif
     private let session: URLSession
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
