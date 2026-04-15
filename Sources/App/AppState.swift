@@ -18,6 +18,7 @@ final class AppState: ObservableObject {
     @Published var showApprovalSheet = false
     @Published var pendingApprovalId: UUID?
     @Published var pendingNotification: NotificationAction?
+    @Published var pendingDirectChatAgentId: String?
 
     // MARK: - Auth Manager (Keychain-backed)
 

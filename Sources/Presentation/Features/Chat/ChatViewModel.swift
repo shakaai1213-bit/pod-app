@@ -20,6 +20,7 @@ struct Channel: Identifiable, Hashable, Sendable {
         case .agents:    return "cpu"
         case .research:  return "magnifyingglass"
         case .alerts:    return "bell"
+        case .direct:    return "person.fill"
         }
     }
 
@@ -32,6 +33,7 @@ enum ChatChannelType: String, CaseIterable, Sendable {
     case agents   = "agents"
     case research = "research"
     case alerts   = "alerts"
+    case direct   = "direct"
 }
 
 // MARK: - Message
@@ -365,11 +367,15 @@ final class ChatViewModel {
     // MARK: - Computed
 
     var pinnedChannels: [Channel] {
-        channels.filter(\.isPinned)
+        channels.filter { $0.isPinned && $0.type != .direct }
     }
 
     var unpinnedChannels: [Channel] {
-        channels.filter { !$0.isPinned }
+        channels.filter { !$0.isPinned && $0.type != .direct }
+    }
+
+    var directChannels: [Channel] {
+        channels.filter { $0.type == .direct }
     }
 
     var currentUserIsAgent: Bool {
@@ -493,7 +499,7 @@ final class ChatViewModel {
         // Try to send via API; if offline, the message stays queued
         let repo = ChannelRepository()
         do {
-            try await repo.sendMessage(channelId: channelId, content: content, replyToId: replyToId)
+            _ = try await repo.sendMessage(channelId: channelId, content: content, replyToId: replyToId)
             // Mark as sent in queue and update UI
             offlineQueue.remove(id: queueEntryId)
             updateMessageQueueState(id: queueEntryId, state: .sent)
@@ -523,7 +529,7 @@ final class ChatViewModel {
 
         let repo = ChannelRepository()
         do {
-            try await repo.sendMessage(channelId: msg.channelId, content: msg.content, replyToId: msg.replyTo)
+            _ = try await repo.sendMessage(channelId: msg.channelId, content: msg.content, replyToId: msg.replyTo)
             offlineQueue.remove(id: id)
             updateMessageQueueState(id: id, state: .sent)
         } catch {

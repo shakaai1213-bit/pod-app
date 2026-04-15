@@ -79,6 +79,12 @@ enum MockData {
     private static let agentsChannelId = UUID(uuidString: "c0000001-0000-0000-0000-000000000004")!
     private static let alertsChannelId = UUID(uuidString: "c0000001-0000-0000-0000-000000000005")!
     private static let chiefDeskChannelId = UUID(uuidString: "c0000001-0000-0000-0000-000000000006")!
+    // 1:1 Direct Message channels
+    private static let dmAuroraId = UUID(uuidString: "d0000001-0000-0000-0000-000000000001")!
+    private static let dmMauiId   = UUID(uuidString: "d0000001-0000-0000-0000-000000000002")!
+    private static let dmAlohaId  = UUID(uuidString: "d0000001-0000-0000-0000-000000000003")!
+    private static let dmLunaId   = UUID(uuidString: "d0000001-0000-0000-0000-000000000004")!
+    private static let dmChiefId  = UUID(uuidString: "d0000001-0000-0000-0000-000000000005")!
 
     // MARK: - Messages
 
@@ -266,6 +272,57 @@ enum MockData {
             type: .general,
             lastMessage: messages[5].content,
             lastMessageTimestamp: messages[5].timestamp,
+            unreadCount: 0,
+            isPinned: false,
+            isMuted: false
+        ),
+        // MARK: 1:1 Direct Message channels
+        Channel(
+            id: dmAuroraId,
+            name: "Aurora",
+            type: .direct,
+            lastMessage: "Whisplay build is passing in simulator ✅",
+            lastMessageTimestamp: Date().addingTimeInterval(-1800),
+            unreadCount: 1,
+            isPinned: true,
+            isMuted: false
+        ),
+        Channel(
+            id: dmMauiId,
+            name: "Maui",
+            type: .direct,
+            lastMessage: "TICKET-001 committed + pushed to main",
+            lastMessageTimestamp: Date().addingTimeInterval(-3600),
+            unreadCount: 0,
+            isPinned: false,
+            isMuted: false
+        ),
+        Channel(
+            id: dmAlohaId,
+            name: "Aloha",
+            type: .direct,
+            lastMessage: "NATS registry update ready for review",
+            lastMessageTimestamp: Date().addingTimeInterval(-7200),
+            unreadCount: 0,
+            isPinned: false,
+            isMuted: false
+        ),
+        Channel(
+            id: dmLunaId,
+            name: "Luna",
+            type: .direct,
+            lastMessage: "Owl overnight run complete — 3 signals flagged",
+            lastMessageTimestamp: Date().addingTimeInterval(-28800),
+            unreadCount: 2,
+            isPinned: true,
+            isMuted: false
+        ),
+        Channel(
+            id: dmChiefId,
+            name: "Chief",
+            type: .direct,
+            lastMessage: "Octopus P&L up 4.2% this week",
+            lastMessageTimestamp: Date().addingTimeInterval(-43200),
             unreadCount: 0,
             isPinned: false,
             isMuted: false

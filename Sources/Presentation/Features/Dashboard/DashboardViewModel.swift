@@ -236,7 +236,7 @@ final class DashboardViewModel {
                 type: .messageSent,
                 description: "Posted weekly status update in #general",
                 timestamp: now.addingTimeInterval(-900),
-                actor: "Nova",
+                actor: "Aurora",
                 isAgent: true
             ),
             ActivityItem(

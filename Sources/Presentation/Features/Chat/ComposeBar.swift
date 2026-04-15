@@ -438,8 +438,8 @@ struct ComposeBarView: View {
     // MARK: - Agent Loading
 
     private func loadAgents() async {
-        // Nova is always available as an on-demand assistant
-        let nova = MentionCandidate(id: "nova", name: "Nova", icon: "sparkle")
+        // Aurora is always available as Mission Control
+        let aurora = MentionCandidate(id: "aurora", name: "Aurora", icon: "sparkles")
 
         do {
             let response: PaginatedResponse<AgentDTO> = try await APIClient.shared.get(path: "/api/v1/agents")
@@ -450,23 +450,29 @@ struct ComposeBarView: View {
                     icon: iconForAgent(dto.name)
                 )
             }
-            // Prepend Nova if not already in the list
-            if !candidates.contains(where: { $0.name.lowercased() == "nova" }) {
-                candidates.insert(nova, at: 0)
+            // Prepend Aurora if not already in the list
+            if !candidates.contains(where: { $0.name.lowercased() == "aurora" }) {
+                candidates.insert(aurora, at: 0)
             }
             agents = candidates
         } catch {
-            // Fall back to just Nova
-            agents = [nova]
+            // Fall back to real team members
+            agents = [
+                aurora,
+                MentionCandidate(id: "maui",  name: "Maui",  icon: "wrench.and.screwdriver"),
+                MentionCandidate(id: "aloha",  name: "Aloha",  icon: "doc.text"),
+                MentionCandidate(id: "luna",   name: "Luna",   icon: "moon.stars"),
+                MentionCandidate(id: "chief",  name: "Chief",  icon: "chart.line.uptrend.xyaxis")
+            ]
         }
     }
 
     private func iconForAgent(_ name: String) -> String {
         switch name.lowercased() {
-        case "nova":    return "sparkle"
+        case "aurora":  return "sparkles"
         case "maui":    return "wrench.and.screwdriver"
         case "aloha":   return "doc.text"
-        case "aurora":  return "sparkles"
+        case "luna":    return "moon.stars"
         case "shaka":   return "person.circle"
         case "chief":   return "chart.line.uptrend.xyaxis"
         case "rooster": return "shield"

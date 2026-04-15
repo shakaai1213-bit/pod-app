@@ -1,9 +1,9 @@
 import SwiftUI
 
 struct ContentView: View {
-    @Environment(\.appState) private var appState: AppState
+    @EnvironmentObject private var appState: AppState
     // Persistent ViewModels — survive tab switches
-    @State private var chatViewModel = ChatViewModel()
+    @State private var directChatViewModel = DirectChatViewModel()
     @State private var voiceViewModel = VoiceCompanionViewModel()
     // Use @State to track selected tab - force SwiftUI to see changes
     @State private var selectedTab: AppTab = .dashboard
@@ -54,7 +54,7 @@ struct ContentView: View {
         ZStack(alignment: .bottom) {
             // Tab content — ignore container safe areas (notch/home indicator) but NOT keyboard
             tabContent
-                .ignoresSafeArea(.container, edges: .all)
+                .ignoresSafeArea(.container, edges: [.top, .horizontal])
 
             // Custom tab bar — hidden when keyboard is up
             if !isKeyboardVisible {
@@ -72,6 +72,15 @@ struct ContentView: View {
                 withAnimation(.easeOut(duration: 0.25)) { isKeyboardVisible = false }
             }
         }
+        .onChange(of: appState.pendingDirectChatAgentId) { _, agentId in
+            guard let agentId, let agentInfo = AgentInfo.find(agentId) else {
+                appState.pendingDirectChatAgentId = nil
+                return
+            }
+            withAnimation(.easeInOut(duration: 0.15)) { selectedTab = .chat }
+            directChatViewModel.navigationPath.append(agentInfo)
+            appState.pendingDirectChatAgentId = nil
+        }
     }
 
     @ViewBuilder
@@ -81,7 +90,7 @@ struct ContentView: View {
         } else if selectedTab == .projects {
             ProjectsView()
         } else if selectedTab == .chat {
-            ChatView(viewModel: chatViewModel)
+            DirectChatView(viewModel: directChatViewModel)
         } else if selectedTab == .tickets {
             TicketsView()
         } else if selectedTab == .agents {
@@ -232,7 +241,7 @@ struct ContentView: View {
 // MARK: - Login View
 
 struct LoginView: View {
-    @Environment(\.appState) private var appState: AppState
+    @EnvironmentObject private var appState: AppState
     // Default to the known-good token, or load from UserDefaults if auto-login previously succeeded
     @State private var token: String = UserDefaults.standard.string(forKey: "orca_auth_token") ?? "ebe9a0fdfaf9b7674f4e2b9d0149f881d46111730b780d9e508ad94023c03051"
     @State private var networkStatus: String = ""   // live network diagnostic
@@ -415,5 +424,5 @@ struct LoginView: View {
 
 #Preview {
     ContentView()
-        .environment(\.appState, AppState())
+        .environmentObject(AppState())
 }

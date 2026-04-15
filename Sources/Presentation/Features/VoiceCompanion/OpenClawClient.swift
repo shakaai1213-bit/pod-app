@@ -10,7 +10,7 @@ actor OpenClawClient {
         self.authToken = authToken
     }
 
-    struct MessagePayload: Codable {
+    struct MessagePayload: Encodable {
         let content: String
         let message_type: String = "text"
     }

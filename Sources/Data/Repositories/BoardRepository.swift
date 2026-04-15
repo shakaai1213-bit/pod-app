@@ -1,6 +1,6 @@
 import Foundation
 
-final class BoardRepository: Sendable {
+final class BoardRepository {
     private let api = APIClient.shared
 
     var boards: [Board] = []
@@ -74,8 +74,8 @@ final class BoardRepository: Sendable {
         switch status?.lowercased() {
         case "todo", "open":       return .todo
         case "in_progress":        return .inProgress
-        case "review", "done":     return .review
-        case "completed", "done":  return .done
+        case "review":            return .review
+        case "completed", "done": return .done
         default:                   return .todo
         }
     }

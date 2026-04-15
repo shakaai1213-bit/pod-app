@@ -2,89 +2,110 @@ import Foundation
 
 actor ClaudeClient {
     private let apiKey: String
+    private let baseURL: String
     private let model: String
 
-    init(apiKey: String, model: String = "claude-opus-4-5") {
+    // Default: Claude API. Swap baseURL + model for Kimi or any OpenAI-compatible endpoint.
+    init(
+        apiKey: String,
+        model: String = "claude-opus-4-5",
+        baseURL: String = "https://api.anthropic.com/v1/messages"
+    ) {
         self.apiKey = apiKey
         self.model = model
+        self.baseURL = baseURL
     }
 
-    struct Message: Codable {
-        let role: String
-        let content: String
-    }
-
-    struct Request: Codable {
-        let model: String
-        let max_tokens: Int
-        let messages: [Message]
-        let stream: Bool
-    }
+    // MARK: - Streaming response
 
     func stream(prompt: String, systemPrompt: String) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             Task {
-                let url = URL(string: "https://api.anthropic.com/v1/messages")!
+                do {
+                    var messages: [[String: Any]] = []
+                    if !systemPrompt.isEmpty {
+                        messages.append(["role": "system", "content": systemPrompt])
+                    }
+                    messages.append(["role": "user", "content": prompt])
 
-                var request = URLRequest(url: url)
-                request.httpMethod = "POST"
-                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                request.setValue("application/json", forHTTPHeaderField: "anthropic-version")
-                request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "x-api-key")
-                request.setValue(model, forHTTPHeaderField: "anthropic-dangerous-direct-browser-access")
+                    let body: [String: Any] = [
+                        "model": model,
+                        "max_tokens": 1024,
+                        "messages": messages,
+                        "stream": true
+                    ]
 
-                let body: [String: Any] = [
-                    "model": model,
-                    "max_tokens": 1024,
-                    "messages": [
-                        ["role": "user", "content": prompt]
-                    ],
-                    "stream": true
-                ]
+                    var request = URLRequest(url: URL(string: baseURL)!)
+                    request.httpMethod = "POST"
+                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+                    request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+                    request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-                // Inject system prompt if provided
-                var fullMessages: [[String: Any]] = []
-                if !systemPrompt.isEmpty {
-                    fullMessages.append(["role": "system", "content": systemPrompt])
-                }
-                fullMessages.append(["role": "user", "content": prompt])
+                    let (bytes, response) = try await URLSession.shared.bytes(for: request)
 
-                var bodyWithSystem = body
-                bodyWithSystem["messages"] = fullMessages
-
-                request.httpBody = try? JSONSerialization.data(withJSONObject: bodyWithSystem)
-
-                let task = URLSession.shared.dataTask(with: request) { data, response, error in
-                    if let error = error {
-                        continuation.finish(throwing: error)
+                    if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+                        continuation.finish(throwing: NSError(
+                            domain: "ClaudeClient",
+                            code: http.statusCode,
+                            userInfo: [NSLocalizedDescriptionKey: "HTTP \(http.statusCode)"]
+                        ))
                         return
                     }
 
-                    guard let data = data, let text = String(data: data, encoding: .utf8) else {
-                        continuation.finish(throwing: NSError(domain: "ClaudeClient", code: -1))
-                        return
-                    }
-
-                    // Parse SSE stream
-                    let lines = text.components(separatedBy: "\n")
-                    for line in lines {
+                    for try await line in bytes.lines {
                         if line.hasPrefix("data: ") {
                             let json = String(line.dropFirst(6))
-                            if let content = Self.parseSSEvent(json) {
-                                continuation.yield(content)
+                            if json == "[DONE]" { break }
+                            if let chunk = Self.parseSSEvent(json) {
+                                continuation.yield(chunk)
                             }
                         }
                     }
                     continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
                 }
-
-                // Use streaming session
-                let session = URLSession(configuration: .default)
-                let streamTask = session.dataTask(with: request)
-                streamTask.resume()
             }
         }
     }
+
+    // MARK: - Non-streaming (fallback / Kimi compatible)
+
+    nonisolated func send(prompt: String, systemPrompt: String) async throws -> String {
+        var messages: [[String: Any]] = []
+        if !systemPrompt.isEmpty {
+            messages.append(["role": "system", "content": systemPrompt])
+        }
+        messages.append(["role": "user", "content": prompt])
+
+        let body: [String: Any] = [
+            "model": model,
+            "max_tokens": 1024,
+            "messages": messages
+        ]
+
+        var request = URLRequest(url: URL(string: baseURL)!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, _) = try await URLSession.shared.data(for: request)
+
+        struct Response: Decodable {
+            let content: [ContentBlock]
+            struct ContentBlock: Decodable {
+                let text: String?
+            }
+        }
+
+        let decoded = try JSONDecoder().decode(Response.self, from: data)
+        return decoded.content.first?.text ?? ""
+    }
+
+    // MARK: - SSE parser
 
     private static func parseSSEvent(_ json: String) -> String? {
         guard let data = json.data(using: .utf8) else { return nil }
@@ -102,46 +123,20 @@ actor ClaudeClient {
               let text = event.delta?.text else {
             return nil
         }
-
         return text
     }
 }
 
-// Simple streaming using URLSession dataTask (non-streaming fallback)
+// MARK: - Kimi (Moonshot) factory
+
 extension ClaudeClient {
-    nonisolated func send(prompt: String, systemPrompt: String) async throws -> String {
-        let url = URL(string: "https://api.anthropic.com/v1/messages")!
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "x-api-key")
-
-        var messages: [[String: Any]] = []
-        if !systemPrompt.isEmpty {
-            messages.append(["role": "system", "content": systemPrompt])
-        }
-        messages.append(["role": "user", "content": prompt])
-
-        let body: [String: Any] = [
-            "model": model,
-            "max_tokens": 1024,
-            "messages": messages
-        ]
-
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        let (data, _) = try await URLSession.shared.data(for: request)
-
-        struct Response: Decodable {
-            let content: [ContentBlock]
-            struct ContentBlock: Decodable {
-                let text: String?
-            }
-        }
-
-        let response = try JSONDecoder().decode(Response.self, from: data)
-        return response.content.first?.text ?? ""
+    /// Creates a ClaudeClient pointed at Kimi's OpenAI-compatible endpoint.
+    /// Kimi uses OpenAI format so the response shape is different — use send() not stream() until we add OpenAI SSE parsing.
+    static func kimi(apiKey: String, model: String = "moonshot-v1-8k") -> ClaudeClient {
+        ClaudeClient(
+            apiKey: apiKey,
+            model: model,
+            baseURL: "https://api.moonshot.cn/v1/chat/completions"
+        )
     }
 }

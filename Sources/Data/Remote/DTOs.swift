@@ -9,6 +9,7 @@ enum DTOChatChannelType: String, Codable {
     case agent
     case research
     case alerts
+    case direct
 
     // Handle API's "public" / "group" / "private" types by mapping to name-based type
     // The API uses channel.name (e.g. "general", "projects", "alerts") to determine type
@@ -130,12 +131,35 @@ struct BoardDTO: Codable, Identifiable {
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        description = try c.decodeIfPresent(String.self, forKey: .description)
+        status = try c.decodeIfPresent(BoardStatus.self, forKey: .status)
+        stage = try c.decodeIfPresent(String.self, forKey: .stage)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        updatedAt = try c.decode(Date.self, forKey: .updatedAt)
+        taskCount = try c.decodeIfPresent(Int.self, forKey: .taskCount) ?? 0
+        completedTaskCount = try c.decodeIfPresent(Int.self, forKey: .completedTaskCount) ?? 0
+    }
 }
 
 enum BoardStatus: String, Codable {
     case active
     case archived
     case completed
+    case backlog
+    case inProgress = "in_progress"
+    case done
+    case cancelled
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+        self = BoardStatus(rawValue: rawValue) ?? .active
+    }
 }
 
 // MARK: - Task DTO

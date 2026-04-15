@@ -62,7 +62,7 @@ final class VoiceCompanionViewModel: ObservableObject {
             statusText = "Listening…"
 
             // Observe partial transcript changes
-            for await transcript in speechRecorder.$partialTranscript.terminalValues {
+            for await transcript in speechRecorder.$partialTranscript.values {
                 self.partialTranscript = transcript
             }
         } catch {

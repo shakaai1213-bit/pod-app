@@ -49,14 +49,16 @@ final class AgentsViewModel {
             let response: PaginatedResponse<AgentDTO> = try await apiClient.request(.agents)
             agents = response.items.map { dto in
                 let profile = agentProfiles[dto.name.lowercased()]
+                let role = dto.role.isEmpty ? (profile?.role ?? "Agent") : dto.role
+                let skills = dto.skills.isEmpty ? (profile?.skills ?? []) : dto.skills
                 return Agent(
                     id: UUID(uuidString: dto.id) ?? UUID(),
                     name: dto.name,
-                    role: dto.role ?? profile?.role ?? "Agent",
+                    role: role,
                     status: AgentState(rawValue: dto.status.rawValue) ?? .offline,
                     currentTask: dto.currentTask ?? profile?.skills.first,
                     lastActivity: dto.lastSeenAt ?? Date(),
-                    skills: dto.skills ?? profile?.skills ?? [],
+                    skills: skills,
                     avatarColor: dto.avatarColor ?? profile?.avatarColor ?? "#3B82F6"
                 )
             }

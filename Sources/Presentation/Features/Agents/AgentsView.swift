@@ -4,6 +4,7 @@ import SwiftUI
 
 struct AgentsView: View {
 
+    @EnvironmentObject private var appState: AppState
     @State private var viewModel = AgentsViewModel()
     @State private var searchText: String = ""
     @State private var selectedAgent: Agent?
@@ -44,6 +45,9 @@ struct AgentsView: View {
                     },
                     onRestart: {
                         Task { await viewModel.restartAgent(agent.id) }
+                    },
+                    onStartChat: {
+                        appState.pendingDirectChatAgentId = agent.name.lowercased()
                     }
                 )
             }

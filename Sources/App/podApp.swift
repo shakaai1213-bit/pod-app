@@ -1,21 +1,5 @@
 import SwiftUI
-
-// MARK: - AppState Environment Key
-
-@MainActor private func makeDefaultAppState() -> AppState {
-    AppState()
-}
-
-private struct AppStateKey: EnvironmentKey {
-    @MainActor static let defaultValue: AppState = makeDefaultAppState()
-}
-
-extension EnvironmentValues {
-    @MainActor var appState: AppState {
-        get { self[AppStateKey.self] }
-        set { self[AppStateKey.self] = newValue }
-    }
-}
+import SwiftData
 
 @main
 struct podApp: App {
@@ -24,7 +8,8 @@ struct podApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environment(\.appState, appState)
+                .modelContainer(for: [DMConversation.self, DMMessage.self])
+                .environmentObject(appState)
                 .preferredColorScheme(.dark)
                 .onAppear {
                     configureAppearance()

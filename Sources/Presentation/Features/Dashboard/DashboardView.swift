@@ -4,7 +4,7 @@ import SwiftUI
 
 struct DashboardView: View {
 
-    @Environment(\.appState) private var appState: AppState
+    @EnvironmentObject private var appState: AppState
     @State private var viewModel = DashboardViewModel()
     @State private var selectedAgent: Agent?
     @State private var showingSettings = false

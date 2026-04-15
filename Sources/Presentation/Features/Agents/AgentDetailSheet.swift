@@ -9,6 +9,7 @@ struct AgentDetailSheet: View {
     var onStatusChanged: ((AgentState) -> Void)?
     var onPause: (() -> Void)?
     var onRestart: (() -> Void)?
+    var onStartChat: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @State private var selectedStatus: AgentState
@@ -22,13 +23,15 @@ struct AgentDetailSheet: View {
         onViewLogs: (() -> Void)? = nil,
         onStatusChanged: ((AgentState) -> Void)? = nil,
         onPause: (() -> Void)? = nil,
-        onRestart: (() -> Void)? = nil
+        onRestart: (() -> Void)? = nil,
+        onStartChat: (() -> Void)? = nil
     ) {
         self.agent = agent
         self.onViewLogs = onViewLogs
         self.onStatusChanged = onStatusChanged
         self.onPause = onPause
         self.onRestart = onRestart
+        self.onStartChat = onStartChat
         _selectedStatus = State(initialValue: agent.status)
     }
 
@@ -295,10 +298,11 @@ struct AgentDetailSheet: View {
             // Primary actions
             actionButton(
                 icon: "bubble.left.fill",
-                label: "Send Message",
+                label: "Chat",
                 color: AppColors.accentElectric
             ) {
-                showingSendMessage = true
+                dismiss()
+                onStartChat?()
             }
 
             actionButton(
