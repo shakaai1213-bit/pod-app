@@ -3,7 +3,7 @@ import SwiftUI
 
 // MARK: - Ticket Domain Model
 
-struct Ticket: Identifiable, Sendable {
+struct Ticket: Identifiable, Sendable, Hashable {
     let id: String
     let title: String
     let description: String?
@@ -187,7 +187,26 @@ final class TicketsViewModel {
 
         do {
             let dtos: [TicketDTO] = try await api.get(path: "/api/v1/tickets")
-            tickets = dtos.map { $0.toDomain() }.sorted { $0.createdAt > $1.createdAt }
+            
+            // Fetch agent names for tickets with assignee_agent_id
+            let agentIds = Set(dtos.compactMap { $0.assigneeAgentId })
+            var agentNames: [String: String] = [:]
+            
+            if !agentIds.isEmpty {
+                do {
+                    let response: PaginatedResponse<AgentDTO> = try await api.get(path: "/api/v1/agents")
+                    for agent in response.items {
+                        agentNames[agent.id] = agent.name
+                    }
+                } catch {
+                    // Ignore agent fetch errors, we'll show IDs instead
+                }
+            }
+            
+            tickets = dtos.map { dto in
+                let agentName = dto.assigneeAgentId.flatMap { agentNames[$0] }
+                return dto.toDomain(agentName: agentName)
+            }.sorted { $0.createdAt > $1.createdAt }
         } catch {
             // Backend offline — fall back to local ticket data
             tickets = Self.mockTickets
@@ -319,6 +338,19 @@ final class TicketsViewModel {
             errorMessage = error.localizedDescription
         }
     }
+
+    // MARK: - Update Lessons Learned
+
+    @MainActor
+    func updateLessonsLearned(ticketId: String, lessonsLearned: String) async {
+        do {
+            let body = UpdateTicketLessonsBody(lessonsLearned: lessonsLearned)
+            let _: TicketDTO = try await api.patch(path: "/api/v1/tickets/\(ticketId)", body: body)
+            await load()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
 }
 
 // MARK: - Request Bodies
@@ -343,5 +375,13 @@ private struct CreateTicketBody: Encodable {
 
 private struct UpdateTicketBody: Encodable {
     let status: String
+}
+
+private struct UpdateTicketLessonsBody: Encodable {
+    let lessonsLearned: String
+
+    enum CodingKeys: String, CodingKey {
+        case lessonsLearned = "lessons_learned"
+    }
 }
 

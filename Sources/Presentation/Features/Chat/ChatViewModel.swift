@@ -257,11 +257,8 @@ final class ChatViewModel {
         let existingIds = Set(messages.map(\.id))
         guard !existingIds.contains(UUID(uuidString: payload.id) ?? UUID()) else { return }
 
-        // Resolve agent name via UserNameCache when sender is an agent
-        let authorName = await UserNameCache.shared.displayName(
-            userId: payload.senderId,
-            agentId: payload.senderAgentId
-        )
+        // Use senderName from payload directly (it's already resolved by the backend)
+        let authorName = payload.senderName
         let isAgent = payload.senderAgentId != nil
 
         let newMessage = Message(
@@ -342,12 +339,12 @@ final class ChatViewModel {
         await withTaskGroup(of: Message.self) { group in
             for dto in dtos {
                 group.addTask {
-                    let authorName = await UserNameCache.shared.displayName(userId: dto.authorId, agentId: dto.agentId)
                     return Message(
                         id: UUID(uuidString: dto.id) ?? UUID(),
                         channelId: channelId,
                         authorId: UUID(uuidString: dto.authorId) ?? UUID(),
-                        authorName: authorName,
+                        authorName: dto.authorName,
+                        authorRole: dto.isAgent ? .agent : .human,
                         isAgent: dto.isAgent,
                         agentId: dto.agentId,
                         content: dto.content,

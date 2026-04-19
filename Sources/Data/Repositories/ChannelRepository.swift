@@ -64,15 +64,12 @@ final class ChannelRepository {
         await withTaskGroup(of: Message.self) { group in
             for dto in dtos {
                 group.addTask {
-                    let authorName = await UserNameCache.shared.displayName(
-                        userId: dto.authorId,
-                        agentId: dto.agentId
-                    )
                     return Message(
                         id: UUID(uuidString: dto.id) ?? UUID(),
                         channelId: channelId,
                         authorId: UUID(uuidString: dto.authorId) ?? UUID(),
-                        authorName: authorName,
+                        authorName: dto.authorName,
+                        authorRole: dto.isAgent ? .agent : .human,
                         isAgent: dto.isAgent,
                         agentId: dto.agentId,
                         content: dto.content,

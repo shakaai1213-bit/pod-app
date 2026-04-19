@@ -5,6 +5,7 @@ import SwiftUI
 struct TicketsView: View {
     @State private var viewModel = TicketsViewModel()
     @State private var agents: [AgentDTO] = []
+    @State private var selectedTicket: Ticket? = nil
 
     var body: some View {
         NavigationStack {
@@ -50,6 +51,9 @@ struct TicketsView: View {
             .sheet(isPresented: $viewModel.showCreateSheet) {
                 CreateTicketSheet(viewModel: viewModel, agents: agents)
             }
+            .sheet(item: $selectedTicket) { ticket in
+                TicketDetailSheet(ticket: ticket, viewModel: viewModel)
+            }
             .alert("Error", isPresented: .constant(viewModel.errorMessage != nil)) {
                 Button("OK") { viewModel.errorMessage = nil }
             } message: {
@@ -93,8 +97,6 @@ struct TicketsView: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - Ticket List
-
     // MARK: - Ticket List (POD-4: tree view)
 
     private var ticketList: some View {
@@ -105,6 +107,9 @@ struct TicketsView: View {
                     depth: 0,
                     onStatusChange: { newStatus in
                         Task { await viewModel.updateStatus(ticketId: ticket.id, status: newStatus) }
+                    },
+                    onTap: {
+                        selectedTicket = ticket
                     },
                     subtasksProvider: { viewModel.subtasks(of: $0) }
                 )
@@ -261,6 +266,7 @@ struct TicketTreeNode: View {
     let ticket: Ticket
     let depth: Int
     let onStatusChange: (TicketStatus) -> Void
+    let onTap: () -> Void
     let subtasksProvider: (Ticket) -> [Ticket]
 
     @State private var expanded = false
@@ -296,6 +302,9 @@ struct TicketTreeNode: View {
                 }
 
                 TicketRowView(ticket: ticket, onStatusChange: onStatusChange)
+                    .onTapGesture {
+                        onTap()
+                    }
             }
             .background(AppColors.backgroundSecondary)
 
@@ -321,6 +330,7 @@ struct TicketTreeNode: View {
                         ticket: child,
                         depth: depth + 1,
                         onStatusChange: onStatusChange,
+                        onTap: onTap,
                         subtasksProvider: subtasksProvider
                     )
                 }

@@ -71,6 +71,7 @@ struct MessageDTO: Codable, Identifiable {
     let id: String
     let channelId: String
     let authorId: String
+    let authorName: String
     let content: String
     let timestamp: Date
     var isAgent: Bool
@@ -84,6 +85,7 @@ struct MessageDTO: Codable, Identifiable {
         case id, content, isAgent, agentId, reactions, threadCount
         case channelId = "channel_id"
         case authorId = "sender_user_id"
+        case authorName = "sender_name"
         case timestamp = "created_at"
         case replyToId = "reply_to_id"
         case isThreadReply = "is_thread_reply"
@@ -94,6 +96,8 @@ struct MessageDTO: Codable, Identifiable {
         id = try container.decode(String.self, forKey: .id)
         channelId = try container.decode(String.self, forKey: .channelId)
         authorId = try container.decode(String.self, forKey: .authorId)
+        authorName = try container.decodeIfPresent(String.self, forKey: .authorName) ?? "Unknown"
+        authorName = try container.decodeIfPresent(String.self, forKey: .authorName) ?? "Unknown"
         content = try container.decode(String.self, forKey: .content)
         timestamp = try container.decode(Date.self, forKey: .timestamp)
         agentId = try container.decodeIfPresent(String.self, forKey: .agentId)
