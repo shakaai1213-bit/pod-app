@@ -126,18 +126,16 @@ final class TradingViewModel {
         guard let url = URL(string: "http://100.80.44.41/api/trading") else {
             throw URLError(.badURL)
         }
-
         var request = URLRequest(url: url)
         request.timeoutInterval = 8
 
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw URLError(.badServerResponse)
         }
 
-        // When Chief's API endpoint is live, decode here.
-        // For now the endpoint doesn't exist, so we'll always fall through to mock.
-        throw URLError(.cannotConnectToHost)
+        let raw = try JSONDecoder().decode(TradingDashboardDTO.self, from: data)
+        return raw.toDomain()
     }
 
     // MARK: - Mock Data (real numbers from Chief's Mac state)
@@ -248,5 +246,154 @@ final class TradingViewModel {
         ]
 
         return TradingDashboard(bots: bots, oracle: oracle, research: research, earnings: earnings, macro: macro)
+    }
+}
+
+// MARK: - API DTOs (snake_case wire format → domain models)
+
+private struct TradingDashboardDTO: Decodable {
+    let updated_at: String
+    let bots:       [TradingBotDTO]
+    let oracle:     OracleStateDTO
+    let research:   ResearchSummaryDTO
+    let earnings:   [EarningsEventDTO]
+    let macro:      [MacroPredictionDTO]
+
+    func toDomain() -> TradingDashboard {
+        TradingDashboard(
+            bots:     bots.map { $0.toDomain() },
+            oracle:   oracle.toDomain(),
+            research: research.toDomain(),
+            earnings: earnings.compactMap { $0.toDomain() },
+            macro:    macro.compactMap { $0.toDomain() }
+        )
+    }
+}
+
+private struct TradingBotDTO: Decodable {
+    let id:              String
+    let name:            String
+    let version:         String
+    let balance:         Double
+    let pnl:             Double
+    let win_rate:        Double?
+    let open_positions:  Int
+    let status:          String
+    let regime:          String?
+    let trades_total:    Int?
+
+    func toDomain() -> TradingBot {
+        TradingBot(
+            id:             id,
+            name:           name,
+            version:        version,
+            balance:        balance,
+            pnl:            pnl,
+            winRate:        win_rate ?? 0,
+            openPositions:  open_positions,
+            status:         TradingBot.BotStatus(rawValue: status) ?? .stopped,
+            regime:         regime.flatMap { MarketRegime(rawValue: $0) },
+            tradesTotal:    trades_total
+        )
+    }
+}
+
+private struct OracleStateDTO: Decodable {
+    let score:            Double
+    let model_version:    String
+    let prediction_count: Int
+    let status_note:      String
+    let predictions:      [OraclePredictionDTO]
+
+    func toDomain() -> OracleState {
+        OracleState(
+            score:           score,
+            modelVersion:    model_version,
+            predictionCount: prediction_count,
+            statusNote:      status_note,
+            predictions:     predictions.map { $0.toDomain() }
+        )
+    }
+}
+
+private struct OraclePredictionDTO: Decodable {
+    let id:         String
+    let question:   String
+    let direction:  String
+    let confidence: Double
+    let volume:     Int
+
+    func toDomain() -> OraclePrediction {
+        OraclePrediction(id: id, question: question,
+                         direction: direction, confidence: confidence, volume: volume)
+    }
+}
+
+private struct ResearchSummaryDTO: Decodable {
+    let active_arms:       Int
+    let experiments_today: Int
+    let best_score:        Double
+    let best_experiment:   Int
+    let arms:              [ResearchArmDTO]
+    let queue_note:        String
+
+    func toDomain() -> ResearchSummary {
+        ResearchSummary(
+            activeArms:       active_arms,
+            experimentsToday: experiments_today,
+            bestScore:        best_score,
+            bestExperiment:   best_experiment,
+            arms:             arms.map { $0.toDomain() },
+            queueNote:        queue_note
+        )
+    }
+}
+
+private struct ResearchArmDTO: Decodable {
+    let id:          String
+    let symbol:      String
+    let take_profit: Double
+    let stop_loss:   Double
+    let pnl_percent: Double
+
+    func toDomain() -> ResearchArm {
+        ResearchArm(id: id, symbol: symbol,
+                    takeProfit: take_profit, stopLoss: stop_loss, pnlPercent: pnl_percent)
+    }
+}
+
+private struct EarningsEventDTO: Decodable {
+    let id:         String
+    let ticker:     String
+    let date:       String   // "YYYY-MM-DD"
+    let direction:  String
+    let confidence: Double
+
+    func toDomain() -> EarningsEvent? {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd"
+        fmt.timeZone = TimeZone(identifier: "UTC")
+        guard let d = fmt.date(from: date) else { return nil }
+        return EarningsEvent(
+            id:         id,
+            ticker:     ticker,
+            date:       d,
+            direction:  EarningsEvent.EarningsDirection(rawValue: direction) ?? .neutral,
+            confidence: confidence
+        )
+    }
+}
+
+private struct MacroPredictionDTO: Decodable {
+    let id:         String
+    let instrument: String
+    let timeframe:  String
+    let regime:     String
+    let conviction: Double
+
+    func toDomain() -> MacroPrediction? {
+        guard let r = MarketRegime(rawValue: regime) else { return nil }
+        return MacroPrediction(id: id, instrument: instrument,
+                               timeframe: timeframe, regime: r, conviction: conviction)
     }
 }
