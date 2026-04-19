@@ -12,6 +12,8 @@ struct Ticket: Identifiable, Sendable {
     let assigneeAgentId: String?
     let assigneeAgentName: String?
     let ticketType: String?
+    let parentTicketId: String?       // POD-4: subtask hierarchy
+    let lessonsLearned: String?       // POD-4: lessons-learned capture
     let createdAt: Date
     let updatedAt: Date
     let claimedAt: Date?
@@ -94,6 +96,8 @@ struct TicketDTO: Codable, Identifiable {
     let priority: String
     let assigneeAgentId: String?
     let ticketType: String?
+    let parentTicketId: String?     // POD-4
+    let lessonsLearned: String?    // POD-4
     let createdAt: Date
     let updatedAt: Date
     let claimedAt: Date?
@@ -105,6 +109,8 @@ struct TicketDTO: Codable, Identifiable {
         case id, title, description, status, priority
         case assigneeAgentId    = "assignee_agent_id"
         case ticketType         = "ticket_type"
+        case parentTicketId     = "parent_ticket_id"
+        case lessonsLearned     = "lessons_learned"
         case createdAt          = "created_at"
         case updatedAt          = "updated_at"
         case claimedAt          = "claimed_at"
@@ -123,6 +129,8 @@ struct TicketDTO: Codable, Identifiable {
             assigneeAgentId: assigneeAgentId,
             assigneeAgentName: agentName,
             ticketType: ticketType,
+            parentTicketId: parentTicketId,
+            lessonsLearned: lessonsLearned,
             createdAt: createdAt,
             updatedAt: updatedAt,
             claimedAt: claimedAt,
@@ -151,6 +159,15 @@ final class TicketsViewModel {
     var isCreating = false
 
     private let api = APIClient.shared
+
+    // POD-4: Subtask tree
+    var rootTickets: [Ticket] {
+        tickets.filter { $0.parentTicketId == nil }
+    }
+
+    func subtasks(of ticket: Ticket) -> [Ticket] {
+        tickets.filter { $0.parentTicketId == ticket.id }
+    }
 
     var filtered: [Ticket] {
         guard let status = selectedStatus else { return tickets }
@@ -191,6 +208,8 @@ final class TicketsViewModel {
                 assigneeAgentId: "maui",
                 assigneeAgentName: "Maui",
                 ticketType: "feature",
+                parentTicketId: nil,
+                lessonsLearned: nil,
                 createdAt: now.addingTimeInterval(-86400),
                 updatedAt: now.addingTimeInterval(-86400),
                 claimedAt: nil, startedAt: nil, resolvedAt: nil, resolutionNotes: nil
@@ -204,6 +223,8 @@ final class TicketsViewModel {
                 assigneeAgentId: "aurora",
                 assigneeAgentName: "Aurora",
                 ticketType: "feature",
+                parentTicketId: nil,
+                lessonsLearned: nil,
                 createdAt: now.addingTimeInterval(-72000),
                 updatedAt: now.addingTimeInterval(-3600),
                 claimedAt: now.addingTimeInterval(-72000), startedAt: now.addingTimeInterval(-3600),
@@ -218,6 +239,8 @@ final class TicketsViewModel {
                 assigneeAgentId: "maui",
                 assigneeAgentName: "Maui",
                 ticketType: "bugfix",
+                parentTicketId: nil,
+                lessonsLearned: nil,
                 createdAt: now.addingTimeInterval(-3600),
                 updatedAt: now.addingTimeInterval(-1800),
                 claimedAt: nil, startedAt: nil, resolvedAt: nil, resolutionNotes: nil
@@ -231,8 +254,26 @@ final class TicketsViewModel {
                 assigneeAgentId: "maui",
                 assigneeAgentName: "Maui",
                 ticketType: "feature",
+                parentTicketId: nil,
+                lessonsLearned: nil,
                 createdAt: now.addingTimeInterval(-1800),
                 updatedAt: now.addingTimeInterval(-1800),
+                claimedAt: nil, startedAt: nil, resolvedAt: nil, resolutionNotes: nil
+            ),
+            // POD-4 subtask example
+            Ticket(
+                id: "TICKET-001-SUB",
+                title: "Design Whisplay voice UX",
+                description: "Design the voice companion tab UI and interaction flow.",
+                status: .open,
+                priority: .medium,
+                assigneeAgentId: "maui",
+                assigneeAgentName: "Maui",
+                ticketType: "design",
+                parentTicketId: "TICKET-001",
+                lessonsLearned: nil,
+                createdAt: now.addingTimeInterval(-80000),
+                updatedAt: now.addingTimeInterval(-80000),
                 claimedAt: nil, startedAt: nil, resolvedAt: nil, resolutionNotes: nil
             )
         ]
@@ -289,10 +330,14 @@ private struct CreateTicketBody: Encodable {
     let assigneeAgentId: String?
     let status = "open"
     let source = "pod_app"
+    let parentTicketId: String?   // POD-4: subtask hierarchy
+    let lessonsLearned: String?  // POD-4: lessons-learned capture
 
     enum CodingKeys: String, CodingKey {
         case title, description, priority, status, source
         case assigneeAgentId = "assignee_agent_id"
+        case parentTicketId  = "parent_ticket_id"
+        case lessonsLearned  = "lessons_learned"
     }
 }
 

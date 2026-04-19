@@ -95,12 +95,19 @@ struct TicketsView: View {
 
     // MARK: - Ticket List
 
+    // MARK: - Ticket List (POD-4: tree view)
+
     private var ticketList: some View {
         List {
-            ForEach(viewModel.filtered) { ticket in
-                TicketRowView(ticket: ticket) { newStatus in
-                    Task { await viewModel.updateStatus(ticketId: ticket.id, status: newStatus) }
-                }
+            ForEach(viewModel.rootTickets) { ticket in
+                TicketTreeNode(
+                    ticket: ticket,
+                    depth: 0,
+                    onStatusChange: { newStatus in
+                        Task { await viewModel.updateStatus(ticketId: ticket.id, status: newStatus) }
+                    },
+                    subtasksProvider: { viewModel.subtasks(of: $0) }
+                )
                 .listRowBackground(AppColors.backgroundSecondary)
                 .listRowSeparatorTint(AppColors.border)
                 .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
@@ -248,7 +255,81 @@ struct TicketRowView: View {
     }
 }
 
-// MARK: - Create Ticket Sheet
+// MARK: - Ticket Tree Node (POD-4: subtask hierarchy)
+
+struct TicketTreeNode: View {
+    let ticket: Ticket
+    let depth: Int
+    let onStatusChange: (TicketStatus) -> Void
+    let subtasksProvider: (Ticket) -> [Ticket]
+
+    @State private var expanded = false
+
+    var body: some View {
+        let children = subtasksProvider(ticket)
+        let hasChildren = !children.isEmpty
+
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                // Indent
+                if depth > 0 {
+                    Text("  ")
+                        .font(.caption)
+                        .foregroundColor(AppColors.textTertiary)
+                }
+
+                // Expand/collapse chevron
+                if hasChildren {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            expanded.toggle()
+                        }
+                    } label: {
+                        Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(AppColors.textTertiary)
+                            .frame(width: 16, height: 16)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Color.clear.frame(width: 16, height: 16)
+                }
+
+                TicketRowView(ticket: ticket, onStatusChange: onStatusChange)
+            }
+            .background(AppColors.backgroundSecondary)
+
+            // Children (POD-4: lessons-learned visible when expanded)
+            if expanded {
+                if let lessons = ticket.lessonsLearned, !lessons.isEmpty {
+                    HStack(spacing: 8) {
+                        if depth > 0 { Text("  ").font(.caption) }
+                        Image(systemName: "lightbulb.fill")
+                            .font(.caption2)
+                            .foregroundColor(Color.yellow)
+                        Text(lessons)
+                            .font(.caption)
+                            .foregroundColor(AppColors.textSecondary)
+                    }
+                    .padding(.leading, CGFloat(depth) * 16 + 24)
+                    .padding(.vertical, 4)
+                    .background(AppColors.backgroundTertiary.opacity(0.5))
+                }
+
+                ForEach(children) { child in
+                    TicketTreeNode(
+                        ticket: child,
+                        depth: depth + 1,
+                        onStatusChange: onStatusChange,
+                        subtasksProvider: subtasksProvider
+                    )
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Ticket Row View (updated to support onStatusChange closure)
 
 struct CreateTicketSheet: View {
     @Bindable var viewModel: TicketsViewModel
