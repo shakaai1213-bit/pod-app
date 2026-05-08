@@ -1,2 +1,9 @@
 OpenClaw-Backup-pod-2026-03-*/
 build/
+
+# Local secrets — never commit (M1 security per Rooster review 2026-05-07)
+# Template at AgentSecrets.swift.template is committed; real file is local-only
+Sources/Presentation/Features/DirectChat/AgentSecrets.swift
+
+# SEC-007 remediation 2026-05-08: ORCA bearer token (template at OrcaSecrets.swift.template)
+Sources/App/OrcaSecrets.swift

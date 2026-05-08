@@ -77,8 +77,12 @@ struct ContentView: View {
                 appState.pendingDirectChatAgentId = nil
                 return
             }
+            // Path B per Shaka 2026-05-07: deep-links to unreachable agents land on
+            // the chat tab but don't push into a dead conversation view.
             withAnimation(.easeInOut(duration: 0.15)) { selectedTab = .chat }
-            directChatViewModel.navigationPath.append(agentInfo)
+            if agentInfo.isReachable {
+                directChatViewModel.navigationPath.append(agentInfo)
+            }
             appState.pendingDirectChatAgentId = nil
         }
     }
@@ -242,8 +246,9 @@ struct ContentView: View {
 
 struct LoginView: View {
     @EnvironmentObject private var appState: AppState
-    // Default to the known-good token, or load from UserDefaults if auto-login previously succeeded
-    @State private var token: String = UserDefaults.standard.string(forKey: "orca_auth_token") ?? "ebe9a0fdfaf9b7674f4e2b9d0149f881d46111730b780d9e508ad94023c03051"
+    // SEC-007 remediation 2026-05-08: default sourced from OrcaSecrets.swift
+    // (gitignored) instead of hardcoded literal.
+    @State private var token: String = UserDefaults.standard.string(forKey: "orca_auth_token") ?? OrcaSecrets.bearerToken
     @State private var networkStatus: String = ""   // live network diagnostic
     @FocusState private var isTokenFocused: Bool
 

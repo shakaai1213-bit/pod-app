@@ -27,7 +27,9 @@ final class OnboardingViewModel {
     // MARK: - Published State
 
     var currentPage: Int = 0
-    var token: String = "ebe9a0fdfaf9b7674f4e2b9d0149f881d46111730b780d9e508ad94023c03051"
+    // SEC-007 remediation 2026-05-08: sourced from OrcaSecrets.swift (gitignored)
+    // instead of hardcoded literal.
+    var token: String = OrcaSecrets.bearerToken
     var isConnecting: Bool = false
     var errorMessage: String?
     var isCompleted: Bool = false

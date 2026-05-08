@@ -17,7 +17,9 @@ struct podApp: App {
                         await appState.attemptAutoLogin()
                     }
                     if CommandLine.arguments.contains("--auto-login") {
-                        let testToken = "ebe9a0fdfaf9b7674f4e2b9d0149f881d46111730b780d9e508ad94023c03051"
+                        // SEC-007 remediation 2026-05-08: token sourced from
+                        // OrcaSecrets.swift (gitignored) instead of hardcoded literal.
+                        let testToken = OrcaSecrets.bearerToken
                         print("[podApp] TEST MODE: auto-submitting token via --auto-login")
                         Task { @MainActor in
                             await appState.authenticate(token: testToken)

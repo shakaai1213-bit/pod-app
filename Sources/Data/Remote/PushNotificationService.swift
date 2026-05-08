@@ -15,7 +15,9 @@ final class PushNotificationService {
     #else
     private let baseURL = URL(string: "http://100.76.196.40:8000")!
     #endif
-    private let authToken = "ebe9a0fdfaf9b7674f4e2b9d0149f881d46111730b780d9e508ad94023c03051"
+    // SEC-007 remediation 2026-05-08: sourced from OrcaSecrets.swift (gitignored)
+    // instead of hardcoded literal.
+    private let authToken = OrcaSecrets.bearerToken
 
     private init() {
         Task { await checkAuthorizationStatus() }
