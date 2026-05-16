@@ -339,8 +339,18 @@ public actor SSEStreamManager {
     public enum SSEEvent: Sendable {
         case connected
         case message(MessageNewPayload)
+        case ticketLifecycle(TicketLifecycleEnvelope)
         case keepalive
         case error(StreamError)
+    }
+
+    /// Stream mode determines how `SSEDelegate` decodes the `data:` body.
+    /// `/chat/channels/<id>/stream` emits `event: message` with MessageNewPayload;
+    /// `/tickets/stream` emits envelopes whose SSE event-name is the envelope
+    /// type (e.g. "fyi") and whose data is a TicketLifecycleEnvelope.
+    enum StreamMode: Sendable {
+        case chat
+        case tickets
     }
 
     // MARK: - State
@@ -399,12 +409,69 @@ public actor SSEStreamManager {
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         request.timeoutInterval = .infinity
 
-        let delegate = SSEDelegate(continuation: continuation, manager: self)
+        let delegate = SSEDelegate(continuation: continuation, manager: self, mode: .chat)
         session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
         dataTask = session?.dataTask(with: request)
         dataTask?.resume()
 
         // Signal connected immediately — Task.sleep hangs on iOS 26 beta
+        if !isCancelled {
+            continuation.yield(.connected)
+        }
+    }
+
+    /// Connect to the team-wide ticket lifecycle SSE stream.
+    /// Backend: `/api/v1/tickets/stream` fans the `team.tickets.events` NATS
+    /// subject (created-no-assignee, claimed, in_progress, closed, cancelled,
+    /// status transitions). Assignee-routed lifecycle events go through the
+    /// agent's NATS inbox, not this stream.
+    /// Caller consumes events on the returned AsyncThrowingStream.
+    public func connectTickets(
+        token: String,
+        baseURL: String
+    ) -> AsyncThrowingStream<SSEEvent, Error> {
+        isCancelled = false
+        let urlString = "\(baseURL)/api/v1/tickets/stream"
+        guard URL(string: urlString) != nil else {
+            return AsyncThrowingStream { continuation in
+                continuation.finish(throwing: StreamError.invalidURL)
+            }
+        }
+
+        return AsyncThrowingStream<SSEEvent, Error> { [weak self] continuation in
+            continuation.onTermination = { [weak self] _ in
+                Task { [weak self] in
+                    await self?.disconnect()
+                }
+            }
+
+            Task { [weak self] in
+                await self?.runTicketsStream(token: token, baseURL: baseURL, continuation: continuation)
+            }
+        }
+    }
+
+    private func runTicketsStream(
+        token: String,
+        baseURL: String,
+        continuation: AsyncThrowingStream<SSEEvent, Error>.Continuation
+    ) async {
+        let urlString = "\(baseURL)/api/v1/tickets/stream"
+        guard let url = URL(string: urlString) else {
+            continuation.finish(throwing: StreamError.invalidURL)
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        request.timeoutInterval = .infinity
+
+        let delegate = SSEDelegate(continuation: continuation, manager: self, mode: .tickets)
+        session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        dataTask = session?.dataTask(with: request)
+        dataTask?.resume()
+
         if !isCancelled {
             continuation.yield(.connected)
         }
@@ -448,13 +515,17 @@ public actor SSEStreamManager {
 private final class SSEDelegate: NSObject, URLSessionDataDelegate {
     private let continuation: AsyncThrowingStream<SSEStreamManager.SSEEvent, Error>.Continuation
     private weak var manager: SSEStreamManager?
+    private let mode: SSEStreamManager.StreamMode
 
     private var eventType: String?
     private var eventData: String?
 
-    init(continuation: AsyncThrowingStream<SSEStreamManager.SSEEvent, Error>.Continuation, manager: SSEStreamManager) {
+    init(continuation: AsyncThrowingStream<SSEStreamManager.SSEEvent, Error>.Continuation,
+         manager: SSEStreamManager,
+         mode: SSEStreamManager.StreamMode) {
         self.continuation = continuation
         self.manager = manager
+        self.mode = mode
         super.init()
     }
 
@@ -488,9 +559,18 @@ private final class SSEDelegate: NSObject, URLSessionDataDelegate {
     }
 
     private func dispatchEvent(type: String, data: String) {
-        switch type {
-        case "message":
-            if let jsonData = data.data(using: .utf8) {
+        // "connected" and "keepalive" are stream-agnostic.
+        if type == "keepalive" {
+            continuation.yield(.keepalive)
+            return
+        }
+        if type == "connected" {
+            continuation.yield(.connected)
+            return
+        }
+        switch mode {
+        case .chat:
+            if type == "message", let jsonData = data.data(using: .utf8) {
                 let decoder = JSONDecoder()
                 decoder.dateDecodingStrategy = .iso8601
                 if let payload = try? decoder.decode(MessageNewPayload.self, from: jsonData) {
@@ -499,12 +579,18 @@ private final class SSEDelegate: NSObject, URLSessionDataDelegate {
                     continuation.yield(.error(.decodingFailed("Could not decode MessageNewPayload")))
                 }
             }
-        case "keepalive":
-            continuation.yield(.keepalive)
-        case "connected":
-            continuation.yield(.connected)
-        default:
-            break
+        case .tickets:
+            // Backend emits SSE event name = envelope `type`. For `/tickets/stream`
+            // (fans team.tickets.events) the payload is type=fyi, occasionally
+            // type=alert. Either way, the data body is the lifecycle envelope.
+            guard let jsonData = data.data(using: .utf8) else { return }
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            if let envelope = try? decoder.decode(TicketLifecycleEnvelope.self, from: jsonData) {
+                continuation.yield(.ticketLifecycle(envelope))
+            }
+            // Silent skip on undecodable — backend may add future event types
+            // (e.g. heartbeat, schema bump); don't break the stream on those.
         }
     }
 
@@ -542,6 +628,30 @@ public struct MessageNewPayload: Codable, Sendable {
         case senderAgentId = "sender_agent_id"
         case replyToId = "reply_to_id"
         case isThreadReply = "is_thread_reply"
+    }
+}
+
+/// Payload for ticket lifecycle events on `/api/v1/tickets/stream`.
+/// Mirrors the envelope shape published by `services/tickets_publisher.py`
+/// to the `team.tickets.events` NATS subject. Field set is intentionally
+/// small — caller typically does a full `load()` refresh on receipt.
+public struct TicketLifecycleEnvelope: Codable, Sendable {
+    public let id: String?
+    public let type: String?
+    public let text: String?
+    public let metadata: Metadata?
+
+    public struct Metadata: Codable, Sendable {
+        /// Lifecycle action: created | claimed | in_progress | closed | cancelled | stale | escalated
+        public let action: String?
+        public let ticketId: String?
+        public let boardId: String?
+
+        enum CodingKeys: String, CodingKey {
+            case action
+            case ticketId = "ticket_id"
+            case boardId  = "board_id"
+        }
     }
 }
 

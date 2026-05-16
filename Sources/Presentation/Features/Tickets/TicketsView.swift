@@ -47,6 +47,10 @@ struct TicketsView: View {
             .task {
                 await viewModel.load()
                 await loadAgents()
+                viewModel.startLiveUpdates()  // b9bbe115: subscribe to /tickets/stream
+            }
+            .onDisappear {
+                viewModel.stopLiveUpdates()
             }
             .sheet(isPresented: $viewModel.showCreateSheet) {
                 CreateTicketSheet(viewModel: viewModel, agents: agents)

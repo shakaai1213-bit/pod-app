@@ -160,6 +160,13 @@ final class TicketsViewModel {
 
     private let api = APIClient.shared
 
+    // b9bbe115 SSE leg: live ticket lifecycle subscription to /api/v1/tickets/stream
+    // (fans team.tickets.events). On any lifecycle event we trigger a full reload —
+    // payload set is small (≤~100 tickets typically) and full-reload is correct
+    // by construction. Patch-in-place is a later optimization.
+    private var sseManager: SSEStreamManager?
+    private var sseListenTask: Task<Void, Never>?
+
     // POD-4: Subtask tree
     var rootTickets: [Ticket] {
         tickets.filter { $0.parentTicketId == nil }
@@ -381,6 +388,58 @@ final class TicketsViewModel {
         } catch {
             errorMessage = "Couldn't save lessons. Try again."
         }
+    }
+
+    // MARK: - SSE live updates (b9bbe115 — REST + SSE + write)
+
+    /// Start live subscription to /api/v1/tickets/stream. Reconnects with
+    /// exponential backoff capped at 30s. Idempotent — calling twice is a no-op.
+    @MainActor
+    func startLiveUpdates() {
+        guard sseListenTask == nil else { return }
+        guard let token = UserDefaults.standard.string(forKey: "orca_auth_token") else { return }
+
+        sseListenTask = Task { @MainActor in
+            var backoffNanos: UInt64 = 2_000_000_000  // 2s
+            while !Task.isCancelled {
+                let manager = SSEStreamManager()
+                self.sseManager = manager
+                do {
+                    let baseURL = AppState.backendURL
+                    let events = await manager.connectTickets(token: token, baseURL: baseURL)
+                    for try await event in events {
+                        if Task.isCancelled { return }
+                        switch event {
+                        case .connected:
+                            backoffNanos = 2_000_000_000  // reset on success
+                        case .ticketLifecycle:
+                            // Lifecycle delta — refresh authoritative list.
+                            // Could optimize to patch-in-place using envelope.metadata.ticket_id
+                            // + action, but full reload is correct + simple for current scale.
+                            await self.load()
+                        case .keepalive, .message, .error:
+                            break  // other events not expected on this stream
+                        }
+                    }
+                } catch {
+                    // Stream ended — fall through to backoff + reconnect.
+                }
+                if Task.isCancelled { break }
+                try? await Task.sleep(nanoseconds: backoffNanos)
+                backoffNanos = min(backoffNanos * 2, 30_000_000_000)  // cap 30s
+            }
+        }
+    }
+
+    /// Cancel the live subscription. Safe to call multiple times.
+    @MainActor
+    func stopLiveUpdates() {
+        sseListenTask?.cancel()
+        sseListenTask = nil
+        Task { [manager = sseManager] in
+            await manager?.disconnect()
+        }
+        sseManager = nil
     }
 }
 
