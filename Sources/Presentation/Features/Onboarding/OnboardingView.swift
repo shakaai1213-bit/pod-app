@@ -1,4 +1,5 @@
 import SwiftUI
+import AuthenticationServices
 
 // MARK: - OnboardingView
 
@@ -236,9 +237,40 @@ private struct ConnectPage: View {
             }
 
             Spacer()
-                .frame(height: 48)
+                .frame(height: 32)
 
-            // Token input
+            // Sign in with Apple — primary path (DDS-POD-AS-VIEW Phase 1)
+            SignInWithAppleButton(
+                onRequest: { request in
+                    request.requestedScopes = [.fullName, .email]
+                },
+                onCompletion: { _ in
+                    // Apple sheet completion is observed inside SIWASignInService;
+                    // we just kick the VM flow which manages its own credential req.
+                    Task { await viewModel.signInWithApple() }
+                }
+            )
+            .signInWithAppleButtonStyle(.white)
+            .frame(height: 52)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .padding(.horizontal, 32)
+
+            // "or" divider
+            HStack(spacing: 12) {
+                Rectangle()
+                    .fill(AppColors.border)
+                    .frame(height: 1)
+                Text("or")
+                    .font(.caption)
+                    .foregroundColor(AppColors.textTertiary)
+                Rectangle()
+                    .fill(AppColors.border)
+                    .frame(height: 1)
+            }
+            .padding(.horizontal, 48)
+            .padding(.vertical, 16)
+
+            // Token input (fallback for power users / dev)
             VStack(spacing: 16) {
                 HStack(spacing: 12) {
                     Image(systemName: "key.fill")

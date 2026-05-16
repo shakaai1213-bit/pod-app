@@ -404,8 +404,7 @@ public actor SSEStreamManager {
         dataTask = session?.dataTask(with: request)
         dataTask?.resume()
 
-        // Signal connected after a short delay (stream opens)
-        try? await Task.sleep(nanoseconds: 500_000_000)
+        // Signal connected immediately — Task.sleep hangs on iOS 26 beta
         if !isCancelled {
             continuation.yield(.connected)
         }

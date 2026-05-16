@@ -59,6 +59,11 @@ final class AppState: ObservableObject {
     func attemptAutoLogin() async {
         let success = await authManager.attemptAutoLogin()
         if success, let user = authManager.currentUser {
+            // Bridge the Keychain token into APIClient so all ViewModels can make authenticated requests
+            if let token = await authManager.getActiveAccessToken() {
+                await APIClient.shared.setToken(token)
+                UserDefaults.standard.set(token, forKey: "orca_auth_token")
+            }
             currentUser = TeamMember(id: user.id, name: user.name, avatarColor: "#6B46C1")
             isAuthenticated = true
             await fetchCurrentUser()

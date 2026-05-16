@@ -1,5 +1,12 @@
 import SwiftUI
 
+// DEPRECATED 2026-05-07 — superseded by Features/DirectChat/. Not wired into
+// ContentView's tab navigation. Channel/Message/ChatChannelType types defined
+// in ChatViewModel.swift are still referenced by Data/Local/SwiftDataModels.swift
+// and Data/Repositories/ChannelRepository.swift, so this file cannot be deleted
+// without untangling that dependency chain (deferred to a future M-cleanup
+// milestone). DO NOT add new functionality here; see Features/DirectChat/.
+
 struct ChatView: View {
     // ViewModel passed in from ContentView so it survives tab switches
     @Bindable var viewModel: ChatViewModel

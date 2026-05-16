@@ -7,3 +7,7 @@ Sources/Presentation/Features/DirectChat/AgentSecrets.swift
 
 # SEC-007 remediation 2026-05-08: ORCA bearer token (template at OrcaSecrets.swift.template)
 Sources/App/OrcaSecrets.swift
+
+# Xcode per-user IDE state (never track)
+*.xcuserstate
+xcuserdata/

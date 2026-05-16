@@ -1,5 +1,6 @@
 import SwiftUI
 import Observation
+import AuthenticationServices
 
 // MARK: - OnboardingPage
 
@@ -149,6 +150,62 @@ final class OnboardingViewModel {
                 self.errorMessage = "Connection failed. Check your network and try again."
             }
             return false
+        }
+    }
+
+    // MARK: - Sign in with Apple
+    //
+    // Calls SIWASignInService → backend `/api/v1/auth/apple/callback` →
+    // stores returned access/refresh token pair in Keychain via TokenManager
+    // and sets it as the active token on APIClient. Then fetches the user's
+    // first agent to populate userName, and advances to the Ready page.
+
+    @MainActor
+    func signInWithApple() async {
+        isConnecting = true
+        errorMessage = nil
+
+        defer { isConnecting = false }
+
+        let service = SIWASignInService(
+            tokenManager: TokenManager(),
+            apiClient: APIClient.shared
+        )
+
+        do {
+            let stored = try await service.signIn()
+            // Make subsequent authenticated calls work
+            await APIClient.shared.setToken(stored.accessToken)
+
+            // Fetch user's name from /api/v1/agents (same shape as token-path)
+            let preferredName = await fetchPreferredName(token: stored.accessToken)
+            self.userName = preferredName ?? "Captain"
+            self.currentPage = OnboardingPage.ready.rawValue
+        } catch SIWASignInError.userCancelled {
+            // No-op — user backed out of the Apple sheet
+        } catch let err as SIWASignInError {
+            self.errorMessage = err.errorDescription ?? "Sign in failed."
+        } catch {
+            self.errorMessage = "Sign in failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func fetchPreferredName(token: String) async -> String? {
+        guard let url = URL(string: "\(baseURL)/api/v1/agents") else { return nil }
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.timeoutInterval = 15
+        do {
+            let (data, response) = try await URLSession.shared.data(for: req)
+            guard let http = response as? HTTPURLResponse,
+                  (200...299).contains(http.statusCode) else { return nil }
+            let decoder = JSONDecoder()
+            decoder.keyDecodingStrategy = .convertFromSnakeCase
+            let agents = try decoder.decode(PaginatedResponse<AgentDTO>.self, from: data)
+            return agents.items.first?.name
+        } catch {
+            return nil
         }
     }
 

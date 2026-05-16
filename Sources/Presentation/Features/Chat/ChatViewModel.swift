@@ -126,6 +126,13 @@ struct MessageGroup: Identifiable, Sendable {
 
 import SwiftUI
 
+// DEPRECATED 2026-05-07 — superseded by Features/DirectChat/. The Channel,
+// Message, Reaction, and ChatChannelType types defined in this file are still
+// referenced by the data layer (Data/Local/SwiftDataModels.swift,
+// Data/Repositories/ChannelRepository.swift, Core/Mock/MockData.swift), so
+// the file cannot be deleted without that cleanup (deferred to a future
+// M-cleanup milestone). DO NOT add new functionality here.
+
 @MainActor
 @Observable
 final class ChatViewModel {
@@ -234,12 +241,21 @@ final class ChatViewModel {
 
                 if Task.isCancelled { break }
 
-                // Only flip the indicator to OFFLINE if we've been disconnected longer than the backoff
-                // This prevents the OFFLINE flash during brief reconnects
-                let reconnectDelay = backoffNanos
-                try? await Task.sleep(nanoseconds: reconnectDelay)
+                // Reconnect backoff — use DispatchSource timer to avoid iOS 26 Task.sleep bug
+                let reconnectSeconds = Double(backoffNanos) / 1_000_000_000.0
+                await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                    var fired = false
+                    let timer = DispatchSource.makeTimerSource(queue: .global())
+                    timer.schedule(deadline: .now() + reconnectSeconds)
+                    timer.setEventHandler {
+                        guard !fired else { return }
+                        fired = true
+                        timer.cancel()
+                        cont.resume()
+                    }
+                    timer.resume()
+                }
 
-                // If still not cancelled after the wait, mark offline briefly then reconnect
                 if !Task.isCancelled {
                     self.sseConnected = false
                 }

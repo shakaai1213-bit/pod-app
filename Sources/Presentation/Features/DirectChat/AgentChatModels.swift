@@ -11,6 +11,7 @@ struct AgentInfo: Identifiable, Hashable, Sendable {
     let icon: String            // SF Symbol name
     let color: String           // hex color for avatar
     let endpoint: AgentEndpoint
+    let isReachable: Bool       // false → row greyed out + tap shows "coming soon"
 
     struct AgentEndpoint: Hashable, Sendable {
         let baseURL: String     // OpenClaw gateway URL
@@ -19,7 +20,18 @@ struct AgentInfo: Identifiable, Hashable, Sendable {
 }
 
 extension AgentInfo {
+    // MARK: - Gateway URL constants (non-sensitive)
+    private static let shakaMacGateway = "https://shakas-mac-mini.tail82d30d.ts.net"
+    private static let chiefMacGateway = "https://chiefs-mac-mini.tail82d30d.ts.net"
+
     /// The team — hardcoded for v1. Will become config-driven.
+    /// Auth tokens read from AgentSecrets (gitignored, see AgentSecrets.swift.template).
+    /// M1 security per Rooster review 2026-05-07.
+    ///
+    /// Reachability state is hardcoded per `agent_gateway_healthcheck.py` truth as of
+    /// 2026-05-07 (Path B per Shaka CEO call). Re-run the healthcheck script after any
+    /// gateway/handler change and update isReachable: flags here.
+    /// Currently reachable: Aurora, Aloha. Others have no server-side chat handler yet.
     static let team: [AgentInfo] = [
         AgentInfo(
             id: "aurora",
@@ -28,9 +40,10 @@ extension AgentInfo {
             icon: "sparkles",
             color: "A855F7",
             endpoint: .init(
-                baseURL: "http://127.0.0.1:18789",
-                authToken: "S43piRnUxdxlKSHG2cLOLYjGUV_yYYOh"
-            )
+                baseURL: shakaMacGateway,
+                authToken: AgentSecrets.shakaMacGatewayToken
+            ),
+            isReachable: true  // Has server-side chat handler (verified via healthcheck)
         ),
         AgentInfo(
             id: "maui",
@@ -39,9 +52,10 @@ extension AgentInfo {
             icon: "wrench.and.screwdriver",
             color: "F97316",
             endpoint: .init(
-                baseURL: "http://127.0.0.1:18789",
-                authToken: "S43piRnUxdxlKSHG2cLOLYjGUV_yYYOh"
-            )
+                baseURL: shakaMacGateway,
+                authToken: AgentSecrets.shakaMacGatewayToken
+            ),
+            isReachable: false  // No server-side handler (Claude session, not chat backend)
         ),
         AgentInfo(
             id: "aloha",
@@ -50,9 +64,10 @@ extension AgentInfo {
             icon: "doc.text",
             color: "EC4899",
             endpoint: .init(
-                baseURL: "http://127.0.0.1:18789",
-                authToken: "S43piRnUxdxlKSHG2cLOLYjGUV_yYYOh"
-            )
+                baseURL: shakaMacGateway,
+                authToken: AgentSecrets.shakaMacGatewayToken
+            ),
+            isReachable: true  // Has server-side chat handler (verified via healthcheck)
         ),
         AgentInfo(
             id: "luna",
@@ -61,9 +76,10 @@ extension AgentInfo {
             icon: "moon.stars",
             color: "6366F1",
             endpoint: .init(
-                baseURL: "http://100.80.44.41:18789",
-                authToken: "f5f8b8d5b029e78783d1b7ac6ecb075b078731b4b4ac3e059562d4cf2f838e90"
-            )
+                baseURL: chiefMacGateway,
+                authToken: AgentSecrets.chiefMacGatewayToken
+            ),
+            isReachable: false  // chief-mac gateway daemon down (Reef reviving)
         ),
         AgentInfo(
             id: "chief",
@@ -72,9 +88,58 @@ extension AgentInfo {
             icon: "chart.line.uptrend.xyaxis",
             color: "22C55E",
             endpoint: .init(
-                baseURL: "http://100.80.44.41:18789",
-                authToken: "f5f8b8d5b029e78783d1b7ac6ecb075b078731b4b4ac3e059562d4cf2f838e90"
-            )
+                baseURL: chiefMacGateway,
+                authToken: AgentSecrets.chiefMacGatewayToken
+            ),
+            isReachable: false  // chief-mac gateway daemon down (Reef reviving)
+        ),
+        AgentInfo(
+            id: "coral",
+            name: "Coral",
+            role: "Operations",
+            icon: "circle.hexagongrid",
+            color: "06B6D4",
+            endpoint: .init(
+                baseURL: shakaMacGateway,
+                authToken: AgentSecrets.shakaMacGatewayToken
+            ),
+            isReachable: false  // No server-side handler (Claude session, not chat backend)
+        ),
+        AgentInfo(
+            id: "rooster",
+            name: "Rooster",
+            role: "Head of Security",
+            icon: "checkmark.shield",
+            color: "EF4444",
+            endpoint: .init(
+                baseURL: chiefMacGateway,
+                authToken: AgentSecrets.chiefMacGatewayToken
+            ),
+            isReachable: false  // chief-mac gateway daemon down (Reef reviving)
+        ),
+        AgentInfo(
+            id: "reef",
+            name: "Reef",
+            role: "Watchdogs",
+            icon: "waveform.path.ecg",
+            color: "14B8A6",
+            endpoint: .init(
+                baseURL: chiefMacGateway,
+                authToken: AgentSecrets.chiefMacGatewayToken
+            ),
+            isReachable: false  // chief-mac gateway daemon down (Reef reviving)
+        ),
+        AgentInfo(
+            id: "shaka",
+            name: "Shaka",
+            role: "CEO",
+            icon: "hands.sparkles",
+            color: "FBBF24",
+            endpoint: .init(
+                baseURL: shakaMacGateway,
+                authToken: AgentSecrets.shakaMacGatewayToken
+            ),
+            isReachable: false  // Person, not Claude session — no chat handler
         ),
     ]
 

@@ -187,11 +187,11 @@ final class TicketsViewModel {
 
         do {
             let dtos: [TicketDTO] = try await api.get(path: "/api/v1/tickets")
-            
+
             // Fetch agent names for tickets with assignee_agent_id
             let agentIds = Set(dtos.compactMap { $0.assigneeAgentId })
             var agentNames: [String: String] = [:]
-            
+
             if !agentIds.isEmpty {
                 do {
                     let response: PaginatedResponse<AgentDTO> = try await api.get(path: "/api/v1/agents")
@@ -202,20 +202,42 @@ final class TicketsViewModel {
                     // Ignore agent fetch errors, we'll show IDs instead
                 }
             }
-            
+
             tickets = dtos.map { dto in
                 let agentName = dto.assigneeAgentId.flatMap { agentNames[$0] }
                 return dto.toDomain(agentName: agentName)
             }.sorted { $0.createdAt > $1.createdAt }
+        } catch let apiError as APIError {
+            // 2026-05-07 plumbing fix: no more silent mock fallback. Surface the real error.
+            tickets = []
+            errorMessage = Self.userFacingMessage(for: apiError)
         } catch {
-            // Backend offline — fall back to local ticket data
-            tickets = Self.mockTickets
+            tickets = []
+            errorMessage = "Couldn't load tickets. Pull to retry."
         }
     }
 
-    // MARK: - Mock Fallback
+    // MARK: - Error classification
 
-    private static var mockTickets: [Ticket] {
+    private static func userFacingMessage(for error: APIError) -> String {
+        switch error.code {
+        case 401, 403:
+            return "Signed out. Sign in to see your tickets."
+        case 404:
+            return "Tickets endpoint not found. Backend may be out of date."
+        case 500...599:
+            return "Server returned \(error.code). Engineers notified."
+        case 0:
+            return "Can't reach backend. Check your connection."
+        default:
+            return error.message.isEmpty ? "Couldn't load tickets (\(error.code))." : error.message
+        }
+    }
+
+    // MARK: - Mock Fallback (DEBUG previews only — 2026-05-07: no longer hit in production)
+
+    #if DEBUG
+    static var mockTickets: [Ticket] {
         let now = Date()
         return [
             Ticket(
@@ -297,6 +319,7 @@ final class TicketsViewModel {
             )
         ]
     }
+    #endif
 
     // MARK: - Create
 
@@ -310,7 +333,9 @@ final class TicketsViewModel {
             title: newTitle.trimmingCharacters(in: .whitespacesAndNewlines),
             description: newDescription.isEmpty ? nil : newDescription,
             priority: newPriority.rawValue,
-            assigneeAgentId: newAssigneeAgentId.isEmpty ? nil : newAssigneeAgentId
+            assigneeAgentId: newAssigneeAgentId.isEmpty ? nil : newAssigneeAgentId,
+            parentTicketId: nil,
+            lessonsLearned: nil
         )
 
         do {
@@ -321,8 +346,10 @@ final class TicketsViewModel {
             newPriority = .normal
             showCreateSheet = false
             await load()
+        } catch let apiError as APIError {
+            errorMessage = "Couldn't create ticket: \(Self.userFacingMessage(for: apiError))"
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = "Couldn't create ticket. Try again."
         }
     }
 
@@ -334,8 +361,10 @@ final class TicketsViewModel {
             let body = UpdateTicketBody(status: status.rawValue)
             let _: TicketDTO = try await api.patch(path: "/api/v1/tickets/\(ticketId)", body: body)
             await load()
+        } catch let apiError as APIError {
+            errorMessage = "Couldn't update status: \(Self.userFacingMessage(for: apiError))"
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = "Couldn't update status. Try again."
         }
     }
 
@@ -347,8 +376,10 @@ final class TicketsViewModel {
             let body = UpdateTicketLessonsBody(lessonsLearned: lessonsLearned)
             let _: TicketDTO = try await api.patch(path: "/api/v1/tickets/\(ticketId)", body: body)
             await load()
+        } catch let apiError as APIError {
+            errorMessage = "Couldn't save lessons: \(Self.userFacingMessage(for: apiError))"
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = "Couldn't save lessons. Try again."
         }
     }
 }

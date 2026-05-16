@@ -11,6 +11,7 @@
 		00E5120390A25C364860CB9E /* VoiceCompanionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 123B9D533AE21BBEEF5A4607 /* VoiceCompanionView.swift */; };
 		06AF85E590D1677BF0CA067C /* StandardEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5D15A077B49CD21B9DDADD5 /* StandardEditorView.swift */; };
 		09171C1766C130BFDB1E66F7 /* VoiceCompanionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30A2E30B6BCD93E8C0D2E71C /* VoiceCompanionViewModel.swift */; };
+		0B923DA74D035A1A6EC2612D /* SIWASignInService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E5074135FB4FB6CD803239 /* SIWASignInService.swift */; };
 		115714EE9EE458D6F1609B08 /* OnboardingViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 348A3B6C0FA234B66DDC7B35 /* OnboardingViewModel.swift */; };
 		14610919B63399A84F20572E /* ResearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 703523736226500B2CD58309 /* ResearchView.swift */; };
 		14BC9A59F22AD1A5BDFD5DDE /* BoardRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E253A244EAB68FD7087A05E0 /* BoardRepository.swift */; };
@@ -180,6 +181,7 @@
 		B67EF6C16A2506EA8FE103F2 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		B7F5808B0A89E2CE05779BF4 /* AgentStatusCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentStatusCard.swift; sourceTree = "<group>"; };
 		BBEBD1E0B19B12F48A528F56 /* ActivityItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityItemView.swift; sourceTree = "<group>"; };
+		C0E5074135FB4FB6CD803239 /* SIWASignInService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SIWASignInService.swift; path = Sources/Core/Auth/SIWASignInService.swift; sourceTree = "<group>"; };
 		C1E75CB63EBA420B1C8624C8 /* AuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthManager.swift; sourceTree = "<group>"; };
 		C49A1876596C226FEB029C28 /* UserNameCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserNameCache.swift; sourceTree = "<group>"; };
 		C62213C075198085FB1FC11D /* MessageBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBubbleView.swift; sourceTree = "<group>"; };
@@ -402,6 +404,7 @@
 				80E142B6B368283CCC120F43 /* DirectChatView.swift */,
 				A3F6B8831FAA0713B3C6E6AE /* AgentSecrets.swift */,
 				3B16E68B9CAA72E4A0E85397 /* OrcaSecrets.swift */,
+				C0E5074135FB4FB6CD803239 /* SIWASignInService.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -763,6 +766,7 @@
 				715B4ED497E7475482E522AA /* DirectChatView.swift in Sources */,
 				E22D3809A28B28F3088F7F4B /* AgentSecrets.swift in Sources */,
 				B341A424B11D3505279B8F0F /* OrcaSecrets.swift in Sources */,
+				0B923DA74D035A1A6EC2612D /* SIWASignInService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

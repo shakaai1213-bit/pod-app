@@ -97,7 +97,6 @@ struct MessageDTO: Codable, Identifiable {
         channelId = try container.decode(String.self, forKey: .channelId)
         authorId = try container.decode(String.self, forKey: .authorId)
         authorName = try container.decodeIfPresent(String.self, forKey: .authorName) ?? "Unknown"
-        authorName = try container.decodeIfPresent(String.self, forKey: .authorName) ?? "Unknown"
         content = try container.decode(String.self, forKey: .content)
         timestamp = try container.decode(Date.self, forKey: .timestamp)
         agentId = try container.decodeIfPresent(String.self, forKey: .agentId)

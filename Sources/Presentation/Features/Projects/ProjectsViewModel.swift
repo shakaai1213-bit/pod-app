@@ -66,9 +66,11 @@ final class ProjectsViewModel {
     func loadBoards() async {
         await MainActor.run { isLoading = true }
 
-        do {
-            let response: PaginatedResponse<BoardDTO> = try await apiClient.get(path: "/api/v1/boards")
-            let boards = response.items.map { dto -> Board in
+        // Try /api/v1/boards first (paginated). Falls back to /api/v1/projects/ (flat array) if it 500s.
+        var boards: [Board] = []
+
+        if let response = try? await apiClient.get(path: "/api/v1/boards") as PaginatedResponse<BoardDTO> {
+            boards = response.items.map { dto in
                 Board(
                     id: UUID(uuidString: dto.id) ?? UUID(),
                     name: dto.name,
@@ -79,7 +81,24 @@ final class ProjectsViewModel {
                     lastActivity: dto.updatedAt
                 )
             }
+        }
 
+        // Boards endpoint broken (500) — fall back to /api/v1/projects/
+        if boards.isEmpty, let projects = try? await apiClient.get(path: "/api/v1/projects/") as [ProjectDTO] {
+            boards = projects.map { dto in
+                Board(
+                    id: dto.id,
+                    name: dto.name,
+                    description: dto.description ?? dto.goal ?? "",
+                    stageCounts: [:],
+                    taskCount: 0,
+                    completedTaskCount: 0,
+                    lastActivity: dto.updatedAt
+                )
+            }
+        }
+
+        await MainActor.run {
             if !boards.isEmpty {
                 let group = BoardGroup(
                     id: UUID(),
@@ -88,17 +107,11 @@ final class ProjectsViewModel {
                     taskCount: boards.reduce(0) { $0 + $1.taskCount },
                     completedTaskCount: boards.reduce(0) { $0 + $1.completedTaskCount }
                 )
-                await MainActor.run {
-                    self.boardGroups = [group]
-                    self.isLoading = false
-                }
+                self.boardGroups = [group]
             } else {
-                await MainActor.run { self.loadMockData() }
-                await MainActor.run { self.isLoading = false }
+                self.loadMockData()
             }
-        } catch {
-            await MainActor.run { self.loadMockData() }
-            await MainActor.run { self.isLoading = false }
+            self.isLoading = false
         }
     }
 

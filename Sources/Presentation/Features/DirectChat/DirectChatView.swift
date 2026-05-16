@@ -18,14 +18,25 @@ struct DirectChatView: View {
 
     private var agentListSidebar: some View {
         List(AgentInfo.team) { agent in
-            NavigationLink(value: agent) {
+            // Path B per Shaka 2026-05-07: unreachable agents render as non-tappable
+            // greyed rows with a "coming soon" indicator. Reachable agents behave
+            // normally with NavigationLink. Source of truth: agent_gateway_healthcheck.py.
+            if agent.isReachable {
+                NavigationLink(value: agent) {
+                    AgentRowView(agent: agent, viewModel: viewModel)
+                }
+                .listRowBackground(
+                    viewModel.selectedAgent?.id == agent.id
+                    ? AppColors.accentElectric.opacity(0.15)
+                    : Color.clear
+                )
+            } else {
                 AgentRowView(agent: agent, viewModel: viewModel)
+                    .opacity(0.45)
+                    .listRowBackground(Color.clear)
+                    .accessibilityLabel("\(agent.name) — coming soon, not yet reachable")
+                    .accessibilityHint("This agent does not yet have a chat handler. Available in a future update.")
             }
-            .listRowBackground(
-                viewModel.selectedAgent?.id == agent.id
-                ? AppColors.accentElectric.opacity(0.15)
-                : Color.clear
-            )
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
@@ -109,10 +120,17 @@ struct AgentRowView: View {
                     }
                 }
 
-                Text(viewModel.lastMessagePreview(for: agent).text)
-                    .font(.caption)
-                    .foregroundColor(AppColors.textSecondary)
-                    .lineLimit(1)
+                if agent.isReachable {
+                    Text(viewModel.lastMessagePreview(for: agent).text)
+                        .font(.caption)
+                        .foregroundColor(AppColors.textSecondary)
+                        .lineLimit(1)
+                } else {
+                    Text("Coming soon — agent not yet reachable")
+                        .font(.caption.italic())
+                        .foregroundColor(AppColors.textTertiary)
+                        .lineLimit(1)
+                }
             }
         }
         .padding(.vertical, 6)

@@ -58,6 +58,10 @@ actor APIClient {
         self.authToken = token
     }
 
+    func currentToken() -> String? {
+        authToken ?? UserDefaults.standard.string(forKey: "orca_auth_token")
+    }
+
     /// Atomically sets the token and verifies it by fetching agents.
     /// Returns true if the token is valid, false otherwise.
     func verifyAndSetToken(_ token: String) async -> Bool {
@@ -150,6 +154,23 @@ actor APIClient {
 
     func post<T: Decodable>(path: String, body: some Encodable) async throws -> T {
         let request = try buildRequest(path: path, method: "POST", body: AnyEncodable(body))
+        return try await perform(request)
+    }
+
+    /// POST without injecting Authorization/X-Api-Key headers. Used by
+    /// the SIWA exchange flow (`/auth/apple/callback`) which is the very
+    /// call that mints the bearer token, so it must run unauthenticated.
+    func unauthenticatedPost<T: Decodable>(path: String, body: some Encodable) async throws -> T {
+        let components = URLComponents(string: "\(baseURL)\(path)")
+        guard let url = components?.url else {
+            throw APIError(code: 0, message: "Invalid URL")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try encoder.encode(AnyEncodable(body))
+
         return try await perform(request)
     }
 
