@@ -26,6 +26,10 @@ final class AgentsViewModel {
     var isLoading: Bool = false
     var error: String?
 
+    /// POD-5 (c797ada1): per-agent inbox tail (unread count + recent entries).
+    /// Keyed by lowercased agent name to match the backend filesystem convention.
+    var inboxTails: [String: InboxTailDTO] = [:]
+
     private(set) var sseClient: LocalSSEClient?
 
     // MARK: - Private
@@ -68,6 +72,43 @@ final class AgentsViewModel {
         }
 
         isLoading = false
+    }
+
+    // MARK: - POD-5: Inbox Tail (c797ada1)
+
+    /// Fetch the non-destructive inbox tail for a single agent. Updates
+    /// `inboxTails[name.lowercased()]`. Best-effort — swallows errors so a
+    /// missing/offline agent inbox doesn't break the agents view.
+    @MainActor
+    func loadInboxTail(for agentName: String, limit: Int = 20) async {
+        let key = agentName.lowercased()
+        do {
+            let dto: InboxTailDTO = try await apiClient.request(
+                .agentInboxTail(name: key, limit: limit)
+            )
+            inboxTails[key] = dto
+        } catch {
+            // Soft fail — agent may not have a local inbox yet (e.g., Luna
+            // until the Phase 2 cross-Mac bridge lands). Do not surface to user.
+        }
+    }
+
+    /// Fetch tails for all currently-loaded agents in parallel. Call after
+    /// `loadAgents()` from the AgentsView .task.
+    @MainActor
+    func loadAllInboxTails(limit: Int = 20) async {
+        await withTaskGroup(of: Void.self) { group in
+            for agent in agents {
+                group.addTask { [weak self] in
+                    await self?.loadInboxTail(for: agent.name, limit: limit)
+                }
+            }
+        }
+    }
+
+    /// Convenience for views: how many unread for this agent?
+    func unreadCount(for agentName: String) -> Int {
+        inboxTails[agentName.lowercased()]?.unreadEntries ?? 0
     }
 
     // MARK: - Update Agent Status
@@ -115,12 +156,14 @@ final class AgentsViewModel {
     // MARK: - SSE Subscription
 
     func subscribeToAgentState() {
+        // d87ed975: fix dead /events/agents → real /agents/stream endpoint
+        let token = UserDefaults.standard.string(forKey: "orca_auth_token") ?? ""
         #if targetEnvironment(simulator)
         sseClient = LocalSSEClient(baseURL: "http://127.0.0.1:19002")
         #else
         sseClient = LocalSSEClient(baseURL: "http://100.76.196.40:8000")
         #endif
-        sseClient?.connect(to: "/api/v1/events/agents") { [weak self] event in
+        sseClient?.connect(to: "/api/v1/agents/stream", token: token) { [weak self] event in
             Task { @MainActor in
                 self?.onAgentStateUpdate(event)
             }
@@ -136,10 +179,12 @@ final class AgentsViewModel {
 
     @MainActor
     func onAgentStateUpdate(_ event: SSEEvent) {
-        guard event.type == "agent.status" else { return }
-        guard let agentIdString = event.data["agent_id"] as? String,
+        // d87ed975: backend /agents/stream emits event:"agent" with data:{"agent":{id,status,...}}
+        guard event.type == "agent" else { return }
+        guard let agentPayload = event.data["agent"] as? [String: Any],
+              let agentIdString = agentPayload["id"] as? String,
               let agentId = UUID(uuidString: agentIdString),
-              let statusString = event.data["status"] as? String,
+              let statusString = agentPayload["status"] as? String,
               let newStatus = AgentState(rawValue: statusString)
         else { return }
 
@@ -269,7 +314,7 @@ final class LocalSSEClient: NSObject, URLSessionDataDelegate {
         super.init()
     }
 
-    func connect(to path: String, onEvent: @escaping (SSEEvent) -> Void) {
+    func connect(to path: String, token: String = "", onEvent: @escaping (SSEEvent) -> Void) {
         self.onEvent = onEvent
         session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
         guard let url = URL(string: "\(baseURL)\(path)") else { return }
@@ -277,6 +322,9 @@ final class LocalSSEClient: NSObject, URLSessionDataDelegate {
         var request = URLRequest(url: url)
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         request.timeoutInterval = .infinity
+        if !token.isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
 
         task = session.dataTask(with: request)
         task?.resume()

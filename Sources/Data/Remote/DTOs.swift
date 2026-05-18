@@ -235,6 +235,57 @@ struct AgentDTO: Codable, Identifiable {
     }
 }
 
+// MARK: - POD-5 Inbox Tail (c797ada1)
+// Mirrors backend app/api/agents.py InboxTailResponse + InboxTailEntry.
+// Non-destructive read of ~/.openclaw/agents/<name>/inbox.jsonl + cursor.
+
+struct InboxTailEntryDTO: Codable, Identifiable, Hashable {
+    let id: String
+    let from: String
+    let type: String
+    let timestamp: String
+    let textPreview: String
+    let headline: String
+    let isUnread: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id, from, type, timestamp, headline
+        case textPreview = "text_preview"
+        case isUnread = "is_unread"
+    }
+
+    /// Best-effort display title: headline first, fall back to preview, then placeholder.
+    var displayTitle: String {
+        if !headline.isEmpty { return headline }
+        if !textPreview.isEmpty { return textPreview }
+        return "(no content)"
+    }
+}
+
+struct InboxTailDTO: Codable, Hashable {
+    let agent: String
+    let inboxPath: String
+    let exists: Bool
+    let totalEntries: Int
+    let unreadEntries: Int
+    let inboxBytes: Int
+    let cursorBytes: Int
+    let cursorPresent: Bool
+    let lastActivityTs: String
+    let recent: [InboxTailEntryDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case agent, exists, recent
+        case inboxPath = "inbox_path"
+        case totalEntries = "total_entries"
+        case unreadEntries = "unread_entries"
+        case inboxBytes = "inbox_bytes"
+        case cursorBytes = "cursor_bytes"
+        case cursorPresent = "cursor_present"
+        case lastActivityTs = "last_activity_ts"
+    }
+}
+
 enum AgentStatus: String, Codable {
     case online
     case busy

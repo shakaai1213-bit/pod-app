@@ -30,6 +30,7 @@ struct AgentsView: View {
             .searchable(text: $searchText, prompt: "Search agents…")
             .refreshable {
                 await viewModel.loadAgents()
+                await viewModel.loadAllInboxTails()   // POD-5: refresh unread counts too
             }
             .sheet(item: $selectedAgent) { agent in
                 AgentDetailSheet(
@@ -57,6 +58,8 @@ struct AgentsView: View {
             .task {
                 await viewModel.loadAgents()
                 viewModel.subscribeToAgentState()
+                // POD-5: fetch per-agent inbox tails (non-destructive) in parallel
+                await viewModel.loadAllInboxTails()
             }
             .onDisappear {
                 viewModel.disconnectSSE()
@@ -173,7 +176,8 @@ struct AgentsView: View {
 
             VStack(spacing: 0) {
                 ForEach(agents) { agent in
-                    AgentRow(agent: agent) {
+                    AgentRow(agent: agent,
+                             unreadCount: viewModel.unreadCount(for: agent.name)) {
                         selectedAgent = agent
                     }
 
@@ -351,6 +355,7 @@ struct CompactAgentCard: View {
 
 struct AgentRow: View {
     let agent: Agent
+    var unreadCount: Int = 0          // POD-5 (c797ada1): non-destructive inbox unread
     let onTap: () -> Void
 
     var body: some View {
@@ -363,9 +368,20 @@ struct AgentRow: View {
             AgentAvatar(agent: agent, size: 44)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(agent.name)
-                    .podTextStyle(.headline, color: AppColors.textPrimary)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(agent.name)
+                        .podTextStyle(.headline, color: AppColors.textPrimary)
+                        .lineLimit(1)
+                    // POD-5: pill badge when there's pending unread inbox.
+                    if unreadCount > 0 {
+                        Text("\(unreadCount)")
+                            .podTextStyle(.caption, color: .white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1)
+                            .background(Capsule().fill(Color.red))
+                            .accessibilityLabel("\(unreadCount) unread")
+                    }
+                }
 
                 Text(agent.role)
                     .podTextStyle(.caption, color: AppColors.textSecondary)

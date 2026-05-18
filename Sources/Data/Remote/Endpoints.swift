@@ -28,6 +28,7 @@ enum Endpoint {
 
     case agents
     case agentStatus(agentId: String)
+    case agentInboxTail(name: String, limit: Int)   // POD-5 (c797ada1): non-destructive inbox tail
 
     // MARK: - Health
 
@@ -73,6 +74,9 @@ extension Endpoint {
 
         case .agentStatus(let agentId):
             return "\(Endpoint.basePath)/agents/\(agentId)/status"
+
+        case .agentInboxTail(let name, let limit):
+            return "\(Endpoint.basePath)/agents/\(name)/inbox-tail?limit=\(limit)"
 
         case .health:
             return "\(Endpoint.basePath)/health"

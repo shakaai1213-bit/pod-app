@@ -18,6 +18,9 @@ struct AgentDetailSheet: View {
     @State private var showingConfigureSheet = false
     @State private var showingSendMessage = false
 
+    // POD-5 (c797ada1): non-destructive inbox tail, fetched on appear.
+    @State private var inboxTail: InboxTailDTO?
+
     init(
         agent: Agent,
         onViewLogs: (() -> Void)? = nil,
@@ -40,6 +43,7 @@ struct AgentDetailSheet: View {
             ScrollView {
                 VStack(spacing: Theme.lg) {
                     headerSection
+                    inboxSection                  // POD-5 (c797ada1)
                     statusSection
                     currentTaskSection
                     skillsSection
@@ -48,6 +52,9 @@ struct AgentDetailSheet: View {
                 }
                 .padding(.horizontal, Theme.md)
                 .padding(.bottom, Theme.xxl)
+                .task {
+                    await loadInboxTail()
+                }
             }
             .background(AppColors.backgroundPrimary)
             .navigationTitle(agent.name)
@@ -381,6 +388,85 @@ struct AgentDetailSheet: View {
             )
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: - Inbox Section (POD-5 / M-042 W21)
+    //
+    // Renders the agent's NATS inbox tail via the live backend contract
+    // (GET /api/v1/agents/{name}/inbox-tail?limit=N — M-036 + M-042 backend).
+    // Fetched once on appear via .task; non-destructive read.
+
+    private var inboxSection: some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            sectionHeader("Inbox", count: inboxTail?.unreadEntries)
+
+            if let tail = inboxTail {
+                VStack(spacing: 0) {
+                    if tail.recent.isEmpty {
+                        Text(tail.exists ? "No messages" : "Inbox not yet present")
+                            .podTextStyle(.body, color: AppColors.textTertiary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(Theme.md)
+                    } else {
+                        let rows = Array(tail.recent.reversed().prefix(5))
+                        ForEach(Array(rows.enumerated()), id: \.element.id) { idx, entry in
+                            inboxEntryRow(entry)
+                            if idx < rows.count - 1 {
+                                Divider().background(AppColors.border)
+                            }
+                        }
+                    }
+                }
+                .podCard()
+            } else {
+                HStack(spacing: Theme.sm) {
+                    ProgressView().controlSize(.small)
+                    Text("Loading inbox…")
+                        .podTextStyle(.body, color: AppColors.textTertiary)
+                    Spacer()
+                }
+                .padding(Theme.md)
+                .podCard()
+            }
+        }
+    }
+
+    private func inboxEntryRow(_ entry: InboxTailEntryDTO) -> some View {
+        HStack(alignment: .top, spacing: Theme.sm) {
+            Circle()
+                .fill(entry.isUnread ? AppColors.accentElectric : Color.clear)
+                .frame(width: 8, height: 8)
+                .padding(.top, 6)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack {
+                    Text(entry.from)
+                        .podTextStyle(.label, color: AppColors.textPrimary)
+                    Spacer()
+                    Text(entry.type)
+                        .podTextStyle(.label, color: AppColors.textTertiary)
+                }
+                Text(entry.displayTitle)
+                    .podTextStyle(.body, color: AppColors.textSecondary)
+                    .lineLimit(2)
+            }
+        }
+        .padding(Theme.md)
+    }
+
+    // MARK: - Data Loading
+
+    private func loadInboxTail() async {
+        let name = agent.name.lowercased()
+        do {
+            let dto: InboxTailDTO = try await APIClient.shared.request(
+                .agentInboxTail(name: name, limit: 20)
+            )
+            await MainActor.run { self.inboxTail = dto }
+        } catch {
+            // Soft-fail (mirrors AgentsViewModel.loadInboxTail): inbox may not
+            // be present yet or backend unreachable. UI shows the
+            // "Inbox not yet present" / loading branch — no user-surfaced error.
+        }
     }
 
     // MARK: - Section Header
