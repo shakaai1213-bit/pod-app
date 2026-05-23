@@ -124,6 +124,8 @@ struct ContentView: View {
             WorkView()
         } else if selectedTab == .captainsLog {
             CaptainsLogView()
+        } else if selectedTab == .lab {
+            LabView()
         } else if selectedTab == .agents {
             AgentsView()
         } else if selectedTab == .knowledge {
@@ -152,7 +154,7 @@ struct ContentView: View {
     }
 
     private var visibleTabs: [AppTab] {
-        [.dashboard, .runtime, .chat, .work, .captainsLog, .knowledge, .agents]
+        [.dashboard, .runtime, .chat, .work, .captainsLog, .lab, .knowledge, .agents]
     }
 
     private func tabBarButton(for tab: AppTab) -> some View {
