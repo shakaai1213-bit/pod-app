@@ -44,6 +44,9 @@ struct DashboardView: View {
                                 .strokeBorder(AppColors.accentWarning.opacity(0.3), lineWidth: 0.5)
                         )
                     }
+                    // Cockpit Tier 1 — sign queue. The "what needs your eyes" surface.
+                    CockpitSignQueueSection()
+
                     metricsStrip
                     startupTruthSection
                     liveStateSection
