@@ -1478,6 +1478,20 @@ struct TicketRowView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Priority: \(ticket.priority.label). Tap to change.")
 
+                // short_id chip — mirrors Project card chip per Tony 2026-05-23
+                Text(String(ticket.id.replacingOccurrences(of: "-", with: "").prefix(8)))
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(AppColors.textTertiary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Color(hexString: "0e0e10"))
+                    .clipShape(RoundedRectangle(cornerRadius: 3))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 3)
+                            .strokeBorder(AppColors.border, lineWidth: 0.5)
+                    )
+                    .accessibilityLabel("Ticket ID \(ticket.id.prefix(8))")
+
                 Text(ticket.title)
                     .font(.subheadline)
                     .fontWeight(.medium)
@@ -1616,40 +1630,40 @@ struct TicketRowView: View {
     private var operationalDebtStrip: some View {
         let debts = viewModel.operationalDebts(for: ticket)
         if !debts.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 7) {
-                    Label("Ops Debt", systemImage: "exclamationmark.triangle")
-                        .font(.caption2.weight(.bold))
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 9, weight: .semibold))
                         .foregroundColor(debts.first?.color ?? AppColors.accentWarning)
-                        .lineLimit(1)
-
+                    Text("OPS DEBT")
+                        .font(.system(size: 9, weight: .heavy))
+                        .tracking(0.5)
+                        .foregroundColor(debts.first?.color ?? AppColors.accentWarning)
                     Text(debts.prefix(2).map { "\($0.label): \($0.detail)" }.joined(separator: " / "))
-                        .font(.caption2)
+                        .font(.system(size: 10))
                         .foregroundColor(AppColors.textSecondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
-
                     Spacer(minLength: 0)
-
                     Text("\(debts.count)")
-                        .font(.caption2.monospacedDigit().weight(.bold))
+                        .font(.system(size: 10, weight: .semibold).monospacedDigit())
                         .foregroundColor(AppColors.textTertiary)
                 }
 
-                FlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                FlowLayout(horizontalSpacing: 6, verticalSpacing: 5) {
                     ForEach(Array(debts.prefix(4))) { debt in
                         Label(debt.label, systemImage: debt.icon)
-                            .font(.caption2.weight(.semibold))
+                            .font(.system(size: 10, weight: .semibold))
                             .foregroundColor(debt.color)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
                             .background(debt.color.opacity(0.10))
                             .clipShape(Capsule())
                     }
                 }
             }
-            .padding(.horizontal, 9)
-            .padding(.vertical, 7)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
             .background((debts.first?.color ?? AppColors.accentWarning).opacity(0.07))
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(

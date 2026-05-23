@@ -198,6 +198,27 @@ struct WorkView: View {
             if let stage = project.stage {
                 stagePill(stage)
             }
+
+            // Priority dot — tap to change (P1–P5)
+            Menu {
+                ForEach(1...5, id: \.self) { level in
+                    Button {
+                        Task { await model.updateProjectPriority(projectId: project.id, priority: level) }
+                    } label: {
+                        HStack {
+                            Text("P\(level)")
+                            if project.priority == level {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                Circle()
+                    .fill(priorityColorInt(project.priority))
+                    .frame(width: 7, height: 7)
+            }
+            .accessibilityLabel("Priority P\(project.priority). Tap to change.")
         }
         .padding(.horizontal, 14)
         .frame(minHeight: 44)
@@ -334,7 +355,7 @@ struct WorkView: View {
     }
 
     private func ticketRow(_ ticket: WorkTicketRow) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             // Priority dot — tap to edit per Aloha 2026-05-23 (ticket 46ca818d)
             Menu {
                 ForEach(["urgent", "high", "medium", "low"], id: \.self) { level in
@@ -355,11 +376,14 @@ struct WorkView: View {
                     .fill(priorityColor(ticket.priority))
                     .frame(width: 7, height: 7)
                     .padding(.leading, 4)
-                    .frame(width: 32, height: 32, alignment: .leading)
+                    .frame(width: 24, height: 32, alignment: .leading)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Priority: \(ticket.priority). Tap to change.")
+
+            // short_id chip — mirrors Project card chip per Tony 2026-05-23
+            ticketShortIdChip(ticket.id)
 
             // Title
             Text(ticket.title)
@@ -380,12 +404,37 @@ struct WorkView: View {
         .frame(minHeight: 40)
     }
 
+    private func ticketShortIdChip(_ id: String) -> some View {
+        Text(String(id.replacingOccurrences(of: "-", with: "").prefix(8)))
+            .font(.system(size: 10, design: .monospaced))
+            .foregroundColor(AppColors.textTertiary)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(Color(hexString: "0e0e10"))
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+            .overlay(
+                RoundedRectangle(cornerRadius: 3)
+                    .strokeBorder(AppColors.border, lineWidth: 0.5)
+            )
+            .accessibilityLabel("Ticket ID \(id.prefix(8))")
+    }
+
     private func priorityColor(_ priority: String) -> Color {
         switch priority.lowercased() {
         case "urgent": return AppColors.accentDanger
         case "high":   return AppColors.accentWarning
         case "medium": return AppColors.accentElectric
         default:       return AppColors.textTertiary
+        }
+    }
+
+    private func priorityColorInt(_ priority: Int) -> Color {
+        switch priority {
+        case 1: return AppColors.accentDanger
+        case 2: return AppColors.accentWarning
+        case 3: return AppColors.accentElectric
+        case 4: return AppColors.accentSuccess
+        default: return AppColors.textTertiary
         }
     }
 
@@ -619,10 +668,59 @@ final class WorkViewModel {
             )
         }
     }
+
+    // Tap-to-edit project priority — optimistic local update, revert on failure.
+    @MainActor
+    func updateProjectPriority(projectId: UUID, priority: Int) async {
+        guard let idx = projects.firstIndex(where: { $0.id == projectId }) else { return }
+        let original = projects[idx].priority
+        guard original != priority else { return }
+        // Rebuild with updated priority (ProjectDTO is a let-struct)
+        let old = projects[idx]
+        projects[idx] = ProjectDTO(
+            id: old.id, name: old.name, goal: old.goal, description: old.description,
+            status: old.status, priority: priority, projectedCost: old.projectedCost,
+            actualCost: old.actualCost, createdBy: old.createdBy, assignedTo: old.assignedTo,
+            createdAt: old.createdAt, updatedAt: old.updatedAt,
+            startedAt: old.startedAt, completedAt: old.completedAt, dueDate: old.dueDate,
+            stage: old.stage
+        )
+        struct Body: Encodable { let priority: Int }
+        do {
+            let _: ProjectPatchResponse = try await APIClient.shared.patch(
+                path: "/api/v1/projects/\(projectId)",
+                body: Body(priority: priority)
+            )
+            priorityToast = PriorityToast(message: "Priority → P\(priority)", isError: false, retry: nil)
+        } catch {
+            if let restoreIdx = projects.firstIndex(where: { $0.id == projectId }) {
+                let cur = projects[restoreIdx]
+                projects[restoreIdx] = ProjectDTO(
+                    id: cur.id, name: cur.name, goal: cur.goal, description: cur.description,
+                    status: cur.status, priority: original, projectedCost: cur.projectedCost,
+                    actualCost: cur.actualCost, createdBy: cur.createdBy, assignedTo: cur.assignedTo,
+                    createdAt: cur.createdAt, updatedAt: cur.updatedAt,
+                    startedAt: cur.startedAt, completedAt: cur.completedAt, dueDate: cur.dueDate,
+                    stage: cur.stage
+                )
+            }
+            priorityToast = PriorityToast(
+                message: "Couldn't update — tap to retry",
+                isError: true,
+                retry: { [weak self] in
+                    Task { await self?.updateProjectPriority(projectId: projectId, priority: priority) }
+                }
+            )
+        }
+    }
 }
 
 private struct TicketPatchResponse: Decodable {
     let id: String
+}
+
+private struct ProjectPatchResponse: Decodable {
+    let id: UUID
 }
 
 // MARK: - Work Ticket Row

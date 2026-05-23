@@ -524,8 +524,10 @@ final class CaptainsLogViewModel {
                 // API may return plain array
             }
 
-            // Try paginated first, fall back to array
-            let path = "/api/v1/notes?type=parking_lot&order=created_at.desc&limit=50"
+            // Try paginated first, fall back to array.
+            // Backend param is `note_type` (not `type`); also filter by source so only
+            // entries authored via Pod's Captain's Log surface, not other parking_lot notes.
+            let path = "/api/v1/notes?note_type=parking_lot&source=pod.captains_log&limit=50"
             let items: [NoteListItem]
             if let paginated: NotesResponse = try? await APIClient.shared.get(path: path),
                let list = paginated.items {
