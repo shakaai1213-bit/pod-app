@@ -161,8 +161,9 @@ enum LabContent {
     // NOT operators/workers — those live on the Agents tab.
     // Each Fish has a partner-operator who owns its directive queue.
     static let fishFleet: [LabFish] = [
-        LabFish(id: "starfish",  emoji: "🭐", name: "Starfish",  role: "General autonomous research · partner: Maui 🪝",    status: .live),
-        LabFish(id: "chieffish", emoji: "🐟", name: "Chieffish", role: "Fund/quant lit research · partner: Chief 🦅",       status: .live)
+        LabFish(id: "starfish",    emoji: "🭐",  name: "Starfish",    role: "General autonomous research · partner: Maui 🪝",                status: .live),
+        LabFish(id: "chieffish",   emoji: "🐟",  name: "Chieffish",   role: "Fund/quant lit research · partner: Chief 🦅",                   status: .live),
+        LabFish(id: "roosterfish", emoji: "🐓🐟", name: "Roosterfish", role: "Security research: CVEs + threat intel · partner: Rooster 🐓", status: .live)
     ]
 
     // Adjacent (not Fish but research-substrate-shaped) — Octopus is chief-local, not Pod-surfaced.
