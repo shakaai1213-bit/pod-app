@@ -83,6 +83,19 @@ struct LabBuildingItem: Identifiable {
     let shortId: String
 }
 
+struct LabWorkflowItem: Identifiable {
+    let id = UUID()
+    let title: String
+    let status: String      // "🟢 LIVE" / "DRAFT" / etc — short label
+    let statusColor: Color
+}
+
+struct LabWorkflowGroup: Identifiable {
+    let id = UUID()
+    let title: String       // "Tier governance", "Project + ticket lifecycle", etc
+    let items: [LabWorkflowItem]
+}
+
 // MARK: - Static content (hand-mirror until M-005 v2)
 
 enum LabContent {
@@ -144,27 +157,17 @@ enum LabContent {
         )
     ]
 
-    static let agents: [LabFish] = [
-        LabFish(id: "aloha",   emoji: "🌸", name: "Aloha",   role: "Backbone · Nerve · Coordinator",    status: .live),
-        LabFish(id: "maui",    emoji: "🪝", name: "Maui",    role: "Engineering · ORCA · Pod",          status: .live),
-        LabFish(id: "chief",   emoji: "🦅", name: "Chief",   role: "Fund · trading · protected",        status: .live),
-        LabFish(id: "rooster", emoji: "🐓", name: "Rooster", role: "Security · credentials · tools",    status: .live),
-        LabFish(id: "coral",   emoji: "🪸", name: "Coral",   role: "Shaka-Mac runtime · daemons",       status: .live),
-        LabFish(id: "reef",    emoji: "🐡", name: "Reef",    role: "Chief-Mac runtime · daemons",       status: .live)
+    // The Fish 🐠 — research substrate fleet (per LAB-SYSTEMS-INDEX §11).
+    // NOT operators/workers — those live on the Agents tab.
+    // Each Fish has a partner-operator who owns its directive queue.
+    static let fishFleet: [LabFish] = [
+        LabFish(id: "starfish",  emoji: "🭐", name: "Starfish",  role: "General autonomous research · partner: Maui 🪝",    status: .live),
+        LabFish(id: "chieffish", emoji: "🐟", name: "Chieffish", role: "Fund/quant lit research · partner: Chief 🦅",       status: .live)
     ]
 
-    static let workers: [LabFish] = [
-        LabFish(id: "merman",  emoji: "🧜‍♂️", name: "Merman",  role: "Triage classifier",                status: .live),
-        LabFish(id: "mermaid", emoji: "🧜‍♀️", name: "Mermaid", role: "Bounded worker (V2 dry-run)",      status: .partial),
-        LabFish(id: "turtle",  emoji: "🐢",   name: "Turtle",  role: "Research · slow + thorough",       status: .live),
-        LabFish(id: "miner",   emoji: "⛏️",   name: "Miner",   role: "Data extract · structured pulls",  status: .live),
-        LabFish(id: "pearl",   emoji: "🦪",   name: "Pearl",   role: "Audit · Maui-only doctrine check", status: .live)
-    ]
-
-    static let compute: [LabFish] = [
-        LabFish(id: "spark",  emoji: "✨", name: "Spark",  role: "Local LLM · short-route default", status: .live),
-        LabFish(id: "kimi",   emoji: "🌊", name: "Kimi",   role: "Frontier premium · no-fallback",  status: .live),
-        LabFish(id: "claude", emoji: "🧠", name: "Claude", role: "Per-agent reasoning runtime",     status: .live)
+    // Adjacent (not Fish but research-substrate-shaped) — Octopus is chief-local, not Pod-surfaced.
+    static let fishAdjacent: [LabFish] = [
+        LabFish(id: "octopus", emoji: "🐙", name: "Octopus", role: "Chief's chief-mac research substrate (octopus_arms)", status: .live)
     ]
 
     /// Flywheel loop nodes, in order. Static rendering for v1 (no animation).
@@ -193,6 +196,50 @@ enum LabContent {
         LabBuildingItem(title: "Memory Spine",                            stage: "Captured", owner: "ALO", shortId: "mem-spn"),
         LabBuildingItem(title: "iMessage outbound contract",              stage: "Active",   owner: "ALO", shortId: "cfde783b"),
         LabBuildingItem(title: "Roster Archive cleanup",                  stage: "Active",   owner: "MAU", shortId: "85103d0c")
+    ]
+
+    // Workflows + Protocols — the procedural backbone (per LAB-SYSTEMS-INDEX §13).
+    // STANDARDS govern what's right; PROTOCOLS govern how we coordinate; SOPs are step-by-step recipes.
+    static let workflows: [LabWorkflowGroup] = [
+        LabWorkflowGroup(
+            title: "Tier governance (umbrella, 2026-05-23)",
+            items: [
+                LabWorkflowItem(title: "standards/approval-tiers.md — Tier 1/2/3 model", status: "ALOHA ✅ · TONY ⏳", statusColor: AppColors.accentWarning),
+                LabWorkflowItem(title: "ADR-002.4-governance-gate-transition", status: "ALOHA ✅ · TONY ⏳", statusColor: AppColors.accentWarning)
+            ]
+        ),
+        LabWorkflowGroup(
+            title: "Project + ticket lifecycle",
+            items: [
+                LabWorkflowItem(title: "project-lifecycle-standard — 8 stages", status: "🟢 LIVE", statusColor: AppColors.accentSuccess),
+                LabWorkflowItem(title: "ADR-013-board-folds-into-project", status: "🟢 LIVE", statusColor: AppColors.accentSuccess),
+                LabWorkflowItem(title: "PROTOCOL-VERIFIED-CLOSE", status: "🟢 LIVE", statusColor: AppColors.accentSuccess),
+                LabWorkflowItem(title: "PROTOCOL-INBOX-DRAIN", status: "DRAFT", statusColor: AppColors.accentCaptain)
+            ]
+        ),
+        LabWorkflowGroup(
+            title: "Sign-chain + attribution",
+            items: [
+                LabWorkflowItem(title: "ADR-002 — maintainer model (sign-chain mechanism)", status: "🟢 LIVE", statusColor: AppColors.accentSuccess),
+                LabWorkflowItem(title: "ADR-002.3 — sign-chain integrity (envelope ≠ signature)", status: "DRAFT · TONY ⏳", statusColor: AppColors.accentCaptain),
+                LabWorkflowItem(title: "SOP-VERIFICATION-RECIPES", status: "🟢 LIVE", statusColor: AppColors.accentSuccess),
+                LabWorkflowItem(title: "SOP-SHARED-TOOLS", status: "🟢 LIVE", statusColor: AppColors.accentSuccess)
+            ]
+        ),
+        LabWorkflowGroup(
+            title: "Memory + documentation",
+            items: [
+                LabWorkflowItem(title: "agent-documentation-workflow-standard", status: "🟢 LIVE", statusColor: AppColors.accentSuccess),
+                LabWorkflowItem(title: "SOP-MEMORY-UPDATE — verify, mark, point, date", status: "🟢 LIVE", statusColor: AppColors.accentSuccess),
+                LabWorkflowItem(title: "charters/memory.md", status: "🟢 LIVE", statusColor: AppColors.accentSuccess)
+            ]
+        ),
+        LabWorkflowGroup(
+            title: "Comms",
+            items: [
+                LabWorkflowItem(title: "standards/imessage-reply-contract.md", status: "🟢 LIVE", statusColor: AppColors.accentSuccess)
+            ]
+        )
     ]
 
     static let retiredItems: [LabRetiredItem] = [

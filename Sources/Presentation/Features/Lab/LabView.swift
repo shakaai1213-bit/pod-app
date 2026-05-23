@@ -11,6 +11,7 @@ struct LabView: View {
     // Per-section expand/collapse state (default per spec §2).
     @State private var stackExpanded     = true
     @State private var fishExpanded      = false
+    @State private var workflowsExpanded = false
     @State private var flywheelExpanded  = true
     @State private var buildingExpanded  = true
     @State private var retiredExpanded   = false
@@ -26,6 +27,7 @@ struct LabView: View {
 
                     stackSection
                     fishSection
+                    workflowsSection
                     flywheelSection
                     buildingSection
                     retiredSection
@@ -157,9 +159,12 @@ struct LabView: View {
     }
 
     // MARK: - FISH section
+    //
+    // Per LAB-SYSTEMS-INDEX §11: Fish are the *research substrate fleet* (Starfish, Chieffish).
+    // The Crew (named operators + workers + compute) lives on the Agents tab — Lab does not duplicate.
 
     private var fishSection: some View {
-        let total = LabContent.agents.count + LabContent.workers.count + LabContent.compute.count
+        let total = LabContent.fishFleet.count + LabContent.fishAdjacent.count
         return sectionCard {
             sectionHeader(title: "THE FISH 🐠", count: total, expanded: fishExpanded)
                 .onTapGesture {
@@ -168,12 +173,67 @@ struct LabView: View {
         } body: {
             if fishExpanded {
                 VStack(alignment: .leading, spacing: 12) {
-                    fishStrip(title: "Agents",  fish: LabContent.agents)
-                    fishStrip(title: "Workers", fish: LabContent.workers)
-                    fishStrip(title: "Compute", fish: LabContent.compute)
+                    fishHeaderNote
+                    fishStrip(title: "Research substrate fleet", fish: LabContent.fishFleet)
+                    fishStrip(title: "Adjacent (chief-local, not Pod-surfaced)", fish: LabContent.fishAdjacent)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
+            }
+        }
+    }
+
+    private var fishHeaderNote: some View {
+        Text("Long-running autonomous research agents. Each has a partner-operator who owns its directive queue. Not operators, not workers.")
+            .font(.system(size: 11))
+            .italic()
+            .foregroundColor(AppColors.textTertiary)
+    }
+
+    // MARK: - WORKFLOWS + PROTOCOLS section
+    //
+    // Per LAB-SYSTEMS-INDEX §13: STANDARDS govern what's right; PROTOCOLS govern how we coordinate.
+    // Surfaces the canonical doctrine catalog so Tony + new agents can see procedure without grepping.
+
+    private var workflowsSection: some View {
+        let total = LabContent.workflows.reduce(0) { $0 + $1.items.count }
+        return sectionCard {
+            sectionHeader(title: "WORKFLOWS + PROTOCOLS", count: total, expanded: workflowsExpanded)
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.15)) { workflowsExpanded.toggle() }
+                }
+        } body: {
+            if workflowsExpanded {
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(LabContent.workflows) { group in
+                        workflowGroupView(group)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+            }
+        }
+    }
+
+    private func workflowGroupView(_ group: LabWorkflowGroup) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(group.title.uppercased())
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(AppColors.textTertiary)
+                .tracking(0.5)
+            ForEach(group.items) { item in
+                HStack(alignment: .top, spacing: 6) {
+                    Text(item.title)
+                        .font(.system(size: 13))
+                        .foregroundColor(AppColors.textPrimary)
+                    Spacer(minLength: 6)
+                    Text(item.status)
+                        .font(.system(size: 10, weight: .semibold))
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(item.statusColor.opacity(0.15))
+                        .foregroundColor(item.statusColor)
+                        .clipShape(Capsule())
+                }
             }
         }
     }
