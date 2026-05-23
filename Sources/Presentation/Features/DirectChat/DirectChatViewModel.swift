@@ -309,9 +309,14 @@ final class DirectChatViewModel {
         }
     }
 
+    // Agents with confirmed NATS wake listeners — liveInbox button is exposed only for these.
+    // shaka-mac confirmed: aloha (pilot), maui, coral (com.team.*-wake LaunchAgents verified 2026-05-23).
+    // chief-mac agents (chief, rooster, reef) added after cross-mac listener confirmation from Reef.
+    private static let liveInboxAgents: Set<String> = ["aloha", "maui", "coral"]
+
     func availableDeliveryModes(for agent: AgentInfo) -> [DMDeliveryMode] {
         let workModes: [DMDeliveryMode] = activeTicketId == nil ? [] : [.agentRun]
-        if agent.id == "aloha" {
+        if Self.liveInboxAgents.contains(agent.id) {
             return [.compute, .liveInbox, .auto] + workModes
         }
         return [.compute, .auto] + workModes
