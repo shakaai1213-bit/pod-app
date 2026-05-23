@@ -1,10 +1,14 @@
 import SwiftUI
 
 // MARK: - Captain's Log View
-// Per SPEC-POD-TABS-HANDOFF §5 — read view (Step 3). Compose (Step 4) + actions (Step 5) follow.
+// Per SPEC-POD-TABS-HANDOFF §5 — read view (Step 3) + compose (Step 4) + promote actions (Step 5).
 
 struct CaptainsLogView: View {
     @State private var model = CaptainsLogViewModel()
+    @State private var composeExpanded = false
+    @State private var composeText = ""
+    @State private var composeKind: CaptainsLogViewModel.ItemKind = .note
+    @FocusState private var composeFocused: Bool
 
     var body: some View {
         NavigationStack {
@@ -23,6 +27,12 @@ struct CaptainsLogView: View {
             .background(AppColors.backgroundPrimary.ignoresSafeArea())
             .refreshable { await model.load() }
             .task { await model.load() }
+            .sheet(item: $model.pendingDropEntry) { entry in
+                DropReasonSheet(entry: entry) { reason in
+                    Task { await model.drop(entry, reason: reason) }
+                }
+                .presentationDetents([.height(220)])
+            }
         }
     }
 
@@ -39,9 +49,14 @@ struct CaptainsLogView: View {
                     .foregroundColor(AppColors.textSecondary)
             }
             Spacer()
-            // + button — compose (Step 4, disabled until backend extension lands)
+            // + button — expands inline compose row
             Button {
-                // TODO: open compose sheet when backend Notes extension ships (ticket c5cf51e1)
+                withAnimation(.easeOut(duration: 0.2)) {
+                    composeExpanded = true
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    composeFocused = true
+                }
             } label: {
                 ZStack {
                     Circle()
@@ -52,8 +67,6 @@ struct CaptainsLogView: View {
                         .foregroundColor(.white)
                 }
             }
-            .disabled(true)
-            .opacity(0.4)
             .padding(.top, 4)
         }
     }
@@ -92,9 +105,18 @@ struct CaptainsLogView: View {
         )
     }
 
-    // MARK: - Compose Row Placeholder
+    // MARK: - Compose Row
 
+    @ViewBuilder
     private var composeRowPlaceholder: some View {
+        if composeExpanded {
+            composeRowExpanded
+        } else {
+            composeRowCollapsed
+        }
+    }
+
+    private var composeRowCollapsed: some View {
         HStack(spacing: 10) {
             ZStack {
                 Circle()
@@ -102,7 +124,7 @@ struct CaptainsLogView: View {
                     .frame(width: 24, height: 24)
                 Image(systemName: "plus")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(AppColors.accentElectric.opacity(0.5))
+                    .foregroundColor(AppColors.accentElectric.opacity(0.6))
             }
             Text("Add a note…")
                 .font(.system(size: 13))
@@ -112,6 +134,133 @@ struct CaptainsLogView: View {
         .frame(minHeight: 44)
         .padding(.horizontal, 14)
         .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.easeOut(duration: 0.2)) {
+                composeExpanded = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                composeFocused = true
+            }
+        }
+    }
+
+    private var composeRowExpanded: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // Kind picker
+            HStack(spacing: 6) {
+                ForEach(CaptainsLogViewModel.ItemKind.allCases, id: \.self) { kind in
+                    Button {
+                        composeKind = kind
+                    } label: {
+                        Text(kind.label)
+                            .font(.system(size: 11, weight: composeKind == kind ? .semibold : .regular))
+                            .foregroundColor(composeKind == kind ? .white : AppColors.textSecondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(composeKind == kind ? AppColors.accentElectric : Color.clear)
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule()
+                                    .strokeBorder(composeKind == kind ? Color.clear : AppColors.border, lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+                Spacer()
+            }
+
+            // Text editor
+            ZStack(alignment: .topLeading) {
+                if composeText.isEmpty {
+                    Text("What's on your mind?")
+                        .font(.system(size: 14))
+                        .foregroundColor(AppColors.textTertiary)
+                        .padding(.top, 8)
+                        .padding(.leading, 4)
+                }
+                TextEditor(text: $composeText)
+                    .font(.system(size: 14))
+                    .foregroundColor(AppColors.textPrimary)
+                    .scrollContentBackground(.hidden)
+                    .background(Color.clear)
+                    .frame(minHeight: 60, maxHeight: 140)
+                    .focused($composeFocused)
+            }
+            .padding(8)
+            .background(AppColors.backgroundTertiary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.radiusSmall)
+                    .strokeBorder(composeFocused ? AppColors.accentElectric : AppColors.border, lineWidth: 1)
+            )
+
+            // Error banner
+            if let composeErr = model.composeError {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(AppColors.accentDanger)
+                        .font(.system(size: 11))
+                    Text(composeErr)
+                        .font(.system(size: 12))
+                        .foregroundColor(AppColors.accentDanger)
+                }
+            }
+
+            // Action row
+            HStack {
+                Button("Cancel") {
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        composeExpanded = false
+                        composeText = ""
+                        composeFocused = false
+                        model.composeError = nil
+                    }
+                }
+                .font(.system(size: 13))
+                .foregroundColor(AppColors.textSecondary)
+
+                Spacer()
+
+                Button {
+                    Task {
+                        let trimmed = composeText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !trimmed.isEmpty else {
+                            model.composeError = "Note can't be empty"
+                            return
+                        }
+                        let ok = await model.submit(body: trimmed, kind: composeKind)
+                        if ok {
+                            await MainActor.run {
+                                withAnimation(.easeOut(duration: 0.2)) {
+                                    composeExpanded = false
+                                    composeText = ""
+                                    composeFocused = false
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        if model.isSubmitting {
+                            ProgressView()
+                                .progressViewStyle(.circular)
+                                .scaleEffect(0.7)
+                                .tint(.white)
+                        }
+                        Text(model.isSubmitting ? "Saving…" : "Save")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.white)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(composeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? AppColors.accentElectric.opacity(0.4) : AppColors.accentElectric)
+                    .clipShape(Capsule())
+                }
+                .disabled(model.isSubmitting || composeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(14)
     }
 
     // MARK: - Entry Row
@@ -166,14 +315,41 @@ struct CaptainsLogView: View {
         switch entry.lifecycle {
         case "new":
             HStack(spacing: 8) {
-                // Promote button — disabled until Step 5 (promote actions)
-                Button {
-                    // TODO: promote action sheet (ticket 04ccdd78)
+                // Promote menu — Step 5 actions (Promote/Park/Drop)
+                Menu {
+                    Button {
+                        Task { await model.promote(entry, target: "ticket") }
+                    } label: {
+                        Label("Promote to Ticket", systemImage: "ticket")
+                    }
+                    Button {
+                        Task { await model.promote(entry, target: "project") }
+                    } label: {
+                        Label("Promote to Project", systemImage: "square.stack.3d.up")
+                    }
+                    Divider()
+                    Button {
+                        Task { await model.park(entry) }
+                    } label: {
+                        Label("Park", systemImage: "pause")
+                    }
+                    Button(role: .destructive) {
+                        model.pendingDropEntry = entry
+                    } label: {
+                        Label("Drop…", systemImage: "xmark")
+                    }
                 } label: {
                     HStack(spacing: 4) {
-                        Text("Promote")
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 10))
+                        if model.busyEntryIds.contains(entry.id) {
+                            ProgressView()
+                                .progressViewStyle(.circular)
+                                .scaleEffect(0.5)
+                                .tint(.white)
+                        } else {
+                            Text("Promote")
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 10))
+                        }
                     }
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(.white)
@@ -182,9 +358,7 @@ struct CaptainsLogView: View {
                     .background(AppColors.accentElectric)
                     .clipShape(Capsule())
                 }
-                .buttonStyle(.plain)
-                .disabled(true)
-                .opacity(0.6)
+                .disabled(model.busyEntryIds.contains(entry.id))
 
                 Text("awaiting Aloha digest")
                     .font(.system(size: 11))
@@ -292,9 +466,27 @@ struct CaptainsLogView: View {
 
 @Observable
 final class CaptainsLogViewModel {
+    // ItemKind per SPEC-POD-TABS-HANDOFF §5.2: idea / note / question
+    enum ItemKind: String, CaseIterable {
+        case idea, note, question
+
+        var label: String {
+            switch self {
+            case .idea:     return "Idea"
+            case .note:     return "Note"
+            case .question: return "Question"
+            }
+        }
+    }
+
     var entries: [CaptainsLogEntry] = []
     var isLoading = false
     var error: String?
+    var isSubmitting = false
+    var composeError: String?
+    var busyEntryIds: Set<String> = []
+    var pendingDropEntry: CaptainsLogEntry?
+    var actionError: String?
 
     @MainActor
     func load() async {
@@ -359,6 +551,145 @@ final class CaptainsLogViewModel {
             entries = []
         }
     }
+
+    @MainActor
+    func submit(body: String, kind: ItemKind) async -> Bool {
+        guard !isSubmitting else { return false }
+        isSubmitting = true
+        composeError = nil
+        defer { isSubmitting = false }
+
+        // Per SPEC-POD-TABS-HANDOFF §6: parking_lot note with item_kind/lifecycle/capture_source
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = String(trimmed.prefix(60)) + (trimmed.count > 60 ? "…" : "")
+
+        struct CreateBody: Encodable {
+            let targetType: String
+            let targetId: String?
+            let noteType: String        // "parking_lot"
+            let itemKind: String        // idea/note/question
+            let lifecycle: String       // "new"
+            let captureSource: String   // "pod"
+            let title: String
+            let body: String
+            let tags: [String]
+            let source: String
+            let traceId: String
+            let signState: String
+
+            enum CodingKeys: String, CodingKey {
+                case title, body, tags, source, lifecycle
+                case targetType    = "target_type"
+                case targetId      = "target_id"
+                case noteType      = "note_type"
+                case itemKind      = "item_kind"
+                case captureSource = "capture_source"
+                case traceId       = "trace_id"
+                case signState     = "sign_state"
+            }
+        }
+
+        let request = CreateBody(
+            targetType: "system",
+            targetId: nil,
+            noteType: "parking_lot",
+            itemKind: kind.rawValue,
+            lifecycle: "new",
+            captureSource: "pod",
+            title: title,
+            body: trimmed,
+            tags: ["captains-log", kind.rawValue],
+            source: "pod.captains_log",
+            traceId: "pod-captains-log-\(Int(Date().timeIntervalSince1970))",
+            signState: "draft"
+        )
+
+        do {
+            // Use unscoped /api/v1/notes — the /system/global scoped route drops parking_lot fields
+            let _: OrcaNote = try await APIClient.shared.post(path: "/api/v1/notes", body: request)
+            await load()
+            return true
+        } catch {
+            composeError = "Couldn't save note."
+            return false
+        }
+    }
+
+    @MainActor
+    func promote(_ entry: CaptainsLogEntry, target: String) async {
+        guard !busyEntryIds.contains(entry.id) else { return }
+        busyEntryIds.insert(entry.id)
+        actionError = nil
+        defer { busyEntryIds.remove(entry.id) }
+
+        // Per backend NotePromoteRequest schema: target_kind (required)
+        struct PromoteBody: Encodable {
+            let targetKind: String
+            enum CodingKeys: String, CodingKey {
+                case targetKind = "target_kind"
+            }
+        }
+
+        do {
+            let _: EmptyResponse = try await APIClient.shared.post(
+                path: "/api/v1/notes/\(entry.id)/promote",
+                body: PromoteBody(targetKind: target)
+            )
+            await load()
+        } catch {
+            actionError = "Couldn't promote note."
+        }
+    }
+
+    @MainActor
+    func park(_ entry: CaptainsLogEntry) async {
+        guard !busyEntryIds.contains(entry.id) else { return }
+        busyEntryIds.insert(entry.id)
+        actionError = nil
+        defer { busyEntryIds.remove(entry.id) }
+
+        struct ParkBody: Encodable {
+            let lifecycle: String
+            let source: String
+        }
+
+        do {
+            let _: EmptyResponse = try await APIClient.shared.patch(path: "/api/v1/notes/\(entry.id)", body: ParkBody(lifecycle: "parked", source: "pod.captains_log"))
+            await load()
+        } catch {
+            actionError = "Couldn't park note."
+        }
+    }
+
+    @MainActor
+    func drop(_ entry: CaptainsLogEntry, reason: String) async {
+        guard !busyEntryIds.contains(entry.id) else { return }
+        busyEntryIds.insert(entry.id)
+        pendingDropEntry = nil
+        actionError = nil
+        defer { busyEntryIds.remove(entry.id) }
+
+        struct DropBody: Encodable {
+            let lifecycle: String
+            let dropReason: String
+            let source: String
+
+            enum CodingKeys: String, CodingKey {
+                case lifecycle, source
+                case dropReason = "drop_reason"
+            }
+        }
+
+        do {
+            let _: EmptyResponse = try await APIClient.shared.patch(
+                path: "/api/v1/notes/\(entry.id)",
+                body: DropBody(lifecycle: "dropped", dropReason: reason, source: "pod.captains_log")
+            )
+            await load()
+        } catch {
+            actionError = "Couldn't drop note."
+        }
+    }
 }
 
 // MARK: - Captain's Log Entry
@@ -371,6 +702,44 @@ struct CaptainsLogEntry: Identifiable {
     let createdAt: Date
     let dropReason: String?
     let promotedToId: String?
+}
+
+private struct DropReasonSheet: View {
+    let entry: CaptainsLogEntry
+    let onDrop: (String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var reason = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Drop note")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(AppColors.textPrimary)
+
+            TextField("Reason", text: $reason, axis: .vertical)
+                .font(.system(size: 14))
+                .textFieldStyle(.roundedBorder)
+
+            HStack {
+                Button("Cancel") {
+                    dismiss()
+                }
+                .foregroundColor(AppColors.textSecondary)
+
+                Spacer()
+
+                Button("Drop") {
+                    onDrop(reason.trimmingCharacters(in: .whitespacesAndNewlines))
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(20)
+        .background(AppColors.backgroundPrimary)
+    }
 }
 
 // MARK: - Date Extension
