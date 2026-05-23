@@ -306,8 +306,8 @@ struct WorkView: View {
 
             Spacer(minLength: 4)
 
-            // Owner·priority meta
-            Text("\(ticket.ownerShort)·\(ticket.priority)")
+            // Owner · priority meta (owner is resolved agent name per ticket 7d4c89a7)
+            Text("\(ticket.ownerShort) · \(ticket.priority)")
                 .font(.system(size: 11))
                 .foregroundColor(AppColors.textTertiary)
                 .lineLimit(1)
@@ -476,7 +476,15 @@ final class WorkViewModel {
                     case assigneeAgentId = "assignee_agent_id"
                 }
             }
-            let raw: [TicketListItem] = try await APIClient.shared.get(path: "/api/v1/tickets?status=open&limit=200")
+            // Per ticket 7d4c89a7 (UUID→name resolution): fetch tickets AND agents in parallel,
+            // resolve assigneeAgentId UUIDs to names client-side.
+            async let ticketsAsync: [TicketListItem] = APIClient.shared.get(path: "/api/v1/tickets?status=open&limit=200")
+            async let agentsAsync: [AgentNameOnly] = APIClient.shared.get(path: "/api/v1/agents?limit=200")
+
+            let raw = try await ticketsAsync
+            let agentList = (try? await agentsAsync) ?? []
+            let agentNames: [String: String] = Dictionary(uniqueKeysWithValues: agentList.map { ($0.id, $0.name) })
+
             openTicketCount = raw.count
 
             // Priority sort order
@@ -484,12 +492,19 @@ final class WorkViewModel {
             tickets = raw
                 .sorted { (order[$0.priority] ?? 9) < (order[$1.priority] ?? 9) }
                 .map { t in
-                    let ownerShort = String((t.assigneeAgentId ?? "—").prefix(3)).uppercased()
+                    let ownerLabel: String = {
+                        guard let aid = t.assigneeAgentId else { return "—" }
+                        // Look up name; fall back to UUID prefix for orphan IDs (logged but visible)
+                        if let name = agentNames[aid] {
+                            return name.lowercased()
+                        }
+                        return String(aid.prefix(6))
+                    }()
                     return WorkTicketRow(
                         id: t.id,
                         title: t.title,
                         priority: t.priority,
-                        ownerShort: ownerShort,
+                        ownerShort: ownerLabel,
                         assigneeId: t.assigneeAgentId,
                         projectId: nil
                     )
@@ -506,7 +521,13 @@ struct WorkTicketRow: Identifiable {
     let id: String
     let title: String
     let priority: String
-    let ownerShort: String
+    let ownerShort: String   // resolved agent name (lowercased) or 6-char UUID prefix
     let assigneeId: String?
     let projectId: String?
+}
+
+// Lightweight agent decode for UUID→name resolution
+private struct AgentNameOnly: Decodable {
+    let id: String
+    let name: String
 }
