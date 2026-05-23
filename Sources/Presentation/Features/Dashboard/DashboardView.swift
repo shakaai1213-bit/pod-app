@@ -8,8 +8,6 @@ struct DashboardView: View {
     @State private var viewModel = DashboardViewModel()
     @State private var selectedAgent: Agent?
     @State private var showingSettings = false
-    @State private var showingSearch = false
-    @State private var showingScanSheet = false
     @AppStorage("orca_display_name") private var displayName: String = "Captain"
 
     // MARK: - Body
@@ -19,11 +17,39 @@ struct DashboardView: View {
             ScrollView {
                 VStack(spacing: Theme.lg) {
                     headerSection
+                    // Partial-load error banner — surfaces when any dashboard section fails
+                    if let err = viewModel.error, !err.isEmpty {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(AppColors.accentWarning)
+                                .font(.caption)
+                            Text(err)
+                                .font(.caption)
+                                .foregroundColor(AppColors.textSecondary)
+                                .lineLimit(2)
+                            Spacer()
+                            Button {
+                                Task { await viewModel.loadDashboard() }
+                            } label: {
+                                Text("Retry")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundColor(AppColors.accentElectric)
+                            }
+                        }
+                        .padding(10)
+                        .background(AppColors.accentWarning.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Theme.radiusSmall)
+                                .strokeBorder(AppColors.accentWarning.opacity(0.3), lineWidth: 0.5)
+                        )
+                    }
                     metricsStrip
+                    startupTruthSection
+                    liveStateSection
+                    chiefProtectionSection
                     agentStatusStrip
-                    thisMorningSection
                     needsAttentionSection
-                    quickActionsSection
                 }
                 .padding(.horizontal, Theme.md)
                 .padding(.bottom, Theme.xxl)
@@ -37,12 +63,6 @@ struct DashboardView: View {
             }
             .sheet(isPresented: $showingSettings) {
                 SettingsView()
-            }
-            .sheet(isPresented: $showingSearch) {
-                SearchSheet()
-            }
-            .sheet(isPresented: $showingScanSheet) {
-                ScanSheet()
             }
             .task {
                 await viewModel.loadDashboard()
@@ -124,9 +144,196 @@ struct DashboardView: View {
                 )
 
                 MetricCard(
-                    value: viewModel.needsReviewCount,
-                    label: "Needs Review",
+                    value: viewModel.openTicketsCount,
+                    label: "Open Tickets",
                     color: AppColors.accentDanger
+                )
+            }
+        }
+    }
+
+    // MARK: - Live State Section
+
+    private var startupTruthSection: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack {
+                sectionHeader("Startup Truth", count: viewModel.startupStatus?.components.count)
+
+                if let status = viewModel.startupStatus {
+                    Text(status.ok ? "OK" : "\(viewModel.startupDebtCount) needs review")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(status.ok ? AppColors.accentSuccess : AppColors.accentWarning)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background((status.ok ? AppColors.accentSuccess : AppColors.accentWarning).opacity(0.12))
+                        .clipShape(Capsule())
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            if let status = viewModel.startupStatus {
+                VStack(spacing: Theme.xs) {
+                    ForEach(status.components) { component in
+                        StartupTruthRow(component: component)
+                    }
+                }
+                .padding(Theme.sm)
+                .background(AppColors.backgroundSecondary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                        .strokeBorder(AppColors.border, lineWidth: 1)
+                )
+            } else {
+                HStack(spacing: Theme.sm) {
+                    Image(systemName: "stethoscope")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(AppColors.textTertiary)
+
+                    Text("Startup truth unavailable.")
+                        .podTextStyle(.body, color: AppColors.textSecondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(Theme.md)
+                .background(AppColors.backgroundSecondary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+            }
+        }
+    }
+
+    private var liveStateSection: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack {
+                sectionHeader("Live State", count: viewModel.stateTags.count)
+
+                if viewModel.staleStateTagCount > 0 {
+                    Text("\(viewModel.staleStateTagCount) stale")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(AppColors.accentWarning)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(AppColors.accentWarning.opacity(0.12))
+                        .clipShape(Capsule())
+                }
+
+                Spacer(minLength: 0)
+
+                Button {
+                    Task { await viewModel.exportStateRegistryReview() }
+                } label: {
+                    if viewModel.isExportingStateRegistryReview {
+                        ProgressView()
+                            .scaleEffect(0.75)
+                    } else {
+                        Image(systemName: "square.and.arrow.up.on.square")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppColors.accentElectric)
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(viewModel.isExportingStateRegistryReview)
+                .accessibilityLabel("Export State Registry review packet")
+            }
+
+            if viewModel.stateTags.isEmpty {
+                HStack(spacing: Theme.sm) {
+                    Image(systemName: "waveform.path.ecg")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(AppColors.textTertiary)
+
+                    Text("No live state tags available.")
+                        .podTextStyle(.body, color: AppColors.textSecondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(Theme.md)
+                .background(AppColors.backgroundSecondary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+            } else {
+                VStack(spacing: Theme.xs) {
+                    ForEach(viewModel.stateTags.prefix(10)) { tag in
+                        LiveStateRow(tag: tag)
+                    }
+                }
+                .padding(Theme.sm)
+                .background(AppColors.backgroundSecondary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                        .strokeBorder(AppColors.border, lineWidth: 1)
+                )
+            }
+
+            if let message = viewModel.stateRegistryReviewExportMessage {
+                Label(message, systemImage: viewModel.stateRegistryReviewExport == nil ? "exclamationmark.triangle" : "checkmark.circle")
+                    .font(.caption)
+                    .foregroundStyle(viewModel.stateRegistryReviewExport == nil ? AppColors.accentWarning : AppColors.accentSuccess)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, Theme.sm)
+            }
+
+            if let path = viewModel.stateRegistryReviewExport?.path, !path.isEmpty {
+                Text(path)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(AppColors.textTertiary)
+                    .textSelection(.enabled)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, Theme.sm)
+            }
+        }
+    }
+
+    private var chiefProtectionSection: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack {
+                sectionHeader("Chief/Fund Guardrails", count: viewModel.chiefProtectionTags.count)
+
+                Text("Protected")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(AppColors.accentWarning)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(AppColors.accentWarning.opacity(0.12))
+                    .clipShape(Capsule())
+
+                Spacer(minLength: 0)
+            }
+
+            if viewModel.chiefProtectionTags.isEmpty {
+                HStack(spacing: Theme.sm) {
+                    Image(systemName: "lock.shield")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(AppColors.textTertiary)
+
+                    Text("No verified Chief/Fund status feed is available.")
+                        .podTextStyle(.body, color: AppColors.textSecondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(Theme.md)
+                .background(AppColors.backgroundSecondary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+            } else {
+                VStack(alignment: .leading, spacing: Theme.xs) {
+                    HStack(spacing: Theme.xs) {
+                        Image(systemName: "lock.shield")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppColors.accentWarning)
+                        Text("Pod may show verified cards only. P&L, positions, orders, wallets, and bot changes stay Chief/Rooster/Tony gated.")
+                            .podTextStyle(.caption, color: AppColors.textSecondary)
+                            .lineLimit(3)
+                    }
+
+                    ForEach(viewModel.chiefProtectionTags) { tag in
+                        LiveStateRow(tag: tag)
+                    }
+                }
+                .padding(Theme.sm)
+                .background(AppColors.backgroundSecondary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                        .strokeBorder(AppColors.border, lineWidth: 1)
                 )
             }
         }
@@ -156,29 +363,6 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - This Morning Section
-
-    private var thisMorningSection: some View {
-        VStack(alignment: .leading, spacing: Theme.sm) {
-            sectionHeader("This Morning", count: viewModel.activities.count)
-
-            VStack(spacing: 0) {
-                if viewModel.activities.isEmpty {
-                    emptyActivitiesView
-                } else {
-                    ForEach(viewModel.activities) { item in
-                        ActivityItemView(item: item)
-                        if item.id != viewModel.activities.last?.id {
-                            Divider()
-                                .background(AppColors.border)
-                        }
-                    }
-                }
-            }
-            .podCard()
-        }
-    }
-
     // MARK: - Needs Attention Section
 
     private var needsAttentionSection: some View {
@@ -204,48 +388,6 @@ struct DashboardView: View {
                     }
                 }
                 .podCard()
-            }
-        }
-    }
-
-    // MARK: - Quick Actions Section
-
-    private var quickActionsSection: some View {
-        VStack(alignment: .leading, spacing: Theme.sm) {
-            sectionHeader("Quick Actions")
-
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.sm) {
-                QuickActionButton(
-                    icon: "plus.circle.fill",
-                    label: "New Task",
-                    color: AppColors.accentSuccess
-                ) {
-                    appState.navigateTo(.projects)
-                }
-
-                QuickActionButton(
-                    icon: "bubble.left.fill",
-                    label: "New Message",
-                    color: AppColors.accentElectric
-                ) {
-                    appState.navigateTo(.chat)
-                }
-
-                QuickActionButton(
-                    icon: "magnifyingglass",
-                    label: "Search",
-                    color: AppColors.accentWarning
-                ) {
-                    showingSearch = true
-                }
-
-                QuickActionButton(
-                    icon: "doc.text.viewfinder",
-                    label: "Scan",
-                    color: AppColors.accentAgent
-                ) {
-                    showingScanSheet = true
-                }
             }
         }
     }
@@ -290,20 +432,13 @@ struct DashboardView: View {
             .podCard()
     }
 
-    private var emptyActivitiesView: some View {
-        Text("No recent activity")
-            .podTextStyle(.body, color: AppColors.textTertiary)
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.vertical, Theme.lg)
-    }
-
     private var emptyAttentionView: some View {
         HStack(spacing: Theme.sm) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 20))
                 .foregroundStyle(AppColors.accentSuccess)
 
-            Text("All clear. Your team is humming.")
+            Text("No high-priority open tickets.")
                 .podTextStyle(.body, color: AppColors.textSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -333,6 +468,129 @@ struct DashboardView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEEE, MMMM d"
         return formatter.string(from: Date())
+    }
+}
+
+// MARK: - Startup Truth Row
+
+struct StartupTruthRow: View {
+    let component: DashboardStartupStatusComponentDTO
+
+    var body: some View {
+        HStack(spacing: Theme.sm) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(statusColor)
+                .frame(width: 22)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: Theme.xs) {
+                    Text(component.label)
+                        .podTextStyle(.caption, color: AppColors.textTertiary)
+                        .lineLimit(1)
+
+                    if let latency = component.latencyMs {
+                        Text("\(latency)ms")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(AppColors.textTertiary)
+                    }
+                }
+
+                Text(component.detail)
+                    .podTextStyle(.body, color: AppColors.textPrimary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 0)
+
+            Text(component.status.uppercased())
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(statusColor)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(statusColor.opacity(0.12))
+                .clipShape(Capsule())
+        }
+        .padding(.vertical, 6)
+    }
+
+    private var icon: String {
+        switch component.status.lowercased() {
+        case "good": return "checkmark.circle.fill"
+        case "degraded": return "exclamationmark.triangle.fill"
+        case "unavailable": return "xmark.octagon.fill"
+        default: return "questionmark.circle.fill"
+        }
+    }
+
+    private var statusColor: Color {
+        switch component.status.lowercased() {
+        case "good": return AppColors.accentSuccess
+        case "degraded", "unknown": return AppColors.accentWarning
+        case "unavailable": return AppColors.accentDanger
+        default: return AppColors.textTertiary
+        }
+    }
+}
+
+// MARK: - Live State Row
+
+struct LiveStateRow: View {
+    let tag: StateTagDTO
+
+    var body: some View {
+        HStack(spacing: Theme.sm) {
+            Circle()
+                .fill(statusColor.opacity(0.18))
+                .frame(width: 9, height: 9)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(displayName)
+                    .podTextStyle(.caption, color: AppColors.textTertiary)
+                    .lineLimit(1)
+
+                Text(tag.valueText)
+                    .podTextStyle(.body, color: AppColors.textPrimary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 0)
+
+            Text(tag.quality?.uppercased() ?? "UNKNOWN")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(statusColor)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(statusColor.opacity(0.12))
+                .clipShape(Capsule())
+        }
+        .padding(.vertical, 6)
+    }
+
+    private var displayName: String {
+        tag.tagId
+            .replacingOccurrences(of: "agent.", with: "")
+            .replacingOccurrences(of: "worker.", with: "")
+            .replacingOccurrences(of: "ticket.", with: "")
+            .replacingOccurrences(of: "work_control.", with: "work control ")
+            .replacingOccurrences(of: ".count", with: "")
+            .replacingOccurrences(of: ".counts", with: "")
+            .replacingOccurrences(of: ".active_task", with: "")
+            .replacingOccurrences(of: ".status", with: "")
+            .replacingOccurrences(of: "_", with: " ")
+            .capitalized
+    }
+
+    private var statusColor: Color {
+        if tag.stale {
+            return AppColors.accentWarning
+        }
+        switch tag.quality?.lowercased() {
+        case "good": return AppColors.accentSuccess
+        case "degraded", "unknown", "estimated": return AppColors.accentWarning
+        case "error": return AppColors.accentDanger
+        default: return AppColors.textTertiary
+        }
     }
 }
 
