@@ -10,6 +10,7 @@ import SwiftUI
 
 struct CockpitSignQueueSection: View {
     @State private var model = CockpitSignQueueModel()
+    @State private var detailItem: CockpitSignItem?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -56,6 +57,14 @@ struct CockpitSignQueueSection: View {
         }
         .task { await model.load() }
         .refreshable { await model.load() }
+        .sheet(item: $detailItem) { item in
+            CockpitSignDetailSheet(
+                item: item,
+                onSign: { Task { await model.sign(item); detailItem = nil } },
+                onPass: { Task { await model.countermand(item); detailItem = nil } },
+                isBusy: model.busyIds.contains(item.id)
+            )
+        }
     }
 
     // MARK: - Header
@@ -95,39 +104,56 @@ struct CockpitSignQueueSection: View {
 
     private func row(_ item: CockpitSignItem) -> some View {
         HStack(spacing: 10) {
-            // Kind icon
-            ZStack {
-                Circle()
-                    .fill(item.kind.tint.opacity(0.18))
-                    .frame(width: 28, height: 28)
-                Image(systemName: item.kind.icon)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(item.kind.tint)
-            }
+            // Tappable info area — opens detail sheet with full body
+            Button {
+                detailItem = item
+            } label: {
+                HStack(spacing: 10) {
+                    // Kind icon
+                    ZStack {
+                        Circle()
+                            .fill(item.kind.tint.opacity(0.18))
+                            .frame(width: 28, height: 28)
+                        Image(systemName: item.kind.icon)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(item.kind.tint)
+                    }
 
-            // Title + gate
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.title)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(AppColors.textPrimary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                    // Title + gate + expand hint
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.title)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(AppColors.textPrimary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
 
-                HStack(spacing: 4) {
-                    Text(item.kind.label)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(item.kind.tint)
-                    Text("·")
-                        .font(.system(size: 10))
-                        .foregroundColor(AppColors.textTertiary)
-                    Text(item.gateLabel)
-                        .font(.system(size: 10))
-                        .foregroundColor(AppColors.textTertiary)
-                        .lineLimit(1)
+                        HStack(spacing: 4) {
+                            Text(item.kind.label)
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(item.kind.tint)
+                            Text("·")
+                                .font(.system(size: 10))
+                                .foregroundColor(AppColors.textTertiary)
+                            Text(item.gateLabel)
+                                .font(.system(size: 10))
+                                .foregroundColor(AppColors.textTertiary)
+                                .lineLimit(1)
+                            if !item.body.isEmpty {
+                                Text("·")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(AppColors.textTertiary)
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundColor(AppColors.textTertiary)
+                            }
+                        }
+                    }
+
+                    Spacer(minLength: 6)
                 }
+                .contentShape(Rectangle())
             }
-
-            Spacer(minLength: 6)
+            .buttonStyle(.plain)
 
             // Actions
             if model.busyIds.contains(item.id) {
@@ -222,6 +248,129 @@ struct CockpitSignQueueSection: View {
     }
 }
 
+// MARK: - Detail Sheet
+
+struct CockpitSignDetailSheet: View {
+    let item: CockpitSignItem
+    let onSign: () -> Void
+    let onPass: () -> Void
+    let isBusy: Bool
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack(spacing: 10) {
+                        ZStack {
+                            Circle()
+                                .fill(item.kind.tint.opacity(0.18))
+                                .frame(width: 36, height: 36)
+                            Image(systemName: item.kind.icon)
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(item.kind.tint)
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.kind.label)
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(item.kind.tint)
+                                .kerning(0.5)
+                            Text(item.gateLabel)
+                                .font(.system(size: 12))
+                                .foregroundColor(AppColors.textSecondary)
+                        }
+                        Spacer()
+                        if let pri = item.priority {
+                            Text(pri.uppercased())
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(AppColors.textPrimary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(AppColors.accentWarning.opacity(0.18))
+                                .clipShape(Capsule())
+                        }
+                    }
+
+                    Text(item.title)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(AppColors.textPrimary)
+
+                    if item.body.isEmpty {
+                        Text("No description provided.")
+                            .font(.system(size: 13))
+                            .foregroundColor(AppColors.textTertiary)
+                            .italic()
+                    } else {
+                        Text(item.body)
+                            .font(.system(size: 14))
+                            .foregroundColor(AppColors.textPrimary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    Spacer(minLength: 24)
+                }
+                .padding(20)
+            }
+            .background(AppColors.backgroundPrimary)
+            .safeAreaInset(edge: .bottom) {
+                HStack(spacing: 10) {
+                    Button {
+                        onPass()
+                    } label: {
+                        Text("Pass")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundColor(AppColors.textSecondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(AppColors.backgroundTertiary)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10).strokeBorder(AppColors.border, lineWidth: 0.5)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isBusy)
+
+                    Button {
+                        onSign()
+                    } label: {
+                        HStack(spacing: 6) {
+                            if isBusy {
+                                ProgressView().tint(.white).scaleEffect(0.8)
+                            } else {
+                                Image(systemName: "checkmark.seal.fill")
+                                    .font(.system(size: 13, weight: .semibold))
+                            }
+                            Text("Sign")
+                                .font(.system(size: 15, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(AppColors.accentElectric)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isBusy)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(AppColors.backgroundSecondary)
+            }
+            .navigationTitle("Needs Your Sign")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { dismiss() }
+                        .foregroundColor(AppColors.accentElectric)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+}
+
 // MARK: - Cockpit Sign Item
 
 struct CockpitSignItem: Identifiable, Hashable {
@@ -231,6 +380,7 @@ struct CockpitSignItem: Identifiable, Hashable {
     let gateLabel: String  // approval_gate or doc-name or reviewer
     let priority: String?
     let rawId: String      // server UUID for actions
+    let body: String       // full description (ticket) or content (note) — shown on tap-to-expand
 
     enum Kind: String {
         case ticket, note
@@ -283,10 +433,11 @@ final class CockpitSignQueueModel {
                 struct ApprovalItem: Decodable {
                     let id: String
                     let title: String
+                    let description: String?
                     let priority: String?
                     let approvalGate: String?
                     enum CodingKeys: String, CodingKey {
-                        case id, title, priority
+                        case id, title, description, priority
                         case approvalGate = "approval_gate"
                     }
                 }
@@ -300,7 +451,8 @@ final class CockpitSignQueueModel {
                     title: t.title,
                     gateLabel: t.approvalGate ?? "approval pending",
                     priority: t.priority,
-                    rawId: t.id
+                    rawId: t.id,
+                    body: t.description ?? ""
                 ))
             }
         } catch {
@@ -312,6 +464,7 @@ final class CockpitSignQueueModel {
             struct DraftNote: Decodable {
                 let id: String
                 let title: String
+                let body: String?
                 let reviewer: String?
                 let owner: String?
             }
@@ -328,7 +481,8 @@ final class CockpitSignQueueModel {
                     title: n.title,
                     gateLabel: n.reviewer ?? n.owner ?? "review pending",
                     priority: nil,
-                    rawId: n.id
+                    rawId: n.id,
+                    body: n.body ?? ""
                 ))
             }
         } catch {
