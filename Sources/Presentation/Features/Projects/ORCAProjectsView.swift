@@ -152,7 +152,7 @@ struct ORCAProjectsView: View {
         return ScrollView(.horizontal, showsIndicators: false) {
             HStack(alignment: .top, spacing: Theme.md) {
                 ForEach(ORCAProjectsViewModel.KanbanStatus.allCases, id: \.self) { status in
-                    let colProjects = filtered.filter { $0.status == status.rawValue }
+                    let colProjects = filtered.filter { viewModel.statusBucket($0.status) == status.rawValue }
                     ORCAKanbanColumn(
                         status: status,
                         projects: colProjects,
@@ -287,9 +287,10 @@ private struct ORCAProjectCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.sm) {
-            // Top row: priority dot + priority label
+            // Top row: priority dot + short_id chip + priority label
             HStack(spacing: Theme.xs) {
                 priorityDot
+                shortIdChip
                 Spacer(minLength: 0)
                 priorityLabel
             }
@@ -386,6 +387,21 @@ private struct ORCAProjectCard: View {
             .frame(width: 8, height: 8)
     }
 
+    // short_id chip per SPEC-POD-AGENTS-TAB §4.2 / pull-forward 2026-05-23: first 8 chars of UUID
+    private var shortIdChip: some View {
+        Text(String(project.id.uuidString.replacingOccurrences(of: "-", with: "").prefix(8)))
+            .font(.system(size: 10, design: .monospaced))
+            .foregroundColor(AppColors.textTertiary)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(Color(hexString: "0e0e10"))
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+            .overlay(
+                RoundedRectangle(cornerRadius: 3)
+                    .strokeBorder(AppColors.border, lineWidth: 0.5)
+            )
+    }
+
     private var priorityColor: Color {
         switch project.priority {
         case 1: return AppColors.accentDanger
@@ -438,7 +454,7 @@ private struct NewProjectSheet: View {
     @State private var name = ""
     @State private var goal = ""
     @State private var priority = 3
-    @State private var selectedStatus: ORCAProjectsViewModel.KanbanStatus = .backlog
+    @State private var selectedStage: ProjectLifecycleStage = .blueprint
 
     var body: some View {
         NavigationStack {
@@ -460,9 +476,9 @@ private struct NewProjectSheet: View {
                     }
                 }
 
-                Picker("Status", selection: $selectedStatus) {
-                    ForEach(ORCAProjectsViewModel.KanbanStatus.allCases, id: \.self) { s in
-                        Text(s.displayName).tag(s)
+                Picker("Milestone", selection: $selectedStage) {
+                    ForEach(ProjectLifecycleStage.allCases, id: \.self) { stage in
+                        Text(stage.displayName).tag(stage)
                     }
                 }
             }
@@ -477,7 +493,9 @@ private struct NewProjectSheet: View {
                         Task {
                             await viewModel.createProject(
                                 name: name,
-                                goal: goal.isEmpty ? nil : goal
+                                goal: goal.isEmpty ? nil : goal,
+                                priority: priority,
+                                stage: selectedStage.rawValue
                             )
                             dismiss()
                         }
@@ -508,14 +526,21 @@ private struct ORCAProjectDetailView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var tasks: [ProjectTaskDTO] = []
+    @State private var notes: [ProjectNoteDTO] = []
     @State private var isLoading = false
     @State private var showingNewTask = false
+    @State private var newNoteTitle = ""
+    @State private var newNoteBody = ""
+    @State private var newNoteType = "decision"
+    @State private var isSavingNote = false
+    @State private var noteStatus: String?
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.lg) {
                     projectInfo
+                    notesSection
                     tasksSection
                 }
                 .padding(.horizontal, Theme.md)
@@ -599,6 +624,125 @@ private struct ORCAProjectDetailView: View {
         }
     }
 
+    private var notesSection: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack(spacing: Theme.xs) {
+                Text("NOTES & DECISIONS")
+                    .podTextStyle(.label, color: AppColors.textTertiary)
+
+                Spacer(minLength: 0)
+
+                if !notes.isEmpty {
+                    Text("\(notes.count)")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(AppColors.accentElectric)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(AppColors.accentElectric.opacity(0.12))
+                        .clipShape(Capsule())
+                }
+            }
+
+            VStack(alignment: .leading, spacing: Theme.xs) {
+                HStack(spacing: Theme.xs) {
+                    TextField("Note title", text: $newNoteTitle)
+                        .font(.caption.weight(.semibold))
+                        .textInputAutocapitalization(.sentences)
+
+                    Picker("Type", selection: $newNoteType) {
+                        Text("Decision").tag("decision")
+                        Text("Note").tag("note")
+                        Text("Handoff").tag("handoff")
+                        Text("Finding").tag("finding")
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .font(.caption)
+                }
+
+                TextField("Project note", text: $newNoteBody, axis: .vertical)
+                    .font(.caption)
+                    .lineLimit(2...6)
+
+                Button {
+                    Task { await createProjectNote() }
+                } label: {
+                    HStack(spacing: Theme.xs) {
+                        if isSavingNote {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                        } else {
+                            Image(systemName: "square.and.pencil")
+                        }
+                        Text(isSavingNote ? "Saving" : "Save ORCA Note")
+                            .font(.caption.weight(.semibold))
+                        Spacer()
+                    }
+                    .foregroundStyle(AppColors.accentElectric)
+                }
+                .buttonStyle(.plain)
+                .disabled(!canSaveProjectNote || isSavingNote)
+
+                if let noteStatus {
+                    Text(noteStatus)
+                        .font(.caption2)
+                        .foregroundStyle(noteStatus.localizedCaseInsensitiveContains("couldn't") ? AppColors.accentDanger : AppColors.textTertiary)
+                }
+            }
+            .padding(Theme.sm)
+            .background(AppColors.backgroundTertiary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+
+            if isLoading && notes.isEmpty {
+                RoundedRectangle(cornerRadius: Theme.radiusSmall)
+                    .fill(AppColors.backgroundTertiary)
+                    .frame(height: 72)
+                    .shimmer()
+            } else if notes.isEmpty {
+                Text("No ORCA project notes yet")
+                    .podTextStyle(.body, color: AppColors.textTertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(Theme.md)
+                    .background(AppColors.backgroundTertiary)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+            } else {
+                VStack(spacing: Theme.xs) {
+                    ForEach(notes.prefix(6)) { note in
+                        ORCAProjectNoteRow(note: note)
+                    }
+                }
+            }
+        }
+    }
+
+    private var canSaveProjectNote: Bool {
+        !newNoteTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        && !newNoteBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    @MainActor
+    private func createProjectNote() async {
+        guard canSaveProjectNote else { return }
+        isSavingNote = true
+        noteStatus = nil
+        defer { isSavingNote = false }
+
+        if let note = await viewModel.createNote(
+            projectId: project.id,
+            title: newNoteTitle,
+            body: newNoteBody,
+            noteType: newNoteType
+        ) {
+            notes.insert(note, at: 0)
+            newNoteTitle = ""
+            newNoteBody = ""
+            newNoteType = "decision"
+            noteStatus = "ORCA note saved."
+        } else {
+            noteStatus = "Couldn't save ORCA note."
+        }
+    }
+
     private func metaPill(icon: String, text: String, color: Color) -> some View {
         HStack(spacing: 4) {
             Image(systemName: icon)
@@ -630,9 +774,117 @@ private struct ORCAProjectDetailView: View {
 
     private func loadTasks() async {
         isLoading = true
-        await viewModel.loadTasks(projectId: project.id)
+        async let taskLoad: Void = viewModel.loadTasks(projectId: project.id)
+        async let notesLoad = viewModel.loadNotes(projectId: project.id)
+        _ = await taskLoad
         tasks = viewModel.tasks
+        notes = await notesLoad
         isLoading = false
+    }
+}
+
+private struct ORCAProjectNoteRow: View {
+    let note: ProjectNoteDTO
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: Theme.xs) {
+                Image(systemName: iconName)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(iconColor)
+                    .frame(width: 18)
+
+                Text(note.title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.textPrimary)
+                    .lineLimit(1)
+
+                Spacer(minLength: Theme.xs)
+
+                Text(note.typeLabel)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(iconColor)
+                    .lineLimit(1)
+            }
+
+            Text(note.body)
+                .font(.caption)
+                .foregroundStyle(AppColors.textSecondary)
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: Theme.xs) {
+                if let source = note.source, !source.isEmpty {
+                    noteChip(text: source, icon: "tray")
+                }
+
+                if let signState = note.signState, !signState.isEmpty {
+                    noteChip(text: signState.replacingOccurrences(of: "_", with: " "), icon: "signature")
+                }
+
+                if let traceId = note.traceId, !traceId.isEmpty {
+                    noteChip(text: traceId, icon: "point.3.connected.trianglepath.dotted")
+                }
+
+                Text(note.updatedAt.formatted(date: .abbreviated, time: .shortened))
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.textTertiary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 0)
+            }
+
+            if note.owner?.isEmpty == false || note.reviewer?.isEmpty == false {
+                HStack(spacing: Theme.xs) {
+                    if let owner = note.owner, !owner.isEmpty {
+                        noteChip(text: owner, icon: "person.crop.circle")
+                    }
+
+                    if let reviewer = note.reviewer, !reviewer.isEmpty {
+                        noteChip(text: reviewer, icon: "person.crop.circle.badge.checkmark")
+                    }
+                }
+            }
+
+            if let tags = note.tags, !tags.isEmpty {
+                HStack(spacing: Theme.xs) {
+                    ForEach(tags.prefix(4), id: \.self) { tag in
+                        noteChip(text: tag, icon: "tag")
+                    }
+                }
+            }
+        }
+        .padding(Theme.sm)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+    }
+
+    private var iconName: String {
+        switch note.noteType {
+        case "decision": return "checkmark.seal.fill"
+        case "handoff": return "arrow.left.arrow.right.circle.fill"
+        case "risk": return "exclamationmark.triangle.fill"
+        default: return "note.text"
+        }
+    }
+
+    private var iconColor: Color {
+        switch note.noteType {
+        case "decision": return AppColors.accentSuccess
+        case "risk": return AppColors.accentWarning
+        default: return AppColors.accentElectric
+        }
+    }
+
+    private func noteChip(text: String, icon: String) -> some View {
+        Label(text, systemImage: icon)
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(AppColors.textSecondary)
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(AppColors.backgroundSecondary)
+            .clipShape(Capsule())
     }
 }
 
@@ -700,7 +952,6 @@ private struct NewORCATaskSheet: View {
     @State private var title = ""
     @State private var description = ""
     @State private var priority = 3
-    @State private var selectedStatus: ORCAProjectsViewModel.KanbanStatus = .backlog
 
     var body: some View {
         NavigationStack {
@@ -716,11 +967,9 @@ private struct NewORCATaskSheet: View {
                     }
                 }
 
-                Picker("Status", selection: $selectedStatus) {
-                    ForEach(ORCAProjectsViewModel.KanbanStatus.allCases, id: \.self) { s in
-                        Text(s.displayName).tag(s)
-                    }
-                }
+                Text("New tasks start in ORCA's default project-task state.")
+                    .font(.caption)
+                    .foregroundStyle(AppColors.textSecondary)
             }
             .navigationTitle("New Task")
             .navigationBarTitleDisplayMode(.inline)
@@ -735,7 +984,7 @@ private struct NewORCATaskSheet: View {
                                 let task = try await ProjectRepository().createTask(
                                     projectId: projectId,
                                     title: title,
-                                    status: selectedStatus.rawValue,
+                                    description: description.isEmpty ? nil : description,
                                     priority: priority
                                 )
                                 onCreated(task)

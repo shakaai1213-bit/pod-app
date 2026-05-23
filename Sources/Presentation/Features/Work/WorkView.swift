@@ -291,11 +291,31 @@ struct WorkView: View {
 
     private func ticketRow(_ ticket: WorkTicketRow) -> some View {
         HStack(spacing: 10) {
-            // Priority dot
-            Circle()
-                .fill(priorityColor(ticket.priority))
-                .frame(width: 7, height: 7)
-                .padding(.leading, 4)
+            // Priority dot — tap to edit per Aloha 2026-05-23 (ticket 46ca818d)
+            Menu {
+                ForEach(["urgent", "high", "medium", "low"], id: \.self) { level in
+                    Button {
+                        Task { await model.updateTicketPriority(ticketId: ticket.id, priority: level) }
+                    } label: {
+                        HStack {
+                            Circle().fill(priorityColor(level)).frame(width: 7, height: 7)
+                            Text(level.capitalized)
+                            if ticket.priority.lowercased() == level {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                Circle()
+                    .fill(priorityColor(ticket.priority))
+                    .frame(width: 7, height: 7)
+                    .padding(.leading, 4)
+                    .frame(width: 32, height: 32, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Priority: \(ticket.priority). Tap to change.")
 
             // Title
             Text(ticket.title)
@@ -513,6 +533,31 @@ final class WorkViewModel {
             ticketsError = "Tickets unavailable"
         }
     }
+
+    // Tap-to-edit priority — optimistic local update, revert on failure.
+    @MainActor
+    func updateTicketPriority(ticketId: String, priority: String) async {
+        guard let idx = tickets.firstIndex(where: { $0.id == ticketId }) else { return }
+        let original = tickets[idx].priority
+        guard original.lowercased() != priority.lowercased() else { return }
+        tickets[idx].priority = priority
+        struct Body: Encodable { let priority: String }
+        do {
+            let _: TicketPatchResponse = try await APIClient.shared.patch(
+                path: "/api/v1/tickets/\(ticketId)",
+                body: Body(priority: priority)
+            )
+        } catch {
+            if let restoreIdx = tickets.firstIndex(where: { $0.id == ticketId }) {
+                tickets[restoreIdx].priority = original
+            }
+            ticketsError = "Couldn't update priority"
+        }
+    }
+}
+
+private struct TicketPatchResponse: Decodable {
+    let id: String
 }
 
 // MARK: - Work Ticket Row
@@ -520,7 +565,7 @@ final class WorkViewModel {
 struct WorkTicketRow: Identifiable {
     let id: String
     let title: String
-    let priority: String
+    var priority: String
     let ownerShort: String   // resolved agent name (lowercased) or 6-char UUID prefix
     let assigneeId: String?
     let projectId: String?
