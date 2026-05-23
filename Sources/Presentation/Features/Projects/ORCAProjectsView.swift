@@ -142,28 +142,34 @@ struct ORCAProjectsView: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - Kanban Content
+    // MARK: - List Content (replaces 3-col kanban per Tony iPad review 2026-05-23)
+    // Single vertical list sorted by priority (P1 → P5). Stage moved to card header.
+    // [DUPLICATE — DEAD] / cancelled / done projects are hidden from default Active view.
 
     private var kanbanContent: some View {
-        let filtered = selectedStage == nil
-            ? viewModel.projects
-            : viewModel.projects.filter { $0.stage == selectedStage?.rawValue }
+        let visible = viewModel.projects
+            .filter { p in
+                // Hide cancelled and DUPLICATE-DEAD from default view
+                let s = p.status.lowercased()
+                if s == "cancelled" || s == "archived" { return false }
+                if p.name.contains("[DUPLICATE") || p.name.contains("— DEAD") { return false }
+                return true
+            }
+            .filter { p in
+                selectedStage == nil || p.stage == selectedStage?.rawValue
+            }
+            .sorted { $0.priority < $1.priority }  // P1 first
 
-        return ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: Theme.md) {
-                ForEach(ORCAProjectsViewModel.KanbanStatus.allCases, id: \.self) { status in
-                    let colProjects = filtered.filter { viewModel.statusBucket($0.status) == status.rawValue }
-                    ORCAKanbanColumn(
-                        status: status,
-                        projects: colProjects,
-                        onProjectTap: { project in selectedProject = project },
-                        onStatusChange: { projectId, newStatus in
-                            Task {
-                                await viewModel.moveProject(projectId, toStatus: newStatus)
-                            }
-                        }
-                    )
-                    .frame(width: 300)
+        return ScrollView(.vertical, showsIndicators: false) {
+            LazyVStack(spacing: 8) {
+                if visible.isEmpty {
+                    listEmptyState
+                        .padding(.top, 60)
+                } else {
+                    ForEach(visible) { project in
+                        ORCAProjectCard(project: project)
+                            .onTapGesture { selectedProject = project }
+                    }
                 }
             }
             .padding(.horizontal, Theme.md)
@@ -171,17 +177,34 @@ struct ORCAProjectsView: View {
         }
     }
 
+    private var listEmptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "square.stack.3d.up")
+                .font(.system(size: 36))
+                .foregroundStyle(AppColors.textTertiary.opacity(0.5))
+            Text("No active projects")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(AppColors.textTertiary)
+            Text(selectedStage == nil ? "Tap + to start one" : "No projects in this stage")
+                .font(.system(size: 13))
+                .foregroundStyle(AppColors.textTertiary.opacity(0.7))
+        }
+    }
+
     // MARK: - Loading View
 
     private var loadingView: some View {
-        HStack(spacing: Theme.sm) {
-            ForEach(0..<3, id: \.self) { _ in
-                RoundedRectangle(cornerRadius: Theme.radiusMedium)
+        VStack(spacing: 8) {
+            ForEach(0..<5, id: \.self) { _ in
+                RoundedRectangle(cornerRadius: Theme.radiusSmall)
                     .fill(AppColors.backgroundTertiary)
-                    .frame(width: 280, height: 400)
+                    .frame(height: 88)
                     .shimmer()
             }
+            Spacer()
         }
+        .padding(.horizontal, Theme.md)
+        .padding(.top, Theme.sm)
     }
 }
 
@@ -286,57 +309,81 @@ private struct ORCAProjectCard: View {
     let project: ProjectDTO
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.sm) {
-            // Top row: priority dot + short_id chip + priority label
-            HStack(spacing: Theme.xs) {
-                priorityDot
+        VStack(alignment: .leading, spacing: 6) {
+            // HEADER ROW per Tony iPad review 2026-05-23:
+            // short_id | STAGE | priority | owner | last-activity Δ
+            HStack(spacing: 8) {
                 shortIdChip
-                Spacer(minLength: 0)
-                priorityLabel
+                stageBadge
+                priorityChip
+                Spacer(minLength: 4)
+                if project.assignedTo != nil {
+                    assignedAgentView
+                }
+                activityDelta
             }
 
-            // Name
+            // TITLE
             Text(project.name)
-                .podTextStyle(.headline, color: AppColors.textPrimary)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(AppColors.textPrimary)
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
 
-            // Goal
-            if let goal = project.goal, !goal.isEmpty {
-                Text(goal)
-                    .podTextStyle(.body, color: AppColors.textSecondary)
+            // DESCRIPTION (NEW — every card; description first, fall back to goal)
+            if let body = descriptionLine, !body.isEmpty {
+                Text(body)
+                    .font(.system(size: 13))
+                    .foregroundStyle(AppColors.textSecondary)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
             }
 
-            // Meta row: due date, cost, assigned agent
-            HStack(spacing: Theme.sm) {
-                if let dueDate = project.dueDate {
-                    dueDateView(dueDate)
-                }
-
-                if let projected = project.projectedCost {
-                    Text("$\(Int(projected))")
-                        .podTextStyle(.caption, color: AppColors.textTertiary)
-                }
-
-                Spacer(minLength: 0)
-
-                if project.assignedTo != nil {
-                    assignedAgentView
+            // FOOTER: due date + cost (ticket counts deferred to slice 2 — tickets don't carry project_id yet)
+            if project.dueDate != nil || project.projectedCost != nil {
+                HStack(spacing: 10) {
+                    if let dueDate = project.dueDate {
+                        dueDateView(dueDate)
+                    }
+                    if let projected = project.projectedCost {
+                        Text("$\(Int(projected))")
+                            .font(.system(size: 11))
+                            .foregroundStyle(AppColors.textTertiary)
+                    }
+                    Spacer(minLength: 0)
                 }
             }
         }
-        .padding(Theme.md)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .background(AppColors.backgroundTertiary)
         .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
-        .overlay(alignment: .topTrailing) {
-            stageBadge
-                .padding(Theme.xs)
-        }
     }
 
-    // MARK: - Stage Badge
+    // First line of description, else goal
+    private var descriptionLine: String? {
+        if let d = project.description, !d.isEmpty {
+            return d.components(separatedBy: .newlines).first
+        }
+        return project.goal
+    }
+
+    // MARK: - Header chips
+
+    // short_id chip — bumped contrast + size per Tony 2026-05-23 (was illegible)
+    private var shortIdChip: some View {
+        Text(String(project.id.uuidString.replacingOccurrences(of: "-", with: "").prefix(8)))
+            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+            .foregroundColor(AppColors.textPrimary.opacity(0.85))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(Color(hexString: "1a1a1f"))
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .strokeBorder(AppColors.border.opacity(0.8), lineWidth: 0.5)
+            )
+    }
 
     @ViewBuilder
     private var stageBadge: some View {
@@ -345,61 +392,62 @@ private struct ORCAProjectCard: View {
             HStack(spacing: 3) {
                 Image(systemName: lifecycleStage.icon)
                     .font(.system(size: 9, weight: .medium))
-                Text(lifecycleStage.displayName)
-                    .font(.system(size: 9, weight: .semibold))
+                Text(lifecycleStage.displayName.uppercased())
+                    .font(.system(size: 9, weight: .bold))
+                    .kerning(0.3)
             }
             .foregroundStyle(.white)
-            .padding(.horizontal, 7)
+            .padding(.horizontal, 6)
             .padding(.vertical, 3)
             .background(lifecycleStage.color)
             .clipShape(Capsule())
         }
     }
 
-    // MARK: - Assigned Agent
+    private var priorityChip: some View {
+        HStack(spacing: 3) {
+            Circle()
+                .fill(priorityColor)
+                .frame(width: 6, height: 6)
+            Text("P\(project.priority)")
+                .font(.system(size: 10, weight: .semibold))
+        }
+        .foregroundStyle(priorityColor)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(priorityColor.opacity(0.15))
+        .clipShape(Capsule())
+    }
 
     private var assignedAgentView: some View {
         HStack(spacing: 3) {
             Image(systemName: "person.circle.fill")
-                .font(.system(size: 11))
-                .foregroundStyle(AppColors.accentAgent)
+                .font(.system(size: 10))
             Text(agentShortId)
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(AppColors.accentAgent)
+                .font(.system(size: 10, weight: .semibold))
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 2)
-        .background(AppColors.accentAgent.opacity(0.15))
-        .clipShape(Capsule())
+        .foregroundStyle(AppColors.accentAgent)
     }
 
     private var agentShortId: String {
         guard let assignedTo = project.assignedTo else { return "" }
-        let str = assignedTo.uuidString
-        return "#\(String(str.suffix(4)).prefix(2))"
+        return String(assignedTo.uuidString.prefix(4)).lowercased()
     }
 
-    // MARK: - Priority
-
-    private var priorityDot: some View {
-        Circle()
-            .fill(priorityColor)
-            .frame(width: 8, height: 8)
+    // Last-activity Δ (uses updatedAt)
+    private var activityDelta: some View {
+        Text(relativeShort(project.updatedAt))
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(AppColors.textTertiary)
     }
 
-    // short_id chip per SPEC-POD-AGENTS-TAB §4.2 / pull-forward 2026-05-23: first 8 chars of UUID
-    private var shortIdChip: some View {
-        Text(String(project.id.uuidString.replacingOccurrences(of: "-", with: "").prefix(8)))
-            .font(.system(size: 10, design: .monospaced))
-            .foregroundColor(AppColors.textTertiary)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 2)
-            .background(Color(hexString: "0e0e10"))
-            .clipShape(RoundedRectangle(cornerRadius: 3))
-            .overlay(
-                RoundedRectangle(cornerRadius: 3)
-                    .strokeBorder(AppColors.border, lineWidth: 0.5)
-            )
+    private func relativeShort(_ date: Date) -> String {
+        let secs = Int(Date().timeIntervalSince(date))
+        if secs < 60 { return "now" }
+        if secs < 3600 { return "\(secs/60)m" }
+        if secs < 86400 { return "\(secs/3600)h" }
+        if secs < 86400 * 7 { return "\(secs/86400)d" }
+        return "\(secs/(86400 * 7))w"
     }
 
     private var priorityColor: Color {
@@ -410,16 +458,6 @@ private struct ORCAProjectCard: View {
         case 4: return Color(hexString: "3B82F6")  // blue
         default: return AppColors.textTertiary
         }
-    }
-
-    private var priorityLabel: some View {
-        Text("P\(project.priority)")
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(priorityColor)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(priorityColor.opacity(0.15))
-            .clipShape(Capsule())
     }
 
     // MARK: - Due Date
@@ -440,8 +478,9 @@ private struct ORCAProjectCard: View {
             Image(systemName: isOverdue ? "calendar.badge.exclamationmark" : "calendar")
                 .font(.system(size: 10))
             Text(formatter.string(from: date))
+                .font(.system(size: 11))
         }
-        .podTextStyle(.caption, color: color)
+        .foregroundStyle(color)
     }
 }
 
