@@ -375,18 +375,6 @@ private struct ConnectPage: View {
             }
             .foregroundColor(AppColors.textTertiary)
 
-            // Demo mode button
-            Button {
-                viewModel.enterDemoMode()
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "eye")
-                    Text("Try Demo Mode")
-                }
-                .font(.caption)
-                .foregroundColor(AppColors.textSecondary)
-            }
-            .padding(.top, 8)
             .padding(.bottom, 60)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

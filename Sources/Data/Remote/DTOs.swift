@@ -38,6 +38,14 @@ struct UserDTO: Codable, Identifiable {
     let agentId: String?
     let avatarColor: String?
     let timezone: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, email, role, timezone
+        case preferredName = "preferred_name"
+        case isAgent = "is_agent"
+        case agentId = "agent_id"
+        case avatarColor = "avatar_color"
+    }
 }
 
 // MARK: - Channel DTO
@@ -52,7 +60,8 @@ struct ChannelDTO: Codable, Identifiable {
     var isPinned: Bool = false
 
     enum CodingKeys: String, CodingKey {
-        case id, name, type, description, unreadCount
+        case id, name, type, description
+        case unreadCount = "unread_count"
     }
 
     init(from decoder: Decoder) throws {
@@ -113,6 +122,11 @@ struct ReactionDTO: Codable {
     let emoji: String
     let count: Int
     let userIds: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case emoji, count
+        case userIds = "user_ids"
+    }
 }
 
 // MARK: - Board DTO
@@ -210,6 +224,10 @@ struct AgentDTO: Codable, Identifiable {
     let lastSeenAt: Date?
     let isBoardLead: Bool?
     let identityProfile: IdentityProfile?
+    let rosterLane: String?
+    let isDefaultRoutingEnabled: Bool?
+    let quarantineState: String?
+    let rosterNote: String?
 
     // Optional fields the app uses but backend doesn't expose yet
     let currentTask: String?
@@ -220,6 +238,10 @@ struct AgentDTO: Codable, Identifiable {
         case lastSeenAt = "last_seen_at"
         case isBoardLead = "is_board_lead"
         case identityProfile = "identity_profile"
+        case rosterLane = "roster_lane"
+        case isDefaultRoutingEnabled = "is_default_routing_enabled"
+        case quarantineState = "quarantine_state"
+        case rosterNote = "roster_note"
     }
 
     /// Derived role from identity_profile, falling back to name-based defaults
@@ -232,6 +254,13 @@ struct AgentDTO: Codable, Identifiable {
     /// Derived skills from identity_profile (comma-separated → array)
     var skills: [String] {
         identityProfile?.skillsArray ?? []
+    }
+
+    var domainRosterLane: AgentRosterLane {
+        if let rosterLane, let lane = AgentRosterLane(rawValue: rosterLane) {
+            return lane
+        }
+        return AgentRosterPolicy.defaultLane(for: name)
     }
 }
 
@@ -283,6 +312,301 @@ struct InboxTailDTO: Codable, Hashable {
         case cursorBytes = "cursor_bytes"
         case cursorPresent = "cursor_present"
         case lastActivityTs = "last_activity_ts"
+    }
+}
+
+// MARK: - Agent Activation Context
+
+struct AgentActivationContextDTO: Codable, Hashable {
+    let packet: Packet
+    let agent: AgentSummary
+    let startHere: StartHere
+    let roster: [String: [String]]
+    let work: Work
+    let reviewQueues: ReviewQueues
+    let notes: Notes
+    let guardrails: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case packet, agent, roster, work, notes, guardrails
+        case startHere = "start_here"
+        case reviewQueues = "review_queues"
+    }
+
+    struct Packet: Codable, Hashable {
+        let id: String?
+        let generatedAt: String?
+        let ttlSeconds: Int?
+        let contextVersion: Int?
+        let source: String?
+        let mode: String?
+        let computePolicy: ComputePolicy?
+
+        enum CodingKeys: String, CodingKey {
+            case id, source, mode
+            case generatedAt = "generated_at"
+            case ttlSeconds = "ttl_seconds"
+            case contextVersion = "context_version"
+            case computePolicy = "compute_policy"
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decodeIfPresent(String.self, forKey: .id)
+            generatedAt = try container.decodeIfPresent(String.self, forKey: .generatedAt)
+            ttlSeconds = try container.decodeIfPresent(Int.self, forKey: .ttlSeconds)
+            contextVersion = try container.decodeIfPresent(Int.self, forKey: .contextVersion)
+            source = try container.decodeIfPresent(String.self, forKey: .source)
+            mode = try container.decodeIfPresent(String.self, forKey: .mode)
+            computePolicy = try? container.decodeIfPresent(ComputePolicy.self, forKey: .computePolicy)
+        }
+    }
+
+    struct ComputePolicy: Codable, Hashable {
+        let defaultTag: String?
+        let allowedTiers: [String]
+        let fallbackAllowed: Bool?
+        let caller: String?
+        let source: String?
+        let lane: String?
+        let path: String?
+        let intelligencePath: String?
+        let workflowComputePath: String?
+        let daemonComputePath: String?
+
+        enum CodingKeys: String, CodingKey {
+            case caller, source, lane, path
+            case defaultTag = "default_tag"
+            case allowedTiers = "allowed_tiers"
+            case fallbackAllowed = "fallback_allowed"
+            case intelligencePath = "intelligence_path"
+            case workflowComputePath = "workflow_compute_path"
+            case daemonComputePath = "daemon_compute_path"
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            defaultTag = try container.decodeIfPresent(String.self, forKey: .defaultTag)
+            allowedTiers = (try? container.decodeIfPresent([String].self, forKey: .allowedTiers)) ?? []
+            fallbackAllowed = try container.decodeIfPresent(Bool.self, forKey: .fallbackAllowed)
+            caller = try container.decodeIfPresent(String.self, forKey: .caller)
+            source = try container.decodeIfPresent(String.self, forKey: .source)
+            lane = try container.decodeIfPresent(String.self, forKey: .lane)
+            path = try container.decodeIfPresent(String.self, forKey: .path)
+            intelligencePath = try container.decodeIfPresent(String.self, forKey: .intelligencePath)
+            workflowComputePath = try container.decodeIfPresent(String.self, forKey: .workflowComputePath)
+            daemonComputePath = try container.decodeIfPresent(String.self, forKey: .daemonComputePath)
+        }
+    }
+
+    struct AgentSummary: Codable, Hashable {
+        let id: String
+        let name: String
+        let status: String?
+        let rosterLane: String?
+        let title: String?
+        let defaultRoutingEnabled: Bool?
+        let owns: [String]
+        let protectedDomains: [String]
+        let responsibilityDomains: [String]
+
+        enum CodingKeys: String, CodingKey {
+            case id, name, status, title, owns
+            case rosterLane = "roster_lane"
+            case defaultRoutingEnabled = "default_routing_enabled"
+            case protectedDomains = "protected_domains"
+            case responsibilityDomains = "responsibility_domains"
+        }
+    }
+
+    struct StartHere: Codable, Hashable {
+        let docs: [String]
+        let manualChecks: [String]
+        let startupStatusEndpoint: String?
+        let responsibilityEndpoint: String?
+        let assignedTicketsEndpoint: String?
+        let reviewRequiredRunsEndpoint: String?
+        let intelligenceEndpoints: [IntelligenceEndpoint]?
+
+        enum CodingKeys: String, CodingKey {
+            case docs
+            case manualChecks = "manual_checks"
+            case startupStatusEndpoint = "startup_status_endpoint"
+            case responsibilityEndpoint = "responsibility_endpoint"
+            case assignedTicketsEndpoint = "assigned_tickets_endpoint"
+            case reviewRequiredRunsEndpoint = "review_required_runs_endpoint"
+            case intelligenceEndpoints = "intelligence_endpoints"
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            docs = try container.decodeIfPresent([String].self, forKey: .docs) ?? []
+            manualChecks = try container.decodeIfPresent([String].self, forKey: .manualChecks) ?? []
+            startupStatusEndpoint = try container.decodeIfPresent(String.self, forKey: .startupStatusEndpoint)
+            responsibilityEndpoint = try container.decodeIfPresent(String.self, forKey: .responsibilityEndpoint)
+            assignedTicketsEndpoint = try container.decodeIfPresent(String.self, forKey: .assignedTicketsEndpoint)
+            reviewRequiredRunsEndpoint = try container.decodeIfPresent(String.self, forKey: .reviewRequiredRunsEndpoint)
+            intelligenceEndpoints = Self.decodeIntelligenceEndpoints(from: container)
+        }
+
+        private static func decodeIntelligenceEndpoints(from container: KeyedDecodingContainer<CodingKeys>) -> [IntelligenceEndpoint]? {
+            if let endpoints = try? container.decodeIfPresent([IntelligenceEndpoint].self, forKey: .intelligenceEndpoints) {
+                return endpoints
+            }
+            if let names = try? container.decodeIfPresent([String].self, forKey: .intelligenceEndpoints) {
+                return names.map { IntelligenceEndpoint(name: $0, path: nil) }
+            }
+            if let endpointsByName = try? container.decodeIfPresent([String: IntelligenceEndpoint].self, forKey: .intelligenceEndpoints) {
+                return endpointsByName
+                    .map { key, value in value.withFallbackName(key) }
+                    .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+            }
+            if let pathsByName = try? container.decodeIfPresent([String: String].self, forKey: .intelligenceEndpoints) {
+                return pathsByName
+                    .map { IntelligenceEndpoint(name: $0.key, path: $0.value) }
+                    .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+            }
+            return nil
+        }
+    }
+
+    struct IntelligenceEndpoint: Codable, Hashable, Identifiable {
+        let name: String?
+        let path: String?
+
+        var id: String { displayName }
+
+        var displayName: String {
+            if let name, !name.isEmpty { return name }
+            if let path, !path.isEmpty { return path }
+            return "intelligence"
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case name, path
+        }
+
+        init(name: String?, path: String?) {
+            self.name = name
+            self.path = path
+        }
+
+        init(from decoder: Decoder) throws {
+            if let value = try? decoder.singleValueContainer().decode(String.self) {
+                name = value
+                path = nil
+                return
+            }
+
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            name = try container.decodeIfPresent(String.self, forKey: .name)
+            path = try container.decodeIfPresent(String.self, forKey: .path)
+        }
+
+        func withFallbackName(_ fallback: String) -> IntelligenceEndpoint {
+            IntelligenceEndpoint(name: name?.isEmpty == false ? name : fallback, path: path)
+        }
+    }
+
+    struct Work: Codable, Hashable {
+        let assignedTicketCount: Int
+        let assignedTickets: [Ticket]
+
+        enum CodingKeys: String, CodingKey {
+            case assignedTicketCount = "assigned_ticket_count"
+            case assignedTickets = "assigned_tickets"
+        }
+    }
+
+    struct Ticket: Codable, Hashable, Identifiable {
+        let id: String
+        let title: String
+        let status: String?
+        let priority: String?
+        let ticketType: String?
+        let computeTag: String?
+        let approvalState: String?
+        let autonomyLevel: String?
+        let workerLane: String?
+        let toolPolicy: String?
+        let updatedAt: String?
+
+        enum CodingKeys: String, CodingKey {
+            case id, title, status, priority
+            case ticketType = "ticket_type"
+            case computeTag = "compute_tag"
+            case approvalState = "approval_state"
+            case autonomyLevel = "autonomy_level"
+            case workerLane = "worker_lane"
+            case toolPolicy = "tool_policy"
+            case updatedAt = "updated_at"
+        }
+    }
+
+    struct ReviewQueues: Codable, Hashable {
+        let agentReviewRequiredCount: Int
+        let agentReviewRequiredRuns: [ReviewRun]
+        let globalReviewRequiredCount: Int
+        let globalReviewRequiredEndpoint: String?
+
+        enum CodingKeys: String, CodingKey {
+            case agentReviewRequiredCount = "agent_review_required_count"
+            case agentReviewRequiredRuns = "agent_review_required_runs"
+            case globalReviewRequiredCount = "global_review_required_count"
+            case globalReviewRequiredEndpoint = "global_review_required_endpoint"
+        }
+    }
+
+    struct ReviewRun: Codable, Hashable, Identifiable {
+        let id: String
+        let ticketId: String?
+        let status: String?
+        let runType: String?
+        let traceId: String?
+        let workerLane: String?
+        let toolPolicy: String?
+        let reviewStatus: String?
+        let outcome: String?
+        let error: String?
+        let updatedAt: String?
+
+        enum CodingKeys: String, CodingKey {
+            case id, status, outcome, error
+            case ticketId = "ticket_id"
+            case runType = "run_type"
+            case traceId = "trace_id"
+            case workerLane = "worker_lane"
+            case toolPolicy = "tool_policy"
+            case reviewStatus = "review_status"
+            case updatedAt = "updated_at"
+        }
+    }
+
+    struct Notes: Codable, Hashable {
+        let recentWorkNotes: [WorkNote]
+        let workNotesEndpoint: String?
+        let findingLandingRule: String?
+
+        enum CodingKeys: String, CodingKey {
+            case recentWorkNotes = "recent_work_notes"
+            case workNotesEndpoint = "work_notes_endpoint"
+            case findingLandingRule = "finding_landing_rule"
+        }
+    }
+
+    struct WorkNote: Codable, Hashable, Identifiable {
+        let id: String
+        let message: String
+        let traceId: String?
+        let source: String?
+        let lane: String?
+        let createdAt: String?
+
+        enum CodingKeys: String, CodingKey {
+            case id, message, source, lane
+            case traceId = "trace_id"
+            case createdAt = "created_at"
+        }
     }
 }
 
@@ -376,15 +700,69 @@ struct ProjectTaskDTO: Codable, Identifiable {
     }
 }
 
+struct ProjectTaskUpdateRequest: Encodable {
+    let title: String?
+    let description: String?
+    let status: String?
+    let priority: Int?
+    let dueDate: Date?
+    let assignedTo: UUID?
+    let parentTaskId: UUID?
+
+    enum CodingKeys: String, CodingKey {
+        case title, description, status, priority
+        case dueDate = "due_date"
+        case assignedTo = "assigned_to"
+        case parentTaskId = "parent_task_id"
+    }
+}
+
+struct ProjectNoteDTO: Codable, Identifiable, Hashable, Sendable {
+    let id: UUID
+    let organizationId: UUID?
+    let targetType: String
+    let targetId: String?
+    let noteType: String
+    let title: String
+    let body: String
+    let tags: [String]?
+    let createdBy: String?
+    let source: String?
+    let traceId: String?
+    let owner: String?
+    let reviewer: String?
+    let signState: String?
+    let createdAt: Date
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, body, tags, source, owner, reviewer
+        case organizationId = "organization_id"
+        case targetType = "target_type"
+        case targetId = "target_id"
+        case noteType = "note_type"
+        case createdBy = "created_by"
+        case traceId = "trace_id"
+        case signState = "sign_state"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+
+    var typeLabel: String {
+        noteType.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+}
+
 struct ProjectCreateRequest: Encodable {
     let name: String
     let goal: String?
     let description: String?
     let priority: Int?
+    let stage: String?
     let dueDate: Date?
 
     enum CodingKeys: String, CodingKey {
-        case name, goal, description, priority
+        case name, goal, description, priority, stage
         case dueDate = "due_date"
     }
 }

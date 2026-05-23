@@ -36,8 +36,11 @@ extension Project: Hashable {}
 
 enum ProjectStatus: String, Codable, CaseIterable {
     case active
+    case inProgress = "in-progress"
+    case review
     case paused
     case completed
+    case archived
 }
 
 // MARK: - Project Stage

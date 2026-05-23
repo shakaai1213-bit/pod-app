@@ -19,7 +19,7 @@ final class NotificationRouter {
             navigateTo(.chat(channelId: channelId))
 
         case .taskAssigned(let taskId, _):
-            selectedTab = .projects
+            selectedTab = .work
             navigateTo(.projects(taskId: taskId))
 
         case .approvalRequested(let approvalId, _):

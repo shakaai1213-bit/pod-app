@@ -12,25 +12,37 @@ final class DashboardViewModel {
     var projects: [Project] = []
     var activities: [ActivityItem] = []
     var attentionItems: [AttentionItem] = []
+    var tickets: [TicketDTO] = []
+    var stateTags: [StateTagDTO] = []
+    var chiefProtectionTags: [StateTagDTO] = []
+    var startupStatus: DashboardStartupStatusResponse?
+    var staleStateTagCount: Int = 0
+    var stateRegistryReviewExport: StateRegistryReviewExportResult?
+    var stateRegistryReviewExportMessage: String?
+    var isExportingStateRegistryReview = false
     var isLoading: Bool = false
     var error: String?
 
     // MARK: - Metrics
 
     var activeProjectsCount: Int {
-        projects.filter { $0.status.rawValue != "done" && $0.status.rawValue != "archived" }.count
+        projects.filter { $0.status == .active || $0.status == .inProgress || $0.status == .review }.count
     }
 
     var inProgressCount: Int {
-        projects.filter { $0.status.rawValue == "in-progress" }.count
+        projects.filter { $0.status == .inProgress }.count
     }
 
     var agentsOnlineCount: Int {
         agents.filter { $0.status != .offline }.count
     }
 
-    var needsReviewCount: Int {
-        projects.filter { $0.status.rawValue == "review" }.count
+    var openTicketsCount: Int {
+        tickets.filter { !["closed", "cancelled"].contains($0.status.lowercased()) }.count
+    }
+
+    var startupDebtCount: Int {
+        startupStatus?.components.filter(\.isDebt).count ?? 0
     }
 
     // MARK: - Private
@@ -52,14 +64,35 @@ final class DashboardViewModel {
     // MARK: - Load
 
     @MainActor
+    func exportStateRegistryReview() async {
+        guard !isExportingStateRegistryReview else { return }
+        isExportingStateRegistryReview = true
+        stateRegistryReviewExport = nil
+        stateRegistryReviewExportMessage = nil
+        defer { isExportingStateRegistryReview = false }
+
+        do {
+            let result: StateRegistryReviewExportResult = try await apiClient.post(
+                path: "/api/v1/state-registry/review/export",
+                body: DashboardEmptyRequestBody()
+            )
+            stateRegistryReviewExport = result
+            stateRegistryReviewExportMessage = result.message
+        } catch {
+            stateRegistryReviewExportMessage = "Couldn't export State Registry review packet."
+        }
+    }
+
+    @MainActor
     func loadDashboard() async {
         isLoading = true
         error = nil
+        var loadErrors: [String] = []
 
         // Fetch agents
         do {
             let response: PaginatedResponse<AgentDTO> = try await apiClient.get(path: Endpoint.agents.path)
-            agents = response.items.map { dto in
+            let mappedAgents = response.items.map { dto in
                 Agent(
                     id: UUID(uuidString: dto.id) ?? UUID(),
                     name: dto.name,
@@ -71,15 +104,16 @@ final class DashboardViewModel {
                     avatarColor: dto.avatarColor ?? "#3B82F6"
                 )
             }
+            agents = AgentRosterPolicy.filterActive(mappedAgents)
         } catch {
-            self.error = error.localizedDescription
+            loadErrors.append("Agents: \(error.localizedDescription)")
             // No fallback — show empty or error state
         }
 
         // Fetch projects
         do {
-            let response: PaginatedResponse<ProjectDTO> = try await apiClient.get(path: Endpoint.listProjects().path)
-            projects = response.items.map { dto in
+            let response: [ProjectDTO] = try await apiClient.get(path: Endpoint.listProjects().path)
+            projects = response.map { dto in
                 Project(
                     id: dto.id,
                     name: dto.name,
@@ -94,11 +128,79 @@ final class DashboardViewModel {
                 )
             }
         } catch {
+            loadErrors.append("Projects: \(error.localizedDescription)")
             // Non-fatal: keep existing projects
         }
 
-        // Don't fall back to mock data — show real data or empty
+        do {
+            let response: [TicketDTO] = try await apiClient.get(path: "/api/v1/tickets")
+            tickets = response
+            attentionItems = response
+                .filter { ticket in
+                    let status = ticket.status.lowercased()
+                    let priority = ticket.priority.lowercased()
+                    return !["closed", "cancelled"].contains(status)
+                        && ["high", "urgent"].contains(priority)
+                }
+                .prefix(5)
+                .map { ticket in
+                    AttentionItem(
+                        type: ticket.priority.lowercased() == "urgent" ? .agentError : .blockedTask,
+                        title: ticket.title,
+                        severity: ticket.priority.lowercased() == "urgent" ? .critical : .warning,
+                        actor: "\(ticket.priority.uppercased()) · \(ticket.status.replacingOccurrences(of: "_", with: " "))"
+                    )
+                }
+        } catch {
+            loadErrors.append("Tickets: \(error.localizedDescription)")
+            tickets = []
+            attentionItems = []
+        }
 
+        do {
+            startupStatus = try await apiClient.get(path: "/api/v1/startup/status")
+        } catch {
+            loadErrors.append("Startup: \(error.localizedDescription)")
+            startupStatus = nil
+        }
+
+        do {
+            let response: StateRegistryResponse = try await apiClient.get(
+                path: "/api/v1/state-registry?prefix=agent.&limit=8"
+            )
+            let workerResponse: StateRegistryResponse = try await apiClient.get(
+                path: "/api/v1/state-registry?prefix=worker.&limit=4"
+            )
+            let ticketResponse: StateRegistryResponse = try await apiClient.get(
+                path: "/api/v1/state-registry?prefix=ticket.&limit=6"
+            )
+            let memoryResponse: StateRegistryResponse = try await apiClient.get(
+                path: "/api/v1/state-registry?prefix=memory.&limit=4"
+            )
+            stateTags = response.items + workerResponse.items + ticketResponse.items + memoryResponse.items
+            staleStateTagCount = response.summary.stale + workerResponse.summary.stale + ticketResponse.summary.stale + memoryResponse.summary.stale
+        } catch {
+            loadErrors.append("State: \(error.localizedDescription)")
+            stateTags = []
+            staleStateTagCount = 0
+        }
+
+        do {
+            let verifiedCards: StateRegistryResponse = try await apiClient.get(
+                path: "/api/v1/state-registry?prefix=surface.pod.chief&limit=10"
+            )
+            let botMap: StateRegistryResponse = try await apiClient.get(
+                path: "/api/v1/state-registry?prefix=agent.chief.fund&limit=10"
+            )
+            chiefProtectionTags = verifiedCards.items + botMap.items
+        } catch {
+            loadErrors.append("Chief/Fund: \(error.localizedDescription)")
+            chiefProtectionTags = []
+        }
+
+        if !loadErrors.isEmpty {
+            error = loadErrors.joined(separator: " · ")
+        }
         isLoading = false
     }
 
@@ -106,7 +208,10 @@ final class DashboardViewModel {
 
     private func mapProjectStatus(_ status: String) -> ProjectStatus {
         switch status.lowercased() {
-        case "done", "completed", "archived": return .completed
+        case "in-progress", "in_progress": return .inProgress
+        case "review", "needs_review", "needs-review": return .review
+        case "archived": return .archived
+        case "done", "completed", "closed": return .completed
         case "paused", "blocked": return .paused
         default: return .active
         }
@@ -124,165 +229,4 @@ final class DashboardViewModel {
         }
     }
 
-    // MARK: - Mock Data
-
-    private static var mockAgents: [Agent] {
-        [
-            Agent(
-                id: UUID(),
-                name: "Kai",
-                role: "Code Architect",
-                status: .online,
-                currentTask: "Reviewing PR #42",
-                lastActivity: Date().addingTimeInterval(-120),
-                skills: ["swift", "architecture", "swiftui"],
-                avatarColor: "#3B82F6"
-            ),
-            Agent(
-                id: UUID(),
-                name: "Nova",
-                role: "Research Analyst",
-                status: .busy,
-                currentTask: "Gathering market data",
-                lastActivity: Date().addingTimeInterval(-300),
-                skills: ["research", "analysis"],
-                avatarColor: "#A855F7"
-            ),
-            Agent(
-                id: UUID(),
-                name: "Orca",
-                role: "DevOps Engineer",
-                status: .online,
-                currentTask: nil,
-                lastActivity: Date().addingTimeInterval(-60),
-                skills: ["kubernetes", "docker", "ci-cd"],
-                avatarColor: "#22C55E"
-            ),
-            Agent(
-                id: UUID(),
-                name: "Pulse",
-                role: "QA Specialist",
-                status: .idle,
-                currentTask: nil,
-                lastActivity: Date().addingTimeInterval(-3600),
-                skills: ["testing", "automation"],
-                avatarColor: "#F59E0B"
-            ),
-            Agent(
-                id: UUID(),
-                name: "Beacon",
-                role: "Documentation",
-                status: .error,
-                currentTask: "Indexing knowledge base",
-                lastActivity: Date().addingTimeInterval(-7200),
-                skills: ["docs", "markdown"],
-                avatarColor: "#EF4444"
-            ),
-        ]
-    }
-
-    private static var mockProjects: [Project] {
-        [
-            Project(
-                id: UUID(),
-                name: "Auth System",
-                description: "Implement token refresh and SSO",
-                boardGroupId: UUID(),
-                status: .active,
-                stage: .dev,
-                createdAt: Date().addingTimeInterval(-86400 * 7),
-                updatedAt: Date().addingTimeInterval(-3600),
-                taskCount: 8,
-                completedTaskCount: 3
-            ),
-            Project(
-                id: UUID(),
-                name: "Dashboard UI",
-                description: "Mission control dashboard",
-                boardGroupId: UUID(),
-                status: .active,
-                stage: .verify,
-                createdAt: Date().addingTimeInterval(-86400 * 3),
-                updatedAt: Date().addingTimeInterval(-7200),
-                taskCount: 12,
-                completedTaskCount: 8
-            ),
-            Project(
-                id: UUID(),
-                name: "API Integration",
-                description: "Connect to ORCA MC backend",
-                boardGroupId: UUID(),
-                status: .completed,
-                stage: .done,
-                createdAt: Date().addingTimeInterval(-86400 * 14),
-                updatedAt: Date().addingTimeInterval(-86400),
-                taskCount: 5,
-                completedTaskCount: 5
-            ),
-        ]
-    }
-
-    private static var mockActivities: [ActivityItem] {
-        let now = Date()
-        return [
-            ActivityItem(
-                type: .taskCompleted,
-                description: "Completed sprint planning board setup",
-                timestamp: now.addingTimeInterval(-300),
-                actor: "Kai",
-                isAgent: true
-            ),
-            ActivityItem(
-                type: .messageSent,
-                description: "Posted weekly status update in #general",
-                timestamp: now.addingTimeInterval(-900),
-                actor: "Aurora",
-                isAgent: true
-            ),
-            ActivityItem(
-                type: .agentMilestone,
-                description: "Orca deployed v2.3.1 to staging",
-                timestamp: now.addingTimeInterval(-1800),
-                actor: "Orca",
-                isAgent: true
-            ),
-            ActivityItem(
-                type: .taskCreated,
-                description: "Created task: Implement auth token refresh",
-                timestamp: now.addingTimeInterval(-3600),
-                actor: "Shaka",
-                isAgent: false
-            ),
-            ActivityItem(
-                type: .fileUploaded,
-                description: "Uploaded architecture_diagram_v3.pdf",
-                timestamp: now.addingTimeInterval(-7200),
-                actor: "Pulse",
-                isAgent: true
-            ),
-        ]
-    }
-
-    private static var mockAttentionItems: [AttentionItem] {
-        [
-            AttentionItem(
-                type: .blockedTask,
-                title: "Auth token refresh blocked",
-                severity: .warning,
-                actor: "Waiting on backend API changes"
-            ),
-            AttentionItem(
-                type: .pendingApproval,
-                title: "PR #41 pending review",
-                severity: .warning,
-                actor: "From Kai · 3h ago"
-            ),
-            AttentionItem(
-                type: .agentError,
-                title: "Beacon encountered an error",
-                severity: .critical,
-                actor: "Knowledge base indexing failed"
-            ),
-        ]
-    }
 }

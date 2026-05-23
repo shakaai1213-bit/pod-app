@@ -6,6 +6,12 @@ struct AuthResponse: Codable {
     let token: String
     let userId: String?
     let expiresAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case token
+        case userId = "user_id"
+        case expiresAt = "expires_at"
+    }
 }
 
 struct APIError: Error {
@@ -29,8 +35,7 @@ struct EmptyResponse: Codable {}
 actor APIClient {
     static let shared = APIClient()
 
-    // Physical device OR Simulator: use Tailscale URL (works from both)
-    private let baseURL = "http://100.76.196.40:8000"
+    private let baseURL = AppConfig.backendURL
     private let session: URLSession
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
@@ -44,8 +49,9 @@ actor APIClient {
         self.session = URLSession(configuration: config)
 
         self.decoder = JSONDecoder()
-        self.decoder.dateDecodingStrategy = .iso8601
-        self.decoder.keyDecodingStrategy = .convertFromSnakeCase
+        self.decoder.dateDecodingStrategy = .custom { decoder in
+            try Self.decodeORCADate(from: decoder)
+        }
 
         self.encoder = JSONEncoder()
         self.encoder.dateEncodingStrategy = .iso8601
@@ -204,6 +210,39 @@ actor APIClient {
             let body = String(data: data.prefix(500), encoding: .utf8) ?? "<\(data.count) bytes>"
             throw APIError(code: 0, message: "Decoding failed: \(error) | Response: \(body)")
         }
+    }
+
+    private static func decodeORCADate(from decoder: Decoder) throws -> Date {
+        let container = try decoder.singleValueContainer()
+        let value = try container.decode(String.self)
+
+        let isoWithTimezone = ISO8601DateFormatter()
+        isoWithTimezone.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = isoWithTimezone.date(from: value) {
+            return date
+        }
+
+        let isoWithoutFraction = ISO8601DateFormatter()
+        isoWithoutFraction.formatOptions = [.withInternetDateTime]
+        if let date = isoWithoutFraction.date(from: value) {
+            return date
+        }
+
+        for format in ["yyyy-MM-dd'T'HH:mm:ss.SSSSSS", "yyyy-MM-dd'T'HH:mm:ss.SSS", "yyyy-MM-dd'T'HH:mm:ss"] {
+            let formatter = DateFormatter()
+            formatter.calendar = Calendar(identifier: .iso8601)
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = TimeZone(secondsFromGMT: 0)
+            formatter.dateFormat = format
+            if let date = formatter.date(from: value) {
+                return date
+            }
+        }
+
+        throw DecodingError.dataCorruptedError(
+            in: container,
+            debugDescription: "Invalid ORCA date: \(value)"
+        )
     }
 }
 

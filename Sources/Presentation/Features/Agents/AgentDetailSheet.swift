@@ -17,6 +17,17 @@ struct AgentDetailSheet: View {
     @State private var showingRestartConfirmation = false
     @State private var showingConfigureSheet = false
     @State private var showingSendMessage = false
+    @State private var workNoteText = ""
+    @State private var workNotes: [AgentWorkNoteDTO] = []
+    @State private var isLoadingWorkNotes = false
+    @State private var isPostingWorkNote = false
+    @State private var workNoteError: String?
+    @State private var responsibility: AgentResponsibilityDetailDTO?
+    @State private var isLoadingResponsibility = false
+    @State private var responsibilityError: String?
+    @State private var activationContext: AgentActivationContextDTO?
+    @State private var isLoadingActivationContext = false
+    @State private var activationContextError: String?
 
     // POD-5 (c797ada1): non-destructive inbox tail, fetched on appear.
     @State private var inboxTail: InboxTailDTO?
@@ -43,17 +54,23 @@ struct AgentDetailSheet: View {
             ScrollView {
                 VStack(spacing: Theme.lg) {
                     headerSection
+                    rosterPolicySection
+                    responsibilitySection
+                    activationContextSection
+                    workNotesSection
                     inboxSection                  // POD-5 (c797ada1)
                     statusSection
                     currentTaskSection
                     skillsSection
-                    recentActivitySection
                     actionsSection
                 }
                 .padding(.horizontal, Theme.md)
                 .padding(.bottom, Theme.xxl)
                 .task {
                     await loadInboxTail()
+                    await loadResponsibility()
+                    await loadActivationContext()
+                    await loadWorkNotes()
                 }
             }
             .background(AppColors.backgroundPrimary)
@@ -158,6 +175,8 @@ struct AgentDetailSheet: View {
             }
             .podCard()
         }
+        .disabled(AgentRosterPolicy.isDormantOrArchived(agent))
+        .opacity(AgentRosterPolicy.isDormantOrArchived(agent) ? 0.55 : 1)
     }
 
     private func statusRow(_ status: AgentState) -> some View {
@@ -250,66 +269,31 @@ struct AgentDetailSheet: View {
         }
     }
 
-    // MARK: - Recent Activity Section
-
-    private var recentActivitySection: some View {
-        VStack(alignment: .leading, spacing: Theme.xs) {
-            sectionHeader("Recent Activity", count: 10)
-
-            VStack(spacing: 0) {
-                ForEach(Array(Self.mockActivity(for: agent).enumerated()), id: \.offset) { index, item in
-                    activityTimelineItem(item)
-
-                    if index < 9 {
-                        Divider()
-                            .background(AppColors.border)
-                            .padding(.leading, 44)
-                    }
-                }
-            }
-            .podCard()
-        }
-    }
-
-    private func activityTimelineItem(_ item: AgentActivityItem) -> some View {
-        HStack(alignment: .top, spacing: Theme.sm) {
-            // Timeline dot
-            ZStack {
-                Circle()
-                    .fill(item.type.color.opacity(0.2))
-                    .frame(width: 28, height: 28)
-
-                Image(systemName: item.type.icon)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(item.type.color)
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.description)
-                    .podTextStyle(.body, color: AppColors.textPrimary)
-                    .lineLimit(2)
-
-                Text(item.timestamp.relativeFormatted)
-                    .podTextStyle(.caption, color: AppColors.textTertiary)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(Theme.md)
-    }
-
     // MARK: - Actions Section
 
     private var actionsSection: some View {
         VStack(spacing: Theme.sm) {
             // Primary actions
-            actionButton(
-                icon: "bubble.left.fill",
-                label: "Chat",
-                color: AppColors.accentElectric
-            ) {
-                dismiss()
-                onStartChat?()
+            if AgentRosterPolicy.isDormantOrArchived(agent) {
+                HStack(spacing: Theme.sm) {
+                    Image(systemName: "archivebox.fill")
+                        .foregroundStyle(AppColors.accentWarning)
+                    Text("Archived agents are inspectable here, but new chat and runtime control are routed through active owners.")
+                        .podTextStyle(.caption, color: AppColors.textSecondary)
+                    Spacer()
+                }
+                .padding(Theme.md)
+                .background(AppColors.accentWarning.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+            } else {
+                actionButton(
+                    icon: "bubble.left.fill",
+                    label: "Chat",
+                    color: AppColors.accentElectric
+                ) {
+                    dismiss()
+                    onStartChat?()
+                }
             }
 
             actionButton(
@@ -324,34 +308,467 @@ struct AgentDetailSheet: View {
                 .background(AppColors.border)
 
             // Status control actions
-            HStack(spacing: Theme.sm) {
-                actionButton(
-                    icon: "pause.circle.fill",
-                    label: "Pause Agent",
-                    color: AppColors.accentWarning,
-                    isDestructive: true
-                ) {
-                    showingPauseConfirmation = true
+            if !AgentRosterPolicy.isDormantOrArchived(agent) {
+                HStack(spacing: Theme.sm) {
+                    actionButton(
+                        icon: "pause.circle.fill",
+                        label: "Pause Agent",
+                        color: AppColors.accentWarning,
+                        isDestructive: true
+                    ) {
+                        showingPauseConfirmation = true
+                    }
+
+                    actionButton(
+                        icon: "arrow.clockwise.circle.fill",
+                        label: "Restart Agent",
+                        color: AppColors.accentDanger,
+                        isDestructive: true
+                    ) {
+                        showingRestartConfirmation = true
+                    }
                 }
 
                 actionButton(
-                    icon: "arrow.clockwise.circle.fill",
-                    label: "Restart Agent",
-                    color: AppColors.accentDanger,
-                    isDestructive: true
+                    icon: "gearshape.fill",
+                    label: "Configure",
+                    color: AppColors.textSecondary
                 ) {
-                    showingRestartConfirmation = true
+                    showingConfigureSheet = true
                 }
-            }
-
-            actionButton(
-                icon: "gearshape.fill",
-                label: "Configure",
-                color: AppColors.textSecondary
-            ) {
-                showingConfigureSheet = true
             }
         }
+    }
+
+    private var rosterPolicySection: some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            sectionHeader("Roster")
+
+            VStack(alignment: .leading, spacing: Theme.sm) {
+                HStack(spacing: Theme.xs) {
+                    Label(agent.rosterLane.label, systemImage: AgentRosterPolicy.isDormantOrArchived(agent) ? "archivebox.fill" : "person.crop.circle.badge.checkmark")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AgentRosterPolicy.isDormantOrArchived(agent) ? AppColors.accentWarning : AppColors.accentSuccess)
+
+                    Spacer()
+
+                    Text(agent.isDefaultRoutingEnabled ? "Routing on" : "Routing off")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(agent.isDefaultRoutingEnabled ? AppColors.accentSuccess : AppColors.accentWarning)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background((agent.isDefaultRoutingEnabled ? AppColors.accentSuccess : AppColors.accentWarning).opacity(0.12))
+                        .clipShape(Capsule())
+                }
+
+                if let state = agent.quarantineState, !state.isEmpty {
+                    Text(state.replacingOccurrences(of: "_", with: " ").capitalized)
+                        .podTextStyle(.caption, color: AppColors.textTertiary)
+                }
+
+                if let note = agent.rosterNote, !note.isEmpty {
+                    Text(note)
+                        .podTextStyle(.body, color: AppColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(Theme.md)
+            .podCard()
+        }
+    }
+
+    private var workNotesSection: some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            sectionHeader("Work Notes", count: workNotes.count)
+
+            VStack(alignment: .leading, spacing: Theme.sm) {
+                TextEditor(text: $workNoteText)
+                    .frame(minHeight: 88)
+                    .scrollContentBackground(.hidden)
+                    .background(AppColors.backgroundPrimary)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .padding(Theme.sm)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.radiusSmall)
+                            .strokeBorder(AppColors.border, lineWidth: 1)
+                    )
+
+                if let workNoteError {
+                    Text(workNoteError)
+                        .podTextStyle(.caption, color: AppColors.accentDanger)
+                }
+
+                Button {
+                    Task { await postWorkNote() }
+                } label: {
+                    HStack(spacing: Theme.xs) {
+                        if isPostingWorkNote {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Image(systemName: "square.and.pencil")
+                                .font(.system(size: 14, weight: .semibold))
+                        }
+                        Text("Add Note")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, Theme.sm)
+                    .foregroundStyle(.white)
+                    .background(canPostWorkNote ? AppColors.accentElectric : AppColors.textMuted)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+                }
+                .buttonStyle(.plain)
+                .disabled(!canPostWorkNote || isPostingWorkNote)
+
+                if isLoadingWorkNotes && workNotes.isEmpty {
+                    HStack(spacing: Theme.sm) {
+                        ProgressView().controlSize(.small)
+                        Text("Loading notes…")
+                            .podTextStyle(.body, color: AppColors.textTertiary)
+                        Spacer()
+                    }
+                    .padding(.vertical, Theme.xs)
+                } else if workNotes.isEmpty {
+                    Text("No work notes")
+                        .podTextStyle(.body, color: AppColors.textTertiary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, Theme.xs)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(Array(workNotes.prefix(5).enumerated()), id: \.element.id) { index, note in
+                            workNoteRow(note)
+                            if index < min(workNotes.count, 5) - 1 {
+                                Divider().background(AppColors.border)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(Theme.md)
+            .podCard()
+        }
+    }
+
+    private var responsibilitySection: some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            sectionHeader("Direction")
+
+            VStack(alignment: .leading, spacing: Theme.sm) {
+                if isLoadingResponsibility && responsibility == nil {
+                    HStack(spacing: Theme.sm) {
+                        ProgressView().controlSize(.small)
+                        Text("Loading ORCA direction…")
+                            .podTextStyle(.body, color: AppColors.textTertiary)
+                        Spacer()
+                    }
+                } else if let responsibility {
+                    VStack(alignment: .leading, spacing: Theme.xs) {
+                        HStack(spacing: Theme.xs) {
+                            Label(responsibility.profile.title ?? agent.role, systemImage: "signpost.right.fill")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(AppColors.accentElectric)
+                            Spacer()
+                            if let worker = responsibility.profile.defaultWorkerLane, !worker.isEmpty {
+                                Text("Worker: \(worker)")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(AppColors.accentAgent)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 3)
+                                    .background(AppColors.accentAgent.opacity(0.12))
+                                    .clipShape(Capsule())
+                            }
+                        }
+
+                        if let summary = responsibility.profile.summary, !summary.isEmpty {
+                            Text(summary)
+                                .podTextStyle(.body, color: AppColors.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        if !responsibility.profile.owns.isEmpty {
+                            AgentDetailFlowLayout(spacing: Theme.xs) {
+                                ForEach(responsibility.profile.owns.prefix(8), id: \.self) { domain in
+                                    Text(domain.replacingOccurrences(of: "_", with: " "))
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(AppColors.textPrimary)
+                                        .padding(.horizontal, Theme.sm)
+                                        .padding(.vertical, Theme.xxs)
+                                        .background(AppColors.backgroundTertiary)
+                                        .clipShape(Capsule())
+                                }
+                            }
+                        }
+
+                        if !responsibility.domains.isEmpty {
+                            VStack(alignment: .leading, spacing: Theme.xs) {
+                                Text("Domain routes")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(AppColors.textTertiary)
+
+                                ForEach(responsibility.sortedDomainRoutes.prefix(5)) { route in
+                                    AgentResponsibilityRouteRow(route: route)
+                                }
+                            }
+                            .padding(.top, Theme.xs)
+                        }
+
+                        if !responsibility.profile.protectedDomains.isEmpty {
+                            Label("Protected: \(responsibility.profile.protectedDomains.joined(separator: ", "))", systemImage: "lock.shield.fill")
+                                .font(.caption)
+                                .foregroundStyle(AppColors.accentWarning)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        if let note = responsibility.profile.approvalNotes.first, !note.isEmpty {
+                            Text(note)
+                                .podTextStyle(.caption, color: AppColors.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                } else {
+                    Text(responsibilityError ?? "No ORCA direction profile")
+                        .podTextStyle(.body, color: AppColors.textTertiary)
+                }
+            }
+            .padding(Theme.md)
+            .podCard()
+        }
+    }
+
+    private var canPostWorkNote: Bool {
+        !workNoteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var activationContextSection: some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            sectionHeader("Activation Context", count: activationContext?.packet.contextVersion)
+
+            VStack(alignment: .leading, spacing: Theme.sm) {
+                if isLoadingActivationContext && activationContext == nil {
+                    HStack(spacing: Theme.sm) {
+                        ProgressView().controlSize(.small)
+                        Text("Loading wake packet…")
+                            .podTextStyle(.body, color: AppColors.textTertiary)
+                        Spacer()
+                    }
+                } else if let context = activationContext {
+                    VStack(alignment: .leading, spacing: Theme.sm) {
+                        HStack(spacing: Theme.sm) {
+                            activationMetric(
+                                "Tickets",
+                                value: "\(context.work.assignedTicketCount)",
+                                icon: "ticket.fill",
+                                color: AppColors.accentElectric
+                            )
+                            activationMetric(
+                                "Review",
+                                value: "\(context.reviewQueues.agentReviewRequiredCount)/\(context.reviewQueues.globalReviewRequiredCount)",
+                                icon: "checklist.checked",
+                                color: context.reviewQueues.globalReviewRequiredCount > 0 ? AppColors.accentWarning : AppColors.accentSuccess
+                            )
+                            activationMetric(
+                                "Notes",
+                                value: "\(context.notes.recentWorkNotes.count)",
+                                icon: "note.text",
+                                color: AppColors.accentAgent
+                            )
+                        }
+
+                        activationList(
+                            title: "Start Docs",
+                            icon: "doc.text.magnifyingglass",
+                            items: context.startHere.docs,
+                            limit: 3
+                        )
+
+                        activationList(
+                            title: "Manual Checks",
+                            icon: "list.bullet.clipboard",
+                            items: context.startHere.manualChecks,
+                            limit: 3
+                        )
+
+                        if context.packet.computePolicy != nil || context.startHere.intelligenceEndpoints?.isEmpty == false {
+                            activationIntelligenceSection(context)
+                        }
+
+                        if !context.guardrails.isEmpty {
+                            VStack(alignment: .leading, spacing: Theme.xs) {
+                                Text("Guardrails")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(AppColors.textTertiary)
+
+                                ForEach(Array(context.guardrails.prefix(4)), id: \.self) { guardrail in
+                                    Label(guardrail, systemImage: "lock.shield.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(AppColors.textSecondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                            .padding(.top, Theme.xs)
+                        }
+
+                        if let source = context.packet.source {
+                            Text(source)
+                                .podTextStyle(.label, color: AppColors.textTertiary)
+                        }
+                    }
+                } else {
+                    Text(activationContextError ?? "Activation context unavailable")
+                        .podTextStyle(.body, color: AppColors.textTertiary)
+                }
+            }
+            .padding(Theme.md)
+            .podCard()
+        }
+    }
+
+    private func activationMetric(_ label: String, value: String, icon: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: Theme.xxs) {
+            Label(label, systemImage: icon)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(AppColors.textTertiary)
+                .lineLimit(1)
+
+            Text(value)
+                .font(.system(size: 20, weight: .bold))
+                .foregroundStyle(color)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.sm)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+    }
+
+    private func activationIntelligenceSection(_ context: AgentActivationContextDTO) -> some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            Label("Compute & Intelligence", systemImage: "cpu.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppColors.textTertiary)
+
+            if let policy = context.packet.computePolicy {
+                VStack(alignment: .leading, spacing: 3) {
+                    activationMetadataRow("Default tag", value: policy.defaultTag)
+                    activationMetadataRow("Path", value: policy.workflowComputePath ?? policy.path ?? policy.daemonComputePath)
+                    activationMetadataRow("Intel", value: policy.intelligencePath)
+                    activationMetadataRow("Policy", value: policy.source ?? policy.caller ?? policy.lane)
+                }
+                .padding(Theme.sm)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(AppColors.backgroundTertiary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+            }
+
+            if let endpoints = context.startHere.intelligenceEndpoints, !endpoints.isEmpty {
+                AgentDetailFlowLayout(spacing: Theme.xs) {
+                    ForEach(Array(endpoints.prefix(6))) { endpoint in
+                        Text(endpoint.displayName)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(AppColors.accentAgent)
+                            .lineLimit(1)
+                            .padding(.horizontal, Theme.sm)
+                            .padding(.vertical, Theme.xxs)
+                            .background(AppColors.accentAgent.opacity(0.12))
+                            .clipShape(Capsule())
+                    }
+                }
+            }
+        }
+        .padding(.top, Theme.xs)
+    }
+
+    private func activationMetadataRow(_ label: String, value: String?) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.xs) {
+            Text(label)
+                .podTextStyle(.label, color: AppColors.textTertiary)
+                .frame(width: 72, alignment: .leading)
+
+            Text(activationMetadataValue(value))
+                .podTextStyle(.caption, color: value?.isEmpty == false ? AppColors.textSecondary : AppColors.textTertiary)
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func activationMetadataValue(_ value: String?) -> String {
+        guard let value, !value.isEmpty else { return "Not listed" }
+        return value
+    }
+
+    private func activationList(title: String, icon: String, items: [String], limit: Int) -> some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            Label(title, systemImage: icon)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppColors.textTertiary)
+
+            if items.isEmpty {
+                Text("None listed")
+                    .podTextStyle(.caption, color: AppColors.textTertiary)
+            } else {
+                ForEach(Array(items.prefix(limit)), id: \.self) { item in
+                    Text(item)
+                        .podTextStyle(.caption, color: AppColors.textSecondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    private func workNoteRow(_ note: AgentWorkNoteDTO) -> some View {
+        VStack(alignment: .leading, spacing: Theme.xxs) {
+            HStack(spacing: Theme.xs) {
+                Text(note.source ?? "orca.notes.agent")
+                    .podTextStyle(.label, color: AppColors.textTertiary)
+                Spacer()
+                Text(note.createdAt.formatted(date: .abbreviated, time: .shortened))
+                    .podTextStyle(.label, color: AppColors.textTertiary)
+            }
+
+            Text(note.title)
+                .podTextStyle(.caption, color: AppColors.textPrimary)
+                .fontWeight(.semibold)
+
+            Text(note.message)
+                .podTextStyle(.body, color: AppColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if note.signState?.isEmpty == false || note.owner?.isEmpty == false || note.reviewer?.isEmpty == false || note.traceId?.isEmpty == false {
+                HStack(spacing: Theme.xs) {
+                    if let signState = note.signState, !signState.isEmpty {
+                        workNoteChip(signState.replacingOccurrences(of: "_", with: " "), icon: "signature")
+                    }
+
+                    if let owner = note.owner, !owner.isEmpty {
+                        workNoteChip(owner, icon: "person.crop.circle")
+                    }
+
+                    if let reviewer = note.reviewer, !reviewer.isEmpty {
+                        workNoteChip(reviewer, icon: "person.crop.circle.badge.checkmark")
+                    }
+
+                    if let traceId = note.traceId, !traceId.isEmpty {
+                        workNoteChip(traceId, icon: "point.3.connected.trianglepath.dotted")
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, Theme.sm)
+    }
+
+    private func workNoteChip(_ text: String, icon: String) -> some View {
+        Label(text, systemImage: icon)
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(AppColors.textSecondary)
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(AppColors.backgroundTertiary)
+            .clipShape(Capsule())
     }
 
     private func actionButton(
@@ -469,6 +886,108 @@ struct AgentDetailSheet: View {
         }
     }
 
+    private func loadWorkNotes() async {
+        await MainActor.run {
+            isLoadingWorkNotes = true
+            workNoteError = nil
+        }
+        do {
+            let notes: [AgentWorkNoteDTO] = try await APIClient.shared.get(
+                path: "/api/v1/notes/agents/\(agent.apiPathComponent)?limit=20"
+            )
+            await MainActor.run {
+                self.workNotes = notes
+                self.isLoadingWorkNotes = false
+            }
+        } catch {
+            await MainActor.run {
+                self.isLoadingWorkNotes = false
+                self.workNoteError = "Notes unavailable"
+            }
+        }
+    }
+
+    private func loadResponsibility() async {
+        await MainActor.run {
+            isLoadingResponsibility = true
+            responsibilityError = nil
+        }
+        do {
+            let dto: AgentResponsibilityDetailDTO = try await APIClient.shared.get(
+                path: "/api/v1/agent-responsibilities/agents/\(agent.apiPathComponent)"
+            )
+            await MainActor.run {
+                self.responsibility = dto
+                self.isLoadingResponsibility = false
+            }
+        } catch {
+            await MainActor.run {
+                self.isLoadingResponsibility = false
+                self.responsibilityError = "ORCA direction unavailable"
+            }
+        }
+    }
+
+    private func loadActivationContext() async {
+        await MainActor.run {
+            isLoadingActivationContext = true
+            activationContextError = nil
+        }
+        do {
+            let dto: AgentActivationContextDTO = try await APIClient.shared.request(
+                .agentActivationContext(name: agent.apiPathComponent, limit: 10)
+            )
+            await MainActor.run {
+                self.activationContext = dto
+                self.isLoadingActivationContext = false
+            }
+        } catch {
+            await MainActor.run {
+                self.isLoadingActivationContext = false
+                self.activationContextError = "Activation context unavailable"
+            }
+        }
+    }
+
+    private func postWorkNote() async {
+        let note = workNoteText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !note.isEmpty else { return }
+        await MainActor.run {
+            isPostingWorkNote = true
+            workNoteError = nil
+        }
+
+        do {
+            let body = AgentWorkNoteCreateBody(
+                targetType: "agent",
+                targetId: nil,
+                noteType: "work_note",
+                title: "Pod work note",
+                body: note,
+                tags: ["pod", "agent-work-note", AgentRosterPolicy.normalizedName(agent.name)],
+                traceId: "pod-agent-note-\(agent.name.lowercased())-\(Int(Date().timeIntervalSince1970))",
+                source: "pod.agents.work_note",
+                owner: AgentRosterPolicy.normalizedName(agent.name),
+                reviewer: "aloha",
+                signState: "draft"
+            )
+            let created: AgentWorkNoteDTO = try await APIClient.shared.post(
+                path: "/api/v1/notes/agents/\(agent.apiPathComponent)",
+                body: body
+            )
+            await MainActor.run {
+                self.workNotes.insert(created, at: 0)
+                self.workNoteText = ""
+                self.isPostingWorkNote = false
+            }
+        } catch {
+            await MainActor.run {
+                self.workNoteError = "Couldn't save note"
+                self.isPostingWorkNote = false
+            }
+        }
+    }
+
     // MARK: - Section Header
 
     private func sectionHeader(_ title: String, count: Int? = nil) -> some View {
@@ -488,62 +1007,184 @@ struct AgentDetailSheet: View {
         }
     }
 
-    // MARK: - Mock Activity
+}
 
-    private static func mockActivity(for agent: Agent) -> [AgentActivityItem] {
-        let now = Date()
-        return [
-            AgentActivityItem(type: .taskStarted, description: "Started working on PR #42 review", timestamp: now.addingTimeInterval(-120)),
-            AgentActivityItem(type: .message, description: "Posted update in #projects channel", timestamp: now.addingTimeInterval(-600)),
-            AgentActivityItem(type: .taskCompleted, description: "Completed code review for module auth", timestamp: now.addingTimeInterval(-1200)),
-            AgentActivityItem(type: .fileCreated, description: "Created architecture_diagram.md", timestamp: now.addingTimeInterval(-1800)),
-            AgentActivityItem(type: .error, description: "Connection timeout to staging — retried successfully", timestamp: now.addingTimeInterval(-2400)),
-            AgentActivityItem(type: .taskStarted, description: "Began sprint planning research", timestamp: now.addingTimeInterval(-3600)),
-            AgentActivityItem(type: .message, description: "Responded to @shaka in #general", timestamp: now.addingTimeInterval(-5400)),
-            AgentActivityItem(type: .deployment, description: "Deployed v2.3.1 to staging environment", timestamp: now.addingTimeInterval(-7200)),
-            AgentActivityItem(type: .taskCompleted, description: "Finished database migration script", timestamp: now.addingTimeInterval(-10800)),
-            AgentActivityItem(type: .fileCreated, description: "Updated API documentation for /v1/agents", timestamp: now.addingTimeInterval(-14400)),
-        ]
+private struct AgentWorkNoteDTO: Identifiable, Decodable {
+    let id: String
+    let targetType: String
+    let targetId: String?
+    let noteType: String
+    let title: String
+    let body: String
+    let tags: [String]?
+    let createdBy: String?
+    let traceId: String?
+    let source: String?
+    let owner: String?
+    let reviewer: String?
+    let signState: String?
+    let createdAt: Date
+    let updatedAt: Date
+
+    var message: String { body }
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, body, tags, source, owner, reviewer
+        case targetType = "target_type"
+        case targetId = "target_id"
+        case noteType = "note_type"
+        case createdBy = "created_by"
+        case traceId = "trace_id"
+        case signState = "sign_state"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
     }
 }
 
-// MARK: - Agent Activity Item
+private struct AgentWorkNoteCreateBody: Encodable {
+    let targetType: String
+    let targetId: String?
+    let noteType: String
+    let title: String
+    let body: String
+    let tags: [String]
+    let traceId: String
+    let source: String
+    let owner: String
+    let reviewer: String
+    let signState: String
 
-struct AgentActivityItem: Identifiable {
-    let id = UUID()
-    let type: ActivityEventType
-    let description: String
-    let timestamp: Date
+    enum CodingKeys: String, CodingKey {
+        case title, body, tags, source, owner, reviewer
+        case targetType = "target_type"
+        case targetId = "target_id"
+        case noteType = "note_type"
+        case traceId = "trace_id"
+        case signState = "sign_state"
+    }
 }
 
-enum ActivityEventType {
-    case taskStarted
-    case taskCompleted
-    case message
-    case fileCreated
-    case deployment
-    case error
+private struct AgentResponsibilityDetailDTO: Decodable {
+    let agent: String
+    let profile: AgentResponsibilityProfileDTO
+    let domains: [String: AgentResponsibilityDomainDTO]
 
-    var icon: String {
-        switch self {
-        case .taskStarted:  return "play.circle.fill"
-        case .taskCompleted: return "checkmark.circle.fill"
-        case .message:    return "bubble.left.fill"
-        case .fileCreated: return "doc.fill"
-        case .deployment:  return "arrow.up.circle.fill"
-        case .error:       return "exclamationmark.triangle.fill"
+    var sortedDomainRoutes: [AgentResponsibilityRoute] {
+        domains
+            .map {
+                AgentResponsibilityRoute(
+                    domain: $0.key,
+                    primary: $0.value.primary,
+                    fallback: $0.value.fallback,
+                    scope: $0.value.scope,
+                    note: $0.value.note
+                )
+            }
+            .sorted { $0.domain.localizedCaseInsensitiveCompare($1.domain) == .orderedAscending }
+    }
+}
+
+private struct AgentResponsibilityRoute: Identifiable, Hashable {
+    let domain: String
+    let primary: String?
+    let fallback: String?
+    let scope: String?
+    let note: String?
+
+    var id: String { domain }
+}
+
+private struct AgentResponsibilityRouteRow: View {
+    let route: AgentResponsibilityRoute
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: Theme.xs) {
+                Text(route.domain.replacingOccurrences(of: "_", with: " "))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.textPrimary)
+                    .lineLimit(1)
+
+                Spacer(minLength: Theme.xs)
+
+                if let primary = route.primary, !primary.isEmpty {
+                    Text(primary)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(AppColors.accentElectric)
+                        .lineLimit(1)
+                }
+            }
+
+            if let scope = route.scope, !scope.isEmpty {
+                Text(scope)
+                    .podTextStyle(.caption, color: AppColors.textSecondary)
+                    .lineLimit(2)
+            }
+
+            HStack(spacing: Theme.xs) {
+                if let fallback = route.fallback, !fallback.isEmpty {
+                    Label(fallback, systemImage: "arrow.triangle.2.circlepath")
+                }
+                if let note = route.note, !note.isEmpty {
+                    Label(note, systemImage: "info.circle")
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(AppColors.textTertiary)
+            .lineLimit(1)
         }
+        .padding(Theme.xs)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+    }
+}
+
+private struct AgentResponsibilityProfileDTO: Decodable {
+    let rosterLane: String?
+    let defaultRoutingEnabled: Bool?
+    let title: String?
+    let summary: String?
+    let owns: [String]
+    let defaultWorkerLane: String?
+    let protectedDomains: [String]
+    let approvalNotes: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case rosterLane = "roster_lane"
+        case defaultRoutingEnabled = "default_routing_enabled"
+        case title
+        case summary
+        case owns
+        case defaultWorkerLane = "default_worker_lane"
+        case protectedDomains = "protected_domains"
+        case approvalNotes = "approval_notes"
     }
 
-    var color: Color {
-        switch self {
-        case .taskStarted:  return AppColors.accentElectric
-        case .taskCompleted: return AppColors.accentSuccess
-        case .message:      return AppColors.accentAgent
-        case .fileCreated:   return AppColors.textSecondary
-        case .deployment:   return AppColors.accentCaptain
-        case .error:         return AppColors.accentDanger
-        }
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        rosterLane = try container.decodeIfPresent(String.self, forKey: .rosterLane)
+        defaultRoutingEnabled = try container.decodeIfPresent(Bool.self, forKey: .defaultRoutingEnabled)
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        summary = try container.decodeIfPresent(String.self, forKey: .summary)
+        owns = try container.decodeIfPresent([String].self, forKey: .owns) ?? []
+        defaultWorkerLane = try container.decodeIfPresent(String.self, forKey: .defaultWorkerLane)
+        protectedDomains = try container.decodeIfPresent([String].self, forKey: .protectedDomains) ?? []
+        approvalNotes = try container.decodeIfPresent([String].self, forKey: .approvalNotes) ?? []
+    }
+}
+
+private struct AgentResponsibilityDomainDTO: Decodable {
+    let primary: String?
+    let fallback: String?
+    let scope: String?
+    let note: String?
+}
+
+private extension Agent {
+    var apiPathComponent: String {
+        name
+            .lowercased()
+            .addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? name.lowercased()
     }
 }
 

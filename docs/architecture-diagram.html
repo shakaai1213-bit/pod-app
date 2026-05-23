@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lab Architecture — How Work Flows</title>
+<style>
+  :root{
+    --bg:#0a0a0c;--card:#17171a;--card2:#1f1f23;--line:#2c2c31;
+    --txt:#ecedef;--dim:#9a9aa1;--faint:#6a6a71;
+    --green:#34c759;--amber:#ff9f0a;--red:#ff453a;--blue:#0a84ff;--violet:#bf5af2;--teal:#30d0c0;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,"SF Pro Text",Helvetica,Arial,sans-serif;}
+  body{background:#000;display:flex;justify-content:center;padding:30px;}
+  .sheet{width:1140px;background:var(--bg);border-radius:20px;border:1px solid #222;padding:30px 34px 36px;}
+  h1{font-size:25px;color:var(--txt);font-weight:700;}
+  .lede{font-size:13px;color:var(--dim);margin:5px 0 24px;}
+  .panel{margin-bottom:26px;}
+  .ptitle{font-size:11px;font-weight:700;letter-spacing:1.6px;color:var(--faint);margin-bottom:12px;}
+  .rowflex{display:flex;align-items:stretch;gap:0;}
+  .box{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:14px 15px;flex:1;}
+  .box .bt{font-size:14px;font-weight:700;color:var(--txt);margin-bottom:5px;}
+  .box .bs{font-size:11.5px;color:var(--dim);line-height:1.5;}
+  .box .tag{font-size:9.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;padding:2px 6px;border-radius:4px;}
+  .arrow{display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:22px;flex:0 0 46px;}
+  .arrowlab{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:0 0 92px;color:var(--faint);}
+  .arrowlab .a{font-size:22px;}
+  .arrowlab .l{font-size:9.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--blue);margin-top:2px;text-align:center;}
+  .hl-orca{border-color:var(--blue);box-shadow:0 0 0 1px rgba(10,132,255,.35) inset;}
+  .hl-pod{border-color:var(--green);box-shadow:0 0 0 1px rgba(52,199,89,.3) inset;}
+  .feeders{display:flex;gap:14px;margin-top:12px;padding-left:0;}
+  .feeder{background:var(--card2);border:1px solid var(--line);border-radius:11px;padding:10px 13px;flex:1;}
+  .feeder .ft{font-size:12.5px;font-weight:600;color:var(--txt);}
+  .feeder .fs{font-size:11px;color:var(--faint);margin-top:2px;}
+  .upinto{text-align:center;color:var(--faint);font-size:11px;margin:7px 0;}
+  .caption{font-size:12px;color:var(--dim);margin-top:12px;padding:10px 13px;background:var(--card2);border-radius:9px;border-left:3px solid var(--blue);}
+  /* flow pipeline */
+  .pipe{display:flex;align-items:stretch;gap:0;}
+  .stage{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 12px;flex:1;text-align:center;}
+  .stage .sn{font-size:9.5px;font-weight:700;letter-spacing:.8px;color:var(--faint);text-transform:uppercase;}
+  .stage .sb{font-size:13px;font-weight:700;color:var(--txt);margin:5px 0 4px;}
+  .stage .ss{font-size:10.5px;color:var(--dim);line-height:1.45;}
+  .parr{display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:18px;flex:0 0 30px;}
+  .stack2{display:flex;flex-direction:column;gap:8px;flex:1;}
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-top:11px;}
+  .tab{font-size:11.5px;padding:6px 12px;border-radius:8px;border:1px solid var(--line);color:var(--dim);background:var(--card);}
+  .tab.on{background:var(--green);color:#04240f;border-color:var(--green);font-weight:700;}
+  .tab.cap{border-color:var(--violet);color:#d6a8f5;}
+</style>
+</head>
+<body>
+<div class="sheet">
+  <h1>Lab Architecture — How Work Flows</h1>
+  <div class="lede">Two pictures: where truth lives, and how a piece of work travels from a thought to a durable result.</div>
+
+  <!-- PANEL A -->
+  <div class="panel">
+    <div class="ptitle">1 · THE TRUTH CHAIN — one spine, not two</div>
+    <div class="rowflex">
+      <div class="box">
+        <div class="bt">Obsidian / Team-Wiki</div>
+        <div class="bs"><span class="tag" style="background:rgba(255,159,10,.15);color:#ffb84d;">authoring</span><br>
+        Doctrine is written here — charters, SOPs, specs, DDS, ADRs. Files + git = review &amp; version history.</div>
+      </div>
+      <div class="arrowlab"><span class="a">→</span><span class="l">mirrors into</span></div>
+      <div class="box hl-orca">
+        <div class="bt">ORCA — control plane</div>
+        <div class="bs"><span class="tag" style="background:rgba(10,132,255,.18);color:#5fa9ff;">the center of truth</span><br>
+        Tickets, projects, notes, agent runs, approvals, registries, state — and it indexes the mirrored wiki. One spine.</div>
+      </div>
+      <div class="arrowlab"><span class="a">→</span><span class="l">shown by</span></div>
+      <div class="box hl-pod">
+        <div class="bt">Pod</div>
+        <div class="bs"><span class="tag" style="background:rgba(52,199,89,.16);color:#5cd97a;">your center of truth</span><br>
+        Your window onto ORCA. You only ever touch Pod — never Obsidian or ORCA directly.</div>
+      </div>
+    </div>
+    <div class="upinto">▲ &nbsp; feed into ORCA &nbsp; ▲</div>
+    <div class="feeders">
+      <div class="feeder"><div class="ft">Compute — the muscle</div><div class="fs">Spark / Kimi routed model horsepower. Replaceable. Every call explains its route.</div></div>
+      <div class="feeder"><div class="ft">Agents — the owners</div><div class="fs">Aloha · Maui · Chief · Rooster · Coral · Reef. Lanes with authority, not chat personas.</div></div>
+    </div>
+    <div class="caption">Obsidian authors doctrine → ORCA is the single truth spine → Pod is how you see it. There is one chain, not two competing truths.</div>
+  </div>
+
+  <!-- PANEL B -->
+  <div class="panel">
+    <div class="ptitle">2 · THE WORK FLOW — a thought becomes a durable result</div>
+    <div class="pipe">
+      <div class="stack2">
+        <div class="stage"><div class="sn">capture</div><div class="sb">Captain's Log</div><div class="ss">you brain-dump, raw</div></div>
+        <div class="stage"><div class="sn">capture</div><div class="sb">Agent daily logs</div><div class="ss">agents log raw</div></div>
+      </div>
+      <div class="parr">→</div>
+      <div class="stage"><div class="sn">triage · Aloha digests</div><div class="sb">Parking Lot</div><div class="ss">discrete items — promote / park / drop</div></div>
+      <div class="parr">→</div>
+      <div class="stage"><div class="sn">commit</div><div class="sb">Project / Ticket</div><div class="ss">owned, tracked work in ORCA</div></div>
+      <div class="parr">→</div>
+      <div class="stage"><div class="sn">execute</div><div class="sb">Agent Run</div><div class="ss">worker does it, returns evidence</div></div>
+      <div class="parr">→</div>
+      <div class="stage"><div class="sn">continuity</div><div class="sb">Memory</div><div class="ss">reviewed, durable</div></div>
+    </div>
+    <div class="caption">Raw capture is never auto-promoted. Aloha digests the logs into discrete Parking-Lot items; those get promoted into committed work; work produces evidence; the durable lessons flow into reviewed Memory. Every step is tracked end-to-end.</div>
+  </div>
+
+  <!-- PANEL C -->
+  <div class="panel">
+    <div class="ptitle">3 · POD — your center of truth, one tab per concern</div>
+    <div class="tabs">
+      <span class="tab">Dashboard</span>
+      <span class="tab">Runtime</span>
+      <span class="tab">Chat</span>
+      <span class="tab on">Work — Parking Lot · Projects · Tickets</span>
+      <span class="tab cap">Captain's Log</span>
+      <span class="tab">Knowledge — doctrine, specs, decisions</span>
+      <span class="tab">Agents</span>
+    </div>
+    <div class="caption">Every tab is a view of ORCA truth. Work = where work lives. Captain's Log = where you think out loud. Knowledge = what you read to understand. Agents = who you talk to.</div>
+  </div>
+</div>
+</body>
+</html>

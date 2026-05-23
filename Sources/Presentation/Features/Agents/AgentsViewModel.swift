@@ -8,11 +8,38 @@ import SwiftUI
 
 private let agentProfiles: [String: (role: String, skills: [String], avatarColor: String)] = [
     "maui":    (role: "Head of Engineering", skills: ["SwiftUI", "iOS", "Architecture", "Swift", "Xcode"], avatarColor: "#22C55E"),
-    "chief":   (role: "Trading Lead",         skills: ["Trading", "Python", "Finance", "NATS", "Data Analysis"], avatarColor: "#F97316"),
+    "chief":   (role: "Protected Fund Lead",  skills: ["Trading Research", "Risk Review", "Python", "Finance", "Data Analysis"], avatarColor: "#22C55E"),
     "aloha":   (role: "Communications",      skills: ["Messaging", "Coordination", "Discord", "Notifications"], avatarColor: "#A855F7"),
-    "turtle":  (role: "Research",             skills: ["Analysis", "Research", "Experimentation", "Statistics"], avatarColor: "#3B82F6"),
-    "aurora":  (role: "Architecture",        skills: ["Design", "Systems", "DDS", "Protocol Buffers"], avatarColor: "#F59E0B"),
+    "coral":   (role: "Support Runtime",      skills: ["Watchdogs", "Daemons", "Runtime Health", "Observability"], avatarColor: "#06B6D4"),
+    "reef":    (role: "Chief Mac Support",    skills: ["Mirrors", "Surfaces", "Watchdogs", "Chief Mac Support"], avatarColor: "#14B8A6"),
+    "rooster": (role: "Security",             skills: ["Security", "Credentials", "Guardrails", "Chief Mac Protection"], avatarColor: "#EF4444"),
+    "aurora":  (role: "Dormant Advisor",      skills: ["Jarvis Memory", "iMessage", "Coordination", "Historical Context"], avatarColor: "#F59E0B"),
+    "shaka":   (role: "Dormant CEO Advisor",  skills: ["Vision", "Leadership", "Historical Context"], avatarColor: "#F97316"),
+    "shaka-agent": (role: "Dormant CEO Advisor", skills: ["Vision", "Leadership", "Historical Context"], avatarColor: "#F97316"),
+    "luna":    (role: "Dormant Fund Analyst", skills: ["Fund Analysis", "Research", "Historical Context"], avatarColor: "#6366F1"),
 ]
+
+private struct AgentResponsibilityRegistryDTO: Decodable {
+    let agents: [String: AgentResponsibilityProfileDTO]
+}
+
+private struct AgentResponsibilityProfileDTO: Decodable {
+    let rosterLane: String?
+    let defaultRoutingEnabled: Bool?
+    let title: String?
+    let summary: String?
+    let owns: [String]
+    let defaultWorkerLane: String?
+    let protectedDomains: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case title, summary, owns
+        case rosterLane = "roster_lane"
+        case defaultRoutingEnabled = "default_routing_enabled"
+        case defaultWorkerLane = "default_worker_lane"
+        case protectedDomains = "protected_domains"
+    }
+}
 
 // MARK: - Agents ViewModel
 
@@ -22,6 +49,7 @@ final class AgentsViewModel {
     // MARK: - State
 
     var agents: [Agent] = []
+    var archivedAgents: [Agent] = []
     var selectedAgent: Agent?
     var isLoading: Bool = false
     var error: String?
@@ -29,6 +57,9 @@ final class AgentsViewModel {
     /// POD-5 (c797ada1): per-agent inbox tail (unread count + recent entries).
     /// Keyed by lowercased agent name to match the backend filesystem convention.
     var inboxTails: [String: InboxTailDTO] = [:]
+
+    /// Read-only ORCA activation wake packet, keyed by normalized agent name.
+    var activationContexts: [String: AgentActivationContextDTO] = [:]
 
     private(set) var sseClient: LocalSSEClient?
 
@@ -50,28 +81,59 @@ final class AgentsViewModel {
         error = nil
 
         do {
+            let responsibilityRegistry: AgentResponsibilityRegistryDTO? = try? await apiClient.get(path: "/api/v1/agent-responsibilities")
             let response: PaginatedResponse<AgentDTO> = try await apiClient.request(.agents)
-            agents = response.items.map { dto in
-                let profile = agentProfiles[dto.name.lowercased()]
-                let role = dto.role.isEmpty ? (profile?.role ?? "Agent") : dto.role
-                let skills = dto.skills.isEmpty ? (profile?.skills ?? []) : dto.skills
+            let mappedAgents = response.items.map { dto in
+                let key = dto.name.lowercased()
+                let profile = agentProfiles[key]
+                let responsibility = responsibilityRegistry?.agents[key]
+                let responsibilitySkills = Self.skills(from: responsibility)
+                let role = dto.role.isEmpty || dto.role == "Agent"
+                    ? (responsibility?.title ?? profile?.role ?? "Agent")
+                    : dto.role
+                let skills = dto.skills.isEmpty ? (responsibilitySkills.isEmpty ? (profile?.skills ?? []) : responsibilitySkills) : dto.skills
+                let rosterLane = Self.rosterLane(from: responsibility) ?? dto.domainRosterLane
                 return Agent(
                     id: UUID(uuidString: dto.id) ?? UUID(),
                     name: dto.name,
                     role: role,
                     status: AgentState(rawValue: dto.status.rawValue) ?? .offline,
-                    currentTask: dto.currentTask ?? profile?.skills.first,
+                    currentTask: dto.currentTask ?? responsibility?.summary ?? profile?.skills.first,
                     lastActivity: dto.lastSeenAt ?? Date(),
                     skills: skills,
-                    avatarColor: dto.avatarColor ?? profile?.avatarColor ?? "#3B82F6"
+                    avatarColor: dto.avatarColor ?? profile?.avatarColor ?? "#3B82F6",
+                    rosterLane: rosterLane,
+                    isDefaultRoutingEnabled: dto.isDefaultRoutingEnabled ?? responsibility?.defaultRoutingEnabled ?? !AgentRosterPolicy.isDormantOrArchived(dto.name),
+                    quarantineState: dto.quarantineState,
+                    rosterNote: dto.rosterNote
                 )
             }
+            agents = AgentRosterPolicy.filterActive(mappedAgents)
+            archivedAgents = AgentRosterPolicy.filterDormant(mappedAgents)
         } catch {
             self.error = error.localizedDescription
-            agents = Self.mockAgents
+            agents = []
+            archivedAgents = []
         }
 
         isLoading = false
+    }
+
+    private static func skills(from responsibility: AgentResponsibilityProfileDTO?) -> [String] {
+        guard let responsibility else { return [] }
+        let owned = responsibility.owns
+            .prefix(5)
+            .map { $0.replacingOccurrences(of: "_", with: " ").capitalized }
+        let protected = responsibility.protectedDomains
+            .prefix(2)
+            .map { "Protected: " + $0.replacingOccurrences(of: "_", with: " ").capitalized }
+        let worker = responsibility.defaultWorkerLane.map { ["Worker: \($0)"] } ?? []
+        return Array(owned + protected + worker)
+    }
+
+    private static func rosterLane(from responsibility: AgentResponsibilityProfileDTO?) -> AgentRosterLane? {
+        guard let raw = responsibility?.rosterLane else { return nil }
+        return AgentRosterLane(rawValue: raw)
     }
 
     // MARK: - POD-5: Inbox Tail (c797ada1)
@@ -88,8 +150,8 @@ final class AgentsViewModel {
             )
             inboxTails[key] = dto
         } catch {
-            // Soft fail — agent may not have a local inbox yet (e.g., Luna
-            // until the Phase 2 cross-Mac bridge lands). Do not surface to user.
+            // Soft fail — support lanes may not have a local inbox yet. Do not
+            // surface this to the user.
         }
     }
 
@@ -109,6 +171,21 @@ final class AgentsViewModel {
     /// Convenience for views: how many unread for this agent?
     func unreadCount(for agentName: String) -> Int {
         inboxTails[agentName.lowercased()]?.unreadEntries ?? 0
+    }
+
+    // MARK: - Activation Context
+
+    @MainActor
+    func loadActivationContext(for agentName: String, limit: Int = 10) async {
+        let key = AgentRosterPolicy.normalizedName(agentName)
+        do {
+            let dto: AgentActivationContextDTO = try await apiClient.request(
+                .agentActivationContext(name: key, limit: limit)
+            )
+            activationContexts[key] = dto
+        } catch {
+            // Soft fail: detail surfaces can show their own unavailable state.
+        }
     }
 
     // MARK: - Update Agent Status
@@ -190,6 +267,11 @@ final class AgentsViewModel {
 
         if let index = agents.firstIndex(where: { $0.id == agentId }) {
             agents[index].status = newStatus
+        } else if let agentName = agentPayload["name"] as? String,
+                  AgentRosterPolicy.isActiveOrSupport(agentName) || AgentRosterPolicy.isDormantOrArchived(agentName) {
+            Task {
+                await loadAgents()
+            }
         }
     }
 
@@ -213,6 +295,17 @@ final class AgentsViewModel {
         }
     }
 
+    func archivedAgents(matching query: String) -> [Agent] {
+        guard !query.isEmpty else { return archivedAgents }
+        let lowercased = query.lowercased()
+        return archivedAgents.filter {
+            $0.name.lowercased().contains(lowercased) ||
+            $0.role.lowercased().contains(lowercased) ||
+            ($0.rosterNote ?? "").lowercased().contains(lowercased) ||
+            $0.skills.contains { $0.lowercased().contains(lowercased) }
+        }
+    }
+
     // MARK: - Mock Data
 
     private static var mockAgents: [Agent] {
@@ -230,12 +323,12 @@ final class AgentsViewModel {
             Agent(
                 id: UUID(),
                 name: "Chief",
-                role: "Head of Trading & Research",
-                status: .busy,
-                currentTask: "Running Octopus trading strategy",
+                role: "Protected Fund Lead",
+                status: .idle,
+                currentTask: "Chief/Fund work is read-only until reviewed",
                 lastActivity: Date().addingTimeInterval(-60),
-                skills: ["trading", "research", "python", "ml"],
-                avatarColor: "#F59E0B"
+                skills: ["trading research", "risk review", "python", "finance"],
+                avatarColor: "#22C55E"
             ),
             Agent(
                 id: UUID(),
@@ -249,23 +342,23 @@ final class AgentsViewModel {
             ),
             Agent(
                 id: UUID(),
-                name: "Aurora",
-                role: "Mission Control",
-                status: .online,
-                currentTask: "TICKET-003: Mock data sync",
+                name: "Coral",
+                role: "Support Runtime",
+                status: .idle,
+                currentTask: "Watching Shaka Mac runtime health",
                 lastActivity: Date().addingTimeInterval(-30),
-                skills: ["coordination", "architecture", "pm", "strategy"],
-                avatarColor: "#A855F7"
+                skills: ["watchdogs", "daemons", "observability"],
+                avatarColor: "#06B6D4"
             ),
             Agent(
                 id: UUID(),
-                name: "Luna",
-                role: "Trading Intelligence (Chief's Mac)",
+                name: "Reef",
+                role: "Chief Mac Support",
                 status: .idle,
-                currentTask: nil,
+                currentTask: "Chief Mac support lane only",
                 lastActivity: Date().addingTimeInterval(-3600),
-                skills: ["trading", "research", "analysis", "coordination"],
-                avatarColor: "#06B6D4"
+                skills: ["mirrors", "watchdogs", "surfaces"],
+                avatarColor: "#14B8A6"
             ),
         ]
     }

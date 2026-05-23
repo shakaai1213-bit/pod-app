@@ -113,10 +113,8 @@ public actor SSEStreamManager {
         dataTask = session?.dataTask(with: request)
         dataTask?.resume()
 
-        // Signal connected immediately — Task.sleep hangs on iOS 26 beta
-        if !isCancelled {
-            continuation.yield(.connected)
-        }
+        // The delegate yields .connected only after the HTTP response is
+        // validated or a backend "connected" SSE event arrives.
     }
 
     /// Connect to the team-wide ticket lifecycle SSE stream.
@@ -171,9 +169,8 @@ public actor SSEStreamManager {
         dataTask = session?.dataTask(with: request)
         dataTask?.resume()
 
-        if !isCancelled {
-            continuation.yield(.connected)
-        }
+        // The delegate yields .connected only after the HTTP response is
+        // validated or a backend "connected" SSE event arrives.
     }
 
     /// Called by SSEDelegate when data arrives.
@@ -218,6 +215,8 @@ private final class SSEDelegate: NSObject, URLSessionDataDelegate {
 
     private var eventType: String?
     private var eventData: String?
+    private var didYieldConnected = false
+    private var lineBuffer = ""
 
     init(continuation: AsyncThrowingStream<SSEStreamManager.SSEEvent, Error>.Continuation,
          manager: SSEStreamManager,
@@ -231,30 +230,62 @@ private final class SSEDelegate: NSObject, URLSessionDataDelegate {
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         guard let chunk = String(data: data, encoding: .utf8) else { return }
 
-        let lines = chunk.components(separatedBy: "\n")
+        lineBuffer += chunk.replacingOccurrences(of: "\r\n", with: "\n")
+        let hasCompleteTrailingLine = lineBuffer.hasSuffix("\n")
+        var lines = lineBuffer.components(separatedBy: "\n")
+        lineBuffer = hasCompleteTrailingLine ? "" : (lines.popLast() ?? "")
 
         for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            processLine(line)
+        }
+    }
 
-            if trimmed.isEmpty {
-                if let type = eventType, let data = eventData, !data.isEmpty {
-                    dispatchEvent(type: type, data: data)
-                }
-                eventType = nil
-                eventData = nil
+    private func processLine(_ line: String) {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
 
-            } else if trimmed.hasPrefix("event:") {
-                eventType = String(trimmed.dropFirst(6)).trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty {
+            if let type = eventType, let data = eventData, !data.isEmpty {
+                dispatchEvent(type: type, data: data)
+            }
+            eventType = nil
+            eventData = nil
 
-            } else if trimmed.hasPrefix("data:") {
-                let value = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespaces)
-                if eventData == nil {
-                    eventData = value
-                } else {
-                    eventData = (eventData ?? "") + "\n" + value
-                }
+        } else if trimmed.hasPrefix("event:") {
+            eventType = String(trimmed.dropFirst(6)).trimmingCharacters(in: .whitespaces)
+
+        } else if trimmed.hasPrefix("data:") {
+            let value = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+            if eventData == nil {
+                eventData = value
+            } else {
+                eventData = (eventData ?? "") + "\n" + value
             }
         }
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        dataTask: URLSessionDataTask,
+        didReceive response: URLResponse,
+        completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
+    ) {
+        guard let http = response as? HTTPURLResponse else {
+            continuation.yield(.error(.connectionFailed(nil)))
+            continuation.finish(throwing: SSEStreamManager.StreamError.connectionFailed(nil))
+            completionHandler(.cancel)
+            return
+        }
+
+        guard 200...299 ~= http.statusCode else {
+            let error = SSEStreamManager.StreamError.decodingFailed("SSE HTTP \(http.statusCode)")
+            continuation.yield(.error(error))
+            continuation.finish(throwing: error)
+            completionHandler(.cancel)
+            return
+        }
+
+        yieldConnectedOnce()
+        completionHandler(.allow)
     }
 
     private func dispatchEvent(type: String, data: String) {
@@ -264,7 +295,7 @@ private final class SSEDelegate: NSObject, URLSessionDataDelegate {
             return
         }
         if type == "connected" {
-            continuation.yield(.connected)
+            yieldConnectedOnce()
             return
         }
         switch mode {
@@ -293,6 +324,12 @@ private final class SSEDelegate: NSObject, URLSessionDataDelegate {
         }
     }
 
+    private func yieldConnectedOnce() {
+        guard !didYieldConnected else { return }
+        didYieldConnected = true
+        continuation.yield(.connected)
+    }
+
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         Task { [weak self] in
             if let error = error {
@@ -313,20 +350,87 @@ public struct MessageNewPayload: Codable, Sendable {
     public let id: String
     public let channelId: String
     public let content: String
-    public let senderId: String
-    public let senderName: String
+    public let senderId: String?
+    public let senderName: String?
     public let senderAgentId: String?
     public let timestamp: Date?
     public let replyToId: String?
     public let isThreadReply: Bool
+    public let traceId: String?
+    public let source: String?
+    public let lane: String?
+    public let messageType: String?
+    public let deliveryMode: String?
+    public let provenance: String?
+    public let responseState: String?
+    public let triageId: String?
+    public let triageTraceId: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, channelId, content, timestamp
+        case id, channelId, content
+        case channelIdSnake = "channel_id"
         case senderId = "sender_id"
+        case senderUserId = "sender_user_id"
         case senderName = "sender_name"
         case senderAgentId = "sender_agent_id"
+        case timestamp
+        case createdAt = "created_at"
         case replyToId = "reply_to_id"
         case isThreadReply = "is_thread_reply"
+        case traceId = "trace_id"
+        case source, lane, provenance
+        case messageType = "message_type"
+        case deliveryMode = "delivery_mode"
+        case responseState = "response_state"
+        case triageId = "triage_id"
+        case triageTraceId = "triage_trace_id"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        channelId = try container.decodeIfPresent(String.self, forKey: .channelId)
+            ?? container.decode(String.self, forKey: .channelIdSnake)
+        content = try container.decode(String.self, forKey: .content)
+        senderId = try container.decodeIfPresent(String.self, forKey: .senderId)
+            ?? container.decodeIfPresent(String.self, forKey: .senderUserId)
+        senderName = try container.decodeIfPresent(String.self, forKey: .senderName)
+        senderAgentId = try container.decodeIfPresent(String.self, forKey: .senderAgentId)
+        timestamp = try container.decodeIfPresent(Date.self, forKey: .timestamp)
+            ?? container.decodeIfPresent(Date.self, forKey: .createdAt)
+        replyToId = try container.decodeIfPresent(String.self, forKey: .replyToId)
+        isThreadReply = try container.decodeIfPresent(Bool.self, forKey: .isThreadReply) ?? false
+        traceId = try container.decodeIfPresent(String.self, forKey: .traceId)
+        source = try container.decodeIfPresent(String.self, forKey: .source)
+        lane = try container.decodeIfPresent(String.self, forKey: .lane)
+        messageType = try container.decodeIfPresent(String.self, forKey: .messageType)
+        deliveryMode = try container.decodeIfPresent(String.self, forKey: .deliveryMode)
+        provenance = try container.decodeIfPresent(String.self, forKey: .provenance)
+        responseState = try container.decodeIfPresent(String.self, forKey: .responseState)
+        triageId = try container.decodeIfPresent(String.self, forKey: .triageId)
+        triageTraceId = try container.decodeIfPresent(String.self, forKey: .triageTraceId)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(channelId, forKey: .channelIdSnake)
+        try container.encode(content, forKey: .content)
+        try container.encodeIfPresent(senderId, forKey: .senderId)
+        try container.encodeIfPresent(senderName, forKey: .senderName)
+        try container.encodeIfPresent(senderAgentId, forKey: .senderAgentId)
+        try container.encodeIfPresent(timestamp, forKey: .timestamp)
+        try container.encodeIfPresent(replyToId, forKey: .replyToId)
+        try container.encode(isThreadReply, forKey: .isThreadReply)
+        try container.encodeIfPresent(traceId, forKey: .traceId)
+        try container.encodeIfPresent(source, forKey: .source)
+        try container.encodeIfPresent(lane, forKey: .lane)
+        try container.encodeIfPresent(messageType, forKey: .messageType)
+        try container.encodeIfPresent(deliveryMode, forKey: .deliveryMode)
+        try container.encodeIfPresent(provenance, forKey: .provenance)
+        try container.encodeIfPresent(responseState, forKey: .responseState)
+        try container.encodeIfPresent(triageId, forKey: .triageId)
+        try container.encodeIfPresent(triageTraceId, forKey: .triageTraceId)
     }
 }
 
@@ -398,4 +502,3 @@ public struct ApprovalRequestedPayload: Codable, Sendable {
         case message, timestamp
     }
 }
-

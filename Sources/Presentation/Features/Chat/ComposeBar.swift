@@ -438,44 +438,42 @@ struct ComposeBarView: View {
     // MARK: - Agent Loading
 
     private func loadAgents() async {
-        // Aurora is always available as Mission Control
-        let aurora = MentionCandidate(id: "aurora", name: "Aurora", icon: "sparkles")
-
         do {
             let response: PaginatedResponse<AgentDTO> = try await APIClient.shared.get(path: "/api/v1/agents")
-            var candidates = response.items.map { dto in
+            let candidates = response.items
+                .filter { AgentRosterPolicy.isActiveOrSupport($0.name) }
+                .sorted {
+                    AgentRosterPolicy.sortKey(for: $0.name) < AgentRosterPolicy.sortKey(for: $1.name)
+                }
+                .map { dto in
                 MentionCandidate(
                     id: dto.id,
                     name: dto.name.prefix(1).uppercased() + dto.name.dropFirst(),
                     icon: iconForAgent(dto.name)
                 )
             }
-            // Prepend Aurora if not already in the list
-            if !candidates.contains(where: { $0.name.lowercased() == "aurora" }) {
-                candidates.insert(aurora, at: 0)
-            }
             agents = candidates
         } catch {
-            // Fall back to real team members
+            // Fall back to active/support team members.
             agents = [
-                aurora,
                 MentionCandidate(id: "maui",  name: "Maui",  icon: "wrench.and.screwdriver"),
                 MentionCandidate(id: "aloha",  name: "Aloha",  icon: "doc.text"),
-                MentionCandidate(id: "luna",   name: "Luna",   icon: "moon.stars"),
-                MentionCandidate(id: "chief",  name: "Chief",  icon: "chart.line.uptrend.xyaxis")
+                MentionCandidate(id: "chief",  name: "Chief",  icon: "chart.line.uptrend.xyaxis"),
+                MentionCandidate(id: "rooster", name: "Rooster", icon: "shield"),
+                MentionCandidate(id: "coral", name: "Coral", icon: "circle.hexagongrid"),
+                MentionCandidate(id: "reef", name: "Reef", icon: "waveform.path.ecg")
             ]
         }
     }
 
     private func iconForAgent(_ name: String) -> String {
         switch name.lowercased() {
-        case "aurora":  return "sparkles"
         case "maui":    return "wrench.and.screwdriver"
         case "aloha":   return "doc.text"
-        case "luna":    return "moon.stars"
-        case "shaka":   return "person.circle"
         case "chief":   return "chart.line.uptrend.xyaxis"
         case "rooster": return "shield"
+        case "coral":   return "circle.hexagongrid"
+        case "reef":    return "waveform.path.ecg"
         default:        return "cpu"
         }
     }

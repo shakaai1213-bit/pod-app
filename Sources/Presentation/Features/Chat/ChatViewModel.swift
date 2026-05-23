@@ -275,14 +275,15 @@ final class ChatViewModel {
         let existingIds = Set(messages.map(\.id))
         guard !existingIds.contains(UUID(uuidString: payload.id) ?? UUID()) else { return }
 
-        // Use senderName from payload directly (it's already resolved by the backend)
-        let authorName = payload.senderName
+        // Use senderName from payload when available; direct agent streams can
+        // legitimately send null names while still carrying sender_agent_id.
+        let authorName = payload.senderName ?? (payload.senderAgentId == nil ? "Unknown" : "Agent")
         let isAgent = payload.senderAgentId != nil
 
         let newMessage = Message(
             id: UUID(uuidString: payload.id) ?? UUID(),
             channelId: channelId,
-            authorId: UUID(uuidString: payload.senderId) ?? UUID(),
+            authorId: UUID(uuidString: payload.senderId ?? payload.senderAgentId ?? "") ?? UUID(),
             authorName: authorName,
             authorRole: isAgent ? .agent : .human,
             isAgent: isAgent,

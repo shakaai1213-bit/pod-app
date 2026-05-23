@@ -35,7 +35,6 @@ final class OnboardingViewModel {
     var errorMessage: String?
     var isCompleted: Bool = false
     var userName: String?
-    var isDemoMode: Bool = false
 
     // MARK: - Computed
 
@@ -55,11 +54,7 @@ final class OnboardingViewModel {
 
     // MARK: - ORCA MC Config
 
-    #if targetEnvironment(simulator)
-    private let baseURL = "http://127.0.0.1:19002"  // Proxy for simulator (port 19002)
-    #else
-    private let baseURL = "http://100.76.196.40:8000"  // Tailscale direct IP for physical device
-    #endif
+    private let baseURL = AppConfig.backendURL
 
     // MARK: - Navigation
 
@@ -213,11 +208,6 @@ final class OnboardingViewModel {
         isCompleted = true
     }
 
-    /// Enter demo mode - bypass auth and use the app with mock data
-    func enterDemoMode() {
-        isDemoMode = true
-        isCompleted = true
-    }
 }
 
 // MARK: - Connection Error

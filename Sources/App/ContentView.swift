@@ -4,7 +4,6 @@ struct ContentView: View {
     @EnvironmentObject private var appState: AppState
     // Persistent ViewModels — survive tab switches
     @State private var directChatViewModel = DirectChatViewModel()
-    @State private var voiceViewModel = VoiceCompanionViewModel()
     // Use @State to track selected tab - force SwiftUI to see changes
     @State private var selectedTab: AppTab = .dashboard
     // Observation token to force refresh
@@ -73,6 +72,9 @@ struct ContentView: View {
             }
         }
         .onChange(of: appState.pendingDirectChatAgentId) { _, agentId in
+            if appState.pendingDirectChatTicketId != nil {
+                return
+            }
             guard let agentId, let agentInfo = AgentInfo.find(agentId) else {
                 appState.pendingDirectChatAgentId = nil
                 return
@@ -81,9 +83,32 @@ struct ContentView: View {
             // the chat tab but don't push into a dead conversation view.
             withAnimation(.easeInOut(duration: 0.15)) { selectedTab = .chat }
             if agentInfo.isReachable {
+                directChatViewModel.navigationPath = NavigationPath()
                 directChatViewModel.navigationPath.append(agentInfo)
             }
             appState.pendingDirectChatAgentId = nil
+        }
+        .onChange(of: appState.pendingDirectChatTicketId) { _, ticketId in
+            guard let ticketId else { return }
+            let agentId = appState.pendingDirectChatAgentId ?? "maui"
+            guard let agentInfo = AgentInfo.find(agentId) ?? AgentInfo.find("maui") else {
+                appState.pendingDirectChatTicketId = nil
+                appState.pendingDirectChatTicketTitle = nil
+                appState.pendingDirectChatAgentId = nil
+                appState.pendingDirectChatChannelId = nil
+                return
+            }
+            withAnimation(.easeInOut(duration: 0.15)) { selectedTab = .chat }
+            directChatViewModel.continueWithTicket(
+                ticketId: ticketId,
+                ticketTitle: appState.pendingDirectChatTicketTitle ?? ticketId,
+                agent: agentInfo,
+                channelId: appState.pendingDirectChatChannelId
+            )
+            appState.pendingDirectChatTicketId = nil
+            appState.pendingDirectChatTicketTitle = nil
+            appState.pendingDirectChatAgentId = nil
+            appState.pendingDirectChatChannelId = nil
         }
     }
 
@@ -91,20 +116,18 @@ struct ContentView: View {
     private var tabContent: some View {
         if selectedTab == .dashboard {
             DashboardView()
-        } else if selectedTab == .projects {
-            ProjectsView()
+        } else if selectedTab == .runtime {
+            RuntimeView()
         } else if selectedTab == .chat {
-            DirectChatView(viewModel: directChatViewModel)
-        } else if selectedTab == .tickets {
-            TicketsView()
+            TriageChatView(directViewModel: directChatViewModel)
+        } else if selectedTab == .work {
+            WorkView()
+        } else if selectedTab == .captainsLog {
+            CaptainsLogView()
         } else if selectedTab == .agents {
             AgentsView()
         } else if selectedTab == .knowledge {
             KnowledgeView()
-        } else if selectedTab == .voice {
-            VoiceCompanionView(viewModel: voiceViewModel)
-        } else if selectedTab == .trading {
-            TradingView()
         } else {
             Color.clear
         }
@@ -129,7 +152,7 @@ struct ContentView: View {
     }
 
     private var visibleTabs: [AppTab] {
-        [.dashboard, .chat, .tickets, .agents, .projects, .voice, .trading]
+        [.dashboard, .runtime, .chat, .work, .captainsLog, .knowledge, .agents]
     }
 
     private func tabBarButton(for tab: AppTab) -> some View {
@@ -239,6 +262,1146 @@ struct ContentView: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .presentationDetents([.medium])
+    }
+}
+
+private struct TriageChatView: View {
+    @Bindable var directViewModel: DirectChatViewModel
+
+    var body: some View {
+        DirectChatView(viewModel: directViewModel)
+        .background(AppColors.backgroundPrimary)
+    }
+}
+
+private struct RuntimeView: View {
+    @State private var model = RuntimeViewModel()
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: Theme.md) {
+                    header
+                    summaryStrip
+                    startupTruthSection
+                    computeSummarySection
+                    computeRoutesSection
+                    classificationSyncSection
+                    runtimeFleetSection
+                    tagGroup(title: "Core", prefixes: ["orca.", "nats.", "compute.", "memory."])
+                    tagGroup(title: "Agents", prefixes: ["agent."])
+                    tagGroup(title: "Workers", prefixes: ["worker."])
+                    tagGroup(title: "Surfaces", prefixes: ["surface."])
+                }
+                .padding(.horizontal, Theme.md)
+                .padding(.top, Theme.lg)
+                .padding(.bottom, Theme.xxl)
+            }
+            .background(AppColors.backgroundPrimary)
+            .refreshable { await model.load() }
+            .task { await model.load() }
+            .navigationTitle("Runtime")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    private var header: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Runtime")
+                    .podTextStyle(.title1, color: AppColors.textPrimary)
+                Text("Live tags from ORCA State Registry")
+                    .podTextStyle(.body, color: AppColors.textSecondary)
+            }
+
+            Spacer()
+
+            Button {
+                Task { await model.load() }
+            } label: {
+                Image(systemName: model.isLoading ? "hourglass" : "arrow.clockwise")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(AppColors.accentElectric)
+                    .frame(width: 38, height: 38)
+                    .background(AppColors.backgroundSecondary)
+                    .clipShape(Circle())
+            }
+            .disabled(model.isLoading)
+        }
+    }
+
+    private var summaryStrip: some View {
+        HStack(spacing: Theme.sm) {
+            runtimeMetric("Tags", value: model.tags.count, color: AppColors.accentElectric)
+            runtimeMetric("Stale", value: model.staleCount, color: model.staleCount > 0 ? AppColors.accentWarning : AppColors.accentSuccess)
+            runtimeMetric("Errors", value: model.errorCount, color: model.errorCount > 0 ? AppColors.accentDanger : AppColors.accentSuccess)
+        }
+    }
+
+    private var runtimeFleetSection: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack {
+                Text("FLEET REGISTRY")
+                    .podTextStyle(.label, color: AppColors.textTertiary)
+
+                Spacer()
+
+                if let generatedAt = model.runtimeRegistryGeneratedAt {
+                    Text(generatedAt.formatted(date: .omitted, time: .shortened))
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.textTertiary)
+                }
+            }
+
+            if let summary = model.runtimeRegistrySummary {
+                HStack(spacing: Theme.sm) {
+                    runtimeMetric("Units", value: summary.total, color: AppColors.accentElectric)
+                    runtimeMetric("Petals", value: summary.byKind["petal"] ?? 0, color: AppColors.accentSuccess)
+                    runtimeMetric("Watchdogs", value: summary.byKind["watchdog"] ?? 0, color: AppColors.accentWarning)
+                }
+
+                VStack(spacing: Theme.xs) {
+                    ForEach(model.runtimeUnits.prefix(12)) { unit in
+                        RuntimeUnitRow(unit: unit) { action in
+                            Task { await model.classify(unit: unit, action: action) }
+                        }
+                    }
+                }
+                .padding(Theme.sm)
+                .background(AppColors.backgroundSecondary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                        .strokeBorder(AppColors.border, lineWidth: 1)
+                )
+            } else if let error = model.errorMessage {
+                Text(error)
+                    .podTextStyle(.caption, color: AppColors.textTertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(Theme.sm)
+                    .background(AppColors.backgroundSecondary)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+            }
+        }
+    }
+
+    private var startupTruthSection: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("STARTUP TRUTH")
+                        .podTextStyle(.label, color: AppColors.textTertiary)
+                    Text(model.startupStatus?.ok == true ? "Schoolhouse core is reachable" : "Startup status needs review")
+                        .podTextStyle(.caption, color: AppColors.textSecondary)
+                }
+
+                Spacer()
+
+                if let checkedAt = model.startupStatus?.checkedAt {
+                    Text(checkedAt.formatted(date: .omitted, time: .shortened))
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.textTertiary)
+                }
+            }
+
+            if let status = model.startupStatus {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 145), spacing: 8)], spacing: 8) {
+                    ForEach(status.components) { component in
+                        StartupStatusChip(component: component)
+                    }
+                }
+            } else if model.isLoading {
+                Text("Loading startup truth...")
+                    .podTextStyle(.caption, color: AppColors.textTertiary)
+            } else {
+                Text("Startup truth unavailable.")
+                    .podTextStyle(.caption, color: AppColors.textTertiary)
+            }
+        }
+        .padding(Theme.sm)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                .strokeBorder(AppColors.border, lineWidth: 1)
+        )
+    }
+
+    private var computeRoutesSection: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("COMPUTE ROUTES")
+                        .podTextStyle(.label, color: AppColors.textTertiary)
+                    Text(model.computeRouteRegistry?.routerURL ?? "Route registry unavailable")
+                        .podTextStyle(.caption, color: AppColors.textSecondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                if let routes = model.computeRouteRegistry?.routes {
+                    Text("\(routes.count)")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(AppColors.accentElectric)
+                }
+            }
+
+            if let registry = model.computeRouteRegistry {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 135), spacing: 8)], spacing: 8) {
+                    ForEach(registry.routes) { route in
+                        ComputeRouteChip(route: route)
+                    }
+                }
+            } else if model.isLoading {
+                Text("Loading compute routes...")
+                    .podTextStyle(.caption, color: AppColors.textTertiary)
+            } else {
+                Text("Compute route registry unavailable.")
+                    .podTextStyle(.caption, color: AppColors.textTertiary)
+            }
+        }
+        .padding(Theme.sm)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                .strokeBorder(AppColors.border, lineWidth: 1)
+        )
+    }
+
+    private var computeSummarySection: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("COMPUTE HEALTH")
+                        .podTextStyle(.label, color: AppColors.textTertiary)
+                    Text(model.computeSummary?.status.capitalized ?? "Summary unavailable")
+                        .podTextStyle(.caption, color: computeSummaryColor)
+                }
+
+                Spacer()
+
+                if let latest = model.computeSummary?.latest {
+                    Text((latest.actualTier ?? latest.route).uppercased())
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(latest.fallbackUsed ? AppColors.accentWarning : AppColors.accentSuccess)
+                }
+            }
+
+            if let summary = model.computeSummary {
+                HStack(spacing: Theme.sm) {
+                    runtimeMetric("Runs", value: summary.total, color: AppColors.accentElectric)
+                    runtimeMetric("Fallback", value: summary.fallback, color: summary.fallback > 0 ? AppColors.accentWarning : AppColors.accentSuccess)
+                    runtimeMetric("Failed", value: summary.failed, color: summary.failed > 0 ? AppColors.accentDanger : AppColors.accentSuccess)
+                }
+
+                HStack(spacing: Theme.xs) {
+                    computePill("fallback \(Int(summary.fallbackRate * 100))%", color: summary.fallbackRate >= 0.5 ? AppColors.accentWarning : AppColors.textTertiary)
+                    computePill("anonymous \(summary.anonymousCount)", color: summary.anonymousCount > 0 ? AppColors.accentWarning : AppColors.textTertiary)
+                    if let latency = summary.avgLatencyMs {
+                        computePill("\(latency)ms avg", color: AppColors.textTertiary)
+                    }
+                }
+
+                if let latest = summary.latest {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("\(latest.taskHint) · \(latest.model ?? "unknown model")")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppColors.textPrimary)
+                            .lineLimit(1)
+                        Text(computeRouteLine(latest))
+                            .font(.caption2)
+                            .foregroundStyle(AppColors.textTertiary)
+                            .lineLimit(2)
+                        Text(latest.error ?? latest.backend ?? "No latest error")
+                            .font(.caption2)
+                            .foregroundStyle(latest.error == nil ? AppColors.textTertiary : AppColors.accentWarning)
+                            .lineLimit(2)
+                    }
+                }
+            } else if model.isLoading {
+                Text("Loading compute summary...")
+                    .podTextStyle(.caption, color: AppColors.textTertiary)
+            } else {
+                Text("Compute summary unavailable.")
+                    .podTextStyle(.caption, color: AppColors.textTertiary)
+            }
+        }
+        .padding(Theme.sm)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                .strokeBorder(AppColors.border, lineWidth: 1)
+        )
+    }
+
+    private var computeSummaryColor: Color {
+        switch model.computeSummary?.status {
+        case "good": return AppColors.accentSuccess
+        case "warning", "degraded": return AppColors.accentWarning
+        case "unavailable": return AppColors.accentDanger
+        default: return AppColors.textTertiary
+        }
+    }
+
+    private func computePill(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(color)
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(AppColors.backgroundSecondary)
+            .clipShape(Capsule())
+    }
+
+    private func computeRouteLine(_ latest: ComputeRunSummaryLatestDTO) -> String {
+        let requested = latest.requestedRoute ?? latest.route
+        let actual = latest.actualTier ?? latest.route
+        let backend = latest.actualBackend ?? latest.backend ?? "unknown backend"
+        if requested == actual {
+            return "actual \(actual) / \(backend)"
+        }
+        return "requested \(requested) -> actual \(actual) / \(backend)"
+    }
+
+    private var classificationSyncSection: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("CLEANUP REVIEW")
+                        .podTextStyle(.label, color: AppColors.textTertiary)
+                    if let preview = model.classificationSyncPreview {
+                        Text("\(preview.total) reviewed runtime decision\(preview.total == 1 ? "" : "s")")
+                            .podTextStyle(.caption, color: AppColors.textSecondary)
+                    } else {
+                        Text("No reviewed runtime decisions yet")
+                            .podTextStyle(.caption, color: AppColors.textSecondary)
+                    }
+                }
+
+                Spacer()
+
+                Button {
+                    Task { await model.exportRuntimeSync() }
+                } label: {
+                    Image(systemName: model.isExportingRuntimeSync ? "hourglass" : "square.and.arrow.up")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(AppColors.accentElectric)
+                        .frame(width: 36, height: 36)
+                        .background(AppColors.backgroundSecondary)
+                        .clipShape(Circle())
+                }
+                .disabled(model.isExportingRuntimeSync || (model.classificationSyncPreview?.total ?? 0) == 0)
+            }
+
+            if let preview = model.classificationSyncPreview, !preview.byAction.isEmpty {
+                FlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                    ForEach(preview.byAction.sorted(by: { $0.key < $1.key }), id: \.key) { action, count in
+                        Text("\(action.replacingOccurrences(of: "_", with: " ")) \(count)")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(AppColors.textSecondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(AppColors.backgroundSecondary)
+                            .clipShape(Capsule())
+                    }
+                }
+            }
+
+            if let message = model.runtimeExportMessage {
+                Text(message)
+                    .podTextStyle(.caption, color: AppColors.textTertiary)
+                    .lineLimit(2)
+            }
+
+            if !model.classificationSyncExports.isEmpty {
+                VStack(alignment: .leading, spacing: Theme.xs) {
+                    ForEach(model.classificationSyncExports.prefix(3)) { artifact in
+                        HStack(spacing: Theme.xs) {
+                            Image(systemName: "doc.text.magnifyingglass")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(AppColors.accentElectric)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(artifact.exportId)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(AppColors.textPrimary)
+                                    .lineLimit(1)
+                                Text(artifact.markdownPath)
+                                    .font(.caption2)
+                                    .foregroundStyle(AppColors.textTertiary)
+                                    .lineLimit(1)
+                            }
+                            Spacer(minLength: Theme.xs)
+                            Text(artifact.updatedAt.formatted(date: .omitted, time: .shortened))
+                                .font(.caption2.monospacedDigit())
+                                .foregroundStyle(AppColors.textTertiary)
+                        }
+                    }
+                }
+                .padding(Theme.xs)
+                .background(AppColors.backgroundSecondary)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+        }
+        .padding(Theme.sm)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                .strokeBorder(AppColors.border, lineWidth: 1)
+        )
+    }
+
+    private func runtimeMetric(_ label: String, value: Int, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("\(value)")
+                .font(.system(size: 24, weight: .bold))
+                .foregroundStyle(color)
+            Text(label)
+                .podTextStyle(.caption, color: AppColors.textSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.sm)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+    }
+
+    @ViewBuilder
+    private func tagGroup(title: String, prefixes: [String]) -> some View {
+        let tags = model.tags.filter { tag in prefixes.contains { tag.tagId.hasPrefix($0) } }
+        if !tags.isEmpty {
+            VStack(alignment: .leading, spacing: Theme.sm) {
+                Text(title.uppercased())
+                    .podTextStyle(.label, color: AppColors.textTertiary)
+
+                VStack(spacing: Theme.xs) {
+                    ForEach(tags) { tag in
+                        LiveStateRow(tag: tag)
+                    }
+                }
+                .padding(Theme.sm)
+                .background(AppColors.backgroundSecondary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                        .strokeBorder(AppColors.border, lineWidth: 1)
+                )
+            }
+        }
+    }
+}
+
+@Observable
+private final class RuntimeViewModel {
+    var tags: [StateTagDTO] = []
+    var runtimeUnits: [RuntimeUnitDTO] = []
+    var runtimeRegistrySummary: RuntimeRegistrySummaryDTO?
+    var runtimeRegistryGeneratedAt: Date?
+    var classificationSyncPreview: RuntimeClassificationSyncPreviewDTO?
+    var classificationSyncExports: [RuntimeClassificationSyncArtifactDTO] = []
+    var startupStatus: StartupStatusResponseDTO?
+    var computeSummary: ComputeRunSummaryDTO?
+    var computeRouteRegistry: ComputeRouteRegistryDTO?
+    var runtimeExportMessage: String?
+    var isLoading = false
+    var isClassifying = false
+    var isExportingRuntimeSync = false
+    var errorMessage: String?
+
+    var staleCount: Int { tags.filter(\.stale).count }
+    var errorCount: Int { tags.filter { $0.quality?.lowercased() == "error" }.count }
+
+    @MainActor
+    func load() async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        do {
+            async let stateResponse: StateRegistryResponse = APIClient.shared.get(path: "/api/v1/state-registry?limit=80")
+            async let runtimeResponse: RuntimeRegistryResponseDTO = APIClient.shared.get(path: "/api/v1/runtime-registry?limit=120")
+            async let syncResponse: RuntimeClassificationSyncPreviewDTO = APIClient.shared.get(path: "/api/v1/runtime-registry/classification-sync/preview?limit=20")
+            async let syncExportsResponse: RuntimeClassificationSyncExportsDTO = APIClient.shared.get(path: "/api/v1/runtime-registry/classification-sync/exports?limit=5")
+            async let startupResponse: StartupStatusResponseDTO = APIClient.shared.get(path: "/api/v1/startup/status")
+            async let computeSummaryResponse: ComputeRunSummaryDTO = APIClient.shared.get(path: "/api/v1/compute/runs/summary?window_hours=24")
+            async let computeRouteResponse: ComputeRouteRegistryDTO = APIClient.shared.get(path: "/api/v1/compute/runs/routes")
+            let response = try await stateResponse
+            let runtime = try await runtimeResponse
+            let syncPreview = try await syncResponse
+            let syncExports = try await syncExportsResponse
+            let startup = try await startupResponse
+            let summary = try await computeSummaryResponse
+            let computeRoutes = try await computeRouteResponse
+            tags = response.items.sorted { lhs, rhs in
+                if lhs.stale != rhs.stale { return lhs.stale && !rhs.stale }
+                return lhs.tagId < rhs.tagId
+            }
+            runtimeRegistrySummary = runtime.summary
+            runtimeRegistryGeneratedAt = runtime.generatedAt
+            classificationSyncPreview = syncPreview
+            classificationSyncExports = syncExports.items
+            startupStatus = startup
+            computeSummary = summary
+            computeRouteRegistry = computeRoutes
+            runtimeUnits = runtime.items.sorted { lhs, rhs in
+                if lhs.statusSort != rhs.statusSort { return lhs.statusSort < rhs.statusSort }
+                if lhs.kind != rhs.kind { return lhs.kind < rhs.kind }
+                return lhs.name < rhs.name
+            }
+        } catch {
+            tags = []
+            runtimeUnits = []
+            runtimeRegistrySummary = nil
+            runtimeRegistryGeneratedAt = nil
+            classificationSyncPreview = nil
+            classificationSyncExports = []
+            startupStatus = nil
+            computeSummary = nil
+            computeRouteRegistry = nil
+            errorMessage = "Runtime state unavailable."
+        }
+    }
+
+    @MainActor
+    func classify(unit: RuntimeUnitDTO, action: RuntimeClassificationAction) async {
+        isClassifying = true
+        errorMessage = nil
+        defer { isClassifying = false }
+
+        do {
+            let request = RuntimeClassificationRequestDTO(
+                unitId: unit.id,
+                action: action.rawValue,
+                reviewer: "maui",
+                note: action.defaultNote(for: unit),
+                mergeTarget: nil
+            )
+            let _: RuntimeClassificationResponseDTO = try await APIClient.shared.post(
+                path: "/api/v1/runtime-registry/classifications",
+                body: request
+            )
+            await load()
+        } catch {
+            errorMessage = "Runtime classification failed."
+        }
+    }
+
+    @MainActor
+    func exportRuntimeSync() async {
+        isExportingRuntimeSync = true
+        errorMessage = nil
+        runtimeExportMessage = nil
+        defer { isExportingRuntimeSync = false }
+
+        do {
+            let response: RuntimeClassificationSyncExportDTO = try await APIClient.shared.post(
+                path: "/api/v1/runtime-registry/classification-sync/export",
+                body: EmptyRequestDTO()
+            )
+            runtimeExportMessage = "Exported \(response.total) decision\(response.total == 1 ? "" : "s"): \(response.exportId)"
+            await load()
+        } catch {
+            errorMessage = "Runtime export failed."
+        }
+    }
+}
+
+private struct RuntimeRegistryResponseDTO: Decodable {
+    let generatedAt: Date?
+    let summary: RuntimeRegistrySummaryDTO
+    let items: [RuntimeUnitDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case generatedAt = "generated_at"
+        case summary, items
+    }
+}
+
+private struct RuntimeRegistrySummaryDTO: Decodable {
+    let total: Int
+    let byKind: [String: Int]
+    let byStatus: [String: Int]
+    let byOwner: [String: Int]
+    let byClassification: [String: Int]
+
+    enum CodingKeys: String, CodingKey {
+        case total
+        case byKind = "by_kind"
+        case byStatus = "by_status"
+        case byOwner = "by_owner"
+        case byClassification = "by_classification"
+    }
+}
+
+private struct RuntimeUnitDTO: Decodable, Identifiable {
+    let id: String
+    let name: String
+    let kind: String
+    let owner: String?
+    let status: String
+    let scriptPath: String?
+    let launchAgentLabel: String?
+    let cadence: String?
+    let lastExitCode: Int?
+    let pid: Int?
+    let logPaths: [String]
+    let statePaths: [String]
+    let docs: [String]
+    let classification: String?
+    let classifiedBy: String?
+    let classifiedAt: Date?
+    let classificationNote: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, kind, owner, status, cadence, pid, docs, classification
+        case scriptPath = "script_path"
+        case launchAgentLabel = "launch_agent_label"
+        case lastExitCode = "last_exit_code"
+        case logPaths = "log_paths"
+        case statePaths = "state_paths"
+        case classifiedBy = "classified_by"
+        case classifiedAt = "classified_at"
+        case classificationNote = "classification_note"
+    }
+
+    var statusSort: Int {
+        switch status {
+        case "running": return 0
+        case "loaded": return 1
+        case "script_only": return 2
+        case "disabled": return 4
+        default: return 3
+        }
+    }
+}
+
+private enum RuntimeClassificationAction: String, CaseIterable {
+    case keep
+    case merge
+    case retire
+    case needsOwner = "needs_owner"
+    case needsDocs = "needs_docs"
+    case needsOrcaState = "needs_orca_state"
+
+    var title: String {
+        switch self {
+        case .keep: return "Keep"
+        case .merge: return "Merge"
+        case .retire: return "Retire"
+        case .needsOwner: return "Needs owner"
+        case .needsDocs: return "Needs docs"
+        case .needsOrcaState: return "Needs ORCA state"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .keep: return "checkmark.circle"
+        case .merge: return "arrow.triangle.merge"
+        case .retire: return "archivebox"
+        case .needsOwner: return "person.crop.circle.badge.questionmark"
+        case .needsDocs: return "doc.badge.gearshape"
+        case .needsOrcaState: return "rectangle.connected.to.line.below"
+        }
+    }
+
+    func defaultNote(for unit: RuntimeUnitDTO) -> String {
+        switch self {
+        case .keep:
+            return "Pod runtime review: keep \(unit.name) in the active fleet."
+        case .merge:
+            return "Pod runtime review: merge candidate. Needs explicit merge target before host changes."
+        case .retire:
+            return "Pod runtime review: retire candidate. Host runtime remains unchanged pending review."
+        case .needsOwner:
+            return "Pod runtime review: owner must be assigned before this unit is trusted."
+        case .needsDocs:
+            return "Pod runtime review: documentation is required before this unit is trusted."
+        case .needsOrcaState:
+            return "Pod runtime review: unit needs ORCA state/health tags."
+        }
+    }
+}
+
+private struct RuntimeClassificationRequestDTO: Encodable {
+    let unitId: String
+    let action: String
+    let reviewer: String
+    let note: String
+    let mergeTarget: String?
+}
+
+private struct RuntimeClassificationResponseDTO: Decodable {
+    let ok: Bool
+    let classificationId: String
+    let unit: RuntimeUnitDTO
+    let action: String
+
+    enum CodingKeys: String, CodingKey {
+        case ok, unit, action
+        case classificationId = "classification_id"
+    }
+}
+
+private struct RuntimeClassificationSyncPreviewDTO: Decodable {
+    let total: Int
+    let byAction: [String: Int]
+    let items: [RuntimeClassificationSyncItemDTO]
+    let overlayPath: String
+    let auditPath: String
+    let mode: String
+
+    enum CodingKeys: String, CodingKey {
+        case total, items, mode
+        case byAction = "by_action"
+        case overlayPath = "overlay_path"
+        case auditPath = "audit_path"
+    }
+}
+
+private struct RuntimeClassificationSyncItemDTO: Decodable, Identifiable {
+    let unitId: String
+    let action: String
+    let reviewedBy: String?
+    let reviewedAt: String?
+    let classificationId: String?
+    let note: String?
+    let unit: RuntimeUnitDTO?
+
+    var id: String { classificationId ?? "\(unitId)-\(action)" }
+
+    enum CodingKeys: String, CodingKey {
+        case action, note, unit
+        case unitId = "unit_id"
+        case reviewedBy = "reviewed_by"
+        case reviewedAt = "reviewed_at"
+        case classificationId = "classification_id"
+    }
+}
+
+private struct RuntimeClassificationSyncExportDTO: Decodable {
+    let ok: Bool
+    let exportId: String
+    let total: Int
+    let markdownPath: String
+    let yamlPath: String
+    let message: String
+
+    enum CodingKeys: String, CodingKey {
+        case ok, total, message
+        case exportId = "export_id"
+        case markdownPath = "markdown_path"
+        case yamlPath = "yaml_path"
+    }
+}
+
+private struct RuntimeClassificationSyncExportsDTO: Decodable {
+    let total: Int
+    let items: [RuntimeClassificationSyncArtifactDTO]
+}
+
+private struct RuntimeClassificationSyncArtifactDTO: Decodable, Identifiable {
+    var id: String { exportId }
+    let exportId: String
+    let markdownPath: String
+    let yamlPath: String?
+    let updatedAt: Date
+    let sizeBytes: Int
+
+    enum CodingKeys: String, CodingKey {
+        case exportId = "export_id"
+        case markdownPath = "markdown_path"
+        case yamlPath = "yaml_path"
+        case updatedAt = "updated_at"
+        case sizeBytes = "size_bytes"
+    }
+}
+
+private struct StartupStatusResponseDTO: Decodable {
+    let ok: Bool
+    let checkedAt: Date
+    let components: [StartupStatusComponentDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case ok, components
+        case checkedAt = "checked_at"
+    }
+}
+
+private struct StartupStatusComponentDTO: Decodable, Identifiable {
+    let id: String
+    let label: String
+    let status: String
+    let detail: String
+    let source: String
+    let endpoint: String?
+    let checkedAt: Date
+    let latencyMs: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case id, label, status, detail, source, endpoint
+        case checkedAt = "checked_at"
+        case latencyMs = "latency_ms"
+    }
+}
+
+private struct ComputeRunSummaryDTO: Decodable {
+    let windowHours: Int
+    let status: String
+    let total: Int
+    let succeeded: Int
+    let failed: Int
+    let fallback: Int
+    let fallbackRate: Double
+    let avgLatencyMs: Int?
+    let latest: ComputeRunSummaryLatestDTO?
+    let latestError: String?
+    let anonymousCount: Int
+    let byRoute: [ComputeRunSummaryBucketDTO]
+    let byTaskHint: [ComputeRunSummaryBucketDTO]
+    let byBackend: [ComputeRunSummaryBucketDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case status, total, succeeded, failed, fallback, latest
+        case windowHours = "window_hours"
+        case fallbackRate = "fallback_rate"
+        case avgLatencyMs = "avg_latency_ms"
+        case latestError = "latest_error"
+        case anonymousCount = "anonymous_count"
+        case byRoute = "by_route"
+        case byTaskHint = "by_task_hint"
+        case byBackend = "by_backend"
+    }
+}
+
+private struct ComputeRunSummaryLatestDTO: Decodable {
+    let id: String
+    let traceId: String?
+    let surface: String
+    let taskHint: String
+    let route: String
+    let requestedRoute: String?
+    let actualTier: String?
+    let actualBackend: String?
+    let model: String?
+    let backend: String?
+    let status: String
+    let fallbackUsed: Bool
+    let latencyMs: Int?
+    let error: String?
+    let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, surface, route, model, backend, status, error
+        case traceId = "trace_id"
+        case taskHint = "task_hint"
+        case requestedRoute = "requested_route"
+        case actualTier = "actual_tier"
+        case actualBackend = "actual_backend"
+        case fallbackUsed = "fallback_used"
+        case latencyMs = "latency_ms"
+        case createdAt = "created_at"
+    }
+}
+
+private struct ComputeRunSummaryBucketDTO: Decodable, Identifiable {
+    var id: String { key }
+    let key: String
+    let total: Int
+    let succeeded: Int
+    let failed: Int
+    let fallback: Int
+    let fallbackRate: Double
+    let avgLatencyMs: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case key, total, succeeded, failed, fallback
+        case fallbackRate = "fallback_rate"
+        case avgLatencyMs = "avg_latency_ms"
+    }
+}
+
+private struct ComputeRouteRegistryDTO: Decodable {
+    let source: String
+    let routerURL: String
+    let routes: [ComputeRouteDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case source, routes
+        case routerURL = "router_url"
+    }
+}
+
+private struct ComputeRouteDTO: Decodable, Identifiable {
+    var id: String { route }
+    let route: String
+    let status: String
+    let defaultFor: [String]
+    let capabilities: [String]
+    let fallback: String?
+    let providerKeysRequired: Bool
+    let notes: String?
+
+    enum CodingKeys: String, CodingKey {
+        case route, status, capabilities, fallback, notes
+        case defaultFor = "default_for"
+        case providerKeysRequired = "provider_keys_required"
+    }
+}
+
+private struct EmptyRequestDTO: Encodable {}
+
+private struct RuntimeUnitRow: View {
+    let unit: RuntimeUnitDTO
+    let onClassify: (RuntimeClassificationAction) -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: Theme.xs) {
+            Image(systemName: icon)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(statusColor)
+                .frame(width: 18)
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .top, spacing: Theme.xs) {
+                    Text(unit.name)
+                        .podTextStyle(.caption, color: AppColors.textPrimary)
+                        .lineLimit(1)
+                    Spacer(minLength: Theme.xs)
+                    if let classification = unit.classification {
+                        Text(classification.replacingOccurrences(of: "_", with: " ").uppercased())
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(classificationColor)
+                            .lineLimit(1)
+                    }
+                    Text(unit.kind.uppercased())
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.textTertiary)
+                        .lineLimit(1)
+                    classificationMenu
+                }
+
+                HStack(spacing: Theme.xs) {
+                    Text(unit.status)
+                    if let owner = unit.owner {
+                        Text(owner)
+                    }
+                    if let cadence = unit.cadence {
+                        Text(cadence)
+                    }
+                    if let pid = unit.pid {
+                        Text("pid \(pid)")
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(AppColors.textSecondary)
+                .lineLimit(1)
+
+                if let scriptPath = unit.scriptPath {
+                    Text(scriptPath)
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.textTertiary)
+                        .lineLimit(1)
+                }
+
+                if let note = unit.classificationNote {
+                    Text(note)
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.textTertiary)
+                        .lineLimit(2)
+                }
+            }
+        }
+        .padding(.vertical, Theme.xs)
+    }
+
+    private var classificationMenu: some View {
+        Menu {
+            ForEach(RuntimeClassificationAction.allCases, id: \.rawValue) { action in
+                Button {
+                    onClassify(action)
+                } label: {
+                    Label(action.title, systemImage: action.icon)
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppColors.textTertiary)
+                .frame(width: 24, height: 24)
+        }
+    }
+
+    private var icon: String {
+        switch unit.kind {
+        case "petal": return "leaf.fill"
+        case "watchdog": return "shield.lefthalf.filled"
+        case "bridge": return "point.3.connected.trianglepath.dotted"
+        case "worker": return "hammer.fill"
+        default: return "gearshape.fill"
+        }
+    }
+
+    private var statusColor: Color {
+        switch unit.status {
+        case "running": return AppColors.accentSuccess
+        case "loaded", "script_only": return AppColors.accentElectric
+        case "disabled": return AppColors.textTertiary
+        default: return AppColors.accentWarning
+        }
+    }
+
+    private var classificationColor: Color {
+        switch unit.classification {
+        case "keep": return AppColors.accentSuccess
+        case "retire": return AppColors.accentDanger
+        case "merge", "needs_owner", "needs_docs", "needs_orca_state": return AppColors.accentWarning
+        default: return AppColors.textTertiary
+        }
+    }
+}
+
+private struct StartupStatusChip: View {
+    let component: StartupStatusComponentDTO
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(color)
+                Text(component.label)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.textPrimary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+
+            Text(component.status.capitalized)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(color)
+
+            Text(component.detail)
+                .font(.caption2)
+                .foregroundStyle(AppColors.textTertiary)
+                .lineLimit(2)
+
+            if let latency = component.latencyMs {
+                Text("\(latency)ms")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(AppColors.textTertiary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(color.opacity(0.24), lineWidth: 1)
+        )
+    }
+
+    private var color: Color {
+        switch component.status {
+        case "good": return AppColors.accentSuccess
+        case "degraded", "unknown": return AppColors.accentWarning
+        case "unavailable": return AppColors.accentDanger
+        default: return AppColors.textTertiary
+        }
+    }
+
+    private var icon: String {
+        switch component.id {
+        case "orca": return "checkmark.seal.fill"
+        case "nats": return "antenna.radiowaves.left.and.right"
+        case "compute": return "cpu"
+        case "compute_history": return "chart.xyaxis.line"
+        case "mermaid": return "hammer.fill"
+        case "chat_sse": return "bubble.left.and.bubble.right.fill"
+        case "ticket_sse": return "ticket.fill"
+        default: return "circle.grid.cross"
+        }
+    }
+}
+
+private struct ComputeRouteChip: View {
+    let route: ComputeRouteDTO
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(color)
+                Text(route.route)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.textPrimary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+
+            Text(route.status.replacingOccurrences(of: "_", with: " "))
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(color)
+                .lineLimit(1)
+
+            if !route.defaultFor.isEmpty {
+                Text(route.defaultFor.prefix(3).joined(separator: ", "))
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.textTertiary)
+                    .lineLimit(2)
+            } else if !route.capabilities.isEmpty {
+                Text(route.capabilities.prefix(2).joined(separator: ", "))
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.textTertiary)
+                    .lineLimit(2)
+            }
+
+            if let fallback = route.fallback {
+                Text("fallback \(fallback)")
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(AppColors.textTertiary)
+                    .lineLimit(1)
+            }
+
+            if route.providerKeysRequired {
+                Label("API key", systemImage: "key")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(AppColors.accentWarning)
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(color.opacity(0.24), lineWidth: 1)
+        )
+    }
+
+    private var color: Color {
+        switch route.status {
+        case "active": return AppColors.accentSuccess
+        case "fallback": return AppColors.accentElectric
+        case "future_optional": return AppColors.accentWarning
+        default: return AppColors.textTertiary
+        }
+    }
+
+    private var icon: String {
+        switch route.route {
+        case "auto": return "arrow.triangle.branch"
+        case "spark": return "bolt.fill"
+        case "kimi": return "text.magnifyingglass"
+        case "local": return "shield.lefthalf.filled"
+        default: return "cpu"
+        }
     }
 }
 
@@ -369,7 +1532,7 @@ struct LoginView: View {
 
             Spacer()
 
-            Text("Connecting via Tailscale: 100.76.196.40:8000")
+            Text("Connecting to ORCA: \(AppState.backendURL)")
                 .font(.caption)
                 .foregroundColor(AppTheme.tertiaryText)
                 .padding(.bottom, AppTheme.spacingLG)

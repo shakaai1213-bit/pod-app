@@ -17,23 +17,29 @@ final class ORCAProjectsViewModel {
     // MARK: - Kanban Columns
 
     enum KanbanStatus: String, CaseIterable {
+        case active
         case backlog
         case inProgress = "in-progress"
         case done
+        case archived
 
         var displayName: String {
             switch self {
+            case .active:      return "Active"
             case .backlog:    return "Backlog"
             case .inProgress: return "In Progress"
             case .done:       return "Done"
+            case .archived:    return "Archived"
             }
         }
 
         var color: Color {
             switch self {
+            case .active:      return AppColors.accentElectric
             case .backlog:    return AppColors.textTertiary
             case .inProgress: return AppColors.accentElectric
             case .done:       return AppColors.accentSuccess
+            case .archived:    return AppColors.textTertiary
             }
         }
     }
@@ -41,12 +47,28 @@ final class ORCAProjectsViewModel {
     // MARK: - Computed
 
     func projectsByStatus(_ status: String) -> [ProjectDTO] {
-        projects.filter { $0.status == status }
+        projects.filter { statusBucket($0.status) == status }
     }
 
+    var activeProjects: [ProjectDTO] { projectsByStatus(KanbanStatus.active.rawValue) }
     var backlogProjects: [ProjectDTO] { projectsByStatus(KanbanStatus.backlog.rawValue) }
     var inProgressProjects: [ProjectDTO] { projectsByStatus(KanbanStatus.inProgress.rawValue) }
     var doneProjects: [ProjectDTO] { projectsByStatus(KanbanStatus.done.rawValue) }
+
+    func statusBucket(_ status: String) -> String {
+        switch status.lowercased().replacingOccurrences(of: "_", with: "-") {
+        case "in-progress":
+            return KanbanStatus.inProgress.rawValue
+        case "done", "completed", "closed":
+            return KanbanStatus.done.rawValue
+        case "archived":
+            return KanbanStatus.archived.rawValue
+        case "backlog":
+            return KanbanStatus.backlog.rawValue
+        default:
+            return KanbanStatus.active.rawValue
+        }
+    }
 
     // MARK: - Loading
 
@@ -70,11 +92,38 @@ final class ORCAProjectsViewModel {
         }
     }
 
+    func loadNotes(projectId: UUID) async -> [ProjectNoteDTO] {
+        do {
+            return try await repo.listNotes(projectId: projectId)
+        } catch {
+            print("Failed to load project notes: \(error)")
+            return []
+        }
+    }
+
+    func createNote(projectId: UUID, title: String, body: String, noteType: String) async -> ProjectNoteDTO? {
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTitle.isEmpty, !cleanBody.isEmpty else { return nil }
+
+        do {
+            return try await repo.createNote(
+                projectId: projectId,
+                title: cleanTitle,
+                body: cleanBody,
+                noteType: noteType
+            )
+        } catch {
+            print("Failed to create project note: \(error)")
+            return nil
+        }
+    }
+
     // MARK: - Mutations
 
-    func createProject(name: String, goal: String? = nil, priority: Int = 3) async {
+    func createProject(name: String, goal: String? = nil, priority: Int = 3, stage: String = "blueprint") async {
         do {
-            let new = try await repo.createProject(name: name, goal: goal, priority: priority)
+            let new = try await repo.createProject(name: name, goal: goal, priority: priority, stage: stage)
             projects.insert(new, at: 0)
         } catch {
             print("Failed to create project: \(error)")
@@ -109,25 +158,39 @@ final class ORCAProjectsViewModel {
     }
 
     func moveTask(taskId: UUID, toStatus: String) async {
-        // Optimistic update
+        guard let task = tasks.first(where: { $0.id == taskId }) else {
+            errorMessage = "Project task not loaded."
+            return
+        }
+
+        let oldTasks = tasks
         if let idx = tasks.firstIndex(where: { $0.id == taskId }) {
-            let task = tasks[idx]
+            let old = tasks[idx]
             tasks[idx] = ProjectTaskDTO(
-                id: task.id, projectId: task.projectId, title: task.title,
-                description: task.description, status: toStatus, priority: task.priority,
-                parentTaskId: task.parentTaskId, createdBy: task.createdBy,
-                assignedTo: task.assignedTo, createdAt: task.createdAt,
-                updatedAt: Date(), dueDate: task.dueDate
+                id: old.id,
+                projectId: old.projectId,
+                title: old.title,
+                description: old.description,
+                status: toStatus,
+                priority: old.priority,
+                parentTaskId: old.parentTaskId,
+                createdBy: old.createdBy,
+                assignedTo: old.assignedTo,
+                createdAt: old.createdAt,
+                updatedAt: Date(),
+                dueDate: old.dueDate
             )
         }
 
-        // Persist via project update endpoint (ORCA MC uses project-level status update)
-        if let task = tasks.first(where: { $0.id == taskId }) {
-            do {
-                _ = try await repo.updateProject(task.projectId, status: toStatus)
-            } catch {
-                print("Failed to move task: \(error)")
+        do {
+            let updated = try await repo.updateTask(projectId: task.projectId, taskId: taskId, status: toStatus)
+            if let idx = tasks.firstIndex(where: { $0.id == taskId }) {
+                tasks[idx] = updated
             }
+            errorMessage = nil
+        } catch {
+            tasks = oldTasks
+            errorMessage = "Failed to move project task: \(error.localizedDescription)"
         }
     }
 }

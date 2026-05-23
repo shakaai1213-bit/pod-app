@@ -1,6 +1,16 @@
 import Foundation
 import SwiftUI
 
+enum AppConfig {
+    #if targetEnvironment(simulator)
+    static let backendURL = "http://127.0.0.1:19002"
+    static let computeURL = "http://127.0.0.1:8890"
+    #else
+    static let backendURL = "http://100.76.196.40:8000"
+    static let computeURL = "http://100.76.196.40:8890"
+    #endif
+}
+
 @MainActor
 final class AppState: ObservableObject {
     // MARK: - Published State
@@ -19,6 +29,9 @@ final class AppState: ObservableObject {
     @Published var pendingApprovalId: UUID?
     @Published var pendingNotification: NotificationAction?
     @Published var pendingDirectChatAgentId: String?
+    @Published var pendingDirectChatTicketId: String?
+    @Published var pendingDirectChatTicketTitle: String?
+    @Published var pendingDirectChatChannelId: String?
 
     // MARK: - Auth Manager (Keychain-backed)
 
@@ -26,12 +39,7 @@ final class AppState: ObservableObject {
 
     // MARK: - Backend URL
 
-    // Simulator can still use the local proxy when available, but must authenticate honestly.
-    #if targetEnvironment(simulator)
-    static let backendURL = "http://192.168.4.243:19002"
-    #else
-    static let backendURL = "http://100.76.196.40:8000"
-    #endif
+    static let backendURL = AppConfig.backendURL
 
     // MARK: - Initialization
 
@@ -300,7 +308,7 @@ final class AppState: ObservableObject {
         switch state {
         case .dashboard: selectedTab = .dashboard
         case .chat: selectedTab = .chat
-        case .projects: selectedTab = .projects
+        case .projects: selectedTab = .work
         case .knowledge: selectedTab = .knowledge
         case .agents: selectedTab = .agents
         case .settings: selectedTab = .dashboard
@@ -312,13 +320,12 @@ final class AppState: ObservableObject {
         selectedTab = tab
         switch tab {
         case .dashboard: navigationState = .dashboard
+        case .runtime: navigationState = .dashboard
         case .chat: navigationState = .chat(channelId: nil)
-        case .projects: navigationState = .projects(taskId: nil)
+        case .work: navigationState = .projects(taskId: nil)
+        case .captainsLog: navigationState = .dashboard
         case .knowledge: navigationState = .knowledge(standardId: nil)
         case .agents: navigationState = .agents(agentId: nil)
-        case .tickets: break
-        case .voice: break
-        case .trading: break
         }
     }
 
@@ -328,7 +335,7 @@ final class AppState: ObservableObject {
             selectedTab = .chat
             navigationState = .chat(channelId: channelId)
         case .taskAssigned(let taskId, _):
-            selectedTab = .projects
+            selectedTab = .work
             navigationState = .projects(taskId: taskId)
         case .approvalRequested(let approvalId, _):
             selectedTab = .dashboard

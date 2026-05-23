@@ -36,13 +36,13 @@ final class AgentRepository {
                     avatarColor: dto.avatarColor ?? "#3B82F6"
                 )
             }
-            agents = remote
-            await cache.syncAgents(remote)
+            agents = AgentRosterPolicy.filterActive(remote)
+            await cache.syncAgents(agents)
         } catch {
             lastError = error
             // Fall back to cache
             let cached = cache.fetchCachedAgents()
-            agents = cached.map { $0.toAgent() }
+            agents = AgentRosterPolicy.filterActive(cached.map { $0.toAgent() })
         }
     }
 
@@ -65,10 +65,12 @@ final class AgentRepository {
 
         if let index = agents.firstIndex(where: { $0.id == id }) {
             agents[index] = agent
-        } else {
+        } else if AgentRosterPolicy.isActiveOrSupport(agent.name) {
             agents.append(agent)
         }
-        await cache.syncAgents([agent])
+        if AgentRosterPolicy.isActiveOrSupport(agent.name) {
+            await cache.syncAgents([agent])
+        }
     }
 
     // MARK: - Queries
