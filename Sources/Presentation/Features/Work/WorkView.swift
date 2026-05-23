@@ -38,7 +38,51 @@ struct WorkView: View {
             .navigationDestination(isPresented: $pushTickets) {
                 TicketsView()
             }
+            .overlay(alignment: .bottom) {
+                if let toast = model.priorityToast {
+                    priorityToastView(toast)
+                        .padding(.bottom, 100)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .id(toast.message)
+                        .task(id: toast.message) {
+                            try? await Task.sleep(nanoseconds: 2_000_000_000)
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                if model.priorityToast == toast {
+                                    model.priorityToast = nil
+                                }
+                            }
+                        }
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: model.priorityToast)
         }
+    }
+
+    private func priorityToastView(_ toast: WorkViewModel.PriorityToast) -> some View {
+        let bg = toast.isError ? AppColors.accentDanger : AppColors.backgroundTertiary
+        let fg = toast.isError ? Color.white : AppColors.textPrimary
+        return HStack(spacing: 8) {
+            Image(systemName: toast.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                .font(.system(size: 13, weight: .semibold))
+            Text(toast.message)
+                .font(.system(size: 13, weight: .medium))
+        }
+        .foregroundColor(fg)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .background(bg)
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(AppColors.border, lineWidth: 0.5))
+        .shadow(color: Color.black.opacity(0.25), radius: 6, y: 2)
+        .contentShape(Capsule())
+        .onTapGesture {
+            if let retry = toast.retry {
+                model.priorityToast = nil
+                retry()
+            }
+        }
+        .accessibilityLabel(toast.message)
+        .accessibilityAddTraits(toast.retry != nil ? .isButton : [])
     }
 
     // MARK: - Page Header
@@ -419,6 +463,16 @@ final class WorkViewModel {
     var isLoadingTickets = false
     var ticketsError: String?
     var activeFilter: TicketFilter = .all
+    var priorityToast: PriorityToast?
+
+    struct PriorityToast: Equatable {
+        let message: String
+        let isError: Bool
+        let retry: (() -> Void)?
+        static func == (lhs: PriorityToast, rhs: PriorityToast) -> Bool {
+            lhs.message == rhs.message && lhs.isError == rhs.isError
+        }
+    }
 
     // MARK: Sheet
     var showingNewProject = false
@@ -547,11 +601,22 @@ final class WorkViewModel {
                 path: "/api/v1/tickets/\(ticketId)",
                 body: Body(priority: priority)
             )
+            priorityToast = PriorityToast(
+                message: "Priority → \(priority.capitalized)",
+                isError: false,
+                retry: nil
+            )
         } catch {
             if let restoreIdx = tickets.firstIndex(where: { $0.id == ticketId }) {
                 tickets[restoreIdx].priority = original
             }
-            ticketsError = "Couldn't update priority"
+            priorityToast = PriorityToast(
+                message: "Couldn't update — tap to retry",
+                isError: true,
+                retry: { [weak self] in
+                    Task { await self?.updateTicketPriority(ticketId: ticketId, priority: priority) }
+                }
+            )
         }
     }
 }
