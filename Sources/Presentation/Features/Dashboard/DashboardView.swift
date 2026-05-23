@@ -290,9 +290,9 @@ struct DashboardView: View {
     private var chiefProtectionSection: some View {
         VStack(alignment: .leading, spacing: Theme.sm) {
             HStack {
-                sectionHeader("Chief/Fund Guardrails", count: viewModel.chiefProtectionTags.count)
+                sectionHeader("Chief/Fund", count: ChiefFundContent.bots.count)
 
-                Text("Protected")
+                Text("Read-Only")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(AppColors.accentWarning)
                     .padding(.horizontal, 8)
@@ -303,30 +303,37 @@ struct DashboardView: View {
                 Spacer(minLength: 0)
             }
 
-            if viewModel.chiefProtectionTags.isEmpty {
-                HStack(spacing: Theme.sm) {
-                    Image(systemName: "lock.shield")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(AppColors.textTertiary)
+            // Guardrail notice
+            HStack(spacing: 6) {
+                Image(systemName: "lock.shield.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.accentWarning)
+                Text("Pod shows verified registry only. P&L, positions, orders, wallets, and bot changes stay Chief/Rooster/Tony gated.")
+                    .podTextStyle(.caption, color: AppColors.textSecondary)
+                    .lineLimit(2)
+            }
+            .padding(Theme.sm)
+            .background(AppColors.accentWarning.opacity(0.07))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.radiusSmall)
+                    .strokeBorder(AppColors.accentWarning.opacity(0.2), lineWidth: 0.5)
+            )
 
-                    Text("No verified Chief/Fund status feed is available.")
-                        .podTextStyle(.body, color: AppColors.textSecondary)
+            // Bot registry cards
+            VStack(spacing: Theme.xs) {
+                ForEach(ChiefFundContent.bots) { bot in
+                    ChiefFundBotCard(bot: bot)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(Theme.md)
-                .background(AppColors.backgroundSecondary)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
-            } else {
-                VStack(alignment: .leading, spacing: Theme.xs) {
-                    HStack(spacing: Theme.xs) {
-                        Image(systemName: "lock.shield")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(AppColors.accentWarning)
-                        Text("Pod may show verified cards only. P&L, positions, orders, wallets, and bot changes stay Chief/Rooster/Tony gated.")
-                            .podTextStyle(.caption, color: AppColors.textSecondary)
-                            .lineLimit(3)
-                    }
+            }
 
+            // Live state tags (when backend publishes them)
+            if !viewModel.chiefProtectionTags.isEmpty {
+                VStack(alignment: .leading, spacing: Theme.xs) {
+                    Text("LIVE STATE")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(AppColors.textTertiary)
+                        .tracking(0.5)
                     ForEach(viewModel.chiefProtectionTags) { tag in
                         LiveStateRow(tag: tag)
                     }
@@ -338,6 +345,113 @@ struct DashboardView: View {
                     RoundedRectangle(cornerRadius: Theme.radiusMedium)
                         .strokeBorder(AppColors.border, lineWidth: 1)
                 )
+            }
+        }
+    }
+
+    // MARK: - Chief/Fund Bot Card
+
+    private struct ChiefFundBotCard: View {
+        let bot: ChiefFundBot
+        @State private var expanded = false
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 0) {
+                // Header row
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
+                } label: {
+                    HStack(spacing: 10) {
+                        Text(bot.emoji)
+                            .font(.system(size: 22))
+                            .frame(width: 32, height: 32)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 6) {
+                                Text(bot.name)
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(AppColors.textPrimary)
+
+                                modePill(bot.mode)
+                            }
+                            Text(bot.role)
+                                .font(.system(size: 11))
+                                .foregroundStyle(AppColors.textSecondary)
+                                .lineLimit(1)
+                        }
+
+                        Spacer(minLength: 4)
+
+                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppColors.textTertiary)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                if expanded {
+                    Divider().background(AppColors.border)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        if let path = bot.launchPath {
+                            botDetailRow(icon: "terminal", label: "Launch", value: path)
+                        }
+                        botDetailRow(icon: "power", label: "Kill Switch", value: bot.killSwitch)
+                        botDetailRow(icon: "person.2.badge.gearshape", label: "Review Gate", value: bot.reviewGate.rawValue)
+                        if let notes = bot.notes {
+                            botDetailRow(icon: "info.circle", label: "Notes", value: notes)
+                        }
+                        botDetailRow(icon: "person.crop.circle", label: "Owner", value: bot.owner)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                }
+            }
+            .background(AppColors.backgroundSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                    .strokeBorder(AppColors.border, lineWidth: 0.5)
+            )
+        }
+
+        private func modePill(_ mode: BotMode) -> some View {
+            HStack(spacing: 3) {
+                Image(systemName: mode.icon)
+                    .font(.system(size: 8, weight: .bold))
+                Text(mode.label.uppercased())
+                    .font(.system(size: 9, weight: .bold))
+                    .tracking(0.3)
+            }
+            .foregroundStyle(mode.color)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(mode.color.opacity(0.12))
+            .clipShape(Capsule())
+        }
+
+        private func botDetailRow(icon: String, label: String, value: String) -> some View {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 11))
+                    .foregroundStyle(AppColors.textTertiary)
+                    .frame(width: 14)
+
+                Text(label)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(AppColors.textTertiary)
+                    .frame(width: 72, alignment: .leading)
+
+                Text(value)
+                    .font(.system(size: 11))
+                    .foregroundStyle(AppColors.textSecondary)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: 0)
             }
         }
     }

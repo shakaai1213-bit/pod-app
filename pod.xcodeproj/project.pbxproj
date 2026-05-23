@@ -34,6 +34,7 @@
 		3FF7F4F2966A2B3337C97B8E /* AuthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E75CB63EBA420B1C8624C8 /* AuthManager.swift */; };
 		43C5E6069CFE09916C866EF0 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2D290EE8D7D2034F520F37F /* AppState.swift */; };
 		48DC0D4A902E5E25D14427FF /* ShimmerModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8974E1454949E877F3566950 /* ShimmerModifier.swift */; };
+		50CCE7E17C21A642DDA65C63 /* ChiefFundContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E565B81C093C4FF46686662 /* ChiefFundContent.swift */; };
 		50D5FB832D3F748D484A7DA6 /* OfflineQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2314FFEFA469FFDCDA8BCB0 /* OfflineQueue.swift */; };
 		59202E155A36185F02416841 /* ChannelRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC9A4A64DB751E8953D363DF /* ChannelRepository.swift */; };
 		5E8CE5D256DC98E4F893A8CE /* AgentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D18D78CE9147C58BF929B8A0 /* AgentsView.swift */; };
@@ -176,6 +177,7 @@
 		84961F81D6C2F51B1A1EC335 /* AppTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTab.swift; sourceTree = "<group>"; };
 		8974E1454949E877F3566950 /* ShimmerModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShimmerModifier.swift; sourceTree = "<group>"; };
 		8DAAD8A63CB713714666FEE9 /* ComposeBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeBar.swift; sourceTree = "<group>"; };
+		8E565B81C093C4FF46686662 /* ChiefFundContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChiefFundContent.swift; sourceTree = "<group>"; };
 		916EBD9D032E8F9FE9864379 /* pod.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = pod.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		928284E5D88714A670BD7542 /* ProjectRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectRepository.swift; sourceTree = "<group>"; };
 		952F2ED4468BC7A6FAAEF442 /* AgentDetailSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentDetailSheet.swift; sourceTree = "<group>"; };
@@ -315,6 +317,7 @@
 			children = (
 				BBEBD1E0B19B12F48A528F56 /* ActivityItemView.swift */,
 				B7F5808B0A89E2CE05779BF4 /* AgentStatusCard.swift */,
+				8E565B81C093C4FF46686662 /* ChiefFundContent.swift */,
 				A4E4C855478DA5C9D41034E0 /* CockpitSignQueueSection.swift */,
 				F73FE194ED17E1FF892B715D /* DashboardModels.swift */,
 				49A69CF51ACDCD9D554A9BA5 /* DashboardView.swift */,
@@ -755,6 +758,7 @@
 				EEB7FD53570A06DB48B7954B /* Chat.swift in Sources */,
 				38A4AD8CE06D7BDB153DB923 /* ChatView.swift in Sources */,
 				A9A6BA534A675DEB3601570D /* ChatViewModel.swift in Sources */,
+				50CCE7E17C21A642DDA65C63 /* ChiefFundContent.swift in Sources */,
 				86591B7A5B04085131D89111 /* ClaudeClient.swift in Sources */,
 				3C135990C2E55C1E5079A33C /* CockpitSignQueueSection.swift in Sources */,
 				3AB34F50F3630DA8760A6CFA /* Colors.swift in Sources */,
