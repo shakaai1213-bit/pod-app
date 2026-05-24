@@ -119,7 +119,7 @@ struct WorkView: View {
     private var suggestionsSection: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("SUGGESTIONS · \(model.suggestions.count)")
+                Text("SCHOOLHOUSE · \(model.schoolhouseDigest?.attentionStack.count ?? model.suggestions.count)")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(AppColors.textTertiary)
                     .kerning(0.5)
@@ -139,12 +139,16 @@ struct WorkView: View {
             .padding(.vertical, 10)
 
             VStack(spacing: 8) {
+                if let digest = model.schoolhouseDigest {
+                    schoolhouseDigestSummary(digest)
+                }
+
                 if model.isLoadingSuggestions && model.suggestions.isEmpty {
                     suggestionSkeletons
                 } else if let err = model.suggestionsError {
                     errorBanner(message: err) { Task { await model.loadSuggestions() } }
                 } else if model.suggestions.isEmpty {
-                    emptyState(icon: "sparkle.magnifyingglass", text: "No proposed suggestions waiting.")
+                    emptyState(icon: "sparkle.magnifyingglass", text: "Schoolhouse digest clear.")
                 } else {
                     ForEach(model.suggestions.prefix(7)) { suggestion in
                         PodReviewCard(
@@ -166,6 +170,63 @@ struct WorkView: View {
             RoundedRectangle(cornerRadius: Theme.radiusMedium)
                 .strokeBorder(AppColors.border, lineWidth: 0.5)
         )
+    }
+
+    private func schoolhouseDigestSummary(_ digest: SchoolhouseDigest) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            FlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                ForEach(digest.attentionStack.prefix(3), id: \.self) { item in
+                    Label(item, systemImage: digest.attentionIcon(for: item))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(digest.attentionColor(for: item))
+                        .lineLimit(1)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(digest.attentionColor(for: item).opacity(0.12))
+                        .clipShape(Capsule())
+                }
+            }
+
+            HStack(spacing: 8) {
+                digestMetric(
+                    title: "Due",
+                    value: "\(digest.suggestionCount)",
+                    color: digest.suggestionCount > 0 ? AppColors.accentWarning : AppColors.accentSuccess
+                )
+                digestMetric(
+                    title: "Awake stale",
+                    value: "\(digest.staleSessionCount)",
+                    color: digest.staleSessionCount > 0 ? AppColors.accentWarning : AppColors.textTertiary
+                )
+                digestMetric(
+                    title: "Run review",
+                    value: "\(digest.worker.pendingReviewCount)",
+                    color: digest.worker.pendingReviewCount > 0 ? AppColors.accentWarning : AppColors.textTertiary
+                )
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppColors.backgroundPrimary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(AppColors.border, lineWidth: 0.5)
+        )
+    }
+
+    private func digestMetric(title: String, value: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title.uppercased())
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(AppColors.textTertiary)
+            Text(value)
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .foregroundColor(color)
+                .monospacedDigit()
+        }
+        .frame(minWidth: 66, alignment: .leading)
     }
 
     private func suggestionReviewItem(_ suggestion: SchoolhouseSuggestion) -> PodReviewItem {
@@ -914,6 +975,7 @@ final class WorkViewModel {
     var priorityToast: PriorityToast?
 
     // MARK: Suggestions
+    var schoolhouseDigest: SchoolhouseDigest?
     var suggestions: [SchoolhouseSuggestion] = []
     var isLoadingSuggestions = false
     var suggestionsError: String?
@@ -1099,8 +1161,29 @@ final class WorkViewModel {
         suggestionsError = nil
         defer { isLoadingSuggestions = false }
         do {
-            let response: WorkListResponse<SchoolhouseSuggestion> = try await APIClient.shared.get(path: "/api/v1/schoolhouse/suggestions?status=proposed&limit=7")
-            suggestions = response.items.sorted { $0.sortScore > $1.sortScore }
+            let digest: SchoolhouseDigest = try await APIClient.shared.get(path: "/api/v1/schoolhouse/digest?limit=7")
+            schoolhouseDigest = digest
+
+            var loadedSuggestions: [SchoolhouseSuggestion] = []
+            for item in digest.suggestions {
+                if let suggestion: SchoolhouseSuggestion = try? await APIClient.shared.get(
+                    path: "/api/v1/schoolhouse/suggestions/\(item.id.uuidString)"
+                ) {
+                    loadedSuggestions.append(suggestion)
+                }
+            }
+
+            if loadedSuggestions.isEmpty, digest.suggestionCount == 0 {
+                suggestions = []
+            } else if loadedSuggestions.isEmpty {
+                let response: WorkListResponse<SchoolhouseSuggestion> = try await APIClient.shared.get(path: "/api/v1/schoolhouse/suggestions?status=proposed&limit=7")
+                suggestions = response.items.sorted { $0.sortScore > $1.sortScore }
+            } else {
+                let scoreById = Dictionary(uniqueKeysWithValues: digest.suggestions.map { ($0.id, $0.rankScore) })
+                suggestions = loadedSuggestions.sorted {
+                    (scoreById[$0.id] ?? $0.sortScore) > (scoreById[$1.id] ?? $1.sortScore)
+                }
+            }
         } catch {
             suggestionsError = "Suggestions unavailable"
         }
@@ -1510,6 +1593,71 @@ private struct WorkTicketFlowItemDTO: Decodable {
             reasons: reasons ?? [],
             updatedAt: updatedAt ?? .distantPast
         )
+    }
+}
+
+// MARK: - Schoolhouse Digest
+
+struct SchoolhouseDigest: Decodable, Hashable {
+    let generatedAt: Date
+    let suggestionCount: Int
+    let countsByStatus: [String: Int]
+    let countsByKind: [String: Int]
+    let attentionStack: [String]
+    let suggestions: [SchoolhouseDigestSuggestion]
+    let sessions: [SchoolhouseDigestSession]
+    let worker: SchoolhouseDigestWorker
+
+    enum CodingKeys: String, CodingKey {
+        case suggestions, sessions, worker
+        case generatedAt = "generated_at"
+        case suggestionCount = "suggestion_count"
+        case countsByStatus = "counts_by_status"
+        case countsByKind = "counts_by_kind"
+        case attentionStack = "attention_stack"
+    }
+
+    var staleSessionCount: Int {
+        sessions.filter(\.stale).count
+    }
+
+    func attentionIcon(for item: String) -> String {
+        let lower = item.lowercased()
+        if lower.contains("mermaid") { return "hammer" }
+        if lower.contains("session") { return "moon.zzz" }
+        if lower.contains("clear") { return "checkmark.seal" }
+        return "sparkle.magnifyingglass"
+    }
+
+    func attentionColor(for item: String) -> Color {
+        item.lowercased().contains("clear") ? AppColors.accentSuccess : AppColors.accentWarning
+    }
+}
+
+struct SchoolhouseDigestSuggestion: Decodable, Identifiable, Hashable {
+    let id: UUID
+    let rankScore: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case rankScore = "rank_score"
+    }
+}
+
+struct SchoolhouseDigestSession: Decodable, Identifiable, Hashable {
+    let id: UUID
+    let stale: Bool
+}
+
+struct SchoolhouseDigestWorker: Decodable, Hashable {
+    let queuedCount: Int
+    let retryingCount: Int
+    let pendingReviewCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case queuedCount = "queued_count"
+        case retryingCount = "retrying_count"
+        case pendingReviewCount = "pending_review_count"
     }
 }
 
