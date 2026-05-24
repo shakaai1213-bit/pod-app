@@ -19,6 +19,7 @@ struct LabView: View {
     @State private var flywheelExpanded  = true
     @State private var buildingExpanded  = true
     @State private var retiredExpanded   = false
+    @State private var expandedThemes: Set<String> = ["strategy", "surfaces", "substrate", "health", "doctrine"]
 
     var body: some View {
         NavigationStack {
@@ -169,29 +170,91 @@ struct LabView: View {
                 }
             }
         } body: {
-            VStack(alignment: .leading, spacing: 8) {
-                LazyVGrid(
-                    columns: [
-                        GridItem(.adaptive(minimum: 86, maximum: 126), spacing: 7)
-                    ],
-                    spacing: 7
-                ) {
-                    ForEach(boardsModel.boards) { board in
-                        boardTile(board)
-                            .onTapGesture {
-                                selectedBoard = board
-                            }
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(Self.boardThemes.enumerated()), id: \.element.id) { idx, theme in
+                    let themeBoards = boardsModel.boards.filter { theme.slugs.contains($0.slug) }
+                    themeGroupRow(theme: theme, boards: themeBoards)
+                    if idx < Self.boardThemes.count - 1 {
+                        Divider()
+                            .padding(.horizontal, 12)
                     }
                 }
-
                 if let error = boardsModel.error {
                     Text(error)
                         .font(.system(size: 10))
                         .foregroundColor(AppColors.textTertiary)
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 8)
                 }
             }
+        }
+    }
+
+    private struct LabBoardTheme {
+        let id: String
+        let emoji: String
+        let name: String
+        let slugs: [String]
+    }
+
+    private static let boardThemes: [LabBoardTheme] = [
+        .init(id: "strategy",  emoji: "🎯", name: "Strategy",  slugs: ["north-star"]),
+        .init(id: "surfaces",  emoji: "📱", name: "Surfaces",  slugs: ["pod", "chat"]),
+        .init(id: "substrate", emoji: "🐋", name: "Substrate", slugs: ["orca", "memory", "compute", "nerve"]),
+        .init(id: "health",    emoji: "🌸", name: "Health",    slugs: ["observability"]),
+        .init(id: "doctrine",  emoji: "⚖️", name: "Doctrine",  slugs: ["governance"]),
+    ]
+
+    @ViewBuilder
+    private func themeGroupRow(theme: LabBoardTheme, boards: [LabBoardSummary]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    if expandedThemes.contains(theme.id) {
+                        expandedThemes.remove(theme.id)
+                    } else {
+                        expandedThemes.insert(theme.id)
+                    }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: expandedThemes.contains(theme.id) ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(AppColors.textSecondary)
+                        .frame(width: 12)
+                    Text(theme.emoji)
+                        .font(.system(size: 13))
+                    Text(theme.name)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(AppColors.textPrimary)
+                    Spacer()
+                    Text("\(boards.count)")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(AppColors.textSecondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(AppColors.backgroundTertiary.opacity(0.65))
+                        .clipShape(Capsule())
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
             .padding(.horizontal, 12)
-            .padding(.bottom, 12)
+            .padding(.vertical, 10)
+
+            if expandedThemes.contains(theme.id) {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 86, maximum: 126), spacing: 7)],
+                    spacing: 7
+                ) {
+                    ForEach(boards) { board in
+                        boardTile(board)
+                            .onTapGesture { selectedBoard = board }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 12)
+            }
         }
     }
 
