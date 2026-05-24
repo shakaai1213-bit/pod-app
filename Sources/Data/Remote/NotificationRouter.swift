@@ -29,7 +29,7 @@ final class NotificationRouter {
             navigateTo(.approvals(approvalId: approvalId))
 
         case .agentError(let agentId, _):
-            selectedTab = .agents
+            selectedTab = .crew  // agents folded into Crew (L1 revamp)
             navigateTo(.agents(agentId: agentId))
 
         case .unknown:

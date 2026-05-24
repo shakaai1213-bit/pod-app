@@ -117,24 +117,30 @@ struct ContentView: View {
 
     @ViewBuilder
     private var tabContent: some View {
+        // MARK: Primary 7-tab structure (L1 revamp 2026-W22)
         if selectedTab == .dashboard {
             DashboardView()
-        } else if selectedTab == .runtime {
-            RuntimeView()
         } else if selectedTab == .chat {
             TriageChatView(directViewModel: directChatViewModel)
         } else if selectedTab == .work {
             WorkView()
-        } else if selectedTab == .captainsLog {
-            CaptainsLogView()
+        } else if selectedTab == .crew {
+            // L1: Crew = ArmsTabView (already has ARMS + TEAM sections).
+            // L2 will replace this with full CrewTabView (Focus + Agents + Arms + Workers + Fund).
+            ArmsTabView()
+        } else if selectedTab == .knowledge {
+            KnowledgeView()
         } else if selectedTab == .lab {
             LabView()
+        } else if selectedTab == .runtime {
+            RuntimeView()
+        // MARK: Legacy aliases — routable via deep-link for 30-day dwell period
         } else if selectedTab == .arms {
             ArmsTabView()
         } else if selectedTab == .agents {
             AgentsView()
-        } else if selectedTab == .knowledge {
-            KnowledgeView()
+        } else if selectedTab == .captainsLog {
+            CaptainsLogView()
         } else {
             Color.clear
         }
@@ -159,7 +165,8 @@ struct ContentView: View {
     }
 
     private var visibleTabs: [AppTab] {
-        [.dashboard, .runtime, .chat, .work, .captainsLog, .lab, .arms, .knowledge, .agents]
+        // L1 revamp 2026-W22: 9 → 7 tabs. Legacy cases excluded from bar (still deep-linkable).
+        [.dashboard, .chat, .work, .crew, .knowledge, .lab, .runtime]
     }
 
     private func tabBarButton(for tab: AppTab) -> some View {

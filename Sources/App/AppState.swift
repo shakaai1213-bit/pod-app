@@ -310,7 +310,7 @@ final class AppState: ObservableObject {
         case .chat: selectedTab = .chat
         case .projects: selectedTab = .work
         case .knowledge: selectedTab = .knowledge
-        case .agents: selectedTab = .agents
+        case .agents: selectedTab = .crew  // agents folded into Crew (L1 revamp)
         case .settings: selectedTab = .dashboard
         }
         navigationState = state
@@ -323,11 +323,12 @@ final class AppState: ObservableObject {
         case .runtime: navigationState = .dashboard
         case .chat: navigationState = .chat(channelId: nil)
         case .work: navigationState = .projects(taskId: nil)
-        case .captainsLog: navigationState = .dashboard
+        case .captainsLog: navigationState = .dashboard  // legacy alias
         case .lab: navigationState = .dashboard
-        case .arms: navigationState = .agents(agentId: nil)
+        case .crew: navigationState = .agents(agentId: nil)  // Crew = merged Agents+Arms
+        case .arms: navigationState = .agents(agentId: nil)  // legacy alias
         case .knowledge: navigationState = .knowledge(standardId: nil)
-        case .agents: navigationState = .agents(agentId: nil)
+        case .agents: navigationState = .agents(agentId: nil)  // legacy alias
         }
     }
 
@@ -345,7 +346,7 @@ final class AppState: ObservableObject {
             showApprovalSheet = true
             navigationState = .dashboard
         case .agentError(agentId: let agentId, error: _):
-            selectedTab = .agents
+            selectedTab = .crew  // agents folded into Crew (L1 revamp)
             navigationState = .agents(agentId: agentId)
         case .unknown:
             break
