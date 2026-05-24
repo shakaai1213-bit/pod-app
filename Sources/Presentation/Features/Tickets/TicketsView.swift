@@ -517,7 +517,7 @@ struct TicketsView: View {
                         }
                         .listRowBackground(AppColors.backgroundSecondary)
                     } footer: {
-                        Text("Read-only ORCA terminal execution runs from /api/v1/agent-runs?review_required=true. Recording review decisions is intentionally not available here yet.")
+                        Text("ORCA terminal execution runs from /api/v1/agent-runs?review_required=true. Review decisions write back to the Agent Run record.")
                     }
 
                     Section {
@@ -598,18 +598,8 @@ struct TicketsView: View {
                     } else {
                         Section("Runs") {
                             ForEach(viewModel.agentRunReviewQueue) { run in
-                                if viewModel.ticket(withId: run.ticketId) != nil {
-                                    Button {
-                                        onOpenTicket(run.ticketId)
-                                    } label: {
-                                        reviewRunRow(run)
-                                    }
-                                    .buttonStyle(.plain)
+                                reviewRunRow(run)
                                     .listRowBackground(AppColors.backgroundSecondary)
-                                } else {
-                                    reviewRunRow(run)
-                                        .listRowBackground(AppColors.backgroundSecondary)
-                                }
                             }
                         }
 
@@ -726,6 +716,48 @@ struct TicketsView: View {
                         .foregroundColor(summary.color)
                         .lineLimit(4)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+
+                HStack(spacing: 8) {
+                    if ticket != nil {
+                        Button {
+                            onOpenTicket(run.ticketId)
+                        } label: {
+                            Label("Ticket", systemImage: "arrow.right.circle")
+                                .font(.caption2.weight(.semibold))
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                        .tint(AppColors.accentElectric)
+                    }
+
+                    if let ticket {
+                        Button {
+                            Task {
+                                await viewModel.reviewAgentRun(run, ticket: ticket, reviewStatus: "accepted")
+                                await viewModel.loadAgentRunReviewQueue()
+                            }
+                        } label: {
+                            Label("Accept", systemImage: "checkmark.seal")
+                                .font(.caption2.weight(.semibold))
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                        .tint(AppColors.accentSuccess)
+
+                        Button {
+                            Task {
+                                await viewModel.reviewAgentRun(run, ticket: ticket, reviewStatus: "needs_changes")
+                                await viewModel.loadAgentRunReviewQueue()
+                            }
+                        } label: {
+                            Label("Needs changes", systemImage: "arrow.uturn.backward.circle")
+                                .font(.caption2.weight(.semibold))
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                        .tint(AppColors.accentWarning)
+                    }
                 }
             }
         }
