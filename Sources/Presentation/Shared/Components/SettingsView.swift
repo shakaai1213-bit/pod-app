@@ -54,6 +54,15 @@ struct AgentPreference: Identifiable, Hashable {
     var enabled: Bool
 }
 
+struct PrivacyControl: Identifiable {
+    let id: String
+    let title: String
+    let detail: String
+    let icon: String
+    let color: Color
+    var enabled: Bool
+}
+
 // MARK: - ViewModel
 
 @Observable
@@ -96,6 +105,44 @@ final class SettingsViewModel {
         AgentPreference(id: "coral",       name: "Coral",       enabled: true),
         AgentPreference(id: "reef",        name: "Reef",        enabled: true),
     ]
+
+    // MARK: Privacy & Agent Controls
+    var privacyControls: [PrivacyControl] = [
+        PrivacyControl(
+            id: "workspace_only",
+            title: "Workspace-only file access",
+            detail: "Agents may use ORCA workspace files, ticket artifacts, and approved uploads.",
+            icon: "folder.badge.gearshape",
+            color: AppColors.accentElectric,
+            enabled: true
+        ),
+        PrivacyControl(
+            id: "personal_device_block",
+            title: "Block personal device data",
+            detail: "Photos, contacts, messages, health data, and personal iCloud content stay outside Pod.",
+            icon: "iphone.slash",
+            color: AppColors.accentSuccess,
+            enabled: true
+        ),
+        PrivacyControl(
+            id: "tool_approval",
+            title: "Require approval for tools",
+            detail: "Writes, generated artifacts, dispatch, and external actions require a visible review step.",
+            icon: "checkmark.seal",
+            color: AppColors.accentWarning,
+            enabled: true
+        ),
+        PrivacyControl(
+            id: "no_synthetic_replies",
+            title: "No synthetic live-agent replies",
+            detail: "Chat may show acknowledgements and waiting states, but not invented agent answers.",
+            icon: "bubble.left.and.exclamationmark.bubble.right",
+            color: AppColors.accentAgent,
+            enabled: true
+        ),
+    ]
+    var autoIndexUploads: Bool = false
+    var shareDiagnosticsWithORCA: Bool = false
 
     // MARK: About
     var appVersion: String {
@@ -166,6 +213,7 @@ struct SettingsView: View {
                 notificationsSection
                 organizationSection
                 agentPreferencesSection
+                privacySection
                 aboutSection
                 aboutOrcaSection
                 if viewModel.showDebugSection {
@@ -322,6 +370,49 @@ struct SettingsView: View {
             Text("Dashboard Agents")
         } footer: {
             Text("Select which agents appear on your Dashboard.")
+        }
+    }
+
+    // MARK: - Privacy Section
+
+    private var privacySection: some View {
+        Section {
+            ForEach($viewModel.privacyControls) { $control in
+                Toggle(isOn: $control.enabled) {
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: control.icon)
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(control.color)
+                            .frame(width: 24)
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(control.title)
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(AppColors.textPrimary)
+                            Text(control.detail)
+                                .font(.caption)
+                                .foregroundStyle(AppColors.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .padding(.vertical, 3)
+                }
+                .tint(control.color)
+            }
+
+            Toggle(isOn: $viewModel.autoIndexUploads) {
+                Label("Auto-index uploads into memory", systemImage: "doc.text.magnifyingglass")
+            }
+            .tint(AppColors.accentElectric)
+
+            Toggle(isOn: $viewModel.shareDiagnosticsWithORCA) {
+                Label("Share diagnostics with ORCA", systemImage: "waveform.path.ecg")
+            }
+            .tint(AppColors.accentElectric)
+        } header: {
+            Text("Privacy & Agent Controls")
+        } footer: {
+            Text("Pod should route work through ORCA. Agents do not receive personal iPhone data unless a future explicit permission lane is added.")
         }
     }
 

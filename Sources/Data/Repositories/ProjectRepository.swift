@@ -43,6 +43,46 @@ actor ProjectRepository {
         return try await api.patch(path: "/api/v1/projects/\(id)", body: body)
     }
 
+    func generateMilestones(projectId: UUID) async throws -> ProjectDTO {
+        struct Body: Encodable {
+            let source = "pod.projects.automation"
+        }
+        return try await api.post(
+            path: "/api/v1/projects/\(projectId)/generate-milestones",
+            body: Body()
+        )
+    }
+
+    func acceptMilestone(projectId: UUID, milestoneId: String) async throws -> ProjectDTO {
+        struct Body: Encodable {
+            let source = "pod.projects.automation"
+        }
+        return try await api.post(
+            path: "/api/v1/projects/\(projectId)/milestones/\(milestoneId)/accept",
+            body: Body()
+        )
+    }
+
+    func dropMilestone(projectId: UUID, milestoneId: String) async throws -> ProjectDTO {
+        struct Body: Encodable {
+            let source = "pod.projects.automation"
+        }
+        return try await api.post(
+            path: "/api/v1/projects/\(projectId)/milestones/\(milestoneId)/drop",
+            body: Body()
+        )
+    }
+
+    func advanceToScoping(projectId: UUID) async throws -> ProjectDTO {
+        struct Body: Encodable {
+            let source = "pod.projects.automation"
+        }
+        return try await api.post(
+            path: "/api/v1/projects/\(projectId)/advance-to-scoping",
+            body: Body()
+        )
+    }
+
     func listTasks(projectId: UUID) async throws -> [ProjectTaskDTO] {
         return try await api.get(path: "/api/v1/projects/\(projectId)/tasks")
     }

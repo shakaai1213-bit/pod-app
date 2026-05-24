@@ -564,6 +564,7 @@ private struct ORCAProjectDetailView: View {
     @Bindable var viewModel: ORCAProjectsViewModel
 
     @Environment(\.dismiss) private var dismiss
+    @State private var workingProject: ProjectDTO?
     @State private var tasks: [ProjectTaskDTO] = []
     @State private var notes: [ProjectNoteDTO] = []
     @State private var isLoading = false
@@ -573,12 +574,19 @@ private struct ORCAProjectDetailView: View {
     @State private var newNoteType = "decision"
     @State private var isSavingNote = false
     @State private var noteStatus: String?
+    @State private var automationStatus: String?
+    @State private var automationBusyAction: String?
+
+    private var activeProject: ProjectDTO {
+        workingProject ?? project
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.lg) {
                     projectInfo
+                    proposedMilestonesSection
                     notesSection
                     tasksSection
                 }
@@ -610,6 +618,7 @@ private struct ORCAProjectDetailView: View {
                 }
             }
             .task {
+                workingProject = project
                 await loadTasks()
             }
         }
@@ -617,18 +626,21 @@ private struct ORCAProjectDetailView: View {
 
     private var projectInfo: some View {
         VStack(alignment: .leading, spacing: Theme.sm) {
-            if let goal = project.goal, !goal.isEmpty {
+            if let goal = activeProject.goal, !goal.isEmpty {
                 Text(goal)
                     .podTextStyle(.body, color: AppColors.textSecondary)
             }
 
             HStack(spacing: Theme.md) {
-                metaPill(icon: "flag.fill", text: "P\(project.priority)", color: priorityColor)
-                if let dueDate = project.dueDate {
+                metaPill(icon: "flag.fill", text: "P\(activeProject.priority)", color: priorityColor)
+                if let dueDate = activeProject.dueDate {
                     metaPill(icon: "calendar", text: formatDate(dueDate), color: AppColors.textSecondary)
                 }
-                if let projected = project.projectedCost {
+                if let projected = activeProject.projectedCost {
                     metaPill(icon: "dollarsign.circle", text: "$\(Int(projected))", color: AppColors.textSecondary)
+                }
+                if activeProject.automationEnabled == true {
+                    metaPill(icon: "sparkles", text: "automation", color: AppColors.accentAgent)
                 }
             }
         }
@@ -636,6 +648,101 @@ private struct ORCAProjectDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(AppColors.backgroundSecondary)
         .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+    }
+
+    private var proposedMilestonesSection: some View {
+        let proposals = activeProject.proposedMilestones ?? []
+        let durable = activeProject.milestones ?? []
+        let canAdvance = proposals.isEmpty && !durable.isEmpty
+
+        return VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack(spacing: Theme.xs) {
+                Text("PROPOSED MILESTONES")
+                    .podTextStyle(.label, color: AppColors.textTertiary)
+
+                if !proposals.isEmpty {
+                    Text("\(proposals.count)")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(AppColors.accentAgent)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(AppColors.accentAgent.opacity(0.12))
+                        .clipShape(Capsule())
+                }
+
+                Spacer(minLength: 0)
+
+                Button {
+                    Task { await generateMilestones() }
+                } label: {
+                    Label(automationBusyAction == "generate" ? "Generating" : "Generate", systemImage: "sparkles")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .tint(AppColors.accentElectric)
+                .disabled(automationBusyAction != nil)
+            }
+
+            if let runId = activeProject.lastGenerationRunId, !runId.isEmpty {
+                Label("Last generation \(runId)", systemImage: "point.topleft.down.curvedto.point.bottomright.up")
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.textTertiary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            if let automationStatus {
+                Text(automationStatus)
+                    .font(.caption2)
+                    .foregroundStyle(automationStatus.localizedCaseInsensitiveContains("couldn't") ? AppColors.accentDanger : AppColors.textTertiary)
+            }
+
+            if proposals.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(durable.isEmpty ? "No proposed milestones yet." : "\(durable.count) durable milestone\(durable.count == 1 ? "" : "s") accepted.")
+                        .font(.caption)
+                        .foregroundStyle(AppColors.textSecondary)
+
+                    if canAdvance {
+                        Button {
+                            Task { await advanceToScoping() }
+                        } label: {
+                            Label(automationBusyAction == "advance" ? "Advancing" : "Advance to Scoping", systemImage: "arrow.right.circle")
+                                .font(.caption.weight(.semibold))
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .tint(AppColors.accentSuccess)
+                        .disabled(automationBusyAction != nil)
+                    }
+                }
+                .padding(Theme.sm)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(AppColors.backgroundTertiary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+            } else {
+                VStack(spacing: Theme.xs) {
+                    ForEach(proposals) { proposal in
+                        PodReviewCard(
+                            item: milestoneReviewItem(for: proposal),
+                            isBusy: automationBusyAction?.hasSuffix(proposal.id) == true,
+                            onAction: { action in
+                                switch action.id {
+                                case "accept":
+                                    Task { await acceptMilestone(proposal.id) }
+                                case "drop":
+                                    Task { await dropMilestone(proposal.id) }
+                                default:
+                                    break
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
     }
 
     private var tasksSection: some View {
@@ -797,7 +904,7 @@ private struct ORCAProjectDetailView: View {
     }
 
     private var priorityColor: Color {
-        switch project.priority {
+        switch activeProject.priority {
         case 1: return AppColors.accentDanger
         case 2: return Color(hexString: "F97316")
         case 3: return AppColors.accentWarning
@@ -819,6 +926,85 @@ private struct ORCAProjectDetailView: View {
         tasks = viewModel.tasks
         notes = await notesLoad
         isLoading = false
+    }
+
+    private func milestoneReviewItem(for proposal: ProjectMilestoneProposalDTO) -> PodReviewItem {
+        var provenance: [String] = []
+        if let route = proposal.route, !route.isEmpty { provenance.append(route) }
+        if let model = proposal.model, !model.isEmpty { provenance.append(model) }
+        if let runId = proposal.runId, !runId.isEmpty { provenance.append("run \(String(runId.prefix(8)))") }
+        if let count = proposal.dependencies?.count, count > 0 { provenance.append("\(count) deps") }
+        if let createdAt = proposal.createdAt {
+            provenance.append(createdAt.formatted(date: .abbreviated, time: .shortened))
+        }
+
+        return PodReviewItem(
+            id: proposal.id,
+            eyebrow: "Milestone proposal",
+            title: proposal.title,
+            detail: proposal.description,
+            status: (proposal.status ?? "proposed").replacingOccurrences(of: "_", with: " ").capitalized,
+            statusColor: AppColors.accentAgent,
+            provenance: provenance,
+            traceId: proposal.runId ?? activeProject.lastGenerationRunId,
+            artifactHash: proposal.artifactHash,
+            actions: [
+                PodReviewAction(id: "accept", title: "Accept", systemImage: "checkmark", style: .success),
+                PodReviewAction(id: "drop", title: "Drop", systemImage: "xmark", style: .destructive)
+            ]
+        )
+    }
+
+    @MainActor
+    private func generateMilestones() async {
+        automationBusyAction = "generate"
+        automationStatus = nil
+        defer { automationBusyAction = nil }
+        do {
+            workingProject = try await viewModel.generateMilestones(projectId: activeProject.id)
+            automationStatus = "Milestone generation requested through ORCA."
+        } catch {
+            automationStatus = "Couldn't generate milestones: \(error.localizedDescription)"
+        }
+    }
+
+    @MainActor
+    private func acceptMilestone(_ milestoneId: String) async {
+        automationBusyAction = "accept:\(milestoneId)"
+        automationStatus = nil
+        defer { automationBusyAction = nil }
+        do {
+            workingProject = try await viewModel.acceptMilestone(projectId: activeProject.id, milestoneId: milestoneId)
+            automationStatus = "Milestone accepted into ORCA."
+        } catch {
+            automationStatus = "Couldn't accept milestone: \(error.localizedDescription)"
+        }
+    }
+
+    @MainActor
+    private func dropMilestone(_ milestoneId: String) async {
+        automationBusyAction = "drop:\(milestoneId)"
+        automationStatus = nil
+        defer { automationBusyAction = nil }
+        do {
+            workingProject = try await viewModel.dropMilestone(projectId: activeProject.id, milestoneId: milestoneId)
+            automationStatus = "Milestone dropped with ORCA audit trail."
+        } catch {
+            automationStatus = "Couldn't drop milestone: \(error.localizedDescription)"
+        }
+    }
+
+    @MainActor
+    private func advanceToScoping() async {
+        automationBusyAction = "advance"
+        automationStatus = nil
+        defer { automationBusyAction = nil }
+        do {
+            workingProject = try await viewModel.advanceToScoping(projectId: activeProject.id)
+            automationStatus = "Project advanced to Scoping."
+        } catch {
+            automationStatus = "Couldn't advance to Scoping: \(error.localizedDescription)"
+        }
     }
 }
 

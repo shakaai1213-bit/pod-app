@@ -565,20 +565,56 @@ struct DailyLogExtractionCandidate: Codable, Identifiable, Hashable, Sendable {
     let date: String
     let text: String
     let status: String
+    let lifecycle: String?
+    let reviewState: String?
     let sourcePath: String?
     let confidence: Double?
     let tags: [String]
     let ticketRef: String?
     let requiredReviewers: [String]
     let reviewReason: String?
+    let sensitivityClass: String?
+    let target: String?
+    let targetPath: String?
+    let decisionId: String?
+    let deferUntil: Date?
+    let reviewedBy: [String]
+    let approvedBy: [String]
+    let requiredApprovals: [String]
+    let pendingApprovals: [String]
+    let approvalMode: String?
+    let minimumApprovals: Int?
+    let reviewerNotes: String?
+    let promotedAt: Date?
+    let promotionTarget: String?
+    let promotionTargetPath: String?
+    let promotionArtifactPath: String?
 
     enum CodingKeys: String, CodingKey {
         case agent, date, text, status, confidence, tags
         case candidateId = "candidate_id"
+        case lifecycle
+        case reviewState = "review_state"
         case sourcePath = "source_path"
         case ticketRef = "ticket_ref"
         case requiredReviewers = "required_reviewers"
         case reviewReason = "review_reason"
+        case sensitivityClass = "sensitivity_class"
+        case target
+        case targetPath = "target_path"
+        case decisionId = "decision_id"
+        case deferUntil = "defer_until"
+        case reviewedBy = "reviewed_by"
+        case approvedBy = "approved_by"
+        case requiredApprovals = "required_approvals"
+        case pendingApprovals = "pending_approvals"
+        case approvalMode = "approval_mode"
+        case minimumApprovals = "minimum_approvals"
+        case reviewerNotes = "reviewer_notes"
+        case promotedAt = "promoted_at"
+        case promotionTarget = "promotion_target"
+        case promotionTargetPath = "promotion_target_path"
+        case promotionArtifactPath = "promotion_artifact_path"
     }
 
     init(from decoder: Decoder) throws {
@@ -588,12 +624,43 @@ struct DailyLogExtractionCandidate: Codable, Identifiable, Hashable, Sendable {
         date = try container.decodeIfPresent(String.self, forKey: .date) ?? "unknown"
         text = try container.decode(String.self, forKey: .text)
         status = try container.decodeIfPresent(String.self, forKey: .status) ?? "candidate"
+        lifecycle = try container.decodeIfPresent(String.self, forKey: .lifecycle)
+        reviewState = try container.decodeIfPresent(String.self, forKey: .reviewState)
         sourcePath = try container.decodeIfPresent(String.self, forKey: .sourcePath)
         confidence = try container.decodeIfPresent(Double.self, forKey: .confidence)
         tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
         ticketRef = try container.decodeIfPresent(String.self, forKey: .ticketRef)
         requiredReviewers = try container.decodeIfPresent([String].self, forKey: .requiredReviewers) ?? []
         reviewReason = try container.decodeIfPresent(String.self, forKey: .reviewReason)
+        sensitivityClass = try container.decodeIfPresent(String.self, forKey: .sensitivityClass)
+        target = try container.decodeIfPresent(String.self, forKey: .target)
+        targetPath = try container.decodeIfPresent(String.self, forKey: .targetPath)
+        decisionId = try container.decodeIfPresent(String.self, forKey: .decisionId)
+        deferUntil = try container.decodeIfPresent(Date.self, forKey: .deferUntil)
+        reviewedBy = try container.decodeIfPresent([String].self, forKey: .reviewedBy) ?? []
+        approvedBy = try container.decodeIfPresent([String].self, forKey: .approvedBy) ?? []
+        requiredApprovals = try container.decodeIfPresent([String].self, forKey: .requiredApprovals) ?? []
+        pendingApprovals = try container.decodeIfPresent([String].self, forKey: .pendingApprovals) ?? []
+        approvalMode = try container.decodeIfPresent(String.self, forKey: .approvalMode)
+        minimumApprovals = try container.decodeIfPresent(Int.self, forKey: .minimumApprovals)
+        reviewerNotes = try container.decodeIfPresent(String.self, forKey: .reviewerNotes)
+        promotedAt = try container.decodeIfPresent(Date.self, forKey: .promotedAt)
+        promotionTarget = try container.decodeIfPresent(String.self, forKey: .promotionTarget)
+        promotionTargetPath = try container.decodeIfPresent(String.self, forKey: .promotionTargetPath)
+        promotionArtifactPath = try container.decodeIfPresent(String.self, forKey: .promotionArtifactPath)
+    }
+
+    var effectiveLifecycle: String {
+        lifecycle ?? status
+    }
+
+    var isSensitive: Bool {
+        switch sensitivityClass {
+        case "security", "financial", "pii", "credential_like":
+            return true
+        default:
+            return false
+        }
     }
 }
 
@@ -716,6 +783,93 @@ struct MemoryPromotionTicketResponse: Codable, Hashable, Sendable {
         case ok, created, ticket
         case artifactPath = "artifact_path"
         case candidateCount = "candidate_count"
+    }
+}
+
+struct MemoryCandidateActionResponse: Codable, Hashable, Sendable {
+    let ok: Bool
+    let candidate: DailyLogExtractionCandidate
+    let decisionId: String
+    let overlayPath: String
+    let auditPath: String
+
+    enum CodingKeys: String, CodingKey {
+        case ok, candidate
+        case decisionId = "decision_id"
+        case overlayPath = "overlay_path"
+        case auditPath = "audit_path"
+    }
+}
+
+struct MemoryCandidateQueueSummary: Codable, Hashable, Sendable {
+    let total: Int
+    let byLifecycle: [String: Int]
+    let bySensitivityClass: [String: Int]
+    let byReviewState: [String: Int]
+
+    enum CodingKeys: String, CodingKey {
+        case total
+        case byLifecycle = "by_lifecycle"
+        case bySensitivityClass = "by_sensitivity_class"
+        case byReviewState = "by_review_state"
+    }
+}
+
+struct MemoryCandidateQueueResponse: Codable, Hashable, Sendable {
+    let artifactPath: String
+    let artifactUpdatedAt: Date
+    let generatedAt: Date?
+    let summary: MemoryCandidateQueueSummary
+    let items: [DailyLogExtractionCandidate]
+    let overlayPath: String
+    let auditPath: String
+    let exportDir: String
+
+    enum CodingKeys: String, CodingKey {
+        case summary, items
+        case artifactPath = "artifact_path"
+        case artifactUpdatedAt = "artifact_updated_at"
+        case generatedAt = "generated_at"
+        case overlayPath = "overlay_path"
+        case auditPath = "audit_path"
+        case exportDir = "export_dir"
+    }
+}
+
+struct MemoryApproveRequest: Codable, Sendable {
+    let reviewer: String
+    let target: String
+    let targetPath: String?
+    let reviewerNotes: String?
+    let editText: String?
+
+    enum CodingKeys: String, CodingKey {
+        case reviewer, target
+        case targetPath = "target_path"
+        case reviewerNotes = "reviewer_notes"
+        case editText = "edit_text"
+    }
+}
+
+struct MemoryRejectRequest: Codable, Sendable {
+    let reviewer: String
+    let reason: String
+    let visibleToOriginator: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case reviewer, reason
+        case visibleToOriginator = "visible_to_originator"
+    }
+}
+
+struct MemoryDeferRequest: Codable, Sendable {
+    let reviewer: String
+    let reason: String
+    let deferUntil: Date
+
+    enum CodingKeys: String, CodingKey {
+        case reviewer, reason
+        case deferUntil = "defer_until"
     }
 }
 
@@ -896,6 +1050,7 @@ final class KnowledgeViewModel {
     var runtimeSyncExports: [RuntimeClassificationSyncArtifact] = []
     var runtimeBurnDownExports: [RuntimeClassificationSyncArtifact] = []
     var dailyLogExtraction: DailyLogExtractionResponse?
+    var memoryCandidateQueue: MemoryCandidateQueueResponse?
     var notes: [OrcaNote] = []
     var noteGovernanceAudit: NoteGovernanceAuditResponse?
     var noteGovernanceQueue: NoteGovernanceQueueResponse?
@@ -917,6 +1072,7 @@ final class KnowledgeViewModel {
     var isExportingRuntimeBurnDown: Bool = false
     var isGeneratingStorageHygieneTicket: Bool = false
     var isGeneratingMemoryPromotionTicket: Bool = false
+    var memoryActionCandidateIds: Set<String> = []
     var isExportingNoteGovernance: Bool = false
     var reviewActionInFlightDocId: String?
     var errorMessage: String?
@@ -936,6 +1092,7 @@ final class KnowledgeViewModel {
     var noteGovernanceExportMessage: String?
     var storageHygieneMessage: String?
     var memoryPromotionMessage: String?
+    var memoryActionMessage: String?
 
     // MARK: - Computed
 
@@ -972,6 +1129,10 @@ final class KnowledgeViewModel {
         runtimeReviewReasonCounts["needs_docs"]
             ?? runtimeReviewReasonCounts["needs docs"]
             ?? runtimeReviewQueueItems.filter { $0.followupReasons.contains("needs_docs") || $0.followupReasons.contains("needs docs") }.count
+    }
+
+    var memoryLifecycleCounts: [String: Int] {
+        Dictionary(grouping: memoryCandidateQueue?.items ?? [], by: \.effectiveLifecycle).mapValues(\.count)
     }
 
     // MARK: - Private
@@ -1252,14 +1413,18 @@ final class KnowledgeViewModel {
         memoryCandidatesErrorMessage = nil
 
         do {
-            let extraction: DailyLogExtractionResponse = try await APIClient.shared.get(path: "/api/v1/daily-log-extractions/latest")
+            async let extractionTask: DailyLogExtractionResponse = APIClient.shared.get(path: "/api/v1/daily-log-extractions/latest")
+            async let queueTask: MemoryCandidateQueueResponse = APIClient.shared.get(path: "/api/v1/memory/candidates")
+            let (extraction, queue) = try await (extractionTask, queueTask)
             await MainActor.run {
                 self.dailyLogExtraction = extraction
+                self.memoryCandidateQueue = queue
                 self.isLoadingMemoryCandidates = false
             }
         } catch {
             await MainActor.run {
                 self.dailyLogExtraction = nil
+                self.memoryCandidateQueue = nil
                 self.memoryCandidatesErrorMessage = error.localizedDescription
                 self.isLoadingMemoryCandidates = false
             }
@@ -1395,6 +1560,146 @@ final class KnowledgeViewModel {
                 self.memoryPromotionMessage = "Memory promotion review unavailable: \(error.localizedDescription)"
             }
         }
+    }
+
+    func approveMemoryCandidate(_ candidate: DailyLogExtractionCandidate, target: String, targetPath: String? = nil) async {
+        guard let candidateId = candidate.candidateId, !candidateId.isEmpty else { return }
+        await MainActor.run {
+            memoryActionCandidateIds.insert(candidateId)
+            memoryActionMessage = nil
+        }
+        defer {
+            Task { @MainActor in
+                self.memoryActionCandidateIds.remove(candidateId)
+            }
+        }
+
+        do {
+            let path = "/api/v1/memory/candidates/\(candidateId)/approve"
+            let response: MemoryCandidateActionResponse = try await APIClient.shared.post(
+                path: path,
+                body: MemoryApproveRequest(
+                    reviewer: "maui",
+                    target: target,
+                    targetPath: targetPath,
+                    reviewerNotes: "Approved from Pod Knowledge.",
+                    editText: nil
+                )
+            )
+            await MainActor.run {
+                self.replaceMemoryCandidate(response.candidate)
+                let lifecycle = response.candidate.effectiveLifecycle.replacingOccurrences(of: "_", with: " ")
+                self.memoryActionMessage = "Candidate \(candidateId) \(lifecycle)."
+            }
+        } catch {
+            await MainActor.run {
+                self.memoryActionMessage = "Memory approve unavailable: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func rejectMemoryCandidate(_ candidate: DailyLogExtractionCandidate) async {
+        guard let candidateId = candidate.candidateId, !candidateId.isEmpty else { return }
+        await MainActor.run {
+            memoryActionCandidateIds.insert(candidateId)
+            memoryActionMessage = nil
+        }
+        defer {
+            Task { @MainActor in
+                self.memoryActionCandidateIds.remove(candidateId)
+            }
+        }
+
+        do {
+            let path = "/api/v1/memory/candidates/\(candidateId)/reject"
+            let response: MemoryCandidateActionResponse = try await APIClient.shared.post(
+                path: path,
+                body: MemoryRejectRequest(
+                    reviewer: "maui",
+                    reason: "Rejected from Pod Knowledge review.",
+                    visibleToOriginator: true
+                )
+            )
+            await MainActor.run {
+                self.replaceMemoryCandidate(response.candidate)
+                self.memoryActionMessage = "Candidate \(candidateId) rejected."
+            }
+        } catch {
+            await MainActor.run {
+                self.memoryActionMessage = "Memory reject unavailable: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func deferMemoryCandidate(_ candidate: DailyLogExtractionCandidate) async {
+        guard let candidateId = candidate.candidateId, !candidateId.isEmpty else { return }
+        await MainActor.run {
+            memoryActionCandidateIds.insert(candidateId)
+            memoryActionMessage = nil
+        }
+        defer {
+            Task { @MainActor in
+                self.memoryActionCandidateIds.remove(candidateId)
+            }
+        }
+
+        do {
+            let path = "/api/v1/memory/candidates/\(candidateId)/defer"
+            let response: MemoryCandidateActionResponse = try await APIClient.shared.post(
+                path: path,
+                body: MemoryDeferRequest(
+                    reviewer: "maui",
+                    reason: "Deferred from Pod Knowledge review.",
+                    deferUntil: Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date()
+                )
+            )
+            await MainActor.run {
+                self.replaceMemoryCandidate(response.candidate)
+                self.memoryActionMessage = "Candidate \(candidateId) deferred."
+            }
+        } catch {
+            await MainActor.run {
+                self.memoryActionMessage = "Memory defer unavailable: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func replaceMemoryCandidate(_ updated: DailyLogExtractionCandidate) {
+        if let queue = memoryCandidateQueue {
+            let updatedItems = queue.items.map { candidate in
+                candidate.id == updated.id ? updated : candidate
+            }
+            let byLifecycle = Dictionary(grouping: updatedItems, by: \.effectiveLifecycle).mapValues(\.count)
+            let bySensitivityClass = Dictionary(grouping: updatedItems, by: { $0.sensitivityClass ?? "unknown" }).mapValues(\.count)
+            let byReviewState = Dictionary(grouping: updatedItems, by: { $0.reviewState ?? "unknown" }).mapValues(\.count)
+            memoryCandidateQueue = MemoryCandidateQueueResponse(
+                artifactPath: queue.artifactPath,
+                artifactUpdatedAt: queue.artifactUpdatedAt,
+                generatedAt: queue.generatedAt,
+                summary: MemoryCandidateQueueSummary(
+                    total: updatedItems.count,
+                    byLifecycle: byLifecycle,
+                    bySensitivityClass: bySensitivityClass,
+                    byReviewState: byReviewState
+                ),
+                items: updatedItems,
+                overlayPath: queue.overlayPath,
+                auditPath: queue.auditPath,
+                exportDir: queue.exportDir
+            )
+        }
+        guard var extraction = dailyLogExtraction else { return }
+        extraction = DailyLogExtractionResponse(
+            artifactPath: extraction.artifactPath,
+            artifactUpdatedAt: extraction.artifactUpdatedAt,
+            generatedAt: extraction.generatedAt,
+            summary: extraction.summary,
+            records: extraction.records,
+            candidateMemoryItems: extraction.candidateMemoryItems.map { candidate in
+                candidate.id == updated.id ? updated : candidate
+            }
+        )
+        dailyLogExtraction = extraction
     }
 
     private static func byteCount(_ value: Int) -> String {

@@ -157,6 +157,38 @@ final class ORCAProjectsViewModel {
         }
     }
 
+    func generateMilestones(projectId: UUID) async throws -> ProjectDTO {
+        let updated = try await repo.generateMilestones(projectId: projectId)
+        replaceProject(updated)
+        return updated
+    }
+
+    func acceptMilestone(projectId: UUID, milestoneId: String) async throws -> ProjectDTO {
+        let updated = try await repo.acceptMilestone(projectId: projectId, milestoneId: milestoneId)
+        replaceProject(updated)
+        return updated
+    }
+
+    func dropMilestone(projectId: UUID, milestoneId: String) async throws -> ProjectDTO {
+        let updated = try await repo.dropMilestone(projectId: projectId, milestoneId: milestoneId)
+        replaceProject(updated)
+        return updated
+    }
+
+    func advanceToScoping(projectId: UUID) async throws -> ProjectDTO {
+        let updated = try await repo.advanceToScoping(projectId: projectId)
+        replaceProject(updated)
+        return updated
+    }
+
+    private func replaceProject(_ updated: ProjectDTO) {
+        if let idx = projects.firstIndex(where: { $0.id == updated.id }) {
+            projects[idx] = updated
+        } else {
+            projects.insert(updated, at: 0)
+        }
+    }
+
     func moveTask(taskId: UUID, toStatus: String) async {
         guard let task = tasks.first(where: { $0.id == taskId }) else {
             errorMessage = "Project task not loaded."

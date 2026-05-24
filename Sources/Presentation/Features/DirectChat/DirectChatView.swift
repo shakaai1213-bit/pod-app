@@ -982,37 +982,15 @@ struct ConversationView: View {
                 }
 
                 ForEach(context.toolRequests.prefix(2)) { request in
-                    HStack(spacing: 6) {
-                        Image(systemName: "hammer")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(AppColors.accentWarning)
-
-                        Text("\(request.toolName): \(request.status.replacingOccurrences(of: "_", with: " "))")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(AppColors.textSecondary)
-                            .lineLimit(1)
-
-                        Text(request.instructionPreview)
-                            .font(.caption2)
-                            .foregroundStyle(AppColors.textTertiary)
-                            .lineLimit(1)
-
-                        if request.status == "waiting_for_human" || request.status == "queued" {
-                            if viewModel.executingWorkspaceToolRunIds.contains(request.runId) {
-                                ProgressView()
-                                    .progressViewStyle(.circular)
-                                    .scaleEffect(0.6)
-                                    .tint(AppColors.accentAgent)
-                            } else {
-                                Button("Execute") {
-                                    viewModel.executeWorkspaceToolRequestFromChat(request)
-                                }
-                                .font(.caption2.weight(.semibold))
-                                .buttonStyle(.bordered)
-                                .controlSize(.mini)
+                    PodReviewCard(
+                        item: workspaceToolReviewItem(for: request),
+                        isBusy: viewModel.executingWorkspaceToolRunIds.contains(request.runId),
+                        onAction: { action in
+                            if action.id == "execute" {
+                                viewModel.executeWorkspaceToolRequestFromChat(request)
                             }
                         }
-                    }
+                    )
                 }
 
                 if context.files.isEmpty, let gap = context.gaps.first {
@@ -1026,6 +1004,48 @@ struct ConversationView: View {
             Label(error, systemImage: "folder.badge.questionmark")
                 .font(.caption2)
                 .foregroundStyle(AppColors.accentWarning)
+        }
+    }
+
+    private func workspaceToolReviewItem(for request: DirectChatWorkspaceToolRequest) -> PodReviewItem {
+        let normalizedStatus = request.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let canExecute = normalizedStatus == "waiting_for_human" || normalizedStatus == "queued"
+        let statusLabel = normalizedStatus.replacingOccurrences(of: "_", with: " ").capitalized
+        var provenance = [
+            request.toolName,
+            request.createdAt.formatted(date: .abbreviated, time: .shortened)
+        ]
+        if let reason = request.reason?.trimmingCharacters(in: .whitespacesAndNewlines), !reason.isEmpty {
+            provenance.append(reason)
+        }
+
+        return PodReviewItem(
+            id: request.runId,
+            eyebrow: "Workspace tool request",
+            title: request.instructionPreview.isEmpty ? request.toolName : request.instructionPreview,
+            detail: canExecute
+                ? "Owner approval materializes this as a bounded ORCA workspace artifact."
+                : "Recorded in ORCA for ticket workspace review.",
+            status: statusLabel.isEmpty ? "Unknown" : statusLabel,
+            statusColor: workspaceToolStatusColor(normalizedStatus),
+            provenance: provenance,
+            traceId: request.runId,
+            actions: canExecute
+                ? [PodReviewAction(id: "execute", title: "Execute", systemImage: "checkmark.shield", style: .success)]
+                : []
+        )
+    }
+
+    private func workspaceToolStatusColor(_ status: String) -> Color {
+        switch status {
+        case "succeeded", "complete", "completed":
+            return AppColors.accentSuccess
+        case "failed", "error", "cancelled":
+            return AppColors.accentDanger
+        case "waiting_for_human", "queued":
+            return AppColors.accentWarning
+        default:
+            return AppColors.accentElectric
         }
     }
 

@@ -659,6 +659,10 @@ struct ProjectDTO: Codable, Identifiable {
     let completedAt: Date?
     let dueDate: Date?
     let stage: String?
+    var automationEnabled: Bool? = nil
+    var proposedMilestones: [ProjectMilestoneProposalDTO]? = nil
+    var milestones: [ProjectMilestoneDTO]? = nil
+    var lastGenerationRunId: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case id, name, goal, description, status, priority, stage
@@ -671,6 +675,45 @@ struct ProjectDTO: Codable, Identifiable {
         case startedAt = "started_at"
         case completedAt = "completed_at"
         case dueDate = "due_date"
+        case automationEnabled = "automation_enabled"
+        case proposedMilestones = "proposed_milestones"
+        case milestones
+        case lastGenerationRunId = "last_generation_run_id"
+    }
+}
+
+struct ProjectMilestoneProposalDTO: Codable, Identifiable, Hashable, Sendable {
+    var id: String
+    var title: String
+    var description: String?
+    var status: String?
+    var dependencies: [String]?
+    var route: String?
+    var model: String?
+    var artifactHash: String?
+    var runId: String?
+    var createdAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, description, status, dependencies, route, model
+        case artifactHash = "artifact_hash"
+        case runId = "run_id"
+        case createdAt = "created_at"
+    }
+}
+
+struct ProjectMilestoneDTO: Codable, Identifiable, Hashable, Sendable {
+    var id: String
+    var title: String
+    var description: String?
+    var status: String?
+    var acceptedAt: Date?
+    var sourceRunId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, description, status
+        case acceptedAt = "accepted_at"
+        case sourceRunId = "source_run_id"
     }
 }
 

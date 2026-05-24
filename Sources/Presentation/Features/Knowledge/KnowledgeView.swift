@@ -1174,11 +1174,11 @@ struct KnowledgeView: View {
                 .accessibilityLabel("Refresh memory candidates")
             }
 
-            if viewModel.isLoadingMemoryCandidates && viewModel.dailyLogExtraction == nil {
+            if viewModel.isLoadingMemoryCandidates && viewModel.memoryCandidateQueue == nil {
                 HStack(spacing: Theme.xs) {
                     ProgressView()
                         .scaleEffect(0.75)
-                    Text("Reading latest daily-log extraction...")
+                    Text("Loading memory review queue...")
                         .font(.caption)
                         .foregroundColor(AppColors.textTertiary)
                 }
@@ -1186,7 +1186,7 @@ struct KnowledgeView: View {
                 .padding(Theme.sm)
                 .background(AppColors.backgroundSecondary)
                 .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
-            } else if let extraction = viewModel.dailyLogExtraction {
+            } else if let queue = viewModel.memoryCandidateQueue {
                 VStack(alignment: .leading, spacing: Theme.sm) {
                     if let message = viewModel.storageHygieneMessage {
                         Text(message)
@@ -1200,26 +1200,49 @@ struct KnowledgeView: View {
                             .foregroundColor(message.lowercased().contains("unavailable") ? AppColors.accentWarning : AppColors.accentSuccess)
                             .lineLimit(2)
                     }
-
-                    HStack(spacing: Theme.sm) {
-                        RegistryStat(value: extraction.candidateMemoryItems.count, label: "candidates")
-                        RegistryStat(value: extraction.records.count, label: "logs")
-                        RegistryStat(value: extraction.summary.presentAgents.count, label: "agents")
-                        RegistryStat(value: extraction.summary.byStatus["green"] ?? 0, label: "green")
-                        RegistryStat(value: extraction.summary.byStatus["review_required"] ?? 0, label: "review")
+                    if let message = viewModel.memoryActionMessage {
+                        Text(message)
+                            .font(.caption2.weight(.medium))
+                            .foregroundColor(message.lowercased().contains("unavailable") ? AppColors.accentWarning : AppColors.accentSuccess)
+                            .lineLimit(2)
                     }
 
-                    dailyLogCoverageRow(extraction.summary)
+                    HStack(spacing: Theme.sm) {
+                        RegistryStat(value: queue.items.count, label: "candidates")
+                        RegistryStat(value: viewModel.dailyLogExtraction?.records.count ?? 0, label: "logs")
+                        RegistryStat(value: viewModel.dailyLogExtraction?.summary.presentAgents.count ?? 0, label: "agents")
+                        RegistryStat(value: viewModel.memoryLifecycleCounts["approved"] ?? 0, label: "approved")
+                        RegistryStat(value: viewModel.memoryLifecycleCounts["deferred"] ?? 0, label: "deferred")
+                    }
 
-                    if let generatedAt = extraction.generatedAt {
+                    if let extraction = viewModel.dailyLogExtraction {
+                        dailyLogCoverageRow(extraction.summary)
+                    }
+
+                    if let generatedAt = queue.generatedAt {
                         Text("Generated \(generatedAt.formatted(date: .abbreviated, time: .shortened))")
                             .font(.caption2)
                             .foregroundColor(AppColors.textTertiary)
                     }
 
                     LazyVStack(spacing: Theme.xs) {
-                        ForEach(extraction.candidateMemoryItems.prefix(6)) { item in
-                            MemoryCandidateRow(candidate: item)
+                        ForEach(queue.items.prefix(6)) { item in
+                            MemoryCandidateRow(
+                                candidate: item,
+                                isBusy: viewModel.memoryActionCandidateIds.contains(item.id),
+                                onApproveChroma: {
+                                    Task { await viewModel.approveMemoryCandidate(item, target: "chroma") }
+                                },
+                                onApproveAgentMemory: {
+                                    Task { await viewModel.approveMemoryCandidate(item, target: "agent_memory_md") }
+                                },
+                                onReject: {
+                                    Task { await viewModel.rejectMemoryCandidate(item) }
+                                },
+                                onDefer: {
+                                    Task { await viewModel.deferMemoryCandidate(item) }
+                                }
+                            )
                         }
                     }
                 }
@@ -1446,85 +1469,120 @@ struct KnowledgeView: View {
 
 private struct MemoryCandidateRow: View {
     let candidate: DailyLogExtractionCandidate
+    let isBusy: Bool
+    let onApproveChroma: () -> Void
+    let onApproveAgentMemory: () -> Void
+    let onReject: () -> Void
+    let onDefer: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: Theme.xs) {
-            Image(systemName: "sparkle.magnifyingglass")
-                .font(.caption.weight(.semibold))
-                .foregroundColor(AppColors.accentAgent)
-                .frame(width: 18)
-
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: Theme.xs) {
-                    Text(candidate.agent.capitalized)
-                        .font(.caption.weight(.semibold))
-                        .foregroundColor(AppColors.textPrimary)
-                        .lineLimit(1)
-
-                    Text(candidate.date)
-                        .font(.caption2)
-                        .foregroundColor(AppColors.textTertiary)
-                        .lineLimit(1)
-
-                    Spacer(minLength: Theme.xs)
-
-                    Text(candidate.status.replacingOccurrences(of: "_", with: " "))
-                        .font(.caption2.weight(.semibold))
-                        .foregroundColor(statusColor)
-                        .lineLimit(1)
-                }
-
-                Text(candidate.text)
-                    .font(.caption)
-                    .foregroundColor(AppColors.textSecondary)
-                    .lineLimit(4)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                HStack(spacing: Theme.xs) {
-                    if !candidate.requiredReviewers.isEmpty {
-                        CandidateChip(text: candidate.requiredReviewers.joined(separator: ","), icon: "person.2.badge.gearshape")
-                    }
-
-                    if let ticketRef = candidate.ticketRef, !ticketRef.isEmpty {
-                        CandidateChip(text: ticketRef, icon: "ticket")
-                    }
-
-                    if let confidence = candidate.confidence {
-                        CandidateChip(text: "\(Int(confidence * 100))%", icon: "gauge.with.needle")
-                    }
-
-                    ForEach(candidate.tags.prefix(3), id: \.self) { tag in
-                        CandidateChip(text: tag, icon: "tag")
-                    }
-                }
-
-                if let reason = candidate.reviewReason, !reason.isEmpty {
-                    Text(reason)
-                        .font(.caption2)
-                        .foregroundColor(AppColors.textTertiary)
-                        .lineLimit(2)
-                }
-
-                if let sourcePath = candidate.sourcePath {
-                    Text(sourcePath)
-                        .font(.caption2)
-                        .foregroundColor(AppColors.textTertiary)
-                        .lineLimit(1)
-                }
+        PodReviewCard(item: reviewItem, isBusy: isBusy) { action in
+            switch action.id {
+            case "approve-chroma":
+                onApproveChroma()
+            case "approve-agent-memory":
+                onApproveAgentMemory()
+            case "reject":
+                onReject()
+            case "defer":
+                onDefer()
+            default:
+                break
             }
         }
-        .padding(.vertical, Theme.xs)
     }
 
     private var statusColor: Color {
-        switch candidate.status {
-        case "candidate":
+        switch candidate.effectiveLifecycle.lowercased() {
+        case "candidate", "pending", "review_required", "needs_review":
             return AppColors.accentWarning
-        case "approved", "promoted":
+        case "approved", "promoted", "green":
             return AppColors.accentSuccess
+        case "deferred":
+            return AppColors.accentElectric
+        case "rejected":
+            return AppColors.accentWarning
         default:
             return AppColors.textTertiary
         }
+    }
+
+    private var canTakeAction: Bool {
+        candidate.candidateId?.isEmpty == false
+    }
+
+    private var reviewItem: PodReviewItem {
+        var provenance = [
+            candidate.agent.capitalized,
+            candidate.date,
+        ]
+        if let ticketRef = candidate.ticketRef, !ticketRef.isEmpty {
+            provenance.append(ticketRef)
+        }
+        if let target = candidate.promotionTarget ?? candidate.target, !target.isEmpty {
+            provenance.append("target \(target)")
+        }
+        if let reviewState = candidate.reviewState, !reviewState.isEmpty {
+            provenance.append("review \(reviewState)")
+        }
+        if let sourcePath = candidate.sourcePath, !sourcePath.isEmpty {
+            provenance.append(sourcePath)
+        }
+        if !candidate.requiredReviewers.isEmpty {
+            provenance.append("review \(candidate.requiredReviewers.joined(separator: ","))")
+        }
+        if candidate.isSensitive, let sensitivity = candidate.sensitivityClass, !sensitivity.isEmpty {
+            provenance.append(sensitivity)
+        }
+        if !candidate.pendingApprovals.isEmpty {
+            provenance.append("pending \(candidate.pendingApprovals.joined(separator: ","))")
+        }
+        if let confidence = candidate.confidence {
+            provenance.append("\(Int(confidence * 100))% confidence")
+        }
+        provenance.append(contentsOf: candidate.tags.prefix(3).map { "#\($0)" })
+
+        return PodReviewItem(
+            id: candidate.id,
+            eyebrow: "Memory candidate",
+            title: candidate.text,
+            detail: candidate.reviewReason,
+            status: candidate.effectiveLifecycle.replacingOccurrences(of: "_", with: " "),
+            statusColor: statusColor,
+            provenance: provenance,
+            traceId: candidate.decisionId,
+            artifactHash: candidate.promotionArtifactPath,
+            actions: [
+                PodReviewAction(
+                    id: "approve-chroma",
+                    title: "Chroma",
+                    systemImage: "externaldrive.badge.checkmark",
+                    style: .success,
+                    isDisabled: !canTakeAction || candidate.effectiveLifecycle == "approved"
+                ),
+                PodReviewAction(
+                    id: "approve-agent-memory",
+                    title: "Memory.md",
+                    systemImage: "book.closed",
+                    style: .primary,
+                    isDisabled: !canTakeAction || candidate.effectiveLifecycle == "approved"
+                ),
+                PodReviewAction(
+                    id: "defer",
+                    title: "Defer",
+                    systemImage: "clock.badge",
+                    style: .neutral,
+                    isDisabled: !canTakeAction
+                ),
+                PodReviewAction(
+                    id: "reject",
+                    title: "Reject",
+                    systemImage: "xmark",
+                    style: .destructive,
+                    isDisabled: !canTakeAction || candidate.effectiveLifecycle == "rejected"
+                ),
+            ]
+        )
     }
 }
 

@@ -19,6 +19,10 @@ struct WorkView: View {
                         .padding(.top, 60)
                         .padding(.bottom, 20)
 
+                    suggestionsSection
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
+
                     projectsSection
                         .padding(.horizontal, 16)
                         .padding(.bottom, 16)
@@ -96,6 +100,129 @@ struct WorkView: View {
                 .font(.system(size: 14))
                 .foregroundColor(AppColors.textSecondary)
         }
+    }
+
+    // MARK: - Suggestions Section
+
+    private var suggestionsSection: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("SUGGESTIONS · \(model.suggestions.count)")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(AppColors.textTertiary)
+                    .kerning(0.5)
+                Spacer()
+                Button {
+                    Task { await model.loadSuggestions() }
+                } label: {
+                    Image(systemName: model.isLoadingSuggestions ? "hourglass" : "arrow.clockwise")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(AppColors.accentElectric)
+                }
+                .buttonStyle(.plain)
+                .disabled(model.isLoadingSuggestions)
+                .accessibilityLabel("Refresh Schoolhouse suggestions")
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+
+            VStack(spacing: 8) {
+                if model.isLoadingSuggestions && model.suggestions.isEmpty {
+                    suggestionSkeletons
+                } else if let err = model.suggestionsError {
+                    errorBanner(message: err) { Task { await model.loadSuggestions() } }
+                } else if model.suggestions.isEmpty {
+                    emptyState(icon: "sparkle.magnifyingglass", text: "No proposed suggestions waiting.")
+                } else {
+                    ForEach(model.suggestions.prefix(7)) { suggestion in
+                        PodReviewCard(
+                            item: suggestionReviewItem(suggestion),
+                            isBusy: model.suggestionActionIds.contains(suggestion.id.uuidString),
+                            onAction: { action in
+                                Task { await model.handleSuggestionAction(action.id, suggestion: suggestion) }
+                            }
+                        )
+                    }
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 10)
+        }
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                .strokeBorder(AppColors.border, lineWidth: 0.5)
+        )
+    }
+
+    private func suggestionReviewItem(_ suggestion: SchoolhouseSuggestion) -> PodReviewItem {
+        var provenance = [
+            suggestion.kind.replacingOccurrences(of: "_", with: " "),
+            suggestion.source,
+        ]
+        if let owner = suggestion.ownerLane, !owner.isEmpty {
+            provenance.append(owner)
+        }
+        if let defaultAction = suggestion.defaultAction, !defaultAction.isEmpty {
+            provenance.append("action \(defaultAction)")
+        }
+        if let dedupeKey = suggestion.dedupeKey, !dedupeKey.isEmpty {
+            provenance.append("dedupe \(String(dedupeKey.prefix(12)))")
+        }
+        if suggestion.dismissCount > 0 {
+            provenance.append("dismissed \(suggestion.dismissCount)x")
+        }
+        if let snoozedUntil = suggestion.snoozedUntil {
+            provenance.append("snoozed \(snoozedUntil.formatted(date: .abbreviated, time: .shortened))")
+        }
+
+        return PodReviewItem(
+            id: suggestion.id.uuidString,
+            eyebrow: "Schoolhouse suggestion",
+            title: suggestion.title,
+            detail: suggestion.summary,
+            status: "\(suggestion.riskLevel.uppercased()) · \(suggestion.status)",
+            statusColor: suggestion.statusColor,
+            provenance: provenance,
+            traceId: suggestion.traceId,
+            artifactHash: suggestion.artifactHash,
+            actions: suggestionActions(for: suggestion)
+        )
+    }
+
+    private func suggestionActions(for suggestion: SchoolhouseSuggestion) -> [PodReviewAction] {
+        let isTerminal = ["accepted", "dismissed", "expired", "converted"].contains(suggestion.status.lowercased())
+        return [
+            PodReviewAction(
+                id: "accept",
+                title: "Accept",
+                systemImage: "checkmark.seal",
+                style: .success,
+                isDisabled: isTerminal
+            ),
+            PodReviewAction(
+                id: "convert-ticket",
+                title: "Ticket",
+                systemImage: "text.badge.plus",
+                style: .primary,
+                isDisabled: isTerminal
+            ),
+            PodReviewAction(
+                id: "snooze",
+                title: "Snooze",
+                systemImage: "clock",
+                style: .warning,
+                isDisabled: isTerminal
+            ),
+            PodReviewAction(
+                id: "dismiss",
+                title: "Dismiss",
+                systemImage: "xmark.circle",
+                style: .destructive,
+                isDisabled: isTerminal
+            ),
+        ]
     }
 
     // MARK: - Projects Section
@@ -456,6 +583,16 @@ struct WorkView: View {
         }
     }
 
+    private var suggestionSkeletons: some View {
+        VStack(spacing: 8) {
+            ForEach(0..<2, id: \.self) { _ in
+                skeletonRow(height: 74)
+                    .background(AppColors.backgroundPrimary)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+        }
+    }
+
     private func skeletonRow(height: CGFloat) -> some View {
         HStack(spacing: 10) {
             RoundedRectangle(cornerRadius: 4)
@@ -514,6 +651,12 @@ final class WorkViewModel {
     var activeFilter: TicketFilter = .all
     var priorityToast: PriorityToast?
 
+    // MARK: Suggestions
+    var suggestions: [SchoolhouseSuggestion] = []
+    var isLoadingSuggestions = false
+    var suggestionsError: String?
+    var suggestionActionIds: Set<String> = []
+
     struct PriorityToast: Equatable {
         let message: String
         let isError: Bool
@@ -559,8 +702,22 @@ final class WorkViewModel {
 
     func load() async {
         await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.loadSuggestions() }
             group.addTask { await self.loadProjects() }
             group.addTask { await self.loadTickets() }
+        }
+    }
+
+    @MainActor
+    func loadSuggestions() async {
+        isLoadingSuggestions = true
+        suggestionsError = nil
+        defer { isLoadingSuggestions = false }
+        do {
+            let items: [SchoolhouseSuggestion] = try await APIClient.shared.get(path: "/api/v1/schoolhouse/suggestions?status=proposed&limit=7")
+            suggestions = items.sorted { $0.sortScore > $1.sortScore }
+        } catch {
+            suggestionsError = "Suggestions unavailable"
         }
     }
 
@@ -713,6 +870,92 @@ final class WorkViewModel {
             )
         }
     }
+
+    @MainActor
+    func handleSuggestionAction(_ actionId: String, suggestion: SchoolhouseSuggestion) async {
+        guard !suggestionActionIds.contains(suggestion.id.uuidString) else { return }
+        suggestionActionIds.insert(suggestion.id.uuidString)
+        defer { suggestionActionIds.remove(suggestion.id.uuidString) }
+
+        do {
+            let updated: SchoolhouseSuggestion
+            switch actionId {
+            case "accept":
+                updated = try await APIClient.shared.post(
+                    path: "/api/v1/schoolhouse/suggestions/\(suggestion.id.uuidString)/accept",
+                    body: SuggestionDecisionBody(actor: "maui", reason: "Accepted from Pod Work.")
+                )
+            case "dismiss":
+                updated = try await APIClient.shared.post(
+                    path: "/api/v1/schoolhouse/suggestions/\(suggestion.id.uuidString)/dismiss",
+                    body: SuggestionDecisionBody(actor: "maui", reason: "Dismissed from Pod Work.")
+                )
+            case "snooze":
+                let until = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+                updated = try await APIClient.shared.post(
+                    path: "/api/v1/schoolhouse/suggestions/\(suggestion.id.uuidString)/snooze",
+                    body: SuggestionSnoozeBody(snoozedUntil: until, actor: "maui", reason: "Snoozed from Pod Work.")
+                )
+            case "convert-ticket":
+                updated = try await APIClient.shared.post(
+                    path: "/api/v1/schoolhouse/suggestions/\(suggestion.id.uuidString)/convert-to-ticket",
+                    body: SuggestionConvertBody(
+                        actor: "maui",
+                        title: suggestion.title,
+                        description: suggestion.ticketDescription,
+                        priority: suggestion.ticketPriority,
+                        ticketType: "feature",
+                        tags: ["schoolhouse", "suggestion", suggestion.kind]
+                    )
+                )
+            default:
+                return
+            }
+            replaceSuggestion(updated)
+            priorityToast = PriorityToast(message: "Suggestion \(updated.status)", isError: false, retry: nil)
+            await loadTickets()
+        } catch {
+            priorityToast = PriorityToast(
+                message: "Suggestion action failed — tap to retry",
+                isError: true,
+                retry: { [weak self] in
+                    Task { await self?.handleSuggestionAction(actionId, suggestion: suggestion) }
+                }
+            )
+        }
+    }
+
+    private func replaceSuggestion(_ suggestion: SchoolhouseSuggestion) {
+        if let idx = suggestions.firstIndex(where: { $0.id == suggestion.id }) {
+            if suggestion.status == "proposed" || suggestion.status == "snoozed" {
+                suggestions[idx] = suggestion
+            } else {
+                suggestions.remove(at: idx)
+            }
+        } else if suggestion.status == "proposed" {
+            suggestions.insert(suggestion, at: 0)
+        }
+    }
+}
+
+private struct SuggestionDecisionBody: Encodable {
+    let actor: String
+    let reason: String
+}
+
+private struct SuggestionSnoozeBody: Encodable {
+    let snoozedUntil: Date
+    let actor: String
+    let reason: String
+}
+
+private struct SuggestionConvertBody: Encodable {
+    let actor: String
+    let title: String
+    let description: String
+    let priority: String
+    let ticketType: String
+    let tags: [String]
 }
 
 private struct TicketPatchResponse: Decodable {
@@ -721,6 +964,114 @@ private struct TicketPatchResponse: Decodable {
 
 private struct ProjectPatchResponse: Decodable {
     let id: UUID
+}
+
+// MARK: - Schoolhouse Suggestions
+
+struct SchoolhouseSuggestion: Decodable, Identifiable, Hashable {
+    let id: UUID
+    let kind: String
+    let title: String
+    let summary: String?
+    let status: String
+    let source: String
+    let sourceRefs: [String: AgentRunJSONValue]?
+    let provenance: [String: AgentRunJSONValue]?
+    let riskLevel: String
+    let ownerLane: String?
+    let actionOptions: [AgentRunJSONValue]?
+    let defaultAction: String?
+    let dedupeKey: String?
+    let dismissCount: Int
+    let snoozedUntil: Date?
+    let convertedTo: [String: AgentRunJSONValue]?
+    let createdAt: Date
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, kind, title, summary, status, source, provenance
+        case sourceRefs = "source_refs"
+        case riskLevel = "risk_level"
+        case ownerLane = "owner_lane"
+        case actionOptions = "action_options"
+        case defaultAction = "default_action"
+        case dedupeKey = "dedupe_key"
+        case dismissCount = "dismiss_count"
+        case snoozedUntil = "snoozed_until"
+        case convertedTo = "converted_to"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+
+    var traceId: String? {
+        stringValue(for: ["trace_id", "agent_run_id", "run_id"], in: provenance)
+            ?? stringValue(for: ["trace_id", "agent_run_id", "run_id"], in: sourceRefs)
+    }
+
+    var artifactHash: String? {
+        stringValue(for: ["sha256", "artifact_hash", "hash"], in: provenance)
+            ?? stringValue(for: ["sha256", "artifact_hash", "hash"], in: sourceRefs)
+    }
+
+    var ticketPriority: String {
+        switch riskLevel.lowercased() {
+        case "protected", "tier1": return "high"
+        case "tier2": return "medium"
+        default: return "low"
+        }
+    }
+
+    var ticketDescription: String {
+        [
+            "Converted from Schoolhouse suggestion \(id.uuidString).",
+            summary,
+            "Kind: \(kind)",
+            "Risk: \(riskLevel)",
+            ownerLane.map { "Owner lane: \($0)" },
+            traceId.map { "Trace: \($0)" },
+        ]
+        .compactMap { $0 }
+        .joined(separator: "\n\n")
+    }
+
+    var statusColor: Color {
+        switch status.lowercased() {
+        case "accepted", "converted":
+            return AppColors.accentSuccess
+        case "dismissed", "expired":
+            return AppColors.textTertiary
+        case "snoozed":
+            return AppColors.accentWarning
+        default:
+            switch riskLevel.lowercased() {
+            case "protected", "tier1": return AppColors.accentDanger
+            case "tier2": return AppColors.accentWarning
+            default: return AppColors.accentElectric
+            }
+        }
+    }
+
+    var sortScore: Int {
+        let riskScore: Int
+        switch riskLevel.lowercased() {
+        case "protected": riskScore = 400
+        case "tier1": riskScore = 300
+        case "tier2": riskScore = 200
+        default: riskScore = 100
+        }
+        let age = min(99, Int(Date().timeIntervalSince(updatedAt) / 3600))
+        return riskScore + age
+    }
+
+    private func stringValue(for keys: [String], in values: [String: AgentRunJSONValue]?) -> String? {
+        guard let values else { return nil }
+        for key in keys {
+            if let value = values[key]?.displayValue, !value.isEmpty, value != "null" {
+                return value
+            }
+        }
+        return nil
+    }
 }
 
 // MARK: - Work Ticket Row

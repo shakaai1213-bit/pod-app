@@ -78,4 +78,186 @@ extension View {
     }
 }
 
+// MARK: - Shared Review Cards
 
+enum PodReviewActionStyle: Sendable, Hashable {
+    case primary
+    case success
+    case warning
+    case destructive
+    case neutral
+
+    var color: Color {
+        switch self {
+        case .primary: return AppColors.accentElectric
+        case .success: return AppColors.accentSuccess
+        case .warning: return AppColors.accentWarning
+        case .destructive: return AppColors.accentDanger
+        case .neutral: return AppColors.textSecondary
+        }
+    }
+}
+
+struct PodReviewAction: Identifiable, Sendable, Hashable {
+    let id: String
+    let title: String
+    let systemImage: String
+    let style: PodReviewActionStyle
+    let isDisabled: Bool
+
+    init(
+        id: String,
+        title: String,
+        systemImage: String,
+        style: PodReviewActionStyle = .primary,
+        isDisabled: Bool = false
+    ) {
+        self.id = id
+        self.title = title
+        self.systemImage = systemImage
+        self.style = style
+        self.isDisabled = isDisabled
+    }
+}
+
+struct PodReviewItem: Identifiable {
+    let id: String
+    let eyebrow: String
+    let title: String
+    let detail: String?
+    let status: String
+    let statusColor: Color
+    let provenance: [String]
+    let traceId: String?
+    let artifactHash: String?
+    let actions: [PodReviewAction]
+
+    init(
+        id: String,
+        eyebrow: String,
+        title: String,
+        detail: String? = nil,
+        status: String,
+        statusColor: Color = AppColors.accentElectric,
+        provenance: [String] = [],
+        traceId: String? = nil,
+        artifactHash: String? = nil,
+        actions: [PodReviewAction] = []
+    ) {
+        self.id = id
+        self.eyebrow = eyebrow
+        self.title = title
+        self.detail = detail
+        self.status = status
+        self.statusColor = statusColor
+        self.provenance = provenance
+        self.traceId = traceId
+        self.artifactHash = artifactHash
+        self.actions = actions
+    }
+}
+
+struct PodReviewCard: View {
+    let item: PodReviewItem
+    var isBusy: Bool = false
+    var onAction: (PodReviewAction) -> Void = { _ in }
+    var onOpenTrace: ((String) -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(item.eyebrow.uppercased())
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(item.statusColor)
+
+                Spacer(minLength: 8)
+
+                Label(item.status, systemImage: isBusy ? "clock.arrow.circlepath" : "checkmark.seal")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(item.statusColor)
+                    .lineLimit(1)
+            }
+
+            Text(item.title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppColors.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let detail = item.detail, !detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(detail)
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if !item.provenance.isEmpty || item.artifactHash != nil || item.traceId != nil {
+                FlowLayout(horizontalSpacing: 5, verticalSpacing: 5) {
+                    ForEach(item.provenance, id: \.self) { value in
+                        reviewPill(value)
+                    }
+                    if let artifactHash = item.artifactHash, !artifactHash.isEmpty {
+                        reviewPill("sha \(String(artifactHash.prefix(12)))")
+                    }
+                    if let traceId = item.traceId, !traceId.isEmpty {
+                        Button {
+                            onOpenTrace?(traceId)
+                        } label: {
+                            Label(String(traceId.prefix(12)), systemImage: "point.topleft.down.curvedto.point.bottomright.up")
+                                .font(.caption2.weight(.medium))
+                                .lineLimit(1)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(AppColors.accentElectric)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(AppColors.accentElectric.opacity(0.10))
+                        .clipShape(Capsule())
+                        .disabled(onOpenTrace == nil)
+                    }
+                }
+            }
+
+            if !item.actions.isEmpty {
+                HStack(spacing: 8) {
+                    ForEach(item.actions) { action in
+                        Button {
+                            onAction(action)
+                        } label: {
+                            Label(action.title, systemImage: action.systemImage)
+                                .font(.caption2.weight(.semibold))
+                                .lineLimit(1)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                        .tint(action.style.color)
+                        .disabled(action.isDisabled || isBusy)
+                    }
+                }
+                .padding(.top, 2)
+            }
+        }
+        .padding(9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppColors.backgroundPrimary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(item.statusColor.opacity(0.16), lineWidth: 1)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(item.eyebrow), \(item.title), \(item.status)")
+    }
+
+    private func reviewPill(_ value: String) -> some View {
+        Text(value)
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(AppColors.textSecondary)
+            .lineLimit(1)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(AppColors.backgroundTertiary)
+            .clipShape(Capsule())
+    }
+}
