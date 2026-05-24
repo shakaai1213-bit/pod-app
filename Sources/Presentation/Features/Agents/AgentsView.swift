@@ -7,7 +7,9 @@ struct AgentsView: View {
 
     @EnvironmentObject private var appState: AppState
     @State private var viewModel = AgentsViewModel()
+    @State private var focusModel = AgentFocusCardsModel()
     @State private var selectedAgent: Agent?
+    @State private var selectedFocusCard: AgentFocusCard?
     @State private var showingLogStream: Agent?
     @State private var agentsFilter: AgentsFilter = .active
 
@@ -25,6 +27,10 @@ struct AgentsView: View {
                         .padding(.horizontal, 20)
                         .padding(.top, 60)
                         .padding(.bottom, 16)
+
+                    focusCardsSection
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 14)
 
                     agentsSection
                         .padding(.horizontal, 16)
@@ -49,8 +55,12 @@ struct AgentsView: View {
             }
             .background(AppColors.backgroundPrimary.ignoresSafeArea())
             .refreshable {
+                await focusModel.load(force: true)
                 await viewModel.loadAgents()
                 await viewModel.loadAllInboxTails()
+            }
+            .sheet(item: $selectedFocusCard) { card in
+                AgentFocusCardDetailSheet(card: card)
             }
             .sheet(item: $selectedAgent) { agent in
                 AgentDetailSheet(
@@ -68,12 +78,153 @@ struct AgentsView: View {
                 LogStreamView(agent: agent)
             }
             .task {
+                await focusModel.load()
                 await viewModel.loadAgents()
                 viewModel.subscribeToAgentState()
                 await viewModel.loadAllInboxTails()
             }
             .onDisappear { viewModel.disconnectSSE() }
         }
+    }
+
+    // MARK: - FOCUS CARDS
+
+    private var focusCardsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("FOCUS CARDS")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(AppColors.textTertiary)
+                    .kerning(0.5)
+                Spacer()
+                if focusModel.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.65)
+                }
+            }
+            .padding(.horizontal, 2)
+
+            VStack(spacing: 10) {
+                ForEach(focusModel.mainCards) { card in
+                    focusCardView(card)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            selectedFocusCard = card
+                        }
+                }
+            }
+
+            deputyStrip
+        }
+    }
+
+    private func focusCardView(_ card: AgentFocusCard) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(card.emoji)
+                    .font(.system(size: 22))
+                Text(card.displayName)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(AppColors.textPrimary)
+                Spacer(minLength: 8)
+                Text(card.lastUpdatedLabel)
+                    .font(.system(size: 11))
+                    .foregroundColor(AppColors.textTertiary)
+                    .lineLimit(1)
+            }
+
+            Text(card.charter)
+                .font(.system(size: 12))
+                .foregroundColor(AppColors.textSecondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(Array(card.focusAreas.prefix(3).enumerated()), id: \.offset) { idx, area in
+                    HStack(alignment: .firstTextBaseline, spacing: 5) {
+                        Text("\(idx + 1).")
+                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                            .foregroundColor(AppColors.textTertiary)
+                        Text(area.label)
+                            .font(.system(size: 13))
+                            .foregroundColor(area.label == "Loading..." ? AppColors.textTertiary : AppColors.textPrimary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                }
+            }
+
+            HStack {
+                if card.isSkeleton {
+                    Text("waiting for ORCA focus-card endpoint")
+                        .font(.system(size: 10))
+                        .foregroundColor(AppColors.textTertiary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                fishChip(card.fish)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 120, maxHeight: 120, alignment: .topLeading)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                .strokeBorder(card.tint.opacity(0.35), lineWidth: 1)
+        )
+    }
+
+    private var deputyStrip: some View {
+        HStack(spacing: 8) {
+            ForEach(focusModel.deputies) { deputy in
+                let agent = viewModel.agents.first { $0.name.localizedCaseInsensitiveCompare(deputy.displayName) == .orderedSame }
+                HStack(spacing: 8) {
+                    Text(deputy.emoji)
+                        .font(.system(size: 18))
+                        .frame(width: 24, height: 24)
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 5) {
+                            Text(deputy.displayName)
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(AppColors.textPrimary)
+                                .lineLimit(1)
+                            Circle()
+                                .fill(agent?.status.color ?? deputy.statusColor)
+                                .frame(width: 6, height: 6)
+                        }
+                        Text(agent?.currentTask ?? deputy.currentTicket)
+                            .font(.system(size: 11))
+                            .foregroundColor(AppColors.textTertiary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 10)
+                .frame(height: 64)
+                .background(AppColors.backgroundSecondary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                        .strokeBorder(AppColors.border, lineWidth: 0.5)
+                )
+            }
+        }
+    }
+
+    private func fishChip(_ fish: AgentFocusFish) -> some View {
+        HStack(spacing: 4) {
+            Text(fish.icon)
+            Text(fish.name)
+                .lineLimit(1)
+        }
+        .font(.system(size: 10, weight: .semibold))
+        .foregroundColor(AppColors.textSecondary)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(Capsule())
     }
 
     // MARK: - Page Header
@@ -464,6 +615,281 @@ struct AgentsView: View {
                 .foregroundColor(AppColors.textTertiary)
         }
         .padding(14)
+    }
+}
+
+// MARK: - Agent Focus Cards
+
+private struct AgentFocusArea: Identifiable, Hashable {
+    let id: String
+    let label: String
+    let evidenceRef: String?
+}
+
+private struct AgentFocusFish: Hashable {
+    let name: String
+    let icon: String
+}
+
+private struct AgentFocusCard: Identifiable, Hashable {
+    let agentId: String
+    let displayName: String
+    let emoji: String
+    let charter: String
+    let focusAreas: [AgentFocusArea]
+    let fish: AgentFocusFish
+    let lastLogExcerpt: String?
+    let lastUpdated: Date?
+    let isSkeleton: Bool
+
+    var id: String { agentId.lowercased() }
+
+    var tint: Color {
+        switch id {
+        case "maui": return AppColors.accentSuccess
+        case "aloha": return Color(hexString: "A855F7")
+        case "chief": return Color(hexString: "22C55E")
+        case "rooster": return AppColors.accentDanger
+        default: return AppColors.accentElectric
+        }
+    }
+
+    var lastUpdatedLabel: String {
+        guard let lastUpdated else { return "pending" }
+        return lastUpdated.relativeFormatted
+    }
+
+    static func skeleton(agentId: String) -> AgentFocusCard {
+        let meta = AgentFocusDefaults.mainAgentMeta[agentId]!
+        return AgentFocusCard(
+            agentId: agentId,
+            displayName: meta.name,
+            emoji: meta.emoji,
+            charter: meta.charter,
+            focusAreas: [
+                AgentFocusArea(id: "1", label: "Loading...", evidenceRef: nil),
+                AgentFocusArea(id: "2", label: "", evidenceRef: nil),
+                AgentFocusArea(id: "3", label: "", evidenceRef: nil)
+            ],
+            fish: AgentFocusFish(name: "TBD", icon: "—"),
+            lastLogExcerpt: nil,
+            lastUpdated: nil,
+            isSkeleton: true
+        )
+    }
+}
+
+private struct AgentFocusDeputy: Identifiable {
+    let id: String
+    let displayName: String
+    let emoji: String
+    let currentTicket: String
+    let statusColor: Color
+}
+
+private enum AgentFocusDefaults {
+    static let mainAgentOrder = ["maui", "aloha", "chief", "rooster"]
+    static let mainAgentMeta: [String: (name: String, emoji: String, charter: String)] = [
+        "maui": ("Maui", "🪝", "Pod / Lifecycle / Compute / Codex orchestrator"),
+        "aloha": ("Aloha", "🌸", "Backbone / Nerve / Flywheel / Doctrine gate"),
+        "chief": ("Chief", "🦅", "Trading / P&L / Funding"),
+        "rooster": ("Rooster", "🐓", "Security / Research / Knowledge")
+    ]
+}
+
+@MainActor
+@Observable
+private final class AgentFocusCardsModel {
+    private(set) var mainCards: [AgentFocusCard] = AgentFocusDefaults.mainAgentOrder.map { AgentFocusCard.skeleton(agentId: $0) }
+    let deputies: [AgentFocusDeputy] = [
+        AgentFocusDeputy(id: "coral", displayName: "Coral", emoji: "🪸", currentTicket: "Compute support", statusColor: AppColors.accentSuccess),
+        AgentFocusDeputy(id: "reef", displayName: "Reef", emoji: "🐡", currentTicket: "Tools support", statusColor: AppColors.accentSuccess)
+    ]
+    private(set) var isLoading = false
+
+    func load(force: Bool = false) async {
+        if isLoading { return }
+        if !force && mainCards.contains(where: { !$0.isSkeleton }) { return }
+
+        isLoading = true
+        defer { isLoading = false }
+
+        await withTaskGroup(of: AgentFocusCard.self) { group in
+            for agentId in AgentFocusDefaults.mainAgentOrder {
+                group.addTask {
+                    await Self.loadCard(agentId: agentId)
+                }
+            }
+
+            var loaded: [AgentFocusCard] = []
+            for await card in group {
+                loaded.append(card)
+            }
+            mainCards = AgentFocusDefaults.mainAgentOrder.compactMap { id in
+                loaded.first { $0.id == id }
+            }
+        }
+    }
+
+    private static func loadCard(agentId: String) async -> AgentFocusCard {
+        do {
+            let dto: AgentFocusCardDTO = try await APIClient.shared.get(path: "/api/v1/agents/\(agentId)/focus-card")
+            return dto.toDomain(fallbackId: agentId)
+        } catch {
+            return AgentFocusCard.skeleton(agentId: agentId)
+        }
+    }
+}
+
+private struct AgentFocusCardDTO: Decodable {
+    let agentId: String
+    let displayName: String
+    let charter: String
+    let focusAreas: [FocusAreaDTO]
+    let fish: FishDTO?
+    let lastLogExcerpt: String?
+    let lastUpdated: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case charter, fish
+        case agentId = "agent_id"
+        case displayName = "display_name"
+        case focusAreas = "focus_areas"
+        case lastLogExcerpt = "last_log_excerpt"
+        case lastUpdated = "last_updated"
+    }
+
+    func toDomain(fallbackId: String) -> AgentFocusCard {
+        let id = agentId.lowercased()
+        let meta = AgentFocusDefaults.mainAgentMeta[id] ?? AgentFocusDefaults.mainAgentMeta[fallbackId]!
+        let normalizedAreas = Array(focusAreas.prefix(3)).enumerated().map { idx, area in
+            AgentFocusArea(
+                id: String(area.id ?? idx + 1),
+                label: area.label,
+                evidenceRef: area.evidenceRef
+            )
+        }
+        let paddedAreas = normalizedAreas + (normalizedAreas.count..<3).map {
+            AgentFocusArea(id: String($0 + 1), label: "", evidenceRef: nil)
+        }
+
+        return AgentFocusCard(
+            agentId: id,
+            displayName: displayName.replacingOccurrences(of: meta.emoji, with: "").trimmingCharacters(in: .whitespacesAndNewlines),
+            emoji: meta.emoji,
+            charter: charter.isEmpty ? meta.charter : charter,
+            focusAreas: paddedAreas,
+            fish: AgentFocusFish(name: fish?.name ?? "TBD", icon: fish?.icon ?? "—"),
+            lastLogExcerpt: lastLogExcerpt,
+            lastUpdated: lastUpdated,
+            isSkeleton: false
+        )
+    }
+
+    struct FocusAreaDTO: Decodable {
+        let id: Int?
+        let label: String
+        let evidenceRef: String?
+
+        enum CodingKeys: String, CodingKey {
+            case id, label
+            case evidenceRef = "evidence_ref"
+        }
+    }
+
+    struct FishDTO: Decodable {
+        let name: String
+        let icon: String
+    }
+}
+
+private struct AgentFocusCardDetailSheet: View {
+    let card: AgentFocusCard
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    HStack(spacing: 10) {
+                        Text(card.emoji)
+                            .font(.system(size: 34))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(card.displayName)
+                                .font(.system(size: 22, weight: .bold))
+                                .foregroundColor(AppColors.textPrimary)
+                            Text(card.charter)
+                                .font(.system(size: 13))
+                                .foregroundColor(AppColors.textSecondary)
+                        }
+                        Spacer()
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("FOCUS AREAS")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(AppColors.textTertiary)
+                        ForEach(Array(card.focusAreas.prefix(3).enumerated()), id: \.offset) { idx, area in
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("\(idx + 1). \(area.label)")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundColor(AppColors.textPrimary)
+                                if let evidence = area.evidenceRef, !evidence.isEmpty {
+                                    Text(evidence)
+                                        .font(.system(size: 12, design: .monospaced))
+                                        .foregroundColor(AppColors.textTertiary)
+                                }
+                            }
+                        }
+                    }
+
+                    HStack {
+                        fishPill
+                        Spacer()
+                        Text(card.lastUpdatedLabel)
+                            .font(.system(size: 11))
+                            .foregroundColor(AppColors.textTertiary)
+                    }
+
+                    if let excerpt = card.lastLogExcerpt, !excerpt.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("LAST LOG")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(AppColors.textTertiary)
+                            Text(excerpt)
+                                .font(.system(size: 13))
+                                .foregroundColor(AppColors.textSecondary)
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+                .padding(20)
+            }
+            .background(AppColors.backgroundPrimary.ignoresSafeArea())
+            .navigationTitle("Focus Card")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Close") { dismiss() }
+                        .foregroundColor(AppColors.accentElectric)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private var fishPill: some View {
+        HStack(spacing: 5) {
+            Text(card.fish.icon)
+            Text(card.fish.name)
+        }
+        .font(.system(size: 12, weight: .semibold))
+        .foregroundColor(AppColors.textSecondary)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(AppColors.border, lineWidth: 0.5))
     }
 }
 
