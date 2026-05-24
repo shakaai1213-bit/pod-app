@@ -131,6 +131,14 @@ struct CockpitSignQueueSection: View {
                             Text(item.kind.label)
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundColor(item.kind.tint)
+                            if item.kind == .ticket {
+                                Text("·")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(AppColors.textTertiary)
+                                Text(item.shortRef)
+                                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                                    .foregroundColor(AppColors.textSecondary)
+                            }
                             Text("·")
                                 .font(.system(size: 10))
                                 .foregroundColor(AppColors.textTertiary)
@@ -275,6 +283,11 @@ struct CockpitSignDetailSheet: View {
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundColor(item.kind.tint)
                                 .kerning(0.5)
+                            if item.kind == .ticket {
+                                Text("Ticket \(item.shortRef)")
+                                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                    .foregroundColor(AppColors.textPrimary)
+                            }
                             Text(item.gateLabel)
                                 .font(.system(size: 12))
                                 .foregroundColor(AppColors.textSecondary)
@@ -381,6 +394,10 @@ struct CockpitSignItem: Identifiable, Hashable {
     let priority: String?
     let rawId: String      // server UUID for actions
     let body: String       // full description (ticket) or content (note) — shown on tap-to-expand
+
+    var shortRef: String {
+        String(rawId.replacingOccurrences(of: "-", with: "").prefix(8))
+    }
 
     enum Kind: String {
         case ticket, note
