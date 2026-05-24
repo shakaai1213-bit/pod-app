@@ -171,11 +171,6 @@ struct PodReviewCard: View {
                     .foregroundStyle(item.statusColor)
 
                 Spacer(minLength: 8)
-
-                Label(item.status, systemImage: isBusy ? "clock.arrow.circlepath" : "checkmark.seal")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(item.statusColor)
-                    .lineLimit(1)
             }
 
             Text(item.title)
@@ -218,8 +213,19 @@ struct PodReviewCard: View {
                 }
             }
 
-            if !item.actions.isEmpty {
-                HStack(spacing: 8) {
+            HStack(alignment: .center, spacing: 8) {
+                Label(item.status, systemImage: isBusy ? "clock.arrow.circlepath" : "checkmark.seal")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(item.statusColor)
+                    .lineLimit(1)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(item.statusColor.opacity(0.10))
+                    .clipShape(Capsule())
+
+                Spacer(minLength: 8)
+
+                if !item.actions.isEmpty {
                     ForEach(item.actions) { action in
                         Button {
                             onAction(action)
@@ -227,7 +233,6 @@ struct PodReviewCard: View {
                             Label(action.title, systemImage: action.systemImage)
                                 .font(.caption2.weight(.semibold))
                                 .lineLimit(1)
-                                .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.mini)
@@ -235,8 +240,8 @@ struct PodReviewCard: View {
                         .disabled(action.isDisabled || isBusy)
                     }
                 }
-                .padding(.top, 2)
             }
+            .padding(.top, 2)
         }
         .padding(9)
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -115,7 +115,7 @@ final class DashboardViewModel {
 
         // Fetch projects
         do {
-            let response: [ProjectDTO] = try await apiClient.get(path: Endpoint.listProjects().path)
+            let response = try await ProjectRepository().listProjects()
             projects = response.map { dto in
                 Project(
                     id: dto.id,

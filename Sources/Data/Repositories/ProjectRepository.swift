@@ -26,7 +26,8 @@ actor ProjectRepository {
         if let status = status {
             path += "?status=\(status)"
         }
-        return try await api.get(path: path)
+        let response: ProjectListResponse = try await api.get(path: path)
+        return response.items
     }
 
     func createProject(name: String, goal: String? = nil, priority: Int = 3, stage: String = "blueprint") async throws -> ProjectDTO {
@@ -159,5 +160,27 @@ actor ProjectRepository {
             parentTaskId: nil
         )
         return try await api.patch(path: "/api/v1/projects/\(projectId)/tasks/\(taskId)", body: body)
+    }
+}
+
+private struct ProjectListResponse: Decodable {
+    let items: [ProjectDTO]
+
+    init(from decoder: Decoder) throws {
+        if var unkeyed = try? decoder.unkeyedContainer() {
+            var values: [ProjectDTO] = []
+            while !unkeyed.isAtEnd {
+                values.append(try unkeyed.decode(ProjectDTO.self))
+            }
+            items = values
+            return
+        }
+
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        items = try container.decode([ProjectDTO].self, forKey: .items)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case items
     }
 }

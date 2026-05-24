@@ -84,7 +84,7 @@ final class ProjectsViewModel {
         }
 
         // Boards endpoint broken (500) — fall back to /api/v1/projects/
-        if boards.isEmpty, let projects = try? await apiClient.get(path: "/api/v1/projects/") as [ProjectDTO] {
+        if boards.isEmpty, let projects = try? await ProjectRepository().listProjects() {
             boards = projects.map { dto in
                 Board(
                     id: dto.id,
@@ -98,14 +98,15 @@ final class ProjectsViewModel {
             }
         }
 
+        let loadedBoards = boards
         await MainActor.run {
-            if !boards.isEmpty {
+            if !loadedBoards.isEmpty {
                 let group = BoardGroup(
                     id: UUID(),
                     name: "All Projects",
-                    boards: boards,
-                    taskCount: boards.reduce(0) { $0 + $1.taskCount },
-                    completedTaskCount: boards.reduce(0) { $0 + $1.completedTaskCount }
+                    boards: loadedBoards,
+                    taskCount: loadedBoards.reduce(0) { $0 + $1.taskCount },
+                    completedTaskCount: loadedBoards.reduce(0) { $0 + $1.completedTaskCount }
                 )
                 self.boardGroups = [group]
             } else {

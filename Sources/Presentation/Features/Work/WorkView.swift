@@ -1106,7 +1106,7 @@ final class WorkViewModel {
         projectsError = nil
         defer { isLoadingProjects = false }
         do {
-            let all: [ProjectDTO] = try await APIClient.shared.get(path: "/api/v1/projects/")
+            let all = try await ProjectRepository().listProjects()
             // Show active-ish projects: exclude archived/cancelled
             projects = all.filter { p in
                 let excluded = ["archived", "cancelled", "done"]

@@ -32,6 +32,10 @@ struct AgentsView: View {
                         .padding(.horizontal, 16)
                         .padding(.bottom, 14)
 
+                    protectedChiefFundSection
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 14)
+
                     agentsSection
                         .padding(.horizontal, 16)
                         .padding(.bottom, 14)
@@ -225,6 +229,98 @@ struct AgentsView: View {
         .padding(.vertical, 4)
         .background(AppColors.backgroundTertiary)
         .clipShape(Capsule())
+    }
+
+    // MARK: - Protected Chief/Fund
+
+    private var protectedChiefFundSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text("PROTECTED · CHIEF/FUND")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(AppColors.textTertiary)
+                    .kerning(0.5)
+                Text("Read-only")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(AppColors.accentWarning)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(AppColors.accentWarning.opacity(0.12))
+                    .clipShape(Capsule())
+                Spacer()
+            }
+            .padding(.horizontal, 2)
+
+            Text("P&L, positions, orders, wallets, bot changes, and kill switches stay Chief/Rooster/Tony gated. Pod shows registry context only.")
+                .font(.system(size: 12))
+                .foregroundColor(AppColors.textSecondary)
+                .lineLimit(2)
+                .padding(10)
+                .background(AppColors.accentWarning.opacity(0.07))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            LazyVGrid(columns: [
+                GridItem(.flexible(), spacing: 8),
+                GridItem(.flexible(), spacing: 8)
+            ], spacing: 8) {
+                ForEach(ChiefFundContent.bots) { bot in
+                    chiefFundMiniCard(bot)
+                }
+            }
+        }
+    }
+
+    private func chiefFundMiniCard(_ bot: ChiefFundBot) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 7) {
+                Text(bot.emoji)
+                    .font(.system(size: 18))
+                    .frame(width: 24, height: 24)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(bot.name)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(AppColors.textPrimary)
+                        .lineLimit(1)
+                    Text(bot.owner)
+                        .font(.system(size: 10))
+                        .foregroundColor(AppColors.textTertiary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+
+                HStack(spacing: 3) {
+                    Image(systemName: bot.mode.icon)
+                        .font(.system(size: 8, weight: .bold))
+                    Text(bot.mode.label)
+                        .font(.system(size: 9, weight: .bold))
+                }
+                .foregroundColor(bot.mode.color)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 3)
+                .background(bot.mode.color.opacity(0.12))
+                .clipShape(Capsule())
+            }
+
+            Text(bot.role)
+                .font(.system(size: 11))
+                .foregroundColor(AppColors.textSecondary)
+                .lineLimit(2)
+
+            Text(bot.reviewGate.rawValue)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(AppColors.accentWarning)
+                .lineLimit(1)
+        }
+        .padding(10)
+        .frame(minHeight: 92, alignment: .topLeading)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(AppColors.accentWarning.opacity(0.18), lineWidth: 1)
+        )
     }
 
     // MARK: - Page Header

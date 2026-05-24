@@ -46,18 +46,18 @@ struct DashboardView: View {
                                 .strokeBorder(AppColors.accentWarning.opacity(0.3), lineWidth: 0.5)
                         )
                     }
+                    agentStatusStrip
+
                     // Cockpit Tier 1 — sign queue. The "what needs your eyes" surface.
                     CockpitSignQueueSection()
 
+                    needsAttentionSection
                     morningBriefingSection
                     doctrineVelocitySection
                     flowReviewSection
                     metricsStrip
                     startupTruthSection
                     liveStateSection
-                    chiefProtectionSection
-                    agentStatusStrip
-                    needsAttentionSection
                 }
                 .padding(.horizontal, Theme.md)
                 .padding(.bottom, Theme.xxl)
