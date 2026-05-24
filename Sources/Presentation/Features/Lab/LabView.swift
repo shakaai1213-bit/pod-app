@@ -9,6 +9,8 @@ import SwiftUI
 struct LabView: View {
 
     // Per-section expand/collapse state (default per spec §2).
+    @State private var boardsModel = LabBoardsModel()
+    @State private var selectedBoard: LabBoardSummary?
     @State private var architectureModel = ArchitectureDiagramModel()
     @State private var showingArchitectureSheet = false
     @State private var stackExpanded     = true
@@ -27,6 +29,7 @@ struct LabView: View {
                         .padding(.top, 60)
                         .padding(.bottom, 8)
 
+                    boardsSection
                     architectureSection
                     stackSection
                     fishSection
@@ -40,10 +43,15 @@ struct LabView: View {
             }
             .background(AppColors.backgroundPrimary.ignoresSafeArea())
             .task {
+                await boardsModel.load()
                 await architectureModel.load()
             }
             .refreshable {
+                await boardsModel.load(force: true)
                 await architectureModel.load(force: true)
+            }
+            .sheet(item: $selectedBoard) { board in
+                LabBoardDetailView(board: board)
             }
             .fullScreenCover(isPresented: $showingArchitectureSheet) {
                 ArchitectureDiagramSheet(markdown: architectureModel.markdown)
@@ -117,6 +125,98 @@ struct LabView: View {
             }
         }
         .contentShape(Rectangle())
+    }
+
+    // MARK: - BOARDS section
+
+    private var boardsSection: some View {
+        sectionCard {
+            HStack(spacing: 8) {
+                Image(systemName: "square.grid.2x2.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(AppColors.accentElectric)
+                Text("BOARDS")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(AppColors.textPrimary)
+                Text("· \(boardsModel.boards.count)")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(AppColors.textSecondary)
+                Spacer()
+                if boardsModel.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.65)
+                } else {
+                    Button {
+                        Task { await boardsModel.load(force: true) }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(AppColors.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        } body: {
+            VStack(alignment: .leading, spacing: 8) {
+                LazyVGrid(
+                    columns: [
+                        GridItem(.flexible(), spacing: 8),
+                        GridItem(.flexible(), spacing: 8)
+                    ],
+                    spacing: 8
+                ) {
+                    ForEach(boardsModel.boards) { board in
+                        boardTile(board)
+                            .onTapGesture {
+                                selectedBoard = board
+                            }
+                    }
+                }
+
+                if let error = boardsModel.error {
+                    Text(error)
+                        .font(.system(size: 10))
+                        .foregroundColor(AppColors.textTertiary)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 12)
+        }
+    }
+
+    private func boardTile(_ board: LabBoardSummary) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 8) {
+                Text(board.icon)
+                    .font(.system(size: 22))
+                    .frame(width: 28, height: 28)
+                Text(board.displayName)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(AppColors.textPrimary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+
+            Spacer(minLength: 0)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(board.projectCount) projects")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(AppColors.textSecondary)
+                Text("\(board.activeCount) active")
+                    .font(.system(size: 11))
+                    .foregroundColor(AppColors.textTertiary)
+            }
+        }
+        .frame(minHeight: 104, alignment: .topLeading)
+        .padding(10)
+        .background(AppColors.backgroundPrimary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(AppColors.border, lineWidth: 0.5)
+        )
     }
 
     // MARK: - ARCHITECTURE section
@@ -539,6 +639,569 @@ struct LabView: View {
             .clipShape(Capsule())
     }
 
+}
+
+// MARK: - Lab boards
+
+private struct LabBoardSummary: Identifiable, Hashable {
+    let id: String
+    let slug: String
+    let name: String
+    let layer: String?
+    let component: String?
+    let boardDescription: String?
+    let projectCount: Int
+    let activeCount: Int
+    let ticketCount: Int
+
+    var icon: String {
+        Self.iconMap[slug] ?? "📋"
+    }
+
+    var displayName: String {
+        (component?.isEmpty == false ? component : nil)
+            ?? Self.displayNameMap[slug]
+            ?? name.replacingOccurrences(of: "-", with: " ").capitalized
+    }
+
+    static let orderedSlugs = [
+        "north-star",
+        "pod",
+        "chat",
+        "orca",
+        "memory",
+        "compute",
+        "nerve",
+        "observability",
+        "governance"
+    ]
+
+    static let iconMap: [String: String] = [
+        "north-star": "⭐",
+        "pod": "📱",
+        "chat": "💬",
+        "orca": "🐋",
+        "memory": "🧠",
+        "compute": "🧮",
+        "nerve": "⚡",
+        "observability": "🌸",
+        "governance": "⚖️"
+    ]
+
+    static let displayNameMap: [String: String] = [
+        "north-star": "north-star",
+        "pod": "pod",
+        "chat": "chat",
+        "orca": "orca",
+        "memory": "memory",
+        "compute": "compute",
+        "nerve": "nerve",
+        "observability": "observability",
+        "governance": "governance"
+    ]
+}
+
+@MainActor
+@Observable
+private final class LabBoardsModel {
+    private(set) var boards: [LabBoardSummary] = LabBoardSummary.orderedSlugs.map {
+        LabBoardSummary(
+            id: $0,
+            slug: $0,
+            name: $0,
+            layer: nil,
+            component: nil,
+            boardDescription: nil,
+            projectCount: 0,
+            activeCount: 0,
+            ticketCount: 0
+        )
+    }
+    private(set) var isLoading = false
+    private(set) var error: String?
+
+    func load(force: Bool = false) async {
+        if isLoading { return }
+        if !force && boards.contains(where: { $0.projectCount > 0 || $0.activeCount > 0 }) { return }
+
+        isLoading = true
+        error = nil
+        defer { isLoading = false }
+
+        do {
+            let response: LabBoardListResponse = try await APIClient.shared.get(path: "/api/v1/boards")
+            let loaded = response.items.map(\.summary)
+            boards = Self.ordered(loaded)
+        } catch {
+            boards = Self.ordered(boards)
+            self.error = "Boards unavailable; showing canonical board map."
+        }
+    }
+
+    private static func ordered(_ boards: [LabBoardSummary]) -> [LabBoardSummary] {
+        var bySlug = Dictionary(uniqueKeysWithValues: boards.map { ($0.slug, $0) })
+        let canonical = LabBoardSummary.orderedSlugs.map { slug in
+            bySlug.removeValue(forKey: slug) ?? LabBoardSummary(
+                id: slug,
+                slug: slug,
+                name: slug,
+                layer: nil,
+                component: nil,
+                boardDescription: nil,
+                projectCount: 0,
+                activeCount: 0,
+                ticketCount: 0
+            )
+        }
+        return canonical + bySlug.values.sorted { $0.slug < $1.slug }
+    }
+}
+
+private struct LabBoardListResponse: Decodable {
+    let items: [LabBoardDTO]
+
+    init(from decoder: Decoder) throws {
+        if var unkeyed = try? decoder.unkeyedContainer() {
+            var values: [LabBoardDTO] = []
+            while !unkeyed.isAtEnd {
+                values.append(try unkeyed.decode(LabBoardDTO.self))
+            }
+            items = values
+            return
+        }
+
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        items = try container.decode([LabBoardDTO].self, forKey: .items)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case items
+    }
+}
+
+private struct LabBoardDTO: Decodable {
+    let id: String
+    let slug: String
+    let name: String
+    let layer: String?
+    let component: String?
+    let boardDescription: String?
+    let projectCount: Int
+    let activeCount: Int
+    let ticketCount: Int
+
+    var summary: LabBoardSummary {
+        LabBoardSummary(
+            id: id,
+            slug: slug,
+            name: name,
+            layer: layer,
+            component: component,
+            boardDescription: boardDescription,
+            projectCount: projectCount,
+            activeCount: activeCount,
+            ticketCount: ticketCount
+        )
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeFlexibleString(forKey: .id)
+        let rawSlug = try container.decodeFlexibleStringIfPresent(forKey: .slug)
+            ?? container.decodeFlexibleStringIfPresent(forKey: .name)
+            ?? id
+        slug = rawSlug.lowercased()
+        name = try container.decodeFlexibleStringIfPresent(forKey: .name) ?? slug
+        layer = try container.decodeFlexibleStringIfPresent(forKey: .layer)
+        component = try container.decodeFlexibleStringIfPresent(forKey: .component)
+        boardDescription = try container.decodeFlexibleStringIfPresent(forKey: .description)
+            ?? container.decodeFlexibleStringIfPresent(forKey: .objective)
+        projectCount = try container.decodeFlexibleIntIfPresent(keys: [.projectCount, .projectsCount, .totalProjects]) ?? 0
+        activeCount = try container.decodeFlexibleIntIfPresent(keys: [.activeCount, .activeProjects, .activeProjectCount]) ?? 0
+        ticketCount = try container.decodeFlexibleIntIfPresent(keys: [.ticketCount, .ticketsCount, .directTicketCount]) ?? 0
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case slug
+        case name
+        case layer
+        case component
+        case description
+        case objective
+        case projectCount = "project_count"
+        case projectsCount = "projects_count"
+        case totalProjects = "total_projects"
+        case activeCount = "active_count"
+        case activeProjects = "active_projects"
+        case activeProjectCount = "active_project_count"
+        case ticketCount = "ticket_count"
+        case ticketsCount = "tickets_count"
+        case directTicketCount = "direct_ticket_count"
+    }
+}
+
+private struct LabBoardProjectListResponse: Decodable {
+    let items: [ProjectDTO]
+
+    init(from decoder: Decoder) throws {
+        if var unkeyed = try? decoder.unkeyedContainer() {
+            var values: [ProjectDTO] = []
+            while !unkeyed.isAtEnd {
+                values.append(try unkeyed.decode(ProjectDTO.self))
+            }
+            items = values
+            return
+        }
+
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        items = try container.decode([ProjectDTO].self, forKey: .items)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case items
+    }
+}
+
+private struct LabBoardTicketSummary: Identifiable, Decodable {
+    let id: String
+    let title: String
+    let status: String
+    let priority: String?
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeFlexibleString(forKey: .id)
+        title = try container.decodeFlexibleStringIfPresent(forKey: .title) ?? "Untitled ticket"
+        status = try container.decodeFlexibleStringIfPresent(forKey: .status) ?? "open"
+        priority = try container.decodeFlexibleStringIfPresent(forKey: .priority)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case status
+        case priority
+    }
+}
+
+private struct LabBoardTicketListResponse: Decodable {
+    let items: [LabBoardTicketSummary]
+
+    init(from decoder: Decoder) throws {
+        if var unkeyed = try? decoder.unkeyedContainer() {
+            var values: [LabBoardTicketSummary] = []
+            while !unkeyed.isAtEnd {
+                values.append(try unkeyed.decode(LabBoardTicketSummary.self))
+            }
+            items = values
+            return
+        }
+
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        items = try container.decode([LabBoardTicketSummary].self, forKey: .items)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case items
+    }
+}
+
+@MainActor
+@Observable
+private final class LabBoardDetailModel {
+    private(set) var projects: [ProjectDTO] = []
+    private(set) var directTickets: [LabBoardTicketSummary] = []
+    private(set) var isLoading = false
+    private(set) var error: String?
+
+    func load(board: LabBoardSummary) async {
+        if isLoading { return }
+
+        isLoading = true
+        error = nil
+        defer { isLoading = false }
+
+        async let projectsTask = loadProjects(board: board)
+        async let ticketsTask = loadTickets(board: board)
+        let (loadedProjects, loadedTickets) = await (projectsTask, ticketsTask)
+
+        projects = loadedProjects.projects
+        directTickets = loadedTickets.tickets
+
+        if let projectError = loadedProjects.error, let ticketError = loadedTickets.error {
+            error = "\(projectError) \(ticketError)"
+        } else if let projectError = loadedProjects.error {
+            error = projectError
+        } else if let ticketError = loadedTickets.error {
+            error = ticketError
+        }
+    }
+
+    private func loadProjects(board: LabBoardSummary) async -> (projects: [ProjectDTO], error: String?) {
+        do {
+            let response: LabBoardProjectListResponse = try await APIClient.shared.get(path: "/api/v1/boards/\(board.id)/projects")
+            return (response.items, nil)
+        } catch {
+            do {
+                let response: LabBoardProjectListResponse = try await APIClient.shared.get(path: "/api/v1/projects?board_id=\(board.id)")
+                return (response.items, nil)
+            } catch {
+                return ([], "Projects unavailable.")
+            }
+        }
+    }
+
+    private func loadTickets(board: LabBoardSummary) async -> (tickets: [LabBoardTicketSummary], error: String?) {
+        do {
+            let response: LabBoardTicketListResponse = try await APIClient.shared.get(path: "/api/v1/boards/\(board.id)/tickets")
+            return (response.items, nil)
+        } catch {
+            return ([], "Direct tickets unavailable.")
+        }
+    }
+}
+
+private struct LabBoardDetailView: View {
+    let board: LabBoardSummary
+    @State private var model = LabBoardDetailModel()
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    boardHero
+                    projectsSection
+                    ticketsSection
+                    if let error = model.error {
+                        Text(error)
+                            .font(.system(size: 11))
+                            .foregroundColor(AppColors.textTertiary)
+                    }
+                }
+                .padding(16)
+                .padding(.bottom, 40)
+            }
+            .background(AppColors.backgroundPrimary.ignoresSafeArea())
+            .navigationTitle(board.displayName)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Close") { dismiss() }
+                        .foregroundColor(AppColors.accentElectric)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        Task { await model.load(board: board) }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .disabled(model.isLoading)
+                }
+            }
+            .task {
+                await model.load(board: board)
+            }
+        }
+        .presentationDetents([.large])
+    }
+
+    private var boardHero: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(board.icon)
+                    .font(.system(size: 34))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(board.displayName.uppercased())
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(AppColors.textPrimary)
+                    Text([board.layer, board.component].compactMap { $0 }.joined(separator: " · "))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(AppColors.textSecondary)
+                }
+                Spacer()
+            }
+
+            if let description = board.boardDescription, !description.isEmpty {
+                Text(description)
+                    .font(.system(size: 13))
+                    .foregroundColor(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: 8) {
+                countPill("\(board.projectCount) projects")
+                countPill("\(board.activeCount) active")
+                countPill("\(board.ticketCount) tickets")
+            }
+        }
+        .padding(14)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(AppColors.border, lineWidth: 0.5)
+        )
+    }
+
+    private var projectsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionTitle("PROJECTS", count: model.projects.count)
+            if model.isLoading && model.projects.isEmpty {
+                ProgressView()
+                    .frame(maxWidth: .infinity, minHeight: 80)
+            } else if model.projects.isEmpty {
+                emptyText("No projects on this board yet.")
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(model.projects) { project in
+                        projectRow(project)
+                        if project.id != model.projects.last?.id {
+                            Divider().background(AppColors.border)
+                        }
+                    }
+                }
+                .background(AppColors.backgroundSecondary)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+        }
+    }
+
+    private var ticketsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionTitle("DIRECT TICKETS", count: model.directTickets.count)
+            if model.isLoading && model.directTickets.isEmpty {
+                ProgressView()
+                    .frame(maxWidth: .infinity, minHeight: 80)
+            } else if model.directTickets.isEmpty {
+                emptyText("No direct tickets on this board.")
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(model.directTickets) { ticket in
+                        ticketRow(ticket)
+                        if ticket.id != model.directTickets.last?.id {
+                            Divider().background(AppColors.border)
+                        }
+                    }
+                }
+                .background(AppColors.backgroundSecondary)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+        }
+    }
+
+    private func projectRow(_ project: ProjectDTO) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(project.name)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(AppColors.textPrimary)
+                .lineLimit(2)
+            HStack(spacing: 6) {
+                countPill(project.stage ?? project.status)
+                countPill("P\(project.priority)")
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+    }
+
+    private func ticketRow(_ ticket: LabBoardTicketSummary) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(ticket.title)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(AppColors.textPrimary)
+                .lineLimit(2)
+            HStack(spacing: 6) {
+                countPill(ticket.status)
+                if let priority = ticket.priority {
+                    countPill(priority)
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+    }
+
+    private func sectionTitle(_ title: String, count: Int) -> some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(AppColors.textTertiary)
+            Text("· \(count)")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(AppColors.textTertiary)
+            Spacer()
+        }
+    }
+
+    private func countPill(_ value: String) -> some View {
+        Text(value)
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundColor(AppColors.textSecondary)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(AppColors.backgroundTertiary)
+            .clipShape(Capsule())
+    }
+
+    private func emptyText(_ value: String) -> some View {
+        Text(value)
+            .font(.system(size: 12))
+            .foregroundColor(AppColors.textTertiary)
+            .frame(maxWidth: .infinity, minHeight: 56, alignment: .center)
+            .background(AppColors.backgroundSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private extension KeyedDecodingContainer {
+    func decodeFlexibleString(forKey key: Key) throws -> String {
+        if let value = try? decode(String.self, forKey: key) {
+            return value
+        }
+        if let value = try? decode(UUID.self, forKey: key) {
+            return value.uuidString
+        }
+        if let value = try? decode(Int.self, forKey: key) {
+            return String(value)
+        }
+        throw DecodingError.keyNotFound(
+            key,
+            DecodingError.Context(codingPath: codingPath, debugDescription: "No string-like value for \(key.stringValue)")
+        )
+    }
+
+    func decodeFlexibleStringIfPresent(forKey key: Key) throws -> String? {
+        if let value = try? decodeIfPresent(String.self, forKey: key) {
+            return value
+        }
+        if let value = try? decodeIfPresent(UUID.self, forKey: key) {
+            return value.uuidString
+        }
+        if let value = try? decodeIfPresent(Int.self, forKey: key) {
+            return String(value)
+        }
+        return nil
+    }
+
+    func decodeFlexibleIntIfPresent(keys: [Key]) throws -> Int? {
+        for key in keys {
+            if let value = try? decodeIfPresent(Int.self, forKey: key) {
+                return value
+            }
+            if let value = try? decodeIfPresent(Double.self, forKey: key) {
+                return Int(value)
+            }
+            if let value = try? decodeIfPresent(String.self, forKey: key),
+               let intValue = Int(value) {
+                return intValue
+            }
+        }
+        return nil
+    }
 }
 
 // MARK: - Architecture diagram
