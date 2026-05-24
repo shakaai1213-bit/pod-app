@@ -497,13 +497,11 @@ struct ConversationView: View {
     @State private var showingTicketConfirmation = false
     @State private var showingAttachTicketSheet = false
     @State private var showingTriageSheet = false
+    @State private var isContextExpanded = false
 
     var body: some View {
         VStack(spacing: 0) {
-            ticketContextBar
-            ticketContinuityBar
-            workCockpitPanel
-            routeDecisionBar
+            chatContextSurface
             if !viewModel.routeProgressSteps.isEmpty {
                 RouteProgressStrip(steps: viewModel.routeProgressSteps)
             }
@@ -643,6 +641,169 @@ struct ConversationView: View {
                         .foregroundColor(AppColors.textTertiary)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var chatContextSurface: some View {
+        VStack(spacing: 0) {
+            compactContextBar
+
+            if isContextExpanded {
+                ticketContextBar
+                ticketContinuityBar
+                workCockpitPanel
+                routeDecisionBar
+            }
+        }
+    }
+
+    private var compactContextBar: some View {
+        HStack(spacing: 10) {
+            Image(systemName: contextSummaryIcon)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(contextSummaryColor)
+                .frame(width: 24, height: 24)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(contextSummaryTitle)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.textPrimary)
+                    .lineLimit(1)
+
+                Text(contextSummaryDetail)
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.textTertiary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+
+            Menu {
+                ForEach(viewModel.availableDeliveryModes(for: agent), id: \.rawValue) { mode in
+                    Button {
+                        viewModel.selectedDeliveryMode = mode
+                    } label: {
+                        Label(deliveryLabel(for: mode), systemImage: deliveryIcon(for: mode))
+                    }
+                }
+            } label: {
+                Label(deliveryLabel(for: viewModel.selectedDeliveryMode), systemImage: deliveryIcon(for: viewModel.selectedDeliveryMode))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(AppColors.accentElectric)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(AppColors.accentElectric.opacity(0.10))
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Chat delivery mode")
+
+            if viewModel.currentChannelId(for: agent) != nil {
+                Button {
+                    viewModel.refreshCurrentChannel()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(AppColors.accentElectric)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Refresh ORCA chat channel")
+            }
+
+            if viewModel.activeTicketId != nil {
+                Button {
+                    viewModel.clearTicketContext()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(AppColors.textTertiary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Detach ORCA ticket")
+            } else {
+                Button {
+                    showingAttachTicketSheet = true
+                } label: {
+                    Image(systemName: "link.badge.plus")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(AppColors.accentElectric)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Attach existing ORCA ticket")
+            }
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    isContextExpanded.toggle()
+                }
+            } label: {
+                Image(systemName: isContextExpanded ? "chevron.up.circle.fill" : "chevron.down.circle")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(AppColors.accentElectric)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isContextExpanded ? "Hide chat context" : "Show chat context")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
+        .background(AppColors.backgroundSecondary)
+        .overlay(
+            Rectangle()
+                .fill(AppColors.border)
+                .frame(height: 0.5),
+            alignment: .bottom
+        )
+    }
+
+    private var contextSummaryTitle: String {
+        if let ticketId = viewModel.activeTicketId {
+            return "ORCA ticket \(String(ticketId.prefix(8)))"
+        }
+        return "\(agent.name) chat surface"
+    }
+
+    private var contextSummaryDetail: String {
+        if viewModel.activeTicketId != nil {
+            let run = viewModel.activeTicketContinuity?.latestRunLabel
+            let readiness = "\(viewModel.workCockpitReadinessPercent)% ready"
+            return [run, readiness, viewModel.ticketLiveSummaryLabel]
+                .compactMap { $0 }
+                .joined(separator: " · ")
+        }
+
+        let channelText = viewModel.shortChannelId(for: agent).map { "ORCA channel \($0)" }
+        return [deliveryTruthText, channelText, agent.boundaryText]
+            .compactMap { $0 }
+            .joined(separator: " · ")
+    }
+
+    private var contextSummaryIcon: String {
+        if viewModel.activeTicketId != nil { return "text.badge.checkmark" }
+        return deliveryIcon(for: viewModel.selectedDeliveryMode)
+    }
+
+    private var contextSummaryColor: Color {
+        if viewModel.activeTicketId != nil { return AppColors.accentSuccess }
+        return routeDecisionColor
+    }
+
+    private var deliveryTruthText: String {
+        switch viewModel.selectedDeliveryMode {
+        case .compute:
+            return "\(agent.name) compute persona, not live runtime"
+        case .liveInbox:
+            return "\(agent.name) live inbox handoff"
+        case .agentRun:
+            return "Agent Run requires attached ticket"
+        case .auto:
+            return "Merman/Schoolhouse auto route"
+        case .fallback:
+            return "Local guardrail fallback"
+        case .system:
+            return "System status"
+        case .ticket:
+            return "Ticket evidence"
         }
     }
 
@@ -1106,11 +1267,11 @@ struct ConversationView: View {
                     Button {
                         viewModel.selectedDeliveryMode = mode
                     } label: {
-                        Label(mode.displayLabel, systemImage: deliveryIcon(for: mode))
+                        Label(deliveryLabel(for: mode), systemImage: deliveryIcon(for: mode))
                     }
                 }
             } label: {
-                Label(viewModel.selectedDeliveryMode.displayLabel, systemImage: deliveryIcon(for: viewModel.selectedDeliveryMode))
+                Label(deliveryLabel(for: viewModel.selectedDeliveryMode), systemImage: deliveryIcon(for: viewModel.selectedDeliveryMode))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(AppColors.accentElectric)
                     .padding(.horizontal, 9)
@@ -1518,6 +1679,25 @@ struct ConversationView: View {
         }
     }
 
+    private func deliveryLabel(for mode: DMDeliveryMode) -> String {
+        switch mode {
+        case .compute:
+            return "\(agent.name) compute"
+        case .liveInbox:
+            return "\(agent.name) inbox"
+        case .agentRun:
+            return "ORCA Agent Run"
+        case .auto:
+            return "Auto route"
+        case .fallback:
+            return "Local fallback"
+        case .system:
+            return "System"
+        case .ticket:
+            return "Ticket"
+        }
+    }
+
     private var composeBar: some View {
         HStack(spacing: 10) {
             Button {
@@ -1753,6 +1933,10 @@ struct DMBubble: View {
                     )
                     .opacity(message.isStreaming && message.content.isEmpty ? 0.6 : 1)
 
+                if !isUser {
+                    MessageDeliveryLedger(message: message, agent: agent)
+                }
+
                 // Streaming indicator
                 if message.isStreaming {
                     HStack(spacing: 4) {
@@ -1790,7 +1974,7 @@ struct DMBubble: View {
             parts.append(model)
         }
         if let deliveryMode = DMDeliveryMode.parse(message.deliveryMode) {
-            parts.append(deliveryMode.displayLabel)
+            parts.append(Self.deliveryLabel(deliveryMode, agent: agent))
         }
         if let lane = message.lane, !lane.isEmpty {
             parts.append(lane)
@@ -1839,6 +2023,25 @@ struct DMBubble: View {
         let trimmed = traceId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count > 18 else { return trimmed }
         return "\(trimmed.prefix(10))...\(trimmed.suffix(6))"
+    }
+
+    private static func deliveryLabel(_ mode: DMDeliveryMode, agent: AgentInfo) -> String {
+        switch mode {
+        case .compute:
+            return "\(agent.name) compute"
+        case .liveInbox:
+            return "\(agent.name) inbox"
+        case .agentRun:
+            return "ORCA Agent Run"
+        case .auto:
+            return "Auto route"
+        case .fallback:
+            return "Local fallback"
+        case .system:
+            return "Pod system"
+        case .ticket:
+            return "ORCA ticket"
+        }
     }
 
     @ViewBuilder
@@ -1969,6 +2172,176 @@ struct DMBubble: View {
 
     private var messageTextColor: Color {
         provenance == .fallback || provenance == .protected ? AppColors.accentWarning : AppColors.textPrimary
+    }
+}
+
+private struct MessageDeliveryLedger: View {
+    let message: DMMessage
+    let agent: AgentInfo
+
+    private enum StepState: Equatable {
+        case done
+        case current
+        case pending
+        case failed
+    }
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(steps, id: \.title) { step in
+                Label(step.title, systemImage: step.icon)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(color(for: step.state))
+                    .labelStyle(.iconOnly)
+                    .frame(width: 18, height: 18)
+                    .background(color(for: step.state).opacity(step.state == .pending ? 0.06 : 0.13))
+                    .clipShape(Circle())
+                    .accessibilityLabel("\(step.title): \(accessibilityState(step.state))")
+            }
+
+            Text(ledgerText)
+                .font(.caption2)
+                .foregroundStyle(AppColors.textTertiary)
+                .lineLimit(1)
+        }
+    }
+
+    private var deliveryState: DMDeliveryState? {
+        DMDeliveryState.parse(message.deliveryState)
+    }
+
+    private var deliveryMode: DMDeliveryMode {
+        DMDeliveryMode.parse(message.deliveryMode) ?? .compute
+    }
+
+    private var steps: [(title: String, icon: String, state: StepState)] {
+        let failed = deliveryState == .failed || deliveryState == .fallbackPresented
+        let timedOut = deliveryState == .timedOut
+        let finalDone = deliveryState == .responseReceived
+        let waiting = deliveryState == .computeRunning
+            || deliveryState == .waitingForLiveAgent
+            || deliveryState == .agentRunQueued
+            || deliveryState == .agentRunRunning
+            || deliveryState == .claimedByAgent
+        let handlerTitle: String
+        let handlerIcon: String
+        switch deliveryMode {
+        case .liveInbox:
+            handlerTitle = "\(agent.name) inbox"
+            handlerIcon = "tray.full"
+        case .agentRun:
+            handlerTitle = "Agent Run"
+            handlerIcon = "bolt.badge.clock"
+        case .ticket:
+            handlerTitle = "Ticket"
+            handlerIcon = "text.badge.checkmark"
+        case .fallback:
+            handlerTitle = "Fallback"
+            handlerIcon = "exclamationmark.triangle"
+        case .system:
+            handlerTitle = "System"
+            handlerIcon = "gearshape"
+        case .auto:
+            handlerTitle = "Route"
+            handlerIcon = "arrow.triangle.branch"
+        case .compute:
+            handlerTitle = "\(agent.name) compute"
+            handlerIcon = "cpu"
+        }
+
+        return [
+            (
+                "Sent",
+                "paperplane",
+                failed ? .done : .done
+            ),
+            (
+                "ORCA accepted",
+                "checkmark.circle",
+                failed ? .failed : .done
+            ),
+            (
+                handlerTitle,
+                handlerIcon,
+                failed ? .failed : (waiting || timedOut ? .current : (finalDone ? .done : .pending))
+            ),
+            (
+                "Reply",
+                finalDone ? "checkmark.seal" : "hourglass",
+                failed ? .failed : (finalDone ? .done : (timedOut ? .failed : .pending))
+            ),
+        ]
+    }
+
+    private var ledgerText: String {
+        switch deliveryState {
+        case .routing:
+            return "Routing through ORCA"
+        case .computeRunning:
+            return "\(agent.name) compute accepted; waiting"
+        case .waitingForLiveAgent:
+            return "\(agent.name) inbox accepted; waiting"
+        case .claimedByAgent:
+            return "\(agent.name) claimed the inbox"
+        case .agentRunQueued:
+            return "Agent Run queued"
+        case .agentRunRunning:
+            return "Agent Run running"
+        case .responseReceived:
+            return "Reply/evidence received"
+        case .fallbackPresented:
+            return "Local fallback, not agent reply"
+        case .failed:
+            return "Route failed"
+        case .timedOut:
+            return "Still waiting; refresh can check ORCA"
+        case .sending:
+            return "Sending"
+        case nil:
+            return provenanceText
+        }
+    }
+
+    private var provenanceText: String {
+        switch DMResponseProvenance.parse(message.provenance)
+            ?? DMResponseProvenance(deliveryMode: message.deliveryMode, source: message.source, lane: message.lane) {
+        case .compute:
+            return "\(agent.name) compute persona"
+        case .liveInbox:
+            return "\(agent.name) live inbox"
+        case .agentRun:
+            return "ORCA Agent Run"
+        case .ticket:
+            return "ORCA ticket evidence"
+        case .fallback:
+            return "Local fallback"
+        case .system:
+            return "Pod system"
+        case .protected:
+            return "Protected guardrail"
+        }
+    }
+
+    private func color(for state: StepState) -> Color {
+        switch state {
+        case .done:
+            return AppColors.accentSuccess
+        case .current:
+            return AppColors.accentElectric
+        case .pending:
+            return AppColors.textTertiary
+        case .failed:
+            return AppColors.accentWarning
+        }
+    }
+
+    private func accessibilityState(_ state: StepState) -> String {
+        switch state {
+        case .done: return "done"
+        case .current: return "current"
+        case .pending: return "pending"
+        case .failed: return "needs attention"
+        }
     }
 }
 
