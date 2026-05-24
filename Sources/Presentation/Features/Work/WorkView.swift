@@ -4,6 +4,7 @@ import SwiftUI
 // Per SPEC-POD-TABS-HANDOFF §4 — stacked PROJECTS + TICKETS, no segmented control (v3 decision).
 
 struct WorkView: View {
+    @EnvironmentObject private var appState: AppState
     @State private var model = WorkViewModel()
     @State private var pushProjects = false
     @State private var pushTickets = false
@@ -38,7 +39,11 @@ struct WorkView: View {
             .task { await model.load() }
             .task { await model.startFlowReviewPolling() }
             .onAppear {
+                configureReviewerIdentity()
                 model.consumePendingFlowFilter()
+            }
+            .onChange(of: appState.currentUser?.name) { _, _ in
+                configureReviewerIdentity()
             }
             .onReceive(NotificationCenter.default.publisher(for: Notification.Name("pod.openWorkFlowFilter"))) { note in
                 model.applyIncomingFlowFilter(note.object as? String)
@@ -72,6 +77,10 @@ struct WorkView: View {
             }
             .animation(.easeInOut(duration: 0.2), value: model.priorityToast)
         }
+    }
+
+    private func configureReviewerIdentity() {
+        model.configureReviewerIdentity(from: appState.currentUser?.name ?? appState.authManager.currentUser?.name)
     }
 
     private func priorityToastView(_ toast: WorkViewModel.PriorityToast) -> some View {
@@ -985,6 +994,7 @@ final class WorkViewModel {
     var isLoadingSuggestions = false
     var suggestionsError: String?
     var suggestionActionIds: Set<String> = []
+    var reviewerIdentity = "maui"
 
     struct PriorityToast: Equatable {
         let message: String
@@ -993,6 +1003,13 @@ final class WorkViewModel {
         static func == (lhs: PriorityToast, rhs: PriorityToast) -> Bool {
             lhs.message == rhs.message && lhs.isError == rhs.isError
         }
+    }
+
+    func configureReviewerIdentity(from name: String?) {
+        let normalized = (name ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        reviewerIdentity = normalized.isEmpty ? "maui" : normalized
     }
 
     // MARK: Sheet
@@ -1181,8 +1198,8 @@ final class WorkViewModel {
             if loadedSuggestions.isEmpty, digest.suggestionCount == 0 {
                 suggestions = []
             } else if loadedSuggestions.isEmpty {
-                let response: WorkListResponse<SchoolhouseSuggestion> = try await APIClient.shared.get(path: "/api/v1/schoolhouse/suggestions?status=proposed&limit=7")
-                suggestions = response.items.sorted { $0.sortScore > $1.sortScore }
+                let response: [SchoolhouseSuggestion] = try await APIClient.shared.get(path: "/api/v1/schoolhouse/suggestions?status=proposed&limit=7")
+                suggestions = response.sorted { $0.sortScore > $1.sortScore }
             } else {
                 let scoreById = Dictionary(uniqueKeysWithValues: digest.suggestions.map { ($0.id, $0.rankScore) })
                 suggestions = loadedSuggestions.sorted {
@@ -1345,7 +1362,9 @@ final class WorkViewModel {
             actualCost: old.actualCost, createdBy: old.createdBy, assignedTo: old.assignedTo,
             createdAt: old.createdAt, updatedAt: old.updatedAt,
             startedAt: old.startedAt, completedAt: old.completedAt, dueDate: old.dueDate,
-            stage: old.stage
+            stage: old.stage, automationEnabled: old.automationEnabled,
+            proposedMilestones: old.proposedMilestones, milestones: old.milestones,
+            lastGenerationRunId: old.lastGenerationRunId
         )
         struct Body: Encodable { let priority: Int }
         do {
@@ -1363,7 +1382,9 @@ final class WorkViewModel {
                     actualCost: cur.actualCost, createdBy: cur.createdBy, assignedTo: cur.assignedTo,
                     createdAt: cur.createdAt, updatedAt: cur.updatedAt,
                     startedAt: cur.startedAt, completedAt: cur.completedAt, dueDate: cur.dueDate,
-                    stage: cur.stage
+                    stage: cur.stage, automationEnabled: cur.automationEnabled,
+                    proposedMilestones: cur.proposedMilestones, milestones: cur.milestones,
+                    lastGenerationRunId: cur.lastGenerationRunId
                 )
             }
             priorityToast = PriorityToast(
@@ -1384,28 +1405,29 @@ final class WorkViewModel {
 
         do {
             let updated: SchoolhouseSuggestion
+            let actor = reviewerIdentity
             switch actionId {
             case "accept":
                 updated = try await APIClient.shared.post(
                     path: "/api/v1/schoolhouse/suggestions/\(suggestion.id.uuidString)/accept",
-                    body: SuggestionDecisionBody(actor: "maui", reason: "Accepted from Pod Work.")
+                    body: SuggestionDecisionBody(actor: actor, reason: "Accepted from Pod Work.")
                 )
             case "dismiss":
                 updated = try await APIClient.shared.post(
                     path: "/api/v1/schoolhouse/suggestions/\(suggestion.id.uuidString)/dismiss",
-                    body: SuggestionDecisionBody(actor: "maui", reason: "Dismissed from Pod Work.")
+                    body: SuggestionDecisionBody(actor: actor, reason: "Dismissed from Pod Work.")
                 )
             case "snooze":
                 let until = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
                 updated = try await APIClient.shared.post(
                     path: "/api/v1/schoolhouse/suggestions/\(suggestion.id.uuidString)/snooze",
-                    body: SuggestionSnoozeBody(snoozedUntil: until, actor: "maui", reason: "Snoozed from Pod Work.")
+                    body: SuggestionSnoozeBody(snoozedUntil: until, actor: actor, reason: "Snoozed from Pod Work.")
                 )
             case "convert-ticket":
                 updated = try await APIClient.shared.post(
                     path: "/api/v1/schoolhouse/suggestions/\(suggestion.id.uuidString)/convert-to-ticket",
                     body: SuggestionConvertBody(
-                        actor: "maui",
+                        actor: actor,
                         title: suggestion.title,
                         description: suggestion.ticketDescription,
                         priority: suggestion.ticketPriority,
