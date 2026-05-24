@@ -124,6 +124,7 @@ struct AgentsView: View {
 
     private func focusCardView(_ card: AgentFocusCard) -> some View {
         VStack(alignment: .leading, spacing: 8) {
+            // Header row
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(card.emoji)
                     .font(.system(size: 22))
@@ -137,20 +138,56 @@ struct AgentsView: View {
                     .lineLimit(1)
             }
 
+            // Charter
             Text(card.charter)
                 .font(.system(size: 12))
                 .foregroundColor(AppColors.textSecondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
 
+            Divider()
+
+            // STRETCH
+            VStack(alignment: .leading, spacing: 2) {
+                Text("STRETCH")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(AppColors.textTertiary)
+                    .kerning(0.5)
+                Text(card.stretch ?? "—")
+                    .font(.system(size: 12))
+                    .foregroundColor(card.stretch != nil ? AppColors.textPrimary : AppColors.textTertiary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+
+            // ROADMAP
+            VStack(alignment: .leading, spacing: 2) {
+                Text("ROADMAP")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(AppColors.textTertiary)
+                    .kerning(0.5)
+                Text(card.roadmap ?? "—")
+                    .font(.system(size: 12))
+                    .foregroundColor(card.roadmap != nil ? AppColors.textPrimary : AppColors.textTertiary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+
+            Divider()
+
+            // Today's 3
             VStack(alignment: .leading, spacing: 3) {
+                Text("TODAY'S 3")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(AppColors.textTertiary)
+                    .kerning(0.5)
                 ForEach(Array(card.focusAreas.prefix(3).enumerated()), id: \.offset) { idx, area in
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
                         Text("\(idx + 1).")
-                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
                             .foregroundColor(AppColors.textTertiary)
                         Text(area.label)
-                            .font(.system(size: 13))
+                            .font(.system(size: 12))
                             .foregroundColor(area.label == "Loading..." ? AppColors.textTertiary : AppColors.textPrimary)
                             .lineLimit(1)
                             .truncationMode(.tail)
@@ -158,6 +195,7 @@ struct AgentsView: View {
                 }
             }
 
+            // Fish + skeleton note
             HStack {
                 if card.isSkeleton {
                     Text("waiting for ORCA focus-card endpoint")
@@ -170,7 +208,7 @@ struct AgentsView: View {
             }
         }
         .padding(12)
-        .frame(maxWidth: .infinity, minHeight: 120, maxHeight: 120, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(AppColors.backgroundSecondary)
         .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
         .overlay(
@@ -737,6 +775,9 @@ private struct AgentFocusCard: Identifiable, Hashable {
     let lastLogExcerpt: String?
     let lastUpdated: Date?
     let isSkeleton: Bool
+    // Reframe: STRETCH + ROADMAP (Tony 2026-05-25)
+    let stretch: String?
+    let roadmap: String?
 
     var id: String { agentId.lowercased() }
 
@@ -770,7 +811,9 @@ private struct AgentFocusCard: Identifiable, Hashable {
             fish: AgentFocusFish(name: "TBD", icon: "—"),
             lastLogExcerpt: nil,
             lastUpdated: nil,
-            isSkeleton: true
+            isSkeleton: true,
+            stretch: nil,
+            roadmap: nil
         )
     }
 }
@@ -845,9 +888,11 @@ private struct AgentFocusCardDTO: Decodable {
     let fish: FishDTO?
     let lastLogExcerpt: String?
     let lastUpdated: Date?
+    let stretch: String?
+    let roadmap: String?
 
     enum CodingKeys: String, CodingKey {
-        case charter, fish
+        case charter, fish, stretch, roadmap
         case agentId = "agent_id"
         case displayName = "display_name"
         case focusAreas = "focus_areas"
@@ -878,7 +923,9 @@ private struct AgentFocusCardDTO: Decodable {
             fish: AgentFocusFish(name: fish?.name ?? "TBD", icon: fish?.icon ?? "—"),
             lastLogExcerpt: lastLogExcerpt,
             lastUpdated: lastUpdated,
-            isSkeleton: false
+            isSkeleton: false,
+            stretch: stretch,
+            roadmap: roadmap
         )
     }
 
