@@ -6,7 +6,9 @@ struct DashboardView: View {
 
     @EnvironmentObject private var appState: AppState
     @State private var viewModel = DashboardViewModel()
+    @State private var briefingModel = DashboardBriefingDoctrineModel()
     @State private var selectedAgent: Agent?
+    @State private var selectedBriefingSheet: DashboardBriefingSheetKind?
     @State private var showingSettings = false
     @AppStorage("orca_display_name") private var displayName: String = "Captain"
 
@@ -47,6 +49,8 @@ struct DashboardView: View {
                     // Cockpit Tier 1 — sign queue. The "what needs your eyes" surface.
                     CockpitSignQueueSection()
 
+                    morningBriefingSection
+                    doctrineVelocitySection
                     flowReviewSection
                     metricsStrip
                     startupTruthSection
@@ -61,15 +65,25 @@ struct DashboardView: View {
             .background(AppColors.backgroundPrimary)
             .refreshable {
                 await viewModel.loadDashboard()
+                await briefingModel.load(force: true)
             }
             .sheet(item: $selectedAgent) { agent in
                 AgentDetailSheet(agent: agent)
+            }
+            .sheet(item: $selectedBriefingSheet) { sheet in
+                switch sheet {
+                case .briefing:
+                    MorningBriefingDetailSheet(briefing: briefingModel.briefing)
+                case .doctrine:
+                    DoctrineLedgerDetailSheet(ledger: briefingModel.ledger)
+                }
             }
             .sheet(isPresented: $showingSettings) {
                 SettingsView()
             }
             .task {
                 await viewModel.loadDashboard()
+                await briefingModel.load()
             }
             .task {
                 await viewModel.startFlowReviewPolling()
@@ -125,6 +139,97 @@ struct DashboardView: View {
             )
         )
         .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+    }
+
+    // MARK: - Morning Briefing + Doctrine Velocity
+
+    private var morningBriefingSection: some View {
+        Button {
+            selectedBriefingSheet = .briefing
+        } label: {
+            VStack(alignment: .leading, spacing: 9) {
+                dashboardMiniHeader(
+                    title: "BRIEFING · Today 07:00 PT",
+                    icon: "sunrise.fill",
+                    isLoading: briefingModel.isLoadingBriefing
+                )
+
+                if let briefing = briefingModel.briefing {
+                    Text(briefing.summary)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(AppColors.textPrimary)
+                        .lineLimit(2)
+
+                    if !briefing.highlights.isEmpty {
+                        Text(briefing.highlights.prefix(2).joined(separator: " · "))
+                            .font(.system(size: 12))
+                            .foregroundColor(AppColors.textSecondary)
+                            .lineLimit(2)
+                    }
+                } else {
+                    Text("No briefing yet today — check back at 07:00 PT")
+                        .font(.system(size: 13))
+                        .foregroundColor(AppColors.textSecondary)
+                }
+            }
+            .dashboardInfoCard()
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var doctrineVelocitySection: some View {
+        Button {
+            selectedBriefingSheet = .doctrine
+        } label: {
+            VStack(alignment: .leading, spacing: 9) {
+                dashboardMiniHeader(
+                    title: "DOCTRINE · Yesterday",
+                    icon: "doc.text.magnifyingglass",
+                    isLoading: briefingModel.isLoadingLedger
+                )
+
+                if let ledger = briefingModel.ledger {
+                    Text("\(ledger.shippedCount) docs shipped · \(ledger.debtCount) debt flag · \(ledger.blockedCount) blocked")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(AppColors.textPrimary)
+                        .lineLimit(1)
+
+                    if !ledger.byType.isEmpty {
+                        Text(ledger.typeSummary)
+                            .font(.system(size: 12))
+                            .foregroundColor(AppColors.textSecondary)
+                            .lineLimit(1)
+                    }
+                } else {
+                    Text("Ledger building — first entry coming")
+                        .font(.system(size: 13))
+                        .foregroundColor(AppColors.textSecondary)
+                }
+            }
+            .dashboardInfoCard()
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func dashboardMiniHeader(title: String, icon: String, isLoading: Bool) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(AppColors.accentElectric)
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(AppColors.textTertiary)
+                .kerning(0.5)
+            Spacer()
+            if isLoading {
+                ProgressView()
+                    .scaleEffect(0.65)
+            } else {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(AppColors.textTertiary)
+            }
+        }
     }
 
     // MARK: - Metrics Strip
@@ -742,6 +847,312 @@ struct DashboardView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEEE, MMMM d"
         return formatter.string(from: Date())
+    }
+}
+
+// MARK: - Briefing + Doctrine Models
+
+private enum DashboardBriefingSheetKind: String, Identifiable {
+    case briefing
+    case doctrine
+
+    var id: String { rawValue }
+}
+
+@MainActor
+@Observable
+private final class DashboardBriefingDoctrineModel {
+    private(set) var briefing: MorningBriefingDTO?
+    private(set) var ledger: DoctrineLedgerDTO?
+    private(set) var isLoadingBriefing = false
+    private(set) var isLoadingLedger = false
+
+    func load(force: Bool = false) async {
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.loadBriefing(force: force) }
+            group.addTask { await self.loadLedger(force: force) }
+        }
+    }
+
+    func loadBriefing(force: Bool = false) async {
+        if isLoadingBriefing { return }
+        if !force && briefing != nil { return }
+
+        isLoadingBriefing = true
+        defer { isLoadingBriefing = false }
+
+        do {
+            briefing = try await APIClient.shared.get(path: "/api/v1/briefings/today")
+        } catch {
+            briefing = nil
+        }
+    }
+
+    func loadLedger(force: Bool = false) async {
+        if isLoadingLedger { return }
+        if !force && ledger != nil { return }
+
+        isLoadingLedger = true
+        defer { isLoadingLedger = false }
+
+        do {
+            ledger = try await APIClient.shared.get(path: "/api/v1/doc-ledger/yesterday")
+        } catch {
+            ledger = nil
+        }
+    }
+}
+
+private struct MorningBriefingDTO: Decodable {
+    let date: String
+    let summary: String
+    let highlights: [String]
+    let generatedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case date
+        case summary
+        case highlights
+        case generatedAt = "generated_at"
+    }
+}
+
+private struct DoctrineLedgerDTO: Decodable {
+    let date: String
+    let shippedCount: Int
+    let debtCount: Int
+    let blockedCount: Int
+    let byType: [String: Int]
+    let events: [DoctrineLedgerEvent]
+
+    enum CodingKeys: String, CodingKey {
+        case date
+        case shippedCount = "shipped_count"
+        case debtCount = "debt_count"
+        case blockedCount = "blocked_count"
+        case byType = "by_type"
+        case events
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        date = try container.decodeIfPresent(String.self, forKey: .date) ?? "yesterday"
+        shippedCount = try container.decodeIfPresent(Int.self, forKey: .shippedCount) ?? 0
+        debtCount = try container.decodeIfPresent(Int.self, forKey: .debtCount) ?? 0
+        blockedCount = try container.decodeIfPresent(Int.self, forKey: .blockedCount) ?? 0
+        byType = try container.decodeIfPresent([String: Int].self, forKey: .byType) ?? [:]
+        events = try container.decodeIfPresent([DoctrineLedgerEvent].self, forKey: .events) ?? []
+    }
+
+    var typeSummary: String {
+        byType
+            .sorted { $0.key < $1.key }
+            .map { "\($0.value) \($0.key.uppercased())" }
+            .joined(separator: " · ")
+    }
+}
+
+private struct DoctrineLedgerEvent: Decodable, Identifiable {
+    let id: String
+    let title: String
+    let docType: String?
+    let status: String?
+    let path: String?
+    let timestamp: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case docType = "doc_type"
+        case type
+        case status
+        case path
+        case timestamp
+        case createdAt = "created_at"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+            ?? container.decodeIfPresent(String.self, forKey: .path)
+            ?? "Doctrine event"
+        id = try container.decodeIfPresent(String.self, forKey: .id) ?? title
+        docType = try container.decodeIfPresent(String.self, forKey: .docType)
+            ?? container.decodeIfPresent(String.self, forKey: .type)
+        status = try container.decodeIfPresent(String.self, forKey: .status)
+        path = try container.decodeIfPresent(String.self, forKey: .path)
+        timestamp = try container.decodeIfPresent(Date.self, forKey: .timestamp)
+            ?? container.decodeIfPresent(Date.self, forKey: .createdAt)
+    }
+}
+
+private struct MorningBriefingDetailSheet: View {
+    let briefing: MorningBriefingDTO?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if let briefing {
+                        Text(briefing.date)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(AppColors.textTertiary)
+                        Text(briefing.summary)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(AppColors.textPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if !briefing.highlights.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("HIGHLIGHTS")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(AppColors.textTertiary)
+                                ForEach(briefing.highlights, id: \.self) { highlight in
+                                    Label(highlight, systemImage: "sparkle")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(AppColors.textSecondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+                        if let generatedAt = briefing.generatedAt {
+                            Text("Generated \(generatedAt.relativeFormatted)")
+                                .font(.system(size: 11))
+                                .foregroundColor(AppColors.textTertiary)
+                        }
+                    } else {
+                        Text("No briefing yet today — check back at 07:00 PT")
+                            .font(.system(size: 15))
+                            .foregroundColor(AppColors.textSecondary)
+                    }
+                }
+                .padding(20)
+            }
+            .background(AppColors.backgroundPrimary.ignoresSafeArea())
+            .navigationTitle("Morning Briefing")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Close") { dismiss() }
+                        .foregroundColor(AppColors.accentElectric)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+}
+
+private struct DoctrineLedgerDetailSheet: View {
+    let ledger: DoctrineLedgerDTO?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if let ledger {
+                        Text(ledger.date)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(AppColors.textTertiary)
+                        Text("\(ledger.shippedCount) docs shipped · \(ledger.debtCount) debt flag · \(ledger.blockedCount) blocked")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(AppColors.textPrimary)
+
+                        if !ledger.byType.isEmpty {
+                            Text(ledger.typeSummary)
+                                .font(.system(size: 12))
+                                .foregroundColor(AppColors.textSecondary)
+                        }
+
+                        if ledger.events.isEmpty {
+                            Text("No ledger events returned yet.")
+                                .font(.system(size: 13))
+                                .foregroundColor(AppColors.textTertiary)
+                        } else {
+                            VStack(spacing: 0) {
+                                ForEach(ledger.events) { event in
+                                    doctrineEventRow(event)
+                                    if event.id != ledger.events.last?.id {
+                                        Divider().background(AppColors.border)
+                                    }
+                                }
+                            }
+                            .background(AppColors.backgroundSecondary)
+                            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+                        }
+                    } else {
+                        Text("Ledger building — first entry coming")
+                            .font(.system(size: 15))
+                            .foregroundColor(AppColors.textSecondary)
+                    }
+                }
+                .padding(20)
+            }
+            .background(AppColors.backgroundPrimary.ignoresSafeArea())
+            .navigationTitle("Doctrine Velocity")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Close") { dismiss() }
+                        .foregroundColor(AppColors.accentElectric)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private func doctrineEventRow(_ event: DoctrineLedgerEvent) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(event.title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(AppColors.textPrimary)
+                .lineLimit(2)
+            HStack(spacing: 6) {
+                if let docType = event.docType {
+                    ledgerPill(docType.uppercased())
+                }
+                if let status = event.status {
+                    ledgerPill(status)
+                }
+                if let timestamp = event.timestamp {
+                    Text(timestamp.relativeFormatted)
+                        .font(.system(size: 10))
+                        .foregroundColor(AppColors.textTertiary)
+                }
+            }
+            if let path = event.path {
+                Text(path)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(AppColors.textTertiary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+    }
+
+    private func ledgerPill(_ value: String) -> some View {
+        Text(value)
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundColor(AppColors.textSecondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(AppColors.backgroundTertiary)
+            .clipShape(Capsule())
+    }
+}
+
+private extension View {
+    func dashboardInfoCard() -> some View {
+        self
+            .padding(Theme.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(AppColors.backgroundSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                    .strokeBorder(AppColors.border, lineWidth: 0.5)
+            )
     }
 }
 
