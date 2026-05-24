@@ -735,49 +735,46 @@ private final class RuntimeViewModel {
         errorMessage = nil
         defer { isLoading = false }
 
-        do {
-            async let stateResponse: StateRegistryResponse = APIClient.shared.get(path: "/api/v1/state-registry?limit=80")
-            async let runtimeResponse: RuntimeRegistryResponseDTO = APIClient.shared.get(path: "/api/v1/runtime-registry?limit=120")
-            async let syncResponse: RuntimeClassificationSyncPreviewDTO = APIClient.shared.get(path: "/api/v1/runtime-registry/classification-sync/preview?limit=20")
-            async let syncExportsResponse: RuntimeClassificationSyncExportsDTO = APIClient.shared.get(path: "/api/v1/runtime-registry/classification-sync/exports?limit=5")
-            async let startupResponse: StartupStatusResponseDTO = APIClient.shared.get(path: "/api/v1/startup/status")
-            async let computeSummaryResponse: ComputeRunSummaryDTO = APIClient.shared.get(path: "/api/v1/compute/runs/summary?window_hours=24")
-            async let computeRouteResponse: ComputeRouteRegistryDTO = APIClient.shared.get(path: "/api/v1/compute/runs/routes")
-            let response = try await stateResponse
-            let runtime = try await runtimeResponse
-            let syncPreview = try await syncResponse
-            let syncExports = try await syncExportsResponse
-            let startup = try await startupResponse
-            let summary = try await computeSummaryResponse
-            let computeRoutes = try await computeRouteResponse
+        // L5: partial-load resilience — all 7 fire in parallel via async let,
+        // but each is awaited with try? so one unavailable endpoint doesn't
+        // blank the entire Runtime screen.
+        async let stateResponse: StateRegistryResponse = APIClient.shared.get(path: "/api/v1/state-registry?limit=80")
+        async let runtimeResponse: RuntimeRegistryResponseDTO = APIClient.shared.get(path: "/api/v1/runtime-registry?limit=120")
+        async let syncResponse: RuntimeClassificationSyncPreviewDTO = APIClient.shared.get(path: "/api/v1/runtime-registry/classification-sync/preview?limit=20")
+        async let syncExportsResponse: RuntimeClassificationSyncExportsDTO = APIClient.shared.get(path: "/api/v1/runtime-registry/classification-sync/exports?limit=5")
+        async let startupResponse: StartupStatusResponseDTO = APIClient.shared.get(path: "/api/v1/startup/status")
+        async let computeSummaryResponse: ComputeRunSummaryDTO = APIClient.shared.get(path: "/api/v1/compute/runs/summary?window_hours=24")
+        async let computeRouteResponse: ComputeRouteRegistryDTO = APIClient.shared.get(path: "/api/v1/compute/runs/routes")
+
+        if let response = try? await stateResponse {
             tags = response.items.sorted { lhs, rhs in
                 if lhs.stale != rhs.stale { return lhs.stale && !rhs.stale }
                 return lhs.tagId < rhs.tagId
             }
+        } else {
+            tags = []
+        }
+
+        if let runtime = try? await runtimeResponse {
             runtimeRegistrySummary = runtime.summary
             runtimeRegistryGeneratedAt = runtime.generatedAt
-            classificationSyncPreview = syncPreview
-            classificationSyncExports = syncExports.items
-            startupStatus = startup
-            computeSummary = summary
-            computeRouteRegistry = computeRoutes
             runtimeUnits = runtime.items.sorted { lhs, rhs in
                 if lhs.statusSort != rhs.statusSort { return lhs.statusSort < rhs.statusSort }
                 if lhs.kind != rhs.kind { return lhs.kind < rhs.kind }
                 return lhs.name < rhs.name
             }
-        } catch {
-            tags = []
-            runtimeUnits = []
+        } else {
             runtimeRegistrySummary = nil
             runtimeRegistryGeneratedAt = nil
-            classificationSyncPreview = nil
-            classificationSyncExports = []
-            startupStatus = nil
-            computeSummary = nil
-            computeRouteRegistry = nil
-            errorMessage = "Runtime state unavailable."
+            runtimeUnits = []
+            errorMessage = "Fleet registry unavailable."
         }
+
+        classificationSyncPreview = try? await syncResponse
+        classificationSyncExports = (try? await syncExportsResponse)?.items ?? []
+        startupStatus = try? await startupResponse
+        computeSummary = try? await computeSummaryResponse
+        computeRouteRegistry = try? await computeRouteResponse
     }
 
     @MainActor
