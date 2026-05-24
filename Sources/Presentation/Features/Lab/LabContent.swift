@@ -120,9 +120,18 @@ enum LabContent {
             tint: AppColors.accentElectric
         ),
         LabStackLayer(
+            id: "nats",
+            title: "NATS",
+            oneLine: "Nerve bus · Track B envelopes · agent inbox/events wire",
+            status: .live,
+            owner: "MAU",
+            icon: "point.3.connected.trianglepath.dotted",
+            tint: AppColors.accentSuccess
+        ),
+        LabStackLayer(
             id: "pod",
             title: "Pod",
-            oneLine: "Tony's iPad/iPhone cockpit · SwiftUI · 8 tabs",
+            oneLine: "Tony's iPad/iPhone cockpit · SwiftUI · 7 tabs",
             status: .building,
             owner: "MAU",
             icon: "ipad.landscape",

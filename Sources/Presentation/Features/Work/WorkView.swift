@@ -910,6 +910,7 @@ final class WorkViewModel {
     var selectedSupportLane: String?
     var filterDispatchableOnly = false
     var filterNoiseReviewOnly = false
+    var filterProtectedOnly = false
     var priorityToast: PriorityToast?
 
     // MARK: Suggestions
@@ -972,6 +973,7 @@ final class WorkViewModel {
             if let selectedSupportLane, (flow.supportLane ?? flow.workerLane ?? "standard") != selectedSupportLane { return false }
             if filterDispatchableOnly && !flow.dispatchable { return false }
             if filterNoiseReviewOnly && !flow.noiseReview { return false }
+            if filterProtectedOnly && !flow.protected { return false }
             return true
         }
     }
@@ -1014,6 +1016,9 @@ final class WorkViewModel {
         if filterNoiseReviewOnly {
             chips.append(ActiveFlowChip(id: "noise_review", label: "Noise review"))
         }
+        if filterProtectedOnly {
+            chips.append(ActiveFlowChip(id: "protected", label: "Protected"))
+        }
         return chips
     }
 
@@ -1039,6 +1044,7 @@ final class WorkViewModel {
         case "support_lane": selectedSupportLane = nil
         case "dispatchable": filterDispatchableOnly = false
         case "noise_review": filterNoiseReviewOnly = false
+        case "protected": filterProtectedOnly = false
         default: break
         }
     }
@@ -1050,7 +1056,7 @@ final class WorkViewModel {
         } else if filter == "noise_review" {
             filterNoiseReviewOnly = true
         } else if filter == "protected" {
-            selectedSupportLane = supportLaneOptions.first { $0.contains("protected") }
+            filterProtectedOnly = true
         } else if flowStateOptions.contains(filter) {
             selectedFlowState = filter
         } else if ownerOptions.contains(filter) {
@@ -1093,8 +1099,8 @@ final class WorkViewModel {
         suggestionsError = nil
         defer { isLoadingSuggestions = false }
         do {
-            let items: [SchoolhouseSuggestion] = try await APIClient.shared.get(path: "/api/v1/schoolhouse/suggestions?status=proposed&limit=7")
-            suggestions = items.sorted { $0.sortScore > $1.sortScore }
+            let response: WorkListResponse<SchoolhouseSuggestion> = try await APIClient.shared.get(path: "/api/v1/schoolhouse/suggestions?status=proposed&limit=7")
+            suggestions = response.items.sorted { $0.sortScore > $1.sortScore }
         } catch {
             suggestionsError = "Suggestions unavailable"
         }
@@ -1137,11 +1143,13 @@ final class WorkViewModel {
             }
             // Per ticket 7d4c89a7 (UUID→name resolution): fetch tickets AND agents in parallel,
             // resolve assigneeAgentId UUIDs to names client-side.
-            async let ticketsAsync: [TicketListItem] = APIClient.shared.get(path: "/api/v1/tickets?status=open&limit=200")
-            async let agentsAsync: [AgentNameOnly] = APIClient.shared.get(path: "/api/v1/agents?limit=200")
+            async let ticketsAsync: WorkListResponse<TicketListItem> = APIClient.shared.get(path: "/api/v1/tickets?status=open&limit=200")
+            async let agentsAsync: WorkListResponse<AgentNameOnly> = APIClient.shared.get(path: "/api/v1/agents?limit=200")
 
-            let raw = try await ticketsAsync
-            let agentList = (try? await agentsAsync) ?? []
+            let ticketResponse = try await ticketsAsync
+            let agentResponse = try? await agentsAsync
+            let raw = ticketResponse.items
+            let agentList = agentResponse?.items ?? []
             let agentNames: [String: String] = Dictionary(uniqueKeysWithValues: agentList.map { ($0.id, $0.name) })
 
             openTicketCount = raw.count
@@ -1373,6 +1381,35 @@ private struct TicketPatchResponse: Decodable {
 
 private struct ProjectPatchResponse: Decodable {
     let id: UUID
+}
+
+private struct WorkListResponse<Item: Decodable>: Decodable {
+    let items: [Item]
+
+    init(from decoder: Decoder) throws {
+        if let container = try? decoder.singleValueContainer(),
+           let values = try? container.decode([Item].self) {
+            items = values
+            return
+        }
+
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        if let values = try? container.decode([Item].self, forKey: .items) {
+            items = values
+        } else if let values = try? container.decode([Item].self, forKey: .results) {
+            items = values
+        } else if let values = try? container.decode([Item].self, forKey: .data) {
+            items = values
+        } else {
+            items = []
+        }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case items
+        case results
+        case data
+    }
 }
 
 private struct WorkTicketFlowReviewDTO: Decodable {

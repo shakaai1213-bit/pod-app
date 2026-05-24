@@ -29,14 +29,14 @@ struct LabView: View {
                         .padding(.top, 44)
                         .padding(.bottom, 8)
 
-                    boardsSection
-                    architectureSection
                     stackSection
                     fishSection
                     workflowsSection
                     flywheelSection
                     buildingSection
                     retiredSection
+                    boardsSection
+                    architectureSection
                 }
                 .frame(maxWidth: 920, alignment: .leading)
                 .padding(.horizontal, 16)
@@ -264,20 +264,39 @@ struct LabView: View {
                 }
             }
         } body: {
-            VStack(alignment: .leading, spacing: 6) {
-                ArchitectureDiagramCodeBlock(
-                    text: architectureModel.previewText,
-                    height: 118
-                )
-                .overlay(alignment: .bottomTrailing) {
-                    Image(systemName: "arrow.up.left.and.arrow.down.right")
-                        .font(.system(size: 10, weight: .bold))
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(AppColors.accentElectric)
-                        .frame(width: 24, height: 24)
-                        .background(AppColors.backgroundSecondary.opacity(0.94))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                        .padding(7)
+                        .frame(width: 28, height: 28)
+                        .background(AppColors.accentElectric.opacity(0.1))
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Open full architecture map")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(AppColors.textPrimary)
+                            .lineLimit(1)
+                        Text("Mermaid source · zoom and scroll")
+                            .font(.system(size: 11))
+                            .foregroundColor(AppColors.textTertiary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(AppColors.textTertiary)
                 }
+                .padding(10)
+                .background(AppColors.backgroundPrimary)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(AppColors.border, lineWidth: 0.5)
+                )
 
                 if let error = architectureModel.error {
                     Text(error)
