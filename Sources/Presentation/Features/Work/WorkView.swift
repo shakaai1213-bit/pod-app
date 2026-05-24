@@ -219,6 +219,30 @@ struct WorkView: View {
                 )
                 Spacer(minLength: 0)
             }
+
+            if let activation = digest.activation, !activation.items.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(activation.items.prefix(4)) { item in
+                        HStack(alignment: .top, spacing: 6) {
+                            Image(systemName: "person.crop.circle.badge.exclamationmark")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(AppColors.accentWarning)
+                                .frame(width: 14, height: 14)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("\(item.agentName.capitalized) · \(item.statusLabel)")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundColor(AppColors.textPrimary)
+                                    .lineLimit(1)
+                                Text(item.recommendedAction)
+                                    .font(.system(size: 10))
+                                    .foregroundColor(AppColors.textSecondary)
+                                    .lineLimit(2)
+                            }
+                        }
+                    }
+                }
+                .padding(.top, 2)
+            }
         }
         .padding(9)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1694,12 +1718,35 @@ struct SchoolhouseDigestActivation: Decodable, Hashable {
     let compliantAgents: Int
     let attentionCount: Int
     let byStatus: [String: Int]
+    let items: [SchoolhouseDigestActivationItem]
 
     enum CodingKeys: String, CodingKey {
+        case items
         case totalAgents = "total_agents"
         case compliantAgents = "compliant_agents"
         case attentionCount = "attention_count"
         case byStatus = "by_status"
+    }
+}
+
+struct SchoolhouseDigestActivationItem: Decodable, Identifiable, Hashable {
+    let agentName: String
+    let status: String
+    let missing: [String]
+    let recommendedAction: String
+    let minutesSinceHeartbeat: Int?
+
+    var id: String { "\(agentName)-\(status)" }
+
+    var statusLabel: String {
+        status.replacingOccurrences(of: "_", with: " ")
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case status, missing
+        case agentName = "agent_name"
+        case recommendedAction = "recommended_action"
+        case minutesSinceHeartbeat = "minutes_since_heartbeat"
     }
 }
 
