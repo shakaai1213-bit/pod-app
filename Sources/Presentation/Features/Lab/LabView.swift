@@ -18,7 +18,8 @@ struct LabView: View {
     @State private var workflowsExpanded = false
     @State private var flywheelExpanded  = true
     @State private var buildingExpanded  = true
-    @State private var retiredExpanded   = false
+    @State private var retiredExpanded      = false
+    @State private var teamBuildingExpanded = true
     @State private var expandedThemes: Set<String> = ["strategy", "surfaces", "substrate", "health", "doctrine"]
 
     var body: some View {
@@ -36,6 +37,7 @@ struct LabView: View {
                     flywheelSection
                     buildingSection
                     retiredSection
+                    teamBuildingSection
                     boardsSection
                     architectureSection
                 }
@@ -711,6 +713,119 @@ struct LabView: View {
                 }
             }
         }
+    }
+
+    // MARK: - TEAM BUILDING MAP section
+
+    private struct TeamMapAgent {
+        let emoji: String
+        let name: String
+        let mac: String       // "shaka" | "chief"
+        let themeIds: [String]
+        let fish: String?
+        let flywheelSteps: [String]
+    }
+
+    private static let teamMapAgents: [TeamMapAgent] = [
+        .init(emoji: "🌺", name: "Aloha",  mac: "shaka", themeIds: ["strategy", "doctrine"],          fish: nil,          flywheelSteps: ["Design", "Codify"]),
+        .init(emoji: "🪝", name: "Maui",   mac: "shaka", themeIds: ["surfaces", "substrate"],         fish: "Starfish 🫠", flywheelSteps: ["Build", "Learn"]),
+        .init(emoji: "🪸", name: "Coral",  mac: "shaka", themeIds: ["health"],                        fish: nil,          flywheelSteps: ["Learn"]),
+        .init(emoji: "✨", name: "Aurora", mac: "shaka", themeIds: ["doctrine", "strategy"],          fish: nil,          flywheelSteps: ["Codify", "Learn"]),
+        .init(emoji: "🐠", name: "Reef",   mac: "chief", themeIds: ["health", "substrate"],           fish: nil,          flywheelSteps: ["Learn"]),
+        .init(emoji: "👑", name: "Chief",  mac: "chief", themeIds: ["strategy"],                      fish: "Chieffish",  flywheelSteps: ["Earn"]),
+    ]
+
+    private var teamBuildingSection: some View {
+        sectionCard {
+            sectionHeader(
+                title: "TEAM BUILDING MAP",
+                count: Self.teamMapAgents.count,
+                expanded: teamBuildingExpanded
+            )
+            .onTapGesture {
+                withAnimation(.easeInOut(duration: 0.15)) { teamBuildingExpanded.toggle() }
+            }
+        } body: {
+            if teamBuildingExpanded {
+                VStack(spacing: 0) {
+                    ForEach(Array(Self.teamMapAgents.enumerated()), id: \.offset) { idx, agent in
+                        teamMapRow(agent)
+                        if idx < Self.teamMapAgents.count - 1 {
+                            Divider().background(AppColors.border)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func teamMapRow(_ agent: TeamMapAgent) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            // Agent identity
+            VStack(alignment: .center, spacing: 2) {
+                Text(agent.emoji)
+                    .font(.system(size: 20))
+                Text(agent.name)
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundColor(AppColors.textSecondary)
+                Text(agent.mac)
+                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .foregroundColor(AppColors.textTertiary)
+            }
+            .frame(width: 46)
+
+            VStack(alignment: .leading, spacing: 6) {
+                // Theme chips
+                HStack(spacing: 4) {
+                    ForEach(agent.themeIds, id: \.self) { themeId in
+                        if let theme = Self.boardThemes.first(where: { $0.id == themeId }) {
+                            HStack(spacing: 3) {
+                                Text(theme.emoji)
+                                    .font(.system(size: 9))
+                                Text(theme.name)
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundColor(AppColors.textPrimary)
+                            }
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(AppColors.backgroundTertiary)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 4)
+                                    .stroke(AppColors.border, lineWidth: 0.5)
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+
+                // Fish + Flywheel row
+                HStack(spacing: 8) {
+                    if let fish = agent.fish {
+                        HStack(spacing: 3) {
+                            Image(systemName: "fish")
+                                .font(.system(size: 8, weight: .semibold))
+                                .foregroundColor(AppColors.accentElectric)
+                            Text(fish)
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundColor(AppColors.accentElectric)
+                        }
+                    }
+                    HStack(spacing: 3) {
+                        Image(systemName: "arrow.trianglehead.2.clockwise")
+                            .font(.system(size: 8))
+                            .foregroundColor(AppColors.textTertiary)
+                        Text(agent.flywheelSteps.joined(separator: " · "))
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundColor(AppColors.textTertiary)
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
     }
 
     // MARK: - Shared bits
