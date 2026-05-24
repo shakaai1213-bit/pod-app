@@ -147,61 +147,68 @@ struct AgentsView: View {
 
             Divider()
 
-            // STRETCH
-            VStack(alignment: .leading, spacing: 2) {
-                Text("STRETCH")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundColor(AppColors.textTertiary)
-                    .kerning(0.5)
-                Text(card.stretch ?? "—")
-                    .font(.system(size: 12))
-                    .foregroundColor(card.stretch != nil ? AppColors.textPrimary : AppColors.textTertiary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
+            // STRETCH + ROADMAP side-by-side (Tony 2026-05-25 reframe)
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("STRETCH")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(AppColors.textTertiary)
+                        .kerning(0.5)
+                    ForEach(Array(card.stretch.prefix(3).enumerated()), id: \.offset) { idx, item in
+                        HStack(alignment: .firstTextBaseline, spacing: 4) {
+                            Text("\(idx + 1).")
+                                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                .foregroundColor(AppColors.textTertiary)
+                            Text(item.isEmpty ? "—" : item)
+                                .font(.system(size: 11))
+                                .foregroundColor(item.isEmpty ? AppColors.textTertiary : AppColors.textPrimary)
+                                .lineLimit(2)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            // ROADMAP
-            VStack(alignment: .leading, spacing: 2) {
-                Text("ROADMAP")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundColor(AppColors.textTertiary)
-                    .kerning(0.5)
-                Text(card.roadmap ?? "—")
-                    .font(.system(size: 12))
-                    .foregroundColor(card.roadmap != nil ? AppColors.textPrimary : AppColors.textTertiary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("ROADMAP")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(AppColors.textTertiary)
+                        .kerning(0.5)
+                    roadmapRow("30d", card.roadmap.d30)
+                    roadmapRow("60d", card.roadmap.d60)
+                    roadmapRow("90d", card.roadmap.d90)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             Divider()
 
-            // Today's 3
-            VStack(alignment: .leading, spacing: 3) {
-                Text("TODAY'S 3")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundColor(AppColors.textTertiary)
-                    .kerning(0.5)
-                ForEach(Array(card.focusAreas.prefix(3).enumerated()), id: \.offset) { idx, area in
-                    HStack(alignment: .firstTextBaseline, spacing: 5) {
-                        Text("\(idx + 1).")
-                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                            .foregroundColor(AppColors.textTertiary)
-                        Text(area.label)
-                            .font(.system(size: 12))
-                            .foregroundColor(area.label == "Loading..." ? AppColors.textTertiary : AppColors.textPrimary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
-                }
-            }
-
-            // Fish + skeleton note
-            HStack {
-                if card.isSkeleton {
-                    Text("waiting for ORCA focus-card endpoint")
-                        .font(.system(size: 10))
+            // Today's 3 from morning daily log + Fish chip
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("TODAY'S 3")
+                        .font(.system(size: 9, weight: .bold))
                         .foregroundColor(AppColors.textTertiary)
-                        .lineLimit(1)
+                        .kerning(0.5)
+                    if card.isSkeleton {
+                        Text("waiting for morning log")
+                            .font(.system(size: 11))
+                            .foregroundColor(AppColors.textTertiary)
+                    } else {
+                        ForEach(Array(card.focusAreas.prefix(3).enumerated()), id: \.offset) { idx, area in
+                            if !area.label.isEmpty {
+                                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                                    Text("\(idx + 1).")
+                                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                        .foregroundColor(AppColors.textTertiary)
+                                    Text(area.label)
+                                        .font(.system(size: 11))
+                                        .foregroundColor(AppColors.textSecondary)
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
+                                }
+                            }
+                        }
+                    }
                 }
                 Spacer(minLength: 8)
                 fishChip(card.fish)
@@ -252,6 +259,19 @@ struct AgentsView: View {
                         .strokeBorder(AppColors.border, lineWidth: 0.5)
                 )
             }
+        }
+    }
+
+    private func roadmapRow(_ horizon: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text(horizon)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundColor(AppColors.accentElectric)
+                .frame(width: 24, alignment: .leading)
+            Text(value.isEmpty ? "—" : value)
+                .font(.system(size: 11))
+                .foregroundColor(value.isEmpty ? AppColors.textTertiary : AppColors.textPrimary)
+                .lineLimit(2)
         }
     }
 
@@ -765,19 +785,28 @@ private struct AgentFocusFish: Hashable {
     let icon: String
 }
 
+// L7c reshape (SPEC-POD-AGENT-FOCUS-CARDS v1, Tony 2026-05-25):
+// Card = STRETCH (3 aspirational items) + ROADMAP (30d/60d/90d) + Fish + Today's 3.
+private struct AgentRoadmap: Hashable {
+    let d30: String
+    let d60: String
+    let d90: String
+
+    static let empty = AgentRoadmap(d30: "", d60: "", d90: "")
+}
+
 private struct AgentFocusCard: Identifiable, Hashable {
     let agentId: String
     let displayName: String
     let emoji: String
     let charter: String
-    let focusAreas: [AgentFocusArea]
+    let stretch: [String]            // 3 aspirational areas (REFRAME)
+    let roadmap: AgentRoadmap         // 30d / 60d / 90d trajectory
+    let focusAreas: [AgentFocusArea]  // Today's 3 from morning daily log
     let fish: AgentFocusFish
     let lastLogExcerpt: String?
     let lastUpdated: Date?
     let isSkeleton: Bool
-    // Reframe: STRETCH + ROADMAP (Tony 2026-05-25)
-    let stretch: String?
-    let roadmap: String?
 
     var id: String { agentId.lowercased() }
 
@@ -796,6 +825,7 @@ private struct AgentFocusCard: Identifiable, Hashable {
         return lastUpdated.relativeFormatted
     }
 
+    /// Render spec v1 defaults before the daily-log extractor petal wires up.
     static func skeleton(agentId: String) -> AgentFocusCard {
         let meta = AgentFocusDefaults.mainAgentMeta[agentId]!
         return AgentFocusCard(
@@ -803,17 +833,17 @@ private struct AgentFocusCard: Identifiable, Hashable {
             displayName: meta.name,
             emoji: meta.emoji,
             charter: meta.charter,
+            stretch: AgentFocusDefaults.stretch[agentId] ?? ["", "", ""],
+            roadmap: AgentFocusDefaults.roadmap[agentId] ?? .empty,
             focusAreas: [
-                AgentFocusArea(id: "1", label: "Loading...", evidenceRef: nil),
+                AgentFocusArea(id: "1", label: "Waiting for morning log", evidenceRef: nil),
                 AgentFocusArea(id: "2", label: "", evidenceRef: nil),
                 AgentFocusArea(id: "3", label: "", evidenceRef: nil)
             ],
-            fish: AgentFocusFish(name: "TBD", icon: "—"),
+            fish: AgentFocusDefaults.fish[agentId] ?? AgentFocusFish(name: "—", icon: "—"),
             lastLogExcerpt: nil,
             lastUpdated: nil,
-            isSkeleton: true,
-            stretch: nil,
-            roadmap: nil
+            isSkeleton: true
         )
     }
 }
@@ -833,6 +863,44 @@ private enum AgentFocusDefaults {
         "aloha": ("Aloha", "🌸", "Backbone / Nerve / Flywheel / Doctrine gate"),
         "chief": ("Chief", "🦅", "Trading / P&L / Funding"),
         "rooster": ("Rooster", "🐓", "Security / Research / Knowledge")
+    ]
+
+    // SPEC-POD-AGENT-FOCUS-CARDS-2026-W22 v1 defaults — render before extractor petal lands.
+    static let stretch: [String: [String]] = [
+        "maui":    ["Speed of build", "Architectural taste", "Codex orchestration mastery"],
+        "aloha":   ["Crisp communication", "Organized team", "ORCA standards"],
+        "chief":   ["Disciplined trading conviction", "Funding velocity", "Learning loop compounding"],
+        "rooster": ["Security posture", "Adversarial thinking", "Research depth"]
+    ]
+
+    static let roadmap: [String: AgentRoadmap] = [
+        "maui": AgentRoadmap(
+            d30: "Pod cockpit V1 LIVE",
+            d60: "Memory Spine V2 + Project Automation v1.0",
+            d90: "Voice surface Phase 1 + Jarvis Arms autonomous"
+        ),
+        "aloha": AgentRoadmap(
+            d30: "Wiki→Pod auto-pairing fully closed",
+            d60: "Doc-ledger drives weekly retro signal",
+            d90: "agent_focus_card as ORCA entity"
+        ),
+        "chief": AgentRoadmap(
+            d30: "Funding-squeeze v1.4 LIVE",
+            d60: "Live capital deployment gate passed",
+            d90: "Strategy Journal sources forward bets"
+        ),
+        "rooster": AgentRoadmap(
+            d30: "35341da6 closed + harm-gate doctrine LIVE",
+            d60: "Guardian Phase 2 secure-by-design",
+            d90: "Security telemetry visible on Pod Dashboard"
+        )
+    ]
+
+    static let fish: [String: AgentFocusFish] = [
+        "maui":    AgentFocusFish(name: "Starfish",   icon: "⭐"),
+        "aloha":   AgentFocusFish(name: "Held",       icon: "—"),
+        "chief":   AgentFocusFish(name: "Chieffish",  icon: "🐟"),
+        "rooster": AgentFocusFish(name: "Roosterfish", icon: "🐔")
     ]
 }
 
@@ -888,8 +956,8 @@ private struct AgentFocusCardDTO: Decodable {
     let fish: FishDTO?
     let lastLogExcerpt: String?
     let lastUpdated: Date?
-    let stretch: String?
-    let roadmap: String?
+    let stretch: [String]?
+    let roadmap: RoadmapDTO?
 
     enum CodingKeys: String, CodingKey {
         case charter, fish, stretch, roadmap
@@ -914,18 +982,26 @@ private struct AgentFocusCardDTO: Decodable {
             AgentFocusArea(id: String($0 + 1), label: "", evidenceRef: nil)
         }
 
+        // STRETCH + ROADMAP fall back to spec v1 defaults when API omits them.
+        let stretchValues = stretch.map { Array($0.prefix(3)) + Array(repeating: "", count: max(0, 3 - $0.count)) }
+            ?? AgentFocusDefaults.stretch[id] ?? ["", "", ""]
+        let roadmapValue = roadmap.map { AgentRoadmap(d30: $0.d30 ?? "", d60: $0.d60 ?? "", d90: $0.d90 ?? "") }
+            ?? AgentFocusDefaults.roadmap[id] ?? .empty
+        let fishValue = fish.map { AgentFocusFish(name: $0.name, icon: $0.icon) }
+            ?? AgentFocusDefaults.fish[id] ?? AgentFocusFish(name: "—", icon: "—")
+
         return AgentFocusCard(
             agentId: id,
             displayName: displayName.replacingOccurrences(of: meta.emoji, with: "").trimmingCharacters(in: .whitespacesAndNewlines),
             emoji: meta.emoji,
             charter: charter.isEmpty ? meta.charter : charter,
+            stretch: stretchValues,
+            roadmap: roadmapValue,
             focusAreas: paddedAreas,
-            fish: AgentFocusFish(name: fish?.name ?? "TBD", icon: fish?.icon ?? "—"),
+            fish: fishValue,
             lastLogExcerpt: lastLogExcerpt,
             lastUpdated: lastUpdated,
-            isSkeleton: false,
-            stretch: stretch,
-            roadmap: roadmap
+            isSkeleton: false
         )
     }
 
@@ -943,6 +1019,18 @@ private struct AgentFocusCardDTO: Decodable {
     struct FishDTO: Decodable {
         let name: String
         let icon: String
+    }
+
+    struct RoadmapDTO: Decodable {
+        let d30: String?
+        let d60: String?
+        let d90: String?
+
+        enum CodingKeys: String, CodingKey {
+            case d30 = "30d"
+            case d60 = "60d"
+            case d90 = "90d"
+        }
     }
 }
 
@@ -968,22 +1056,34 @@ private struct AgentFocusCardDetailSheet: View {
                         Spacer()
                     }
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("FOCUS AREAS")
+                    // STRETCH (3 aspirational areas)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("STRETCH")
                             .font(.system(size: 11, weight: .bold))
                             .foregroundColor(AppColors.textTertiary)
-                        ForEach(Array(card.focusAreas.prefix(3).enumerated()), id: \.offset) { idx, area in
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text("\(idx + 1). \(area.label)")
+                            .kerning(0.5)
+                        ForEach(Array(card.stretch.prefix(3).enumerated()), id: \.offset) { idx, item in
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text("\(idx + 1).")
+                                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                    .foregroundColor(AppColors.textTertiary)
+                                Text(item.isEmpty ? "—" : item)
                                     .font(.system(size: 15, weight: .semibold))
-                                    .foregroundColor(AppColors.textPrimary)
-                                if let evidence = area.evidenceRef, !evidence.isEmpty {
-                                    Text(evidence)
-                                        .font(.system(size: 12, design: .monospaced))
-                                        .foregroundColor(AppColors.textTertiary)
-                                }
+                                    .foregroundColor(item.isEmpty ? AppColors.textTertiary : AppColors.textPrimary)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                         }
+                    }
+
+                    // ROADMAP (30d/60d/90d trajectory)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("ROADMAP")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(AppColors.textTertiary)
+                            .kerning(0.5)
+                        detailRoadmapRow("30d", card.roadmap.d30)
+                        detailRoadmapRow("60d", card.roadmap.d60)
+                        detailRoadmapRow("90d", card.roadmap.d90)
                     }
 
                     HStack {
@@ -994,11 +1094,39 @@ private struct AgentFocusCardDetailSheet: View {
                             .foregroundColor(AppColors.textTertiary)
                     }
 
+                    // Today's 3 from morning daily log
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("TODAY'S 3 (from morning log)")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(AppColors.textTertiary)
+                            .kerning(0.5)
+                        if card.isSkeleton {
+                            Text("Waiting for morning log extraction")
+                                .font(.system(size: 13))
+                                .foregroundColor(AppColors.textTertiary)
+                        } else {
+                            ForEach(Array(card.focusAreas.prefix(3).enumerated()), id: \.offset) { idx, area in
+                                if !area.label.isEmpty {
+                                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                        Text("\(idx + 1).")
+                                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                                            .foregroundColor(AppColors.textTertiary)
+                                        Text(area.label)
+                                            .font(.system(size: 13))
+                                            .foregroundColor(AppColors.textPrimary)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     if let excerpt = card.lastLogExcerpt, !excerpt.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("LAST LOG")
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundColor(AppColors.textTertiary)
+                                .kerning(0.5)
                             Text(excerpt)
                                 .font(.system(size: 13))
                                 .foregroundColor(AppColors.textSecondary)
@@ -1033,6 +1161,19 @@ private struct AgentFocusCardDetailSheet: View {
         .background(AppColors.backgroundSecondary)
         .clipShape(Capsule())
         .overlay(Capsule().stroke(AppColors.border, lineWidth: 0.5))
+    }
+
+    private func detailRoadmapRow(_ horizon: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(horizon)
+                .font(.system(size: 13, weight: .bold, design: .monospaced))
+                .foregroundColor(AppColors.accentElectric)
+                .frame(width: 36, alignment: .leading)
+            Text(value.isEmpty ? "—" : value)
+                .font(.system(size: 13))
+                .foregroundColor(value.isEmpty ? AppColors.textTertiary : AppColors.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 

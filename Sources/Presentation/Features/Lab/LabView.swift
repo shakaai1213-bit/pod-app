@@ -37,9 +37,9 @@ struct LabView: View {
                     flywheelSection
                     buildingSection
                     retiredSection
-                    teamBuildingSection
                     boardsSection
                     architectureSection
+                    teamBuildingSection
                 }
                 .frame(maxWidth: 920, alignment: .leading)
                 .padding(.horizontal, 16)
@@ -726,13 +726,14 @@ struct LabView: View {
         let flywheelSteps: [String]
     }
 
+    // TEAM-BUILDING-MAP.md per-agent matrix (Aloha 2026-05-25)
     private static let teamMapAgents: [TeamMapAgent] = [
-        .init(emoji: "🌺", name: "Aloha",  mac: "shaka", themeIds: ["strategy", "doctrine"],          fish: nil,          flywheelSteps: ["Design", "Codify"]),
-        .init(emoji: "🪝", name: "Maui",   mac: "shaka", themeIds: ["surfaces", "substrate"],         fish: "Starfish 🫠", flywheelSteps: ["Build", "Learn"]),
-        .init(emoji: "🪸", name: "Coral",  mac: "shaka", themeIds: ["health"],                        fish: nil,          flywheelSteps: ["Learn"]),
-        .init(emoji: "✨", name: "Aurora", mac: "shaka", themeIds: ["doctrine", "strategy"],          fish: nil,          flywheelSteps: ["Codify", "Learn"]),
-        .init(emoji: "🐠", name: "Reef",   mac: "chief", themeIds: ["health", "substrate"],           fish: nil,          flywheelSteps: ["Learn"]),
-        .init(emoji: "👑", name: "Chief",  mac: "chief", themeIds: ["strategy"],                      fish: "Chieffish",  flywheelSteps: ["Earn"]),
+        .init(emoji: "🪝", name: "Maui",    mac: "shaka", themeIds: ["surfaces", "substrate"], fish: "Starfish ⭐",   flywheelSteps: ["Build", "Codify"]),
+        .init(emoji: "🌸", name: "Aloha",   mac: "shaka", themeIds: ["doctrine", "strategy"],  fish: nil,            flywheelSteps: ["Design", "Codify"]),
+        .init(emoji: "🦅", name: "Chief",   mac: "chief", themeIds: ["strategy"],              fish: "Chieffish 🐟", flywheelSteps: ["Earn"]),
+        .init(emoji: "🐓", name: "Rooster", mac: "chief", themeIds: ["doctrine", "strategy"],  fish: "Roosterfish 🐔", flywheelSteps: ["Learn", "Codify"]),
+        .init(emoji: "🪸", name: "Coral",   mac: "shaka", themeIds: ["health"],                fish: nil,            flywheelSteps: ["Learn"]),
+        .init(emoji: "🐡", name: "Reef",    mac: "chief", themeIds: ["health", "substrate"],   fish: nil,            flywheelSteps: ["Learn"]),
     ]
 
     private var teamBuildingSection: some View {
