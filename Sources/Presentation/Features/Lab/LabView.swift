@@ -26,7 +26,7 @@ struct LabView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     pageHeader
                         .padding(.horizontal, 20)
-                        .padding(.top, 60)
+                        .padding(.top, 44)
                         .padding(.bottom, 8)
 
                     boardsSection
@@ -38,6 +38,7 @@ struct LabView: View {
                     buildingSection
                     retiredSection
                 }
+                .frame(maxWidth: 920, alignment: .leading)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 80)
             }
@@ -135,12 +136,23 @@ struct LabView: View {
                 Image(systemName: "square.grid.2x2.fill")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(AppColors.accentElectric)
-                Text("BOARDS")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(AppColors.textPrimary)
-                Text("· \(boardsModel.boards.count)")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(AppColors.textSecondary)
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 5) {
+                        Text("BOARDS")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(AppColors.textPrimary)
+                        Text("\(boardsModel.boards.count)")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundColor(AppColors.textSecondary)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(AppColors.backgroundTertiary.opacity(0.65))
+                            .clipShape(Capsule())
+                    }
+                    Text("System board map")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(AppColors.textTertiary)
+                }
                 Spacer()
                 if boardsModel.isLoading {
                     ProgressView()
@@ -160,10 +172,9 @@ struct LabView: View {
             VStack(alignment: .leading, spacing: 8) {
                 LazyVGrid(
                     columns: [
-                        GridItem(.flexible(), spacing: 8),
-                        GridItem(.flexible(), spacing: 8)
+                        GridItem(.adaptive(minimum: 86, maximum: 126), spacing: 7)
                     ],
-                    spacing: 8
+                    spacing: 7
                 ) {
                     ForEach(boardsModel.boards) { board in
                         boardTile(board)
@@ -185,32 +196,34 @@ struct LabView: View {
     }
 
     private func boardTile(_ board: LabBoardSummary) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 8) {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .center, spacing: 5) {
                 Text(board.icon)
-                    .font(.system(size: 22))
-                    .frame(width: 28, height: 28)
+                    .font(.system(size: 15))
+                    .frame(width: 18, height: 18)
                 Text(board.displayName)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(AppColors.textPrimary)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
                 Spacer(minLength: 0)
             }
 
-            Spacer(minLength: 0)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("\(board.projectCount) projects")
-                    .font(.system(size: 12, weight: .medium))
+            HStack(spacing: 5) {
+                Text("\(board.projectCount)p")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
                     .foregroundColor(AppColors.textSecondary)
-                Text("\(board.activeCount) active")
-                    .font(.system(size: 11))
+                Text("\(board.activeCount)a")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
                     .foregroundColor(AppColors.textTertiary)
             }
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(AppColors.backgroundTertiary.opacity(0.55))
+            .clipShape(Capsule())
         }
-        .frame(minHeight: 104, alignment: .topLeading)
-        .padding(10)
+        .frame(minHeight: 56, alignment: .topLeading)
+        .padding(7)
         .background(AppColors.backgroundPrimary)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(
@@ -227,39 +240,43 @@ struct LabView: View {
                 Image(systemName: "point.topleft.down.curvedto.point.bottomright.up")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(AppColors.accentElectric)
-                Text("ARCHITECTURE")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(AppColors.textPrimary)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("ARCHITECTURE")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(AppColors.textPrimary)
+                    Text("Canonical stack map")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(AppColors.textTertiary)
+                }
                 Spacer()
                 if architectureModel.isLoading {
                     ProgressView()
                         .scaleEffect(0.65)
                 } else {
-                    Text(architectureModel.sourceLabel)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(AppColors.textTertiary)
+                    HStack(spacing: 8) {
+                        Text(architectureModel.sourceLabel)
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundColor(AppColors.textTertiary)
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(AppColors.accentElectric)
+                    }
                 }
             }
         } body: {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("System map · tap to expand")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(AppColors.textTertiary)
-
+            VStack(alignment: .leading, spacing: 6) {
                 ArchitectureDiagramCodeBlock(
                     text: architectureModel.previewText,
-                    minHeight: 220
+                    height: 118
                 )
-                .frame(maxHeight: 260)
                 .overlay(alignment: .bottomTrailing) {
-                    Label("Expand", systemImage: "arrow.up.left.and.arrow.down.right")
-                        .font(.system(size: 10, weight: .semibold))
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 10, weight: .bold))
                         .foregroundColor(AppColors.accentElectric)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(AppColors.backgroundSecondary.opacity(0.92))
-                        .clipShape(Capsule())
-                        .padding(8)
+                        .frame(width: 24, height: 24)
+                        .background(AppColors.backgroundSecondary.opacity(0.94))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .padding(7)
                 }
 
                 if let error = architectureModel.error {
@@ -1294,18 +1311,19 @@ private struct WikiFileResponse: Decodable {
 
 private struct ArchitectureDiagramCodeBlock: View {
     let text: String
-    let minHeight: CGFloat
+    let height: CGFloat
 
     var body: some View {
         ScrollView([.horizontal, .vertical], showsIndicators: true) {
             Text(text)
-                .font(.system(size: 12, design: .monospaced))
+                .font(.system(size: 11, design: .monospaced))
                 .foregroundColor(AppColors.textPrimary)
                 .textSelection(.enabled)
-                .padding(10)
+                .lineSpacing(2)
+                .padding(9)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(minHeight: minHeight)
+        .frame(height: height)
         .background(AppColors.backgroundPrimary)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(
