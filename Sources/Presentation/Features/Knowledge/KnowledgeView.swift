@@ -1,5 +1,40 @@
 import SwiftUI
 
+// MARK: - Knowledge Chip (L4 — SPEC-POD-LAYOUT-REVAMP-2026-W22 §5)
+
+enum KnowledgeChip: String, CaseIterable, Identifiable {
+    case memory
+    case doctrine
+    case wiki
+    case review
+    case notes
+    case standards
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .memory:    return "Memory"
+        case .doctrine:  return "Doctrine"
+        case .wiki:      return "Wiki"
+        case .review:    return "Review"
+        case .notes:     return "Notes"
+        case .standards: return "Standards"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .memory:    return "brain.head.profile"
+        case .doctrine:  return "square.stack.3d.up"
+        case .wiki:      return "doc.richtext"
+        case .review:    return "tray.full"
+        case .notes:     return "note.text"
+        case .standards: return "books.vertical"
+        }
+    }
+}
+
 // MARK: - Knowledge View
 
 struct KnowledgeView: View {
@@ -16,58 +51,43 @@ struct KnowledgeView: View {
     @State private var isSavingSystemNote = false
     @State private var systemNoteStatus: String?
     @State private var searchText = ""
+    @State private var selectedChip: KnowledgeChip = .memory
 
     // MARK: - Body
 
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottomTrailing) {
-                ScrollView {
-                    VStack(spacing: Theme.lg) {
-                        searchBar
+                VStack(spacing: 0) {
+                    // L4: chip-nav bar
+                    knowledgeChipBar
+                        .padding(.horizontal, Theme.md)
+                        .padding(.top, Theme.xs)
+                        .padding(.bottom, Theme.xs)
+                        .background(AppColors.backgroundPrimary)
 
-                        chronogramSection
-
-                        wikiMirrorSection
-
-                        doctrineBundlesSection
-
-                        docRegistrySection
-
-                        notesAndDecisionsSection
-
-                        reviewQueueSection
-
-                        memoryCandidatesSection
-
-                        categoryGrid
-
-                        if !viewModel.recentStandards.isEmpty {
-                            recentSection
+                    ScrollView {
+                        VStack(spacing: Theme.lg) {
+                            searchBar
+                            knowledgeChipContent
                         }
-
-                        if !viewModel.favoriteStandards.isEmpty {
-                            favoritesSection
-                        }
-
-                        standardsList
+                        .padding(.horizontal, Theme.md)
+                        .padding(.bottom, 100)
                     }
-                    .padding(.horizontal, Theme.md)
-                    .padding(.bottom, 100)
-                }
-                .background(AppColors.backgroundPrimary)
-                .refreshable {
-                    await viewModel.loadStandards()
-                    await viewModel.loadWikiContext()
-                    await viewModel.loadWikiDocuments()
-                    await viewModel.loadDoctrineBundles()
-                    await viewModel.loadDocRegistry()
-                    await viewModel.loadNotes()
-                    await viewModel.loadReviewQueue()
-                    await viewModel.loadRuntimeReviewQueue()
-                    await viewModel.loadReviewSyncPreview()
-                    await viewModel.loadRuntimeSyncPreview()
-                    await viewModel.loadMemoryCandidates()
+                    .background(AppColors.backgroundPrimary)
+                    .refreshable {
+                        await viewModel.loadStandards()
+                        await viewModel.loadWikiContext()
+                        await viewModel.loadWikiDocuments()
+                        await viewModel.loadDoctrineBundles()
+                        await viewModel.loadDocRegistry()
+                        await viewModel.loadNotes()
+                        await viewModel.loadReviewQueue()
+                        await viewModel.loadRuntimeReviewQueue()
+                        await viewModel.loadReviewSyncPreview()
+                        await viewModel.loadRuntimeSyncPreview()
+                        await viewModel.loadMemoryCandidates()
+                    }
                 }
 
                 // FAB
@@ -114,6 +134,77 @@ struct KnowledgeView: View {
                 await viewModel.loadRuntimeSyncPreview()
                 await viewModel.loadMemoryCandidates()
             }
+        }
+    }
+
+    // MARK: - Chip Nav (L4)
+
+    private var knowledgeChipBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: Theme.xs) {
+                ForEach(KnowledgeChip.allCases) { chip in
+                    knowledgeChipButton(for: chip)
+                }
+            }
+        }
+    }
+
+    private func knowledgeChipButton(for chip: KnowledgeChip) -> some View {
+        let isSelected = selectedChip == chip
+        return Button {
+            withAnimation(.easeInOut(duration: 0.15)) { selectedChip = chip }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: chip.icon)
+                    .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
+                Text(chip.title)
+                    .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
+            }
+            .foregroundColor(isSelected ? AppColors.accentElectric : AppColors.textSecondary)
+            .padding(.horizontal, Theme.sm)
+            .padding(.vertical, Theme.xs + 1)
+            .background(
+                Capsule()
+                    .fill(isSelected ? AppColors.backgroundSecondary : Color.clear)
+            )
+            .overlay(
+                Capsule()
+                    .stroke(isSelected ? AppColors.accentElectric.opacity(0.4) : Color.clear, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(chip.title)
+    }
+
+    @ViewBuilder
+    private var knowledgeChipContent: some View {
+        switch selectedChip {
+        case .memory:
+            memoryCandidatesSection
+
+        case .doctrine:
+            doctrineBundlesSection
+            docRegistrySection
+
+        case .wiki:
+            chronogramSection
+            wikiMirrorSection
+
+        case .review:
+            reviewQueueSection
+
+        case .notes:
+            notesAndDecisionsSection
+
+        case .standards:
+            categoryGrid
+            if !viewModel.recentStandards.isEmpty {
+                recentSection
+            }
+            if !viewModel.favoriteStandards.isEmpty {
+                favoritesSection
+            }
+            standardsList
         }
     }
 
