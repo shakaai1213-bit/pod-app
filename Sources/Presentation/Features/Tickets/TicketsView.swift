@@ -1646,41 +1646,39 @@ struct TicketRowView: View {
     private var operationalDebtStrip: some View {
         let debts = viewModel.operationalDebts(for: ticket)
         if !debts.isEmpty {
-            HStack(alignment: .center, spacing: 6) {
+            HStack(alignment: .center, spacing: 5) {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.caption2.weight(.semibold))
                     .foregroundColor(debts.first?.color ?? AppColors.accentWarning)
-                Text("OPS DEBT")
-                    .font(.system(size: 9, weight: .heavy))
-                    .tracking(0.5)
+                Text("Ops debt")
+                    .font(.caption2.weight(.bold))
                     .foregroundColor(debts.first?.color ?? AppColors.accentWarning)
-                Text("\(debts.count)")
-                    .font(.system(size: 9, weight: .semibold).monospacedDigit())
-                    .foregroundColor(AppColors.textTertiary)
-
-                FlowLayout(horizontalSpacing: 5, verticalSpacing: 4) {
-                    ForEach(Array(debts.prefix(4))) { debt in
-                        Text(debt.label)
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundColor(debt.color)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1.5)
-                            .background(debt.color.opacity(0.10))
-                            .clipShape(Capsule())
-                    }
+                ForEach(Array(debts.prefix(3))) { debt in
+                    Text(debt.label)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundColor(debt.color)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(debt.color.opacity(0.12))
+                        .clipShape(Capsule())
+                }
+                if debts.count > 3 {
+                    Text("+\(debts.count - 3)")
+                        .font(.caption2)
+                        .foregroundColor(AppColors.textTertiary)
                 }
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 7)
             .padding(.vertical, 4)
             .background((debts.first?.color ?? AppColors.accentWarning).opacity(0.07))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke((debts.first?.color ?? AppColors.accentWarning).opacity(0.18), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke((debts.first?.color ?? AppColors.accentWarning).opacity(0.18), lineWidth: 0.5)
             )
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("Operational debt: \(debts.map { "\($0.label), \($0.detail)" }.joined(separator: "; "))")
+            .accessibilityLabel("Operational debt: \(debts.map { $0.label }.joined(separator: ", "))")
         }
     }
 
