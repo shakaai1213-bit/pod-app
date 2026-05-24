@@ -3,6 +3,7 @@ import SwiftUI
 struct ArmsTabView: View {
     @State private var viewModel = ArmsViewModel()
     @State private var wakeTarget: ArmTag?
+    @State private var selectedAgent: Agent?
 
     var body: some View {
         NavigationStack {
@@ -21,15 +22,22 @@ struct ArmsTabView: View {
 
                     armsSection
                         .padding(.horizontal, 16)
+                        .padding(.bottom, 18)
+
+                    teamSection
+                        .padding(.horizontal, 16)
                         .padding(.bottom, 90)
                 }
             }
             .background(AppColors.backgroundPrimary.ignoresSafeArea())
-            .refreshable { await viewModel.loadArms() }
+            .refreshable { await viewModel.load() }
             .task { await viewModel.startPolling() }
             .sheet(item: $wakeTarget) { arm in
                 wakeConfirmationSheet(arm)
                     .presentationDetents([.medium])
+            }
+            .sheet(item: $selectedAgent) { agent in
+                AgentDetailSheet(agent: agent)
             }
             .overlay(alignment: .bottom) {
                 if let toast = viewModel.toast {
@@ -52,10 +60,10 @@ struct ArmsTabView: View {
     private var pageHeader: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Arms")
+                Text("Arms + Team")
                     .font(.system(size: 28, weight: .bold))
                     .foregroundColor(AppColors.textPrimary)
-                Text("Codex arm dispatch from live Jarvis tags.")
+                Text("Codex arm dispatch and live crew focus.")
                     .font(.system(size: 14))
                     .foregroundColor(AppColors.textSecondary)
             }
@@ -63,7 +71,7 @@ struct ArmsTabView: View {
             Spacer()
 
             Button {
-                Task { await viewModel.loadArms() }
+                Task { await viewModel.load() }
             } label: {
                 Image(systemName: viewModel.isLoading ? "hourglass" : "arrow.clockwise")
                     .font(.system(size: 17, weight: .semibold))
@@ -79,11 +87,74 @@ struct ArmsTabView: View {
     }
 
     private var armsSection: some View {
-        VStack(spacing: 10) {
-            ForEach(viewModel.arms) { arm in
-                armCard(arm)
+        VStack(alignment: .leading, spacing: 10) {
+            sectionHeader("ARMS", count: viewModel.arms.count)
+
+            VStack(spacing: 10) {
+                ForEach(viewModel.arms) { arm in
+                    armCard(arm)
+                }
             }
         }
+    }
+
+    private var teamSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionHeader("TEAM", count: viewModel.agents.count, suffix: "active")
+
+            VStack(spacing: 0) {
+                if viewModel.agents.isEmpty {
+                    HStack(spacing: 8) {
+                        Image(systemName: "person.3.sequence")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(AppColors.textTertiary)
+                        Text("No active team agents available.")
+                            .font(.system(size: 12))
+                            .foregroundColor(AppColors.textTertiary)
+                        Spacer()
+                    }
+                    .padding(14)
+                } else {
+                    ForEach(Array(viewModel.agents.enumerated()), id: \.element.id) { idx, agent in
+                        VStack(spacing: 0) {
+                            if idx > 0 {
+                                Divider()
+                                    .background(AppColors.border)
+                                    .padding(.leading, 56)
+                            }
+                            agentRow(agent)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    selectedAgent = agent.agent
+                                }
+                        }
+                    }
+                }
+            }
+            .background(AppColors.backgroundSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                    .strokeBorder(AppColors.border, lineWidth: 0.5)
+            )
+        }
+    }
+
+    private func sectionHeader(_ title: String, count: Int, suffix: String? = nil) -> some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(AppColors.textTertiary)
+                .kerning(0.5)
+            Text("·")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(AppColors.textTertiary)
+            Text(suffix.map { "\(count) \($0)" } ?? "\(count)")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(AppColors.accentElectric)
+            Spacer()
+        }
+        .padding(.horizontal, 2)
     }
 
     private func armCard(_ arm: ArmTag) -> some View {
@@ -228,6 +299,56 @@ struct ArmsTabView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
+    private func agentRow(_ agent: AgentSummary) -> some View {
+        HStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(Color(hexString: agent.avatarColor).opacity(0.18))
+                    .frame(width: 28, height: 28)
+                Circle()
+                    .strokeBorder(Color(hexString: agent.avatarColor).opacity(0.42), lineWidth: 0.75)
+                    .frame(width: 28, height: 28)
+                Text(agent.glyph)
+                    .font(.system(size: 16))
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(agent.name)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(AppColors.textPrimary)
+                        .lineLimit(1)
+
+                    Circle()
+                        .fill(agent.statusColor)
+                        .frame(width: 6, height: 6)
+                        .accessibilityLabel("Status \(agent.status.displayName)")
+
+                    if !agent.natsLaneOk {
+                        Image(systemName: "antenna.radiowaves.left.and.right.slash")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(AppColors.accentWarning)
+                    }
+                }
+
+                Text(agent.macLabel)
+                    .font(.system(size: 11))
+                    .foregroundColor(AppColors.textTertiary)
+            }
+
+            Spacer(minLength: 6)
+
+            Text(agent.currentFocus ?? "No focus set")
+                .font(.system(size: 12))
+                .foregroundColor(AppColors.textTertiary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: 150, alignment: .trailing)
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 56)
+    }
+
     private func wakeConfirmationSheet(_ arm: ArmTag) -> some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 16) {
@@ -296,7 +417,7 @@ struct ArmsTabView: View {
                 .foregroundColor(AppColors.textSecondary)
             Spacer()
             Button("Retry") {
-                Task { await viewModel.loadArms() }
+                Task { await viewModel.load() }
             }
             .font(.system(size: 13, weight: .semibold))
             .foregroundColor(AppColors.accentElectric)

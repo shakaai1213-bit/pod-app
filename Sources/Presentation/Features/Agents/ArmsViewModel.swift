@@ -4,6 +4,7 @@ import SwiftUI
 @Observable
 final class ArmsViewModel {
     var arms: [ArmTag] = ArmTag.placeholderArms
+    var agents: [AgentSummary] = []
     var directiveDrafts: [String: String] = [:]
     var busyArms: Set<String> = []
     var isLoading = false
@@ -17,11 +18,18 @@ final class ArmsViewModel {
     }
 
     @MainActor
-    func loadArms() async {
+    func load() async {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
 
+        async let armsTask: Void = loadArms()
+        async let agentsTask: Void = loadAgents()
+        _ = await (armsTask, agentsTask)
+    }
+
+    @MainActor
+    func loadArms() async {
         do {
             let response: ArmTagsResponse = try await apiClient.get(path: "/api/v1/jarvis/arm-tags")
             let liveByName = Dictionary(uniqueKeysWithValues: response.arms.map { ($0.name.lowercased(), $0.toDomain()) })
@@ -33,12 +41,33 @@ final class ArmsViewModel {
     }
 
     @MainActor
+    func loadAgents() async {
+        do {
+            let response: PaginatedResponse<AgentSummaryDTO> = try await apiClient.get(path: "/api/v1/agents?status=active,support&limit=50")
+            let mapped = response.items
+                .map { $0.toDomain() }
+                .filter { AgentRosterPolicy.isActiveOrSupport($0.agent) }
+            agents = mapped.sorted { lhs, rhs in
+                if lhs.macSortRank != rhs.macSortRank { return lhs.macSortRank < rhs.macSortRank }
+                let lhsKey = AgentRosterPolicy.sortKey(for: lhs.name)
+                let rhsKey = AgentRosterPolicy.sortKey(for: rhs.name)
+                if lhsKey != rhsKey { return lhsKey < rhsKey }
+                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            }
+        } catch {
+            if errorMessage == nil {
+                errorMessage = "Team unavailable."
+            }
+        }
+    }
+
+    @MainActor
     func startPolling() async {
-        await loadArms()
+        await load()
         while !Task.isCancelled {
             try? await Task.sleep(nanoseconds: 60_000_000_000)
             if Task.isCancelled { break }
-            await loadArms()
+            await load()
         }
     }
 
@@ -57,7 +86,7 @@ final class ArmsViewModel {
             )
             directiveDrafts[key] = ""
             toast = ArmsToast(message: "Directive queued", isError: false)
-            await loadArms()
+            await load()
         } catch {
             toast = ArmsToast(message: "Directive failed", isError: true)
         }
@@ -76,7 +105,7 @@ final class ArmsViewModel {
                 body: WakeRequest(postedBy: "maui", note: note.isEmpty ? nil : note)
             )
             toast = ArmsToast(message: response.dispatched ? "Dispatched ✅" : "Dispatch queued", isError: false)
-            await loadArms()
+            await load()
         } catch {
             toast = ArmsToast(message: "Wake failed", isError: true)
         }
@@ -98,6 +127,47 @@ final class ArmsViewModel {
 struct ArmsToast: Equatable {
     let message: String
     let isError: Bool
+}
+
+struct AgentSummary: Identifiable, Hashable {
+    let id: UUID
+    let name: String
+    let glyph: String
+    let status: AgentState
+    let macLabel: String
+    let currentFocus: String?
+    let natsLaneOk: Bool
+    let avatarColor: String
+    let role: String
+    let skills: [String]
+    let rosterLane: AgentRosterLane
+
+    var agent: Agent {
+        Agent(
+            id: id,
+            name: name,
+            role: role,
+            status: status,
+            currentTask: currentFocus,
+            lastActivity: nil,
+            skills: skills,
+            avatarColor: avatarColor,
+            rosterLane: rosterLane,
+            isDefaultRoutingEnabled: true
+        )
+    }
+
+    var macSortRank: Int {
+        macLabel.lowercased().contains("chief") ? 1 : 0
+    }
+
+    var statusColor: Color {
+        switch status {
+        case .online, .busy, .idle: return AppColors.accentSuccess
+        case .provisioning: return AppColors.accentWarning
+        case .offline, .error: return AppColors.textTertiary
+        }
+    }
 }
 
 struct ArmTag: Identifiable, Hashable {
@@ -180,6 +250,99 @@ struct ArmTag: Identifiable, Hashable {
 
 private struct ArmTagsResponse: Decodable {
     let arms: [ArmTagDTO]
+}
+
+private struct AgentSummaryDTO: Codable {
+    let id: String
+    let name: String
+    let glyph: String?
+    let status: String?
+    let macLabel: String?
+    let currentFocus: String?
+    let currentTask: String?
+    let natsLaneOk: Bool?
+    let avatarColor: String?
+    let role: String?
+    let rosterLane: String?
+    let skills: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, glyph, status, role, skills
+        case macLabel = "mac_label"
+        case currentFocus = "current_focus"
+        case currentTask
+        case natsLaneOk = "nats_lane_ok"
+        case avatarColor
+        case rosterLane = "roster_lane"
+    }
+
+    func toDomain() -> AgentSummary {
+        let normalized = AgentRosterPolicy.normalizedName(name)
+        let resolvedStatus = AgentState(rawValue: status ?? "") ?? .offline
+        let lane = rosterLane.flatMap(AgentRosterLane.init(rawValue:)) ?? AgentRosterPolicy.defaultLane(for: normalized)
+        let fallback = AgentSummaryFallbacks.profile(for: normalized)
+        return AgentSummary(
+            id: UUID(uuidString: id) ?? UUID(),
+            name: name.capitalized,
+            glyph: AgentSummaryFallbacks.glyph(for: normalized),
+            status: resolvedStatus,
+            macLabel: macLabel ?? AgentSummaryFallbacks.macLabel(for: normalized),
+            currentFocus: currentFocus ?? currentTask ?? fallback.focus,
+            natsLaneOk: natsLaneOk ?? !(resolvedStatus == .offline || resolvedStatus == .error),
+            avatarColor: avatarColor ?? fallback.color,
+            role: role ?? fallback.role,
+            skills: skills ?? fallback.skills,
+            rosterLane: lane
+        )
+    }
+}
+
+private enum AgentSummaryFallbacks {
+    static func glyph(for name: String) -> String {
+        switch name {
+        case "maui": return "🪝"
+        case "aloha": return "🌸"
+        case "coral": return "🪸"
+        case "aurora": return "🌅"
+        case "chief": return "🦅"
+        case "rooster": return "🐓"
+        case "reef": return "🐡"
+        case "luna": return "🌙"
+        default: return "•"
+        }
+    }
+
+    static func macLabel(for name: String) -> String {
+        switch name {
+        case "chief", "rooster", "reef", "luna":
+            return "Chief-mac"
+        default:
+            return "Shaka-mac"
+        }
+    }
+
+    static func profile(for name: String) -> (role: String, skills: [String], color: String, focus: String?) {
+        switch name {
+        case "maui":
+            return ("Head of Engineering", ["SwiftUI", "Architecture", "Pod"], "#22C55E", "Engineering coordination")
+        case "aloha":
+            return ("Communications", ["Specs", "Coordination", "Doctrine"], "#A855F7", "Coordination and specs")
+        case "coral":
+            return ("Support Runtime", ["Runtime Health", "Watchdogs"], "#06B6D4", "Runtime support")
+        case "chief":
+            return ("Protected Fund Lead", ["Research", "Finance"], "#22C55E", "Protected fund review")
+        case "rooster":
+            return ("Security", ["Security", "Guardrails"], "#EF4444", "Security guardrails")
+        case "reef":
+            return ("Chief Mac Support", ["Mirrors", "Chief Mac"], "#14B8A6", "Chief Mac support")
+        case "aurora":
+            return ("Dormant Advisor", ["Memory", "Coordination"], "#F59E0B", "Dormant advisor")
+        case "luna":
+            return ("Dormant Fund Analyst", ["Fund Analysis"], "#6366F1", "Dormant analyst")
+        default:
+            return ("Agent", [], "#3B82F6", nil)
+        }
+    }
 }
 
 private struct ArmTagDTO: Decodable {

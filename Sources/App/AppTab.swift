@@ -19,7 +19,7 @@ enum AppTab: String, CaseIterable, Hashable {
         case .work:        return "Work"
         case .captainsLog: return "Captain's Log"
         case .lab:         return "Lab"
-        case .arms:        return "Arms"
+        case .arms:        return "Arms + Team"
         case .agents:      return "Agents"
         case .knowledge:   return "Knowledge"
         }
