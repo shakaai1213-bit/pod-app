@@ -203,6 +203,11 @@ struct WorkView: View {
                     value: "\(digest.worker.pendingReviewCount)",
                     color: digest.worker.pendingReviewCount > 0 ? AppColors.accentWarning : AppColors.textTertiary
                 )
+                digestMetric(
+                    title: "Activation",
+                    value: "\(digest.activation?.attentionCount ?? 0)",
+                    color: (digest.activation?.attentionCount ?? 0) > 0 ? AppColors.accentWarning : AppColors.accentSuccess
+                )
                 Spacer(minLength: 0)
             }
         }
@@ -1607,9 +1612,10 @@ struct SchoolhouseDigest: Decodable, Hashable {
     let suggestions: [SchoolhouseDigestSuggestion]
     let sessions: [SchoolhouseDigestSession]
     let worker: SchoolhouseDigestWorker
+    let activation: SchoolhouseDigestActivation?
 
     enum CodingKeys: String, CodingKey {
-        case suggestions, sessions, worker
+        case suggestions, sessions, worker, activation
         case generatedAt = "generated_at"
         case suggestionCount = "suggestion_count"
         case countsByStatus = "counts_by_status"
@@ -1658,6 +1664,20 @@ struct SchoolhouseDigestWorker: Decodable, Hashable {
         case queuedCount = "queued_count"
         case retryingCount = "retrying_count"
         case pendingReviewCount = "pending_review_count"
+    }
+}
+
+struct SchoolhouseDigestActivation: Decodable, Hashable {
+    let totalAgents: Int
+    let compliantAgents: Int
+    let attentionCount: Int
+    let byStatus: [String: Int]
+
+    enum CodingKeys: String, CodingKey {
+        case totalAgents = "total_agents"
+        case compliantAgents = "compliant_agents"
+        case attentionCount = "attention_count"
+        case byStatus = "by_status"
     }
 }
 
