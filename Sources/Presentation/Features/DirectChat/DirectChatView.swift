@@ -811,12 +811,15 @@ struct ConversationView: View {
     private var workCockpitPanel: some View {
         if viewModel.activeTicketId != nil {
             VStack(alignment: .leading, spacing: 8) {
+                // L6: toolbar overflow fix — status labels + Refresh inline;
+                // Approval/Memory/Artifact/Tool collapsed into a single … Menu.
                 HStack(spacing: 8) {
                     Label(awakeStateLabel, systemImage: awakeStateIcon)
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(AppColors.accentAgent)
+                        .lineLimit(1)
 
-                    Spacer()
+                    Spacer(minLength: 0)
 
                     Label("\(viewModel.workCockpitReadinessPercent)%", systemImage: "gauge.with.dots.needle.67percent")
                         .font(.caption2.weight(.semibold))
@@ -825,52 +828,68 @@ struct ConversationView: View {
                     Button {
                         viewModel.refreshWorkCockpitFromChat()
                     } label: {
-                        Label(viewModel.isRefreshingWorkCockpit ? "Refreshing" : "Refresh", systemImage: "arrow.clockwise")
-                            .font(.caption2.weight(.semibold))
+                        Image(systemName: viewModel.isRefreshingWorkCockpit ? "hourglass" : "arrow.clockwise")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(AppColors.accentElectric)
+                            .frame(width: 28, height: 28)
+                            .background(AppColors.accentElectric.opacity(0.10))
+                            .clipShape(Circle())
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.mini)
+                    .buttonStyle(.plain)
                     .disabled(viewModel.isRefreshingWorkCockpit)
+                    .accessibilityLabel(viewModel.isRefreshingWorkCockpit ? "Refreshing cockpit" : "Refresh cockpit")
 
-                    Button {
-                        viewModel.requestApprovalFromChat()
-                    } label: {
-                        Label(viewModel.isRequestingTicketApproval ? "Requesting" : "Approval", systemImage: "person.badge.key")
-                            .font(.caption2.weight(.semibold))
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.mini)
-                    .disabled(viewModel.isRequestingTicketApproval)
+                    // Overflow menu — Approval / Memory / Artifact / Tool
+                    Menu {
+                        Button {
+                            viewModel.requestApprovalFromChat()
+                        } label: {
+                            Label(
+                                viewModel.isRequestingTicketApproval ? "Requesting Approval…" : "Request Approval",
+                                systemImage: "person.badge.key"
+                            )
+                        }
+                        .disabled(viewModel.isRequestingTicketApproval)
 
-                    Button {
-                        viewModel.saveMemoryCandidateFromChat()
-                    } label: {
-                        Label(viewModel.isSavingMemoryCandidate ? "Saving" : "Memory", systemImage: "brain.head.profile")
-                            .font(.caption2.weight(.semibold))
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.mini)
-                    .disabled(viewModel.isSavingMemoryCandidate)
+                        Button {
+                            viewModel.saveMemoryCandidateFromChat()
+                        } label: {
+                            Label(
+                                viewModel.isSavingMemoryCandidate ? "Saving Memory…" : "Save Memory Candidate",
+                                systemImage: "brain.head.profile"
+                            )
+                        }
+                        .disabled(viewModel.isSavingMemoryCandidate)
 
-                    Button {
-                        viewModel.saveWorkspaceArtifactFromChat()
-                    } label: {
-                        Label(viewModel.isSavingWorkspaceArtifact ? "Saving" : "Artifact", systemImage: "doc.badge.plus")
-                            .font(.caption2.weight(.semibold))
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.mini)
-                    .disabled(viewModel.isSavingWorkspaceArtifact)
+                        Button {
+                            viewModel.saveWorkspaceArtifactFromChat()
+                        } label: {
+                            Label(
+                                viewModel.isSavingWorkspaceArtifact ? "Saving Artifact…" : "Save Workspace Artifact",
+                                systemImage: "doc.badge.plus"
+                            )
+                        }
+                        .disabled(viewModel.isSavingWorkspaceArtifact)
 
-                    Button {
-                        viewModel.requestWorkspaceToolFromChat()
+                        Button {
+                            viewModel.requestWorkspaceToolFromChat()
+                        } label: {
+                            Label(
+                                viewModel.isRequestingWorkspaceTool ? "Requesting Tool…" : "Request Workspace Tool",
+                                systemImage: "hammer"
+                            )
+                        }
+                        .disabled(viewModel.isRequestingWorkspaceTool)
                     } label: {
-                        Label(viewModel.isRequestingWorkspaceTool ? "Requesting" : "Tool", systemImage: "hammer")
-                            .font(.caption2.weight(.semibold))
+                        Image(systemName: "ellipsis.circle")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(AppColors.accentElectric)
+                            .frame(width: 28, height: 28)
+                            .background(AppColors.accentElectric.opacity(0.10))
+                            .clipShape(Circle())
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.mini)
-                    .disabled(viewModel.isRequestingWorkspaceTool)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Cockpit actions")
                 }
 
                 HStack(spacing: 8) {
