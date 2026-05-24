@@ -13,59 +13,53 @@ struct DashboardView: View {
     @AppStorage("orca_display_name") private var displayName: String = "Captain"
 
     // MARK: - Body
+    // L3 cockpit — no scroll on iPhone portrait (SPEC-POD-LAYOUT-REVAMP-2026-W22 §1)
+    // Four sections only: Sign queue · Agent strip · Briefing line · Top flow card
+    // Overflow (metrics, startup truth, live state, needs attention) → Runtime tab
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: Theme.lg) {
-                    headerSection
-                    // Partial-load error banner — surfaces when any dashboard section fails
-                    if let err = viewModel.error, !err.isEmpty {
-                        HStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundColor(AppColors.accentWarning)
-                                .font(.caption)
-                            Text(err)
-                                .font(.caption)
-                                .foregroundColor(AppColors.textSecondary)
-                                .lineLimit(2)
-                            Spacer()
-                            Button {
-                                Task { await viewModel.loadDashboard() }
-                            } label: {
-                                Text("Retry")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundColor(AppColors.accentElectric)
-                            }
-                        }
-                        .padding(10)
-                        .background(AppColors.accentWarning.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Theme.radiusSmall)
-                                .strokeBorder(AppColors.accentWarning.opacity(0.3), lineWidth: 0.5)
-                        )
-                    }
-                    agentStatusStrip
+            VStack(alignment: .leading, spacing: Theme.md) {
+                // 1. Tier 1 sign queue — "what needs your eyes"
+                CockpitSignQueueSection()
 
-                    // Cockpit Tier 1 — sign queue. The "what needs your eyes" surface.
-                    CockpitSignQueueSection()
+                // 2. Agent status strip — 6 dots + status
+                agentStatusStrip
 
-                    needsAttentionSection
-                    morningBriefingSection
-                    doctrineVelocitySection
-                    flowReviewSection
-                    metricsStrip
-                    startupTruthSection
-                    liveStateSection
-                }
-                .padding(.horizontal, Theme.md)
-                .padding(.bottom, Theme.xxl)
+                // 3. Compact briefing + doctrine velocity line
+                cockpitBriefingLine
+
+                // 4. Top flow card — one blocker, tap → Work
+                cockpitFlowCard
+
+                Spacer(minLength: 0)
             }
+            .padding(.horizontal, Theme.md)
+            .padding(.top, Theme.sm)
+            .padding(.bottom, 100)
             .background(AppColors.backgroundPrimary)
-            .refreshable {
-                await viewModel.loadDashboard()
-                await briefingModel.load(force: true)
+            .navigationTitle("Dashboard")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        Task {
+                            await viewModel.loadDashboard()
+                            await briefingModel.load(force: true)
+                        }
+                    } label: {
+                        Image(systemName: viewModel.isLoading ? "hourglass" : "arrow.clockwise")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(AppColors.accentElectric)
+                    }
+                }
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button { showingSettings = true } label: {
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(AppColors.textSecondary)
+                    }
+                }
             }
             .sheet(item: $selectedAgent) { agent in
                 AgentDetailSheet(agent: agent)
@@ -89,6 +83,157 @@ struct DashboardView: View {
                 await viewModel.startFlowReviewPolling()
             }
         }
+    }
+
+    // MARK: - Cockpit Briefing Line (compact — combines briefing + doctrine)
+
+    private var cockpitBriefingLine: some View {
+        HStack(spacing: Theme.sm) {
+            // Briefing tap → full sheet
+            Button { selectedBriefingSheet = .briefing } label: {
+                HStack(spacing: 7) {
+                    Image(systemName: "sunrise.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(AppColors.accentWarning)
+                    if let briefing = briefingModel.briefing {
+                        Text(briefing.summary)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(AppColors.textPrimary)
+                            .lineLimit(2)
+                    } else {
+                        Text(briefingModel.isLoadingBriefing ? "Loading briefing…" : "No briefing yet today")
+                            .font(.system(size: 12))
+                            .foregroundColor(AppColors.textSecondary)
+                            .lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .background(AppColors.backgroundSecondary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+                .overlay(RoundedRectangle(cornerRadius: Theme.radiusSmall)
+                    .strokeBorder(AppColors.border, lineWidth: 0.5))
+            }
+            .buttonStyle(.plain)
+
+            // Doctrine tap → ledger sheet
+            Button { selectedBriefingSheet = .doctrine } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(AppColors.accentElectric)
+                    if let ledger = briefingModel.ledger {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(ledger.shippedCount) shipped")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(AppColors.textPrimary)
+                            if ledger.debtCount > 0 {
+                                Text("\(ledger.debtCount) debt")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(AppColors.accentWarning)
+                            }
+                        }
+                    } else {
+                        Text(briefingModel.isLoadingLedger ? "…" : "—")
+                            .font(.system(size: 12))
+                            .foregroundColor(AppColors.textSecondary)
+                    }
+                }
+                .frame(width: 84)
+                .padding(10)
+                .background(AppColors.backgroundSecondary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+                .overlay(RoundedRectangle(cornerRadius: Theme.radiusSmall)
+                    .strokeBorder(AppColors.border, lineWidth: 0.5))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: - Cockpit Flow Card (top blocker — tap → Work)
+
+    private var cockpitFlowCard: some View {
+        Button { openWorkFlowFilter(nil) } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("FLOW")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(AppColors.textTertiary)
+                        .kerning(0.5)
+                    Spacer()
+                    if let review = viewModel.ticketFlowReview {
+                        Text("\(review.counts.total) tickets · \(flowUpdatedText)")
+                            .font(.system(size: 11))
+                            .foregroundColor(AppColors.textTertiary)
+                    }
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(AppColors.accentElectric)
+                }
+
+                if let review = viewModel.ticketFlowReview {
+                    HStack(spacing: 8) {
+                        cockpitFlowChip(
+                            label: "Dispatch",
+                            value: review.counts.dispatchable,
+                            icon: "bolt.fill",
+                            color: AppColors.accentSuccess,
+                            key: "dispatchable"
+                        )
+                        cockpitFlowChip(
+                            label: "Noise",
+                            value: review.counts.noiseReview,
+                            icon: "exclamationmark.bubble.fill",
+                            color: AppColors.accentWarning,
+                            key: "noise_review"
+                        )
+                        cockpitFlowChip(
+                            label: "Protected",
+                            value: review.counts.protected,
+                            icon: "lock.shield.fill",
+                            color: AppColors.accentDanger,
+                            key: "protected"
+                        )
+                    }
+                } else {
+                    HStack(spacing: 8) {
+                        ProgressView().scaleEffect(0.7)
+                        Text(viewModel.ticketFlowErrorMessage ?? "Loading flow…")
+                            .font(.system(size: 12))
+                            .foregroundColor(AppColors.textSecondary)
+                    }
+                }
+            }
+            .padding(Theme.md)
+            .background(AppColors.backgroundSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+            .overlay(RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                .strokeBorder(AppColors.border, lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func cockpitFlowChip(label: String, value: Int, icon: String, color: Color, key: String) -> some View {
+        Button { openWorkFlowFilter(key) } label: {
+            VStack(spacing: 4) {
+                HStack(spacing: 4) {
+                    Image(systemName: icon)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(color)
+                    Text("\(value)")
+                        .font(.system(size: 18, weight: .bold).monospacedDigit())
+                        .foregroundColor(value > 0 ? color : AppColors.textTertiary)
+                }
+                Text(label)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(AppColors.textTertiary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(color.opacity(value > 0 ? 0.08 : 0.03))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Header Section
