@@ -107,6 +107,7 @@
 		EE295B15C305769AAB154AFE /* StandardDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3853FCF809EDAFB9AE5C0021 /* StandardDetailView.swift */; };
 		EEB7FD53570A06DB48B7954B /* Chat.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC020A48B04971EAC26F9937 /* Chat.swift */; };
 		F2BA10B64E34BFE3E8114D23 /* AgentDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 952F2ED4468BC7A6FAAEF442 /* AgentDetailSheet.swift */; };
+		F5AB6F564EFA94A292527FF7 /* CrewTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9631EBA588A80D42E7C5F32B /* CrewTabView.swift */; };
 		F81A42E40A89CD31D359D0BF /* SpeechRecognizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3644E968D1280142304E8A4D /* SpeechRecognizer.swift */; };
 		F83091AE4E41C3ECF3813D83 /* WorkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5BA65A8F11D4EA87426C002 /* WorkView.swift */; };
 		F9774DEACCFE1CAE257BAB9E /* AgentStatusCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7F5808B0A89E2CE05779BF4 /* AgentStatusCard.swift */; };
@@ -159,6 +160,8 @@
 		574CFE0B1AC9C1B0155DA6F7 /* NotificationRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationRouter.swift; sourceTree = "<group>"; };
 		5D08D7D34A8A9C7A08349196 /* DirectChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DirectChatViewModel.swift; sourceTree = "<group>"; };
 		5E18BACE3C1681D62AFA8498 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		5F4A0A2C78FBB8AD001B0001 /* ArmsTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArmsTabView.swift; sourceTree = "<group>"; };
+		5F4A0A2C78FBB8AD001B0002 /* ArmsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArmsViewModel.swift; sourceTree = "<group>"; };
 		61E316898E420DEC290715F7 /* TaskCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskCardView.swift; sourceTree = "<group>"; };
 		652176F506F2AFBA5504A5DB /* SwiftDataModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftDataModels.swift; sourceTree = "<group>"; };
 		669E5C6A23ECCE8F11F520BF /* AppIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIntents.swift; sourceTree = "<group>"; };
@@ -183,6 +186,7 @@
 		916EBD9D032E8F9FE9864379 /* pod.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = pod.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		928284E5D88714A670BD7542 /* ProjectRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectRepository.swift; sourceTree = "<group>"; };
 		952F2ED4468BC7A6FAAEF442 /* AgentDetailSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentDetailSheet.swift; sourceTree = "<group>"; };
+		9631EBA588A80D42E7C5F32B /* CrewTabView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CrewTabView.swift; sourceTree = "<group>"; };
 		A28A4672374ACF545BD664A8 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		A2D290EE8D7D2034F520F37F /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		A4E4C855478DA5C9D41034E0 /* CockpitSignQueueSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CockpitSignQueueSection.swift; sourceTree = "<group>"; };
@@ -205,8 +209,6 @@
 		C62213C075198085FB1FC11D /* MessageBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBubbleView.swift; sourceTree = "<group>"; };
 		CBD062EB03F1386CFB3A77D5 /* User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
 		D18D78CE9147C58BF929B8A0 /* AgentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentsView.swift; sourceTree = "<group>"; };
-		5F4A0A2C78FBB8AD001B0001 /* ArmsTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArmsTabView.swift; sourceTree = "<group>"; };
-		5F4A0A2C78FBB8AD001B0002 /* ArmsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArmsViewModel.swift; sourceTree = "<group>"; };
 		D2314FFEFA469FFDCDA8BCB0 /* OfflineQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineQueue.swift; sourceTree = "<group>"; };
 		DBE261A9A40BC12CBB2C0F78 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		DC9A4A64DB751E8953D363DF /* ChannelRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelRepository.swift; sourceTree = "<group>"; };
@@ -453,6 +455,7 @@
 				11D06A5303C4235EC623115D /* VoiceCompanion */,
 				751B52C9774E765B495E6BCD /* WallDisplay */,
 				B6A27F86571736E0BADA22A4 /* Work */,
+				BE66453BD75BB0AE5CAD7EA5 /* Crew */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -603,6 +606,15 @@
 			path = Work;
 			sourceTree = "<group>";
 		};
+		BE66453BD75BB0AE5CAD7EA5 /* Crew */ = {
+			isa = PBXGroup;
+			children = (
+				9631EBA588A80D42E7C5F32B /* CrewTabView.swift */,
+			);
+			name = Crew;
+			path = Crew;
+			sourceTree = "<group>";
+		};
 		CEFC1D1CDAAAE7311D0D8B4D /* Trading */ = {
 			isa = PBXGroup;
 			children = (
@@ -681,8 +693,6 @@
 			dependencies = (
 			);
 			name = pod;
-			packageProductDependencies = (
-			);
 			productName = pod;
 			productReference = 916EBD9D032E8F9FE9864379 /* pod.app */;
 			productType = "com.apple.product-type.application";
@@ -841,6 +851,7 @@
 				FDE7B9465CE4220D636B7042 /* WallDisplayViewModel.swift in Sources */,
 				F83091AE4E41C3ECF3813D83 /* WorkView.swift in Sources */,
 				EA0C06FDC1442F08A3550A36 /* podApp.swift in Sources */,
+				F5AB6F564EFA94A292527FF7 /* CrewTabView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

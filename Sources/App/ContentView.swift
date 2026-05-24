@@ -125,9 +125,10 @@ struct ContentView: View {
         } else if selectedTab == .work {
             WorkView()
         } else if selectedTab == .crew {
-            // L1: Crew = ArmsTabView (already has ARMS + TEAM sections).
-            // L2 will replace this with full CrewTabView (Focus + Agents + Arms + Workers + Fund).
-            ArmsTabView()
+            // L2: Crew tab = CrewTabView with 2-segment picker.
+            // Agents segment: Focus + Agents + Workers + Protected Fund (via AgentsView).
+            // Arms segment: 8 arm cards + TEAM strip (via ArmsTabView).
+            CrewTabView()
         } else if selectedTab == .knowledge {
             KnowledgeView()
         } else if selectedTab == .lab {
