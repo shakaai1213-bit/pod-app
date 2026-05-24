@@ -47,6 +47,7 @@ struct DashboardView: View {
                     // Cockpit Tier 1 — sign queue. The "what needs your eyes" surface.
                     CockpitSignQueueSection()
 
+                    flowReviewSection
                     metricsStrip
                     startupTruthSection
                     liveStateSection
@@ -69,6 +70,9 @@ struct DashboardView: View {
             }
             .task {
                 await viewModel.loadDashboard()
+            }
+            .task {
+                await viewModel.startFlowReviewPolling()
             }
         }
     }
@@ -124,6 +128,159 @@ struct DashboardView: View {
     }
 
     // MARK: - Metrics Strip
+
+    private var flowReviewSection: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("FLOW REVIEW")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(AppColors.textTertiary)
+                        .kerning(0.5)
+
+                    if let review = viewModel.ticketFlowReview {
+                        Text("\(review.counts.total) tickets · \(flowUpdatedText)")
+                            .font(.system(size: 12))
+                            .foregroundColor(AppColors.textSecondary)
+                    } else {
+                        Text(viewModel.ticketFlowErrorMessage ?? "Loading ticket flow...")
+                            .font(.system(size: 12))
+                            .foregroundColor(AppColors.textSecondary)
+                    }
+                }
+
+                Spacer()
+
+                Button {
+                    openWorkFlowFilter(nil)
+                } label: {
+                    Label("Work", systemImage: "arrow.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(AppColors.accentElectric)
+                }
+                .buttonStyle(.plain)
+            }
+
+            if let review = viewModel.ticketFlowReview {
+                VStack(alignment: .leading, spacing: Theme.sm) {
+                    HStack(spacing: 8) {
+                        flowMetricChip(label: "Dispatchable", value: review.counts.dispatchable, icon: "bolt.fill", color: AppColors.accentSuccess, key: "dispatchable")
+                        flowMetricChip(label: "Noise", value: review.counts.noiseReview, icon: "exclamationmark.bubble.fill", color: AppColors.accentWarning, key: "noise_review")
+                        flowMetricChip(label: "Protected", value: review.counts.protected, icon: "lock.shield.fill", color: AppColors.accentDanger, key: "protected")
+                    }
+
+                    flowBucketRow(title: "By flow state", buckets: review.counts.byFlowState)
+                    flowBucketRow(title: "By owner", buckets: review.counts.byOwnerAgent)
+                    flowBucketRow(title: "By support lane", buckets: review.counts.bySupportLane)
+                }
+            } else {
+                HStack(spacing: Theme.sm) {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                    Text("Waiting for ORCA flow review.")
+                        .font(.system(size: 13))
+                        .foregroundColor(AppColors.textSecondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(Theme.md)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                .strokeBorder(AppColors.border, lineWidth: 0.5)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            openWorkFlowFilter(nil)
+        }
+    }
+
+    private var flowUpdatedText: String {
+        guard let updated = viewModel.ticketFlowLastUpdated else { return "fresh" }
+        let seconds = max(0, Int(Date().timeIntervalSince(updated)))
+        if seconds < 60 { return "just updated" }
+        let minutes = seconds / 60
+        return "updated \(minutes)m ago"
+    }
+
+    private func flowMetricChip(label: String, value: Int, icon: String, color: Color, key: String) -> some View {
+        Button {
+            openWorkFlowFilter(key)
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.system(size: 11, weight: .semibold))
+                Text("\(label) \(value)")
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+            .foregroundColor(color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(color.opacity(0.12))
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func flowBucketRow(title: String, buckets: [String: Int]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(AppColors.textTertiary)
+
+            if buckets.isEmpty {
+                Text("No buckets yet")
+                    .font(.system(size: 12))
+                    .foregroundColor(AppColors.textTertiary)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(sortedFlowBuckets(buckets), id: \.0) { key, value in
+                            Button {
+                                openWorkFlowFilter(key)
+                            } label: {
+                                Text("\(displayFlowKey(key)) \(value)")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(AppColors.textSecondary)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 5)
+                                    .background(AppColors.backgroundTertiary)
+                                    .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func sortedFlowBuckets(_ buckets: [String: Int]) -> [(String, Int)] {
+        buckets.sorted { lhs, rhs in
+            if lhs.value == rhs.value { return lhs.key < rhs.key }
+            return lhs.value > rhs.value
+        }
+        .prefix(8)
+        .map { ($0.key, $0.value) }
+    }
+
+    private func displayFlowKey(_ key: String) -> String {
+        key.replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+    }
+
+    private func openWorkFlowFilter(_ key: String?) {
+        if let key {
+            UserDefaults.standard.set(key, forKey: "pod.pendingWorkFlowFilter")
+        } else {
+            UserDefaults.standard.removeObject(forKey: "pod.pendingWorkFlowFilter")
+        }
+        NotificationCenter.default.post(name: Notification.Name("pod.openWorkFlowFilter"), object: key)
+    }
 
     private var metricsStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {

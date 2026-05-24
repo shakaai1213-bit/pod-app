@@ -315,6 +315,22 @@ struct TicketsView: View {
                         .buttonStyle(.plain)
                         .accessibilityLabel("Show tickets waiting for human approval review")
                     }
+                    if let flow = viewModel.ticketFlowReview?.counts {
+                        if flow.dispatchable > 0 {
+                            summaryPill(label: "Flow Ready", value: flow.dispatchable, color: AppColors.accentAgent)
+                        }
+                        if flow.noiseReview > 0 {
+                            summaryPill(label: "Noise", value: flow.noiseReview, color: AppColors.accentDanger)
+                        }
+                        if let coral = flow.bySupportLane["coral-support-runtime"], coral > 0 {
+                            summaryPill(label: "Coral", value: coral, color: AppColors.accentElectric)
+                        }
+                        if let reef = flow.bySupportLane["reef-support-runtime"], reef > 0 {
+                            summaryPill(label: "Reef", value: reef, color: AppColors.accentAgent)
+                        }
+                    } else if viewModel.ticketFlowErrorMessage != nil {
+                        summaryPill(label: "Flow Offline", value: 0, color: AppColors.accentDanger)
+                    }
                     if let integrity = viewModel.workControlIntegritySummary, integrity.issues > 0 {
                         summaryPill(label: "Source Link", value: integrity.sourceLinkGapCount, color: AppColors.accentDanger)
                         summaryPill(label: "Triage Link", value: integrity.triageLinkGapCount, color: Color.orange)

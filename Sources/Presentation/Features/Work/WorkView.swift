@@ -9,6 +9,7 @@ struct WorkView: View {
     @State private var pushTickets = false
     @State private var pushProjectId: UUID? = nil
     @State private var pushTicketId: String? = nil
+    @State private var selectedFlowItem: TicketFlowItem?
 
     var body: some View {
         NavigationStack {
@@ -35,6 +36,17 @@ struct WorkView: View {
             .background(AppColors.backgroundPrimary.ignoresSafeArea())
             .refreshable { await model.load() }
             .task { await model.load() }
+            .task { await model.startFlowReviewPolling() }
+            .onAppear {
+                model.consumePendingFlowFilter()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("pod.openWorkFlowFilter"))) { note in
+                model.applyIncomingFlowFilter(note.object as? String)
+            }
+            .sheet(item: $selectedFlowItem) { flow in
+                flowDetailSheet(flow)
+                    .presentationDetents([.medium, .large])
+            }
             // Hidden navigation links for full-list push
             .navigationDestination(isPresented: $pushProjects) {
                 ORCAProjectsView()
@@ -394,6 +406,8 @@ struct WorkView: View {
             VStack(spacing: 0) {
                 // Filter bar (sticky inside card)
                 ticketFilterBar
+                flowFilterBar
+                activeFlowFiltersBar
 
                 Divider().background(AppColors.border)
 
@@ -481,6 +495,136 @@ struct WorkView: View {
         .frame(minHeight: 30)
     }
 
+    private var flowFilterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                flowMenu(
+                    title: model.selectedFlowState.map(flowStateLabel) ?? "By flow state",
+                    systemImage: "point.topleft.down.curvedto.point.bottomright.up",
+                    options: model.flowStateOptions,
+                    selected: model.selectedFlowState,
+                    countProvider: { model.flowCount(for: $0, in: .flowState) },
+                    onSelect: { model.selectedFlowState = $0 }
+                )
+                flowMenu(
+                    title: model.selectedOwnerAgent.map { $0.capitalized } ?? "By owner",
+                    systemImage: "person.crop.circle",
+                    options: model.ownerOptions,
+                    selected: model.selectedOwnerAgent,
+                    countProvider: { model.flowCount(for: $0, in: .owner) },
+                    onSelect: { model.selectedOwnerAgent = $0 }
+                )
+                flowMenu(
+                    title: model.selectedSupportLane ?? "By support lane",
+                    systemImage: "rectangle.3.group",
+                    options: model.supportLaneOptions,
+                    selected: model.selectedSupportLane,
+                    countProvider: { model.flowCount(for: $0, in: .supportLane) },
+                    onSelect: { model.selectedSupportLane = $0 }
+                )
+                flowToggleChip(label: "Dispatchable", systemImage: "bolt.fill", isOn: model.filterDispatchableOnly) {
+                    model.filterDispatchableOnly.toggle()
+                }
+                flowToggleChip(label: "Noise review", systemImage: "exclamationmark.bubble.fill", isOn: model.filterNoiseReviewOnly) {
+                    model.filterNoiseReviewOnly.toggle()
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 10)
+        }
+    }
+
+    @ViewBuilder
+    private var activeFlowFiltersBar: some View {
+        let chips = model.activeFlowFilterChips
+        if !chips.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(chips, id: \.id) { chip in
+                        Button {
+                            model.clearFlowFilter(chip.id)
+                        } label: {
+                            HStack(spacing: 5) {
+                                Text(chip.label)
+                                    .font(.system(size: 12, weight: .medium))
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 9, weight: .bold))
+                            }
+                            .foregroundColor(AppColors.accentElectric)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 5)
+                            .background(AppColors.accentElectric.opacity(0.12))
+                            .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.bottom, 10)
+            }
+        }
+    }
+
+    private func flowMenu(
+        title: String,
+        systemImage: String,
+        options: [String],
+        selected: String?,
+        countProvider: @escaping (String) -> Int,
+        onSelect: @escaping (String?) -> Void
+    ) -> some View {
+        Menu {
+            Button("All") { onSelect(nil) }
+            ForEach(options, id: \.self) { option in
+                Button {
+                    onSelect(option)
+                } label: {
+                    HStack {
+                        Text("\(flowMenuLabel(option)) (\(countProvider(option)))")
+                        if selected == option {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 11, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 12, weight: selected == nil ? .regular : .semibold))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+            }
+            .foregroundColor(selected == nil ? AppColors.textSecondary : Color.black)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(selected == nil ? Color.clear : AppColors.textPrimary)
+            .clipShape(Capsule())
+            .overlay(Capsule().strokeBorder(selected == nil ? AppColors.border : Color.clear, lineWidth: 1))
+        }
+    }
+
+    private func flowToggleChip(label: String, systemImage: String, isOn: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 11, weight: .semibold))
+                Text(label)
+                    .font(.system(size: 12, weight: isOn ? .semibold : .regular))
+                    .lineLimit(1)
+            }
+            .foregroundColor(isOn ? Color.black : AppColors.textSecondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(isOn ? AppColors.textPrimary : Color.clear)
+            .clipShape(Capsule())
+            .overlay(Capsule().strokeBorder(isOn ? Color.clear : AppColors.border, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
     private func ticketRow(_ ticket: WorkTicketRow) -> some View {
         HStack(spacing: 8) {
             // Priority dot — tap to edit per Aloha 2026-05-23 (ticket 46ca818d)
@@ -512,6 +656,29 @@ struct WorkView: View {
             // short_id chip — mirrors Project card chip per Tony 2026-05-23
             ticketShortIdChip(ticket.id)
 
+            if let flow = model.flow(for: ticket.id) {
+                Button {
+                    selectedFlowItem = flow
+                } label: {
+                    flowStatePill(flow)
+                }
+                .buttonStyle(.plain)
+
+                if flow.protected {
+                    Image(systemName: "lock.shield.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(AppColors.accentDanger)
+                        .accessibilityLabel("Protected")
+                }
+
+                if flow.dispatchable {
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(AppColors.accentSuccess)
+                        .accessibilityLabel("Dispatchable")
+                }
+            }
+
             // Title
             Text(ticket.title)
                 .font(.system(size: 14))
@@ -529,6 +696,92 @@ struct WorkView: View {
         }
         .padding(.horizontal, 14)
         .frame(minHeight: 40)
+    }
+
+    private func flowStatePill(_ flow: TicketFlowItem) -> some View {
+        Text(flowStateLabel(flow.flowState))
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundColor(flowStateColor(flow))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(flowStateColor(flow).opacity(0.12))
+            .clipShape(Capsule())
+            .accessibilityLabel("Flow state \(flowStateLabel(flow.flowState))")
+    }
+
+    private func flowDetailSheet(_ flow: TicketFlowItem) -> some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        flowStatePill(flow)
+                        Text(flow.title)
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundColor(AppColors.textPrimary)
+                        Text(String(flow.ticketId.prefix(8)))
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundColor(AppColors.textTertiary)
+                    }
+
+                    flowDetailBlock(title: "Next action", values: [flow.nextAction])
+                    flowDetailBlock(title: "Owner", values: [flow.ownerAgent])
+                    flowDetailBlock(title: "Support lane", values: [flow.supportLane ?? flow.workerLane ?? "standard"])
+                    flowDetailBlock(title: "Blockers", values: flow.blockers.isEmpty ? ["None"] : flow.blockers)
+                    flowDetailBlock(title: "Reasons", values: flow.reasons.isEmpty ? ["No reasons supplied"] : flow.reasons)
+                }
+                .padding(20)
+            }
+            .background(AppColors.backgroundPrimary)
+            .navigationTitle("Flow Detail")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    private func flowDetailBlock(title: String, values: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title.uppercased())
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(AppColors.textTertiary)
+            ForEach(values, id: \.self) { value in
+                Text(value)
+                    .font(.system(size: 13))
+                    .foregroundColor(AppColors.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .background(AppColors.backgroundSecondary)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+        }
+    }
+
+    private func flowStateLabel(_ state: String) -> String {
+        switch state {
+        case "noise_review": return "noise"
+        case "needs_approval": return "approval"
+        case "needs_scope": return "scope"
+        case "needs_dispatch_plan": return "plan"
+        case "needs_owner_review": return "owner"
+        case "ready_for_dispatch": return "ready"
+        case "ready_to_close": return "close"
+        case "in_progress": return "in flight"
+        default: return state.replacingOccurrences(of: "_", with: " ")
+        }
+    }
+
+    private func flowMenuLabel(_ state: String) -> String {
+        state.replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+    }
+
+    private func flowStateColor(_ flow: TicketFlowItem) -> Color {
+        if flow.protected { return AppColors.accentDanger }
+        switch flow.flowState {
+        case "noise_review", "blocked": return AppColors.accentDanger
+        case "needs_approval", "needs_scope", "needs_dispatch_plan", "needs_owner_review": return AppColors.accentWarning
+        case "ready_for_dispatch", "ready_to_close": return AppColors.accentSuccess
+        case "running", "in_progress": return AppColors.accentElectric
+        default: return AppColors.textTertiary
+        }
     }
 
     private func ticketShortIdChip(_ id: String) -> some View {
@@ -649,6 +902,14 @@ final class WorkViewModel {
     var isLoadingTickets = false
     var ticketsError: String?
     var activeFilter: TicketFilter = .all
+    var ticketFlowReview: TicketFlowReview?
+    var ticketFlowByTicketId: [String: TicketFlowItem] = [:]
+    var ticketFlowErrorMessage: String?
+    var selectedFlowState: String?
+    var selectedOwnerAgent: String?
+    var selectedSupportLane: String?
+    var filterDispatchableOnly = false
+    var filterNoiseReviewOnly = false
     var priorityToast: PriorityToast?
 
     // MARK: Suggestions
@@ -685,17 +946,134 @@ final class WorkViewModel {
     }
 
     var filteredTickets: [WorkTicketRow] {
+        let base: [WorkTicketRow]
         switch activeFilter {
         case .all:
-            return tickets
+            base = tickets
         case .mine:
-            return tickets.filter { $0.ownerShort.lowercased().hasPrefix("mau") || $0.assigneeId == "maui" }
+            base = tickets.filter { $0.ownerShort.lowercased().hasPrefix("mau") || $0.assigneeId == "maui" }
         case .urgent:
-            return tickets.filter { $0.priority.lowercased() == "urgent" }
+            base = tickets.filter { $0.priority.lowercased() == "urgent" }
         case .byProject:
             // Group by project — just sort by projectId for now
-            return tickets.sorted { ($0.projectId ?? "") < ($1.projectId ?? "") }
+            base = tickets.sorted { ($0.projectId ?? "") < ($1.projectId ?? "") }
         }
+
+        return base.filter { ticket in
+            guard let flow = ticketFlowByTicketId[ticket.id] else {
+                return selectedFlowState == nil
+                    && selectedOwnerAgent == nil
+                    && selectedSupportLane == nil
+                    && !filterDispatchableOnly
+                    && !filterNoiseReviewOnly
+            }
+            if let selectedFlowState, flow.flowState != selectedFlowState { return false }
+            if let selectedOwnerAgent, flow.ownerAgent != selectedOwnerAgent { return false }
+            if let selectedSupportLane, (flow.supportLane ?? flow.workerLane ?? "standard") != selectedSupportLane { return false }
+            if filterDispatchableOnly && !flow.dispatchable { return false }
+            if filterNoiseReviewOnly && !flow.noiseReview { return false }
+            return true
+        }
+    }
+
+    enum FlowFilterKind {
+        case flowState, owner, supportLane
+    }
+
+    struct ActiveFlowChip: Hashable {
+        let id: String
+        let label: String
+    }
+
+    var flowStateOptions: [String] {
+        sortedKeys(ticketFlowReview?.counts.byFlowState ?? [:])
+    }
+
+    var ownerOptions: [String] {
+        sortedKeys(ticketFlowReview?.counts.byOwnerAgent ?? [:])
+    }
+
+    var supportLaneOptions: [String] {
+        sortedKeys(ticketFlowReview?.counts.bySupportLane ?? [:])
+    }
+
+    var activeFlowFilterChips: [ActiveFlowChip] {
+        var chips: [ActiveFlowChip] = []
+        if let selectedFlowState {
+            chips.append(ActiveFlowChip(id: "flow_state", label: selectedFlowState.replacingOccurrences(of: "_", with: " ")))
+        }
+        if let selectedOwnerAgent {
+            chips.append(ActiveFlowChip(id: "owner_agent", label: selectedOwnerAgent.capitalized))
+        }
+        if let selectedSupportLane {
+            chips.append(ActiveFlowChip(id: "support_lane", label: selectedSupportLane))
+        }
+        if filterDispatchableOnly {
+            chips.append(ActiveFlowChip(id: "dispatchable", label: "Dispatchable"))
+        }
+        if filterNoiseReviewOnly {
+            chips.append(ActiveFlowChip(id: "noise_review", label: "Noise review"))
+        }
+        return chips
+    }
+
+    func flow(for ticketId: String) -> TicketFlowItem? {
+        ticketFlowByTicketId[ticketId]
+    }
+
+    func flowCount(for key: String, in kind: FlowFilterKind) -> Int {
+        switch kind {
+        case .flowState:
+            return ticketFlowReview?.counts.byFlowState[key] ?? 0
+        case .owner:
+            return ticketFlowReview?.counts.byOwnerAgent[key] ?? 0
+        case .supportLane:
+            return ticketFlowReview?.counts.bySupportLane[key] ?? 0
+        }
+    }
+
+    func clearFlowFilter(_ id: String) {
+        switch id {
+        case "flow_state": selectedFlowState = nil
+        case "owner_agent": selectedOwnerAgent = nil
+        case "support_lane": selectedSupportLane = nil
+        case "dispatchable": filterDispatchableOnly = false
+        case "noise_review": filterNoiseReviewOnly = false
+        default: break
+        }
+    }
+
+    func applyIncomingFlowFilter(_ filter: String?) {
+        guard let filter, !filter.isEmpty else { return }
+        if filter == "dispatchable" {
+            filterDispatchableOnly = true
+        } else if filter == "noise_review" {
+            filterNoiseReviewOnly = true
+        } else if filter == "protected" {
+            selectedSupportLane = supportLaneOptions.first { $0.contains("protected") }
+        } else if flowStateOptions.contains(filter) {
+            selectedFlowState = filter
+        } else if ownerOptions.contains(filter) {
+            selectedOwnerAgent = filter
+        } else if supportLaneOptions.contains(filter) {
+            selectedSupportLane = filter
+        } else {
+            selectedFlowState = filter
+        }
+        UserDefaults.standard.removeObject(forKey: "pod.pendingWorkFlowFilter")
+    }
+
+    func consumePendingFlowFilter() {
+        let filter = UserDefaults.standard.string(forKey: "pod.pendingWorkFlowFilter")
+        applyIncomingFlowFilter(filter)
+    }
+
+    private func sortedKeys(_ counts: [String: Int]) -> [String] {
+        counts.sorted { lhs, rhs in
+            if lhs.value == rhs.value { return lhs.key < rhs.key }
+            return lhs.value > rhs.value
+        }
+        .map(\.key)
     }
 
     // MARK: - Load
@@ -705,6 +1083,7 @@ final class WorkViewModel {
             group.addTask { await self.loadSuggestions() }
             group.addTask { await self.loadProjects() }
             group.addTask { await self.loadTickets() }
+            group.addTask { await self.loadTicketFlowReview() }
         }
     }
 
@@ -791,6 +1170,36 @@ final class WorkViewModel {
                 }
         } catch {
             ticketsError = "Tickets unavailable"
+        }
+    }
+
+    @MainActor
+    func loadTicketFlowReview(limit: Int = 200) async {
+        do {
+            let dto: WorkTicketFlowReviewDTO = try await APIClient.shared.get(
+                path: "/api/v1/tickets/flow-review?limit=\(limit)&include_closed=false"
+            )
+            let review = dto.toDomain()
+            ticketFlowReview = review
+            ticketFlowByTicketId = review.items.reduce(into: [:]) { result, item in
+                result[item.ticketId] = item
+            }
+            ticketFlowErrorMessage = nil
+            consumePendingFlowFilter()
+        } catch {
+            ticketFlowReview = nil
+            ticketFlowByTicketId = [:]
+            ticketFlowErrorMessage = "Ticket flow review unavailable."
+        }
+    }
+
+    @MainActor
+    func startFlowReviewPolling() async {
+        await loadTicketFlowReview()
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 60_000_000_000)
+            if Task.isCancelled { break }
+            await loadTicketFlowReview()
         }
     }
 
@@ -964,6 +1373,107 @@ private struct TicketPatchResponse: Decodable {
 
 private struct ProjectPatchResponse: Decodable {
     let id: UUID
+}
+
+private struct WorkTicketFlowReviewDTO: Decodable {
+    let counts: WorkTicketFlowCountsDTO
+    let items: [WorkTicketFlowItemDTO]
+
+    func toDomain() -> TicketFlowReview {
+        TicketFlowReview(
+            counts: counts.toDomain(),
+            items: items.map { $0.toDomain() }
+        )
+    }
+}
+
+private struct WorkTicketFlowCountsDTO: Decodable {
+    let total: Int?
+    let dispatchable: Int?
+    let noiseReview: Int?
+    let protected: Int?
+    let byFlowState: [String: Int]?
+    let byOwnerAgent: [String: Int]?
+    let bySupportLane: [String: Int]?
+
+    enum CodingKeys: String, CodingKey {
+        case total, dispatchable, protected
+        case noiseReview = "noise_review"
+        case byFlowState = "by_flow_state"
+        case byOwnerAgent = "by_owner_agent"
+        case bySupportLane = "by_support_lane"
+    }
+
+    func toDomain() -> TicketFlowCounts {
+        TicketFlowCounts(
+            total: total ?? 0,
+            dispatchable: dispatchable ?? 0,
+            noiseReview: noiseReview ?? 0,
+            protected: protected ?? 0,
+            byFlowState: byFlowState ?? [:],
+            byOwnerAgent: byOwnerAgent ?? [:],
+            bySupportLane: bySupportLane ?? [:]
+        )
+    }
+}
+
+private struct WorkTicketFlowItemDTO: Decodable {
+    let ticketId: String
+    let title: String?
+    let status: String?
+    let priority: String?
+    let flowState: String?
+    let nextAction: String?
+    let ownerAgent: String?
+    let supportLane: String?
+    let workerLane: String?
+    let approvalState: String?
+    let approvalGate: String?
+    let autonomyLevel: String?
+    let dispatchable: Bool?
+    let noiseReview: Bool?
+    let protected: Bool?
+    let blockers: [String]?
+    let reasons: [String]?
+    let updatedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case title, status, priority, dispatchable, protected, blockers, reasons
+        case ticketId = "ticket_id"
+        case flowState = "flow_state"
+        case nextAction = "next_action"
+        case ownerAgent = "owner_agent"
+        case supportLane = "support_lane"
+        case workerLane = "worker_lane"
+        case approvalState = "approval_state"
+        case approvalGate = "approval_gate"
+        case autonomyLevel = "autonomy_level"
+        case noiseReview = "noise_review"
+        case updatedAt = "updated_at"
+    }
+
+    func toDomain() -> TicketFlowItem {
+        TicketFlowItem(
+            ticketId: ticketId,
+            title: title ?? "Untitled ticket",
+            status: status ?? "unknown",
+            priority: priority ?? "normal",
+            flowState: flowState ?? "unknown",
+            nextAction: nextAction ?? "Review",
+            ownerAgent: ownerAgent ?? "unassigned",
+            supportLane: supportLane,
+            workerLane: workerLane,
+            approvalState: approvalState ?? "not_required",
+            approvalGate: approvalGate,
+            autonomyLevel: autonomyLevel ?? "owner-review",
+            dispatchable: dispatchable ?? false,
+            noiseReview: noiseReview ?? false,
+            protected: protected ?? false,
+            blockers: blockers ?? [],
+            reasons: reasons ?? [],
+            updatedAt: updatedAt ?? .distantPast
+        )
+    }
 }
 
 // MARK: - Schoolhouse Suggestions

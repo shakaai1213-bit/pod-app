@@ -16,6 +16,9 @@ final class DashboardViewModel {
     var stateTags: [StateTagDTO] = []
     var chiefProtectionTags: [StateTagDTO] = []
     var startupStatus: DashboardStartupStatusResponse?
+    var ticketFlowReview: TicketFlowReview?
+    var ticketFlowLastUpdated: Date?
+    var ticketFlowErrorMessage: String?
     var staleStateTagCount: Int = 0
     var stateRegistryReviewExport: StateRegistryReviewExportResult?
     var stateRegistryReviewExportMessage: String?
@@ -157,6 +160,8 @@ final class DashboardViewModel {
             attentionItems = []
         }
 
+        await loadTicketFlowReview()
+
         do {
             startupStatus = try await apiClient.get(path: "/api/v1/startup/status")
         } catch {
@@ -204,6 +209,31 @@ final class DashboardViewModel {
         isLoading = false
     }
 
+    @MainActor
+    func startFlowReviewPolling() async {
+        await loadTicketFlowReview()
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 60_000_000_000)
+            if Task.isCancelled { break }
+            await loadTicketFlowReview()
+        }
+    }
+
+    @MainActor
+    func loadTicketFlowReview(limit: Int = 200) async {
+        do {
+            let dto: DashboardTicketFlowReviewDTO = try await apiClient.get(
+                path: "/api/v1/tickets/flow-review?limit=\(limit)&include_closed=false"
+            )
+            ticketFlowReview = dto.toDomain()
+            ticketFlowLastUpdated = Date()
+            ticketFlowErrorMessage = nil
+        } catch {
+            ticketFlowReview = nil
+            ticketFlowErrorMessage = "Flow review unavailable."
+        }
+    }
+
     // MARK: - Status Mappers
 
     private func mapProjectStatus(_ status: String) -> ProjectStatus {
@@ -229,4 +259,105 @@ final class DashboardViewModel {
         }
     }
 
+}
+
+private struct DashboardTicketFlowReviewDTO: Decodable {
+    let counts: DashboardTicketFlowCountsDTO
+    let items: [DashboardTicketFlowItemDTO]
+
+    func toDomain() -> TicketFlowReview {
+        TicketFlowReview(
+            counts: counts.toDomain(),
+            items: items.map { $0.toDomain() }
+        )
+    }
+}
+
+private struct DashboardTicketFlowCountsDTO: Decodable {
+    let total: Int?
+    let dispatchable: Int?
+    let noiseReview: Int?
+    let protected: Int?
+    let byFlowState: [String: Int]?
+    let byOwnerAgent: [String: Int]?
+    let bySupportLane: [String: Int]?
+
+    enum CodingKeys: String, CodingKey {
+        case total, dispatchable, protected
+        case noiseReview = "noise_review"
+        case byFlowState = "by_flow_state"
+        case byOwnerAgent = "by_owner_agent"
+        case bySupportLane = "by_support_lane"
+    }
+
+    func toDomain() -> TicketFlowCounts {
+        TicketFlowCounts(
+            total: total ?? 0,
+            dispatchable: dispatchable ?? 0,
+            noiseReview: noiseReview ?? 0,
+            protected: protected ?? 0,
+            byFlowState: byFlowState ?? [:],
+            byOwnerAgent: byOwnerAgent ?? [:],
+            bySupportLane: bySupportLane ?? [:]
+        )
+    }
+}
+
+private struct DashboardTicketFlowItemDTO: Decodable {
+    let ticketId: String
+    let title: String?
+    let status: String?
+    let priority: String?
+    let flowState: String?
+    let nextAction: String?
+    let ownerAgent: String?
+    let supportLane: String?
+    let workerLane: String?
+    let approvalState: String?
+    let approvalGate: String?
+    let autonomyLevel: String?
+    let dispatchable: Bool?
+    let noiseReview: Bool?
+    let protected: Bool?
+    let blockers: [String]?
+    let reasons: [String]?
+    let updatedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case title, status, priority, dispatchable, protected, blockers, reasons
+        case ticketId = "ticket_id"
+        case flowState = "flow_state"
+        case nextAction = "next_action"
+        case ownerAgent = "owner_agent"
+        case supportLane = "support_lane"
+        case workerLane = "worker_lane"
+        case approvalState = "approval_state"
+        case approvalGate = "approval_gate"
+        case autonomyLevel = "autonomy_level"
+        case noiseReview = "noise_review"
+        case updatedAt = "updated_at"
+    }
+
+    func toDomain() -> TicketFlowItem {
+        TicketFlowItem(
+            ticketId: ticketId,
+            title: title ?? "Untitled ticket",
+            status: status ?? "unknown",
+            priority: priority ?? "normal",
+            flowState: flowState ?? "unknown",
+            nextAction: nextAction ?? "Review",
+            ownerAgent: ownerAgent ?? "unassigned",
+            supportLane: supportLane,
+            workerLane: workerLane,
+            approvalState: approvalState ?? "not_required",
+            approvalGate: approvalGate,
+            autonomyLevel: autonomyLevel ?? "owner-review",
+            dispatchable: dispatchable ?? false,
+            noiseReview: noiseReview ?? false,
+            protected: protected ?? false,
+            blockers: blockers ?? [],
+            reasons: reasons ?? [],
+            updatedAt: updatedAt ?? .distantPast
+        )
+    }
 }

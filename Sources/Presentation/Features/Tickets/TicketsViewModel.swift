@@ -865,6 +865,8 @@ enum TicketSavedView: String, Sendable, CaseIterable {
     case dispatchable
     case running
     case waitingApproval
+    case ticketFlow
+    case noiseReview
     case operationalDebt
     case needsScope
     case reviewMermaid
@@ -873,6 +875,8 @@ enum TicketSavedView: String, Sendable, CaseIterable {
     case recentlyCompleted
     case myLane
     case alohaTriage
+    case coralRuntime
+    case reefRuntime
     case chiefFund
     case podBugs
 
@@ -882,6 +886,8 @@ enum TicketSavedView: String, Sendable, CaseIterable {
         case .dispatchable: return "Dispatchable"
         case .running: return "Running"
         case .waitingApproval: return "Waiting Approval"
+        case .ticketFlow: return "Flow"
+        case .noiseReview: return "Noise Review"
         case .operationalDebt: return "Ops Debt"
         case .needsScope: return "Needs Scope"
         case .reviewMermaid: return "Review Mermaid"
@@ -890,6 +896,8 @@ enum TicketSavedView: String, Sendable, CaseIterable {
         case .recentlyCompleted: return "Recently Completed"
         case .myLane: return "Maui Lane"
         case .alohaTriage: return "Aloha Triage"
+        case .coralRuntime: return "Coral Runtime"
+        case .reefRuntime: return "Reef Runtime"
         case .chiefFund: return "Chief/Fund"
         case .podBugs: return "Pod Bugs"
         }
@@ -993,6 +1001,144 @@ struct TicketListSummary: Sendable, Hashable {
         let reviewedBy: String?
         let reviewedAt: Date?
         let updatedAt: Date
+    }
+}
+
+struct TicketFlowReview: Sendable, Hashable {
+    let counts: TicketFlowCounts
+    let items: [TicketFlowItem]
+}
+
+struct TicketFlowCounts: Sendable, Hashable {
+    let total: Int
+    let dispatchable: Int
+    let noiseReview: Int
+    let protected: Int
+    let byFlowState: [String: Int]
+    let byOwnerAgent: [String: Int]
+    let bySupportLane: [String: Int]
+}
+
+struct TicketFlowItem: Identifiable, Sendable, Hashable {
+    var id: String { ticketId }
+    let ticketId: String
+    let title: String
+    let status: String
+    let priority: String
+    let flowState: String
+    let nextAction: String
+    let ownerAgent: String
+    let supportLane: String?
+    let workerLane: String?
+    let approvalState: String
+    let approvalGate: String?
+    let autonomyLevel: String
+    let dispatchable: Bool
+    let noiseReview: Bool
+    let protected: Bool
+    let blockers: [String]
+    let reasons: [String]
+    let updatedAt: Date
+}
+
+private struct TicketFlowReviewDTO: Decodable {
+    let counts: TicketFlowCountsDTO
+    let items: [TicketFlowItemDTO]
+
+    func toDomain() -> TicketFlowReview {
+        TicketFlowReview(
+            counts: counts.toDomain(),
+            items: items.map { $0.toDomain() }
+        )
+    }
+}
+
+private struct TicketFlowCountsDTO: Decodable {
+    let total: Int?
+    let dispatchable: Int?
+    let noiseReview: Int?
+    let protected: Int?
+    let byFlowState: [String: Int]?
+    let byOwnerAgent: [String: Int]?
+    let bySupportLane: [String: Int]?
+
+    enum CodingKeys: String, CodingKey {
+        case total, dispatchable, protected
+        case noiseReview = "noise_review"
+        case byFlowState = "by_flow_state"
+        case byOwnerAgent = "by_owner_agent"
+        case bySupportLane = "by_support_lane"
+    }
+
+    func toDomain() -> TicketFlowCounts {
+        TicketFlowCounts(
+            total: total ?? 0,
+            dispatchable: dispatchable ?? 0,
+            noiseReview: noiseReview ?? 0,
+            protected: protected ?? 0,
+            byFlowState: byFlowState ?? [:],
+            byOwnerAgent: byOwnerAgent ?? [:],
+            bySupportLane: bySupportLane ?? [:]
+        )
+    }
+}
+
+private struct TicketFlowItemDTO: Decodable {
+    let ticketId: String
+    let title: String?
+    let status: String?
+    let priority: String?
+    let flowState: String?
+    let nextAction: String?
+    let ownerAgent: String?
+    let supportLane: String?
+    let workerLane: String?
+    let approvalState: String?
+    let approvalGate: String?
+    let autonomyLevel: String?
+    let dispatchable: Bool?
+    let noiseReview: Bool?
+    let protected: Bool?
+    let blockers: [String]?
+    let reasons: [String]?
+    let updatedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case title, status, priority, dispatchable, protected, blockers, reasons
+        case ticketId = "ticket_id"
+        case flowState = "flow_state"
+        case nextAction = "next_action"
+        case ownerAgent = "owner_agent"
+        case supportLane = "support_lane"
+        case workerLane = "worker_lane"
+        case approvalState = "approval_state"
+        case approvalGate = "approval_gate"
+        case autonomyLevel = "autonomy_level"
+        case noiseReview = "noise_review"
+        case updatedAt = "updated_at"
+    }
+
+    func toDomain() -> TicketFlowItem {
+        TicketFlowItem(
+            ticketId: ticketId,
+            title: title ?? "Untitled ticket",
+            status: status ?? "unknown",
+            priority: priority ?? "normal",
+            flowState: flowState ?? "unknown",
+            nextAction: nextAction ?? "Review",
+            ownerAgent: ownerAgent ?? "unassigned",
+            supportLane: supportLane,
+            workerLane: workerLane,
+            approvalState: approvalState ?? "not_required",
+            approvalGate: approvalGate,
+            autonomyLevel: autonomyLevel ?? "owner-review",
+            dispatchable: dispatchable ?? false,
+            noiseReview: noiseReview ?? false,
+            protected: protected ?? false,
+            blockers: blockers ?? [],
+            reasons: reasons ?? [],
+            updatedAt: updatedAt ?? .distantPast
+        )
     }
 }
 
@@ -1172,6 +1318,9 @@ final class TicketsViewModel {
     var loadingArtifactRunIds: Set<String> = []
     var computeRunsByTraceId: [String: [ComputeRunRecord]] = [:]
     var ticketSummariesByTicketId: [String: TicketListSummary] = [:]
+    var ticketFlowReview: TicketFlowReview?
+    var ticketFlowByTicketId: [String: TicketFlowItem] = [:]
+    var ticketFlowErrorMessage: String?
     var dispatchPreviewsByTicketId: [String: TicketDispatchPreview] = [:]
     var dispatchPreviewErrorsByTicketId: [String: String] = [:]
     var workerQueuesByLane: [String: [AgentRun]] = [:]
@@ -1360,6 +1509,7 @@ final class TicketsViewModel {
         let haystack = "\(ticket.title) \(ticket.description ?? "") \(ticket.assigneeAgentName ?? "") \(ticket.ticketType ?? "") \(ticket.computeTag ?? "")"
             .lowercased()
         let grooming = groomingItem(for: ticket.id)
+        let flow = ticketFlowByTicketId[ticket.id]
         switch savedView {
         case .needsHuman:
             let approvalState = ticket.approvalState?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -1404,6 +1554,12 @@ final class TicketsViewModel {
                     || haystack.contains("waiting for human")
                     || haystack.contains("waiting_for_human")
                 )
+        case .ticketFlow:
+            return ticket.status != .closed && ticket.status != .cancelled
+                && flow != nil
+        case .noiseReview:
+            return ticket.status != .closed && ticket.status != .cancelled
+                && (flow?.noiseReview == true || flow?.flowState == "noise_review")
         case .operationalDebt:
             return !operationalDebts(for: ticket).isEmpty
         case .needsScope:
@@ -1456,9 +1612,29 @@ final class TicketsViewModel {
                     || ticket.ticketType == "triage"
                     || grooming?.classification == "needs-human"
                     || grooming?.suggestedOwner?.lowercased() == "aloha"
+                    || flow?.ownerAgent == "aloha"
+                )
+        case .coralRuntime:
+            return ticket.status != .closed && ticket.status != .cancelled
+                && (
+                    flow?.ownerAgent == "coral"
+                    || flow?.supportLane == "coral-support-runtime"
+                    || haystack.contains("coral")
+                    || haystack.contains("watchdog")
+                    || haystack.contains("petal")
+                    || haystack.contains("daemon")
+                )
+        case .reefRuntime:
+            return ticket.status != .closed && ticket.status != .cancelled
+                && (
+                    flow?.ownerAgent == "reef"
+                    || flow?.supportLane == "reef-support-runtime"
+                    || haystack.contains("reef")
+                    || haystack.contains("chief mac")
+                    || haystack.contains("mirror")
                 )
         case .chiefFund:
-            return haystack.contains("chief") || haystack.contains("fund") || haystack.contains("trading") || haystack.contains("p&l") || (grooming?.suggestedWorkerLane ?? SchoolhouseTicketDispatchService.workerLane(for: ticket)) == "protected-chief-review"
+            return haystack.contains("chief") || haystack.contains("fund") || haystack.contains("trading") || haystack.contains("p&l") || (grooming?.suggestedWorkerLane ?? SchoolhouseTicketDispatchService.workerLane(for: ticket)) == "protected-chief-review" || flow?.ownerAgent == "chief"
         case .podBugs:
             return haystack.contains("pod") && (ticket.ticketType == "bug" || haystack.contains("bug") || haystack.contains("broken") || haystack.contains("not working"))
         }
@@ -1499,6 +1675,7 @@ final class TicketsViewModel {
                 return dto.toDomain(agentName: agentName)
             }.sorted { $0.createdAt > $1.createdAt }
             await loadTicketSummaries(limit: limitForSummaries)
+            await loadTicketFlowReview(limit: limitForSummaries)
             await loadGroomingSummary()
             await loadBacklogReprocessDryRun()
             await loadWorkControlBackfillSummary()
@@ -1543,6 +1720,39 @@ final class TicketsViewModel {
     }
 
     @MainActor
+    func loadTicketFlowReview(limit: Int = 100) async {
+        ticketFlowErrorMessage = nil
+        do {
+            let dto: TicketFlowReviewDTO = try await api.get(path: "/api/v1/tickets/flow-review?limit=\(limit)&include_closed=false")
+            let review = dto.toDomain()
+            ticketFlowReview = review
+            ticketFlowByTicketId = review.items.reduce(into: [:]) { partialResult, item in
+                partialResult[item.ticketId] = item
+            }
+        } catch {
+            ticketFlowReview = nil
+            ticketFlowByTicketId = [:]
+            ticketFlowErrorMessage = "Ticket flow review unavailable."
+        }
+    }
+
+    @MainActor
+    private func refreshTicketFlow(ticketId: String, includeClosed: Bool = true) async {
+        do {
+            let dto: TicketFlowReviewDTO = try await api.get(path: "/api/v1/tickets/flow-review?ticket_id=\(ticketId)&limit=1&include_closed=\(includeClosed)")
+            if let flow = dto.toDomain().items.first {
+                ticketFlowByTicketId[ticketId] = flow
+                ticketFlowErrorMessage = nil
+            } else {
+                ticketFlowByTicketId.removeValue(forKey: ticketId)
+            }
+        } catch {
+            ticketFlowByTicketId.removeValue(forKey: ticketId)
+            ticketFlowErrorMessage = "Ticket flow review unavailable."
+        }
+    }
+
+    @MainActor
     private func resolveAgentName(for agentId: String?) async -> String? {
         guard let agentId, !agentId.isEmpty else { return nil }
         do {
@@ -1583,6 +1793,7 @@ final class TicketsViewModel {
 
             let summary: TicketListSummaryDTO = try await api.get(path: "/api/v1/tickets/\(ticketId)/summary")
             ticketSummariesByTicketId[ticketId] = summary.toDomain()
+            await refreshTicketFlow(ticketId: ticketId)
 
             liveStatusDetail = "Updated \(ticket.title) from live stream."
         } catch {
@@ -1873,6 +2084,15 @@ final class TicketsViewModel {
             )
         }
 
+        if let flow = ticketFlowByTicketId[ticket.id] {
+            return TicketListSignal(
+                label: Self.flowStateLabel(flow.flowState),
+                detail: Self.flowDetail(flow),
+                icon: Self.flowStateIcon(flow.flowState, protected: flow.protected),
+                color: Self.flowStateColor(flow.flowState, protected: flow.protected)
+            )
+        }
+
         let localBlockers = Self.localEvidenceBlockers(ticket: ticket, runs: agentRuns(for: ticket.id))
         if localBlockers.contains("waiting_for_human") {
             return TicketListSignal(
@@ -2080,6 +2300,63 @@ final class TicketsViewModel {
             blockers.append("failed_run")
         }
         return blockers
+    }
+
+    private static func flowDetail(_ flow: TicketFlowItem) -> String {
+        let lane = flow.supportLane ?? flow.workerLane
+        let owner = flow.ownerAgent.capitalized
+        if let lane, !lane.isEmpty {
+            return "\(owner) / \(lane)"
+        }
+        return flow.nextAction
+    }
+
+    private static func flowStateLabel(_ state: String) -> String {
+        switch state {
+        case "noise_review": return "Noise Review"
+        case "needs_approval": return "Needs Approval"
+        case "needs_scope": return "Needs Scope"
+        case "needs_dispatch_plan": return "Needs Plan"
+        case "needs_owner_review": return "Owner Review"
+        case "ready_for_dispatch": return "Dispatchable"
+        case "ready_to_close": return "Ready To Close"
+        case "running": return "Running"
+        case "blocked": return "Blocked"
+        case "in_progress": return "In Progress"
+        case "closed": return "Closed"
+        case "cancelled": return "Cancelled"
+        default:
+            return state.replacingOccurrences(of: "_", with: " ").capitalized
+        }
+    }
+
+    private static func flowStateIcon(_ state: String, protected: Bool) -> String {
+        if protected { return "lock.shield" }
+        switch state {
+        case "noise_review": return "exclamationmark.bubble"
+        case "needs_approval": return "person.crop.circle.badge.exclamationmark"
+        case "needs_scope": return "doc.badge.gearshape"
+        case "needs_dispatch_plan": return "list.bullet.clipboard"
+        case "needs_owner_review": return "checkmark.seal"
+        case "ready_for_dispatch": return "bolt.badge.clock"
+        case "ready_to_close": return "checkmark.circle"
+        case "running": return "arrow.clockwise.circle"
+        case "blocked": return "exclamationmark.triangle"
+        default: return "point.topleft.down.curvedto.point.bottomright.up"
+        }
+    }
+
+    private static func flowStateColor(_ state: String, protected: Bool) -> Color {
+        if protected { return AppColors.accentDanger }
+        switch state {
+        case "noise_review", "blocked": return AppColors.accentDanger
+        case "needs_approval", "needs_scope", "needs_dispatch_plan", "needs_owner_review": return Color.orange
+        case "ready_for_dispatch", "ready_to_close": return AppColors.accentAgent
+        case "running", "in_progress": return AppColors.accentElectric
+        case "closed": return AppColors.accentSuccess
+        case "cancelled": return AppColors.textTertiary
+        default: return AppColors.textSecondary
+        }
     }
 
     private static func localNextAction(ticket: Ticket, runs: [AgentRun]) -> String? {

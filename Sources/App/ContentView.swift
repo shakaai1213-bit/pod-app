@@ -110,6 +110,9 @@ struct ContentView: View {
             appState.pendingDirectChatAgentId = nil
             appState.pendingDirectChatChannelId = nil
         }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("pod.openWorkFlowFilter"))) { _ in
+            withAnimation(.easeInOut(duration: 0.15)) { selectedTab = .work }
+        }
     }
 
     @ViewBuilder
