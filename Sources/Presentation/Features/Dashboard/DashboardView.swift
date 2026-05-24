@@ -19,24 +19,25 @@ struct DashboardView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: Theme.md) {
-                // 1. Tier 1 sign queue — "what needs your eyes"
-                CockpitSignQueueSection()
+            ScrollView {
+                VStack(alignment: .leading, spacing: Theme.md) {
+                    // 1. Tier 1 sign queue — "what needs your eyes"
+                    CockpitSignQueueSection()
 
-                // 2. Agent status strip — 6 dots + status
-                agentStatusStrip
+                    // 2. Agent status strip — 6 dots + status
+                    agentStatusStrip
 
-                // 3. Compact briefing + doctrine velocity line
-                cockpitBriefingLine
+                    // 3. Compact briefing + doctrine velocity line
+                    cockpitBriefingLine
 
-                // 4. Top flow card — one blocker, tap → Work
-                cockpitFlowCard
-
-                Spacer(minLength: 0)
+                    // 4. Top flow card — one blocker, tap → Work
+                    cockpitFlowCard
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, Theme.md)
+                .padding(.top, Theme.sm)
+                .padding(.bottom, 100)
             }
-            .padding(.horizontal, Theme.md)
-            .padding(.top, Theme.sm)
-            .padding(.bottom, 100)
             .background(AppColors.backgroundPrimary)
             .navigationTitle("Dashboard")
             .navigationBarTitleDisplayMode(.inline)
