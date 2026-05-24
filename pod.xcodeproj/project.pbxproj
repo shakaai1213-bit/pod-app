@@ -38,6 +38,8 @@
 		50D5FB832D3F748D484A7DA6 /* OfflineQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2314FFEFA469FFDCDA8BCB0 /* OfflineQueue.swift */; };
 		59202E155A36185F02416841 /* ChannelRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC9A4A64DB751E8953D363DF /* ChannelRepository.swift */; };
 		5E8CE5D256DC98E4F893A8CE /* AgentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D18D78CE9147C58BF929B8A0 /* AgentsView.swift */; };
+		5F4A0A2C78FBB8AD001A0001 /* ArmsTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F4A0A2C78FBB8AD001B0001 /* ArmsTabView.swift */; };
+		5F4A0A2C78FBB8AD001A0002 /* ArmsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F4A0A2C78FBB8AD001B0002 /* ArmsViewModel.swift */; };
 		607BA9DB490B1693ECB1033C /* KnowledgeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F92E1097762048180C6B3C9E /* KnowledgeViewModel.swift */; };
 		60E5DDF03422C84E645AC58A /* ComposeBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DAAD8A63CB713714666FEE9 /* ComposeBar.swift */; };
 		638892369CE763D406891FA7 /* PushNotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BEE8E77C2965FB511A49166 /* PushNotificationService.swift */; };
@@ -203,6 +205,8 @@
 		C62213C075198085FB1FC11D /* MessageBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBubbleView.swift; sourceTree = "<group>"; };
 		CBD062EB03F1386CFB3A77D5 /* User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
 		D18D78CE9147C58BF929B8A0 /* AgentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentsView.swift; sourceTree = "<group>"; };
+		5F4A0A2C78FBB8AD001B0001 /* ArmsTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArmsTabView.swift; sourceTree = "<group>"; };
+		5F4A0A2C78FBB8AD001B0002 /* ArmsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArmsViewModel.swift; sourceTree = "<group>"; };
 		D2314FFEFA469FFDCDA8BCB0 /* OfflineQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineQueue.swift; sourceTree = "<group>"; };
 		DBE261A9A40BC12CBB2C0F78 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		DC9A4A64DB751E8953D363DF /* ChannelRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelRepository.swift; sourceTree = "<group>"; };
@@ -341,6 +345,8 @@
 				952F2ED4468BC7A6FAAEF442 /* AgentDetailSheet.swift */,
 				D18D78CE9147C58BF929B8A0 /* AgentsView.swift */,
 				2ADC952C3EB865B3AE6D68D0 /* AgentsViewModel.swift */,
+				5F4A0A2C78FBB8AD001B0001 /* ArmsTabView.swift */,
+				5F4A0A2C78FBB8AD001B0002 /* ArmsViewModel.swift */,
 				28ED6950C2F15EC07D3C1331 /* LogStreamView.swift */,
 			);
 			path = Agents;
@@ -744,6 +750,8 @@
 				99367A8E3BC0E7405588837A /* Agents.swift in Sources */,
 				5E8CE5D256DC98E4F893A8CE /* AgentsView.swift in Sources */,
 				BB77E2B8C7E1D40AF2F8F601 /* AgentsViewModel.swift in Sources */,
+				5F4A0A2C78FBB8AD001A0001 /* ArmsTabView.swift in Sources */,
+				5F4A0A2C78FBB8AD001A0002 /* ArmsViewModel.swift in Sources */,
 				AADDFD64686449D8343A6080 /* AppIntents.swift in Sources */,
 				A181B4D7C45780A5CA3ECDA0 /* AppShortcuts.swift in Sources */,
 				43C5E6069CFE09916C866EF0 /* AppState.swift in Sources */,

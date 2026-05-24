@@ -7,6 +7,7 @@ enum AppTab: String, CaseIterable, Hashable {
     case work          // replaces .tickets + .projects
     case captainsLog
     case lab           // product catalog
+    case arms
     case agents
     case knowledge
 
@@ -18,6 +19,7 @@ enum AppTab: String, CaseIterable, Hashable {
         case .work:        return "Work"
         case .captainsLog: return "Captain's Log"
         case .lab:         return "Lab"
+        case .arms:        return "Arms"
         case .agents:      return "Agents"
         case .knowledge:   return "Knowledge"
         }
@@ -31,6 +33,7 @@ enum AppTab: String, CaseIterable, Hashable {
         case .work:        return "square.stack.3d.up.fill"
         case .captainsLog: return "square.and.pencil"
         case .lab:         return "flask.fill"
+        case .arms:        return "person.3.sequence.fill"
         case .agents:      return "cpu.fill"
         case .knowledge:   return "books.vertical.fill"
         }

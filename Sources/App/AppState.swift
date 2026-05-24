@@ -325,6 +325,7 @@ final class AppState: ObservableObject {
         case .work: navigationState = .projects(taskId: nil)
         case .captainsLog: navigationState = .dashboard
         case .lab: navigationState = .dashboard
+        case .arms: navigationState = .agents(agentId: nil)
         case .knowledge: navigationState = .knowledge(standardId: nil)
         case .agents: navigationState = .agents(agentId: nil)
         }
