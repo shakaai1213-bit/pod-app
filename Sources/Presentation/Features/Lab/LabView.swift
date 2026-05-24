@@ -9,6 +9,8 @@ import SwiftUI
 struct LabView: View {
 
     // Per-section expand/collapse state (default per spec §2).
+    @State private var architectureModel = ArchitectureDiagramModel()
+    @State private var showingArchitectureSheet = false
     @State private var stackExpanded     = true
     @State private var fishExpanded      = false
     @State private var workflowsExpanded = false
@@ -25,6 +27,7 @@ struct LabView: View {
                         .padding(.top, 60)
                         .padding(.bottom, 8)
 
+                    architectureSection
                     stackSection
                     fishSection
                     workflowsSection
@@ -36,6 +39,15 @@ struct LabView: View {
                 .padding(.bottom, 80)
             }
             .background(AppColors.backgroundPrimary.ignoresSafeArea())
+            .task {
+                await architectureModel.load()
+            }
+            .refreshable {
+                await architectureModel.load(force: true)
+            }
+            .fullScreenCover(isPresented: $showingArchitectureSheet) {
+                ArchitectureDiagramSheet(markdown: architectureModel.markdown)
+            }
         }
     }
 
@@ -105,6 +117,64 @@ struct LabView: View {
             }
         }
         .contentShape(Rectangle())
+    }
+
+    // MARK: - ARCHITECTURE section
+
+    private var architectureSection: some View {
+        sectionCard {
+            HStack(spacing: 8) {
+                Image(systemName: "point.topleft.down.curvedto.point.bottomright.up")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(AppColors.accentElectric)
+                Text("ARCHITECTURE")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(AppColors.textPrimary)
+                Spacer()
+                if architectureModel.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.65)
+                } else {
+                    Text(architectureModel.sourceLabel)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(AppColors.textTertiary)
+                }
+            }
+        } body: {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("System map · tap to expand")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(AppColors.textTertiary)
+
+                ArchitectureDiagramCodeBlock(
+                    text: architectureModel.previewText,
+                    minHeight: 220
+                )
+                .frame(maxHeight: 260)
+                .overlay(alignment: .bottomTrailing) {
+                    Label("Expand", systemImage: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(AppColors.accentElectric)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(AppColors.backgroundSecondary.opacity(0.92))
+                        .clipShape(Capsule())
+                        .padding(8)
+                }
+
+                if let error = architectureModel.error {
+                    Text(error)
+                        .font(.system(size: 10))
+                        .foregroundColor(AppColors.textTertiary)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 12)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                showingArchitectureSheet = true
+            }
+        }
     }
 
     // MARK: - STACK section
@@ -469,6 +539,275 @@ struct LabView: View {
             .clipShape(Capsule())
     }
 
+}
+
+// MARK: - Architecture diagram
+
+@MainActor
+@Observable
+private final class ArchitectureDiagramModel {
+    private(set) var markdown = ArchitectureDiagramSnapshot.markdown
+    private(set) var isLoading = false
+    private(set) var error: String?
+    private(set) var sourceLabel = "SNAPSHOT"
+
+    var previewText: String {
+        Self.firstMermaidBlock(in: markdown) ?? markdown
+    }
+
+    func load(force: Bool = false) async {
+        if isLoading { return }
+        if !force && sourceLabel == "ORCA" { return }
+
+        isLoading = true
+        error = nil
+        defer { isLoading = false }
+
+        do {
+            let response: WikiFileResponse = try await APIClient.shared.get(
+                path: "/api/v1/wiki/file?path=architecture/ARCHITECTURE-DIAGRAM.md"
+            )
+            markdown = response.content
+            sourceLabel = "ORCA"
+        } catch {
+            do {
+                let response: WikiFileResponse = try await APIClient.shared.get(
+                    path: "/api/v1/wiki/file?path=operating-system/architecture/ARCHITECTURE-DIAGRAM.md"
+                )
+                markdown = response.content
+                sourceLabel = "ORCA"
+            } catch {
+                markdown = ArchitectureDiagramSnapshot.markdown
+                sourceLabel = "SNAPSHOT"
+                self.error = "Showing bundled snapshot; ORCA wiki file unavailable."
+            }
+        }
+    }
+
+    private static func firstMermaidBlock(in markdown: String) -> String? {
+        guard let openRange = markdown.range(of: "```mermaid") else { return nil }
+        let bodyStart = openRange.upperBound
+        guard let closeRange = markdown[bodyStart...].range(of: "```") else { return nil }
+        let block = markdown[bodyStart..<closeRange.lowerBound]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return block.isEmpty ? nil : block
+    }
+}
+
+private struct WikiFileResponse: Decodable {
+    let content: String
+
+    init(from decoder: Decoder) throws {
+        if let single = try? decoder.singleValueContainer(),
+           let value = try? single.decode(String.self) {
+            content = value
+            return
+        }
+
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        if let value = try container.decodeIfPresent(String.self, forKey: .content) {
+            content = value
+        } else if let value = try container.decodeIfPresent(String.self, forKey: .markdown) {
+            content = value
+        } else if let value = try container.decodeIfPresent(String.self, forKey: .text) {
+            content = value
+        } else if let value = try container.decodeIfPresent(String.self, forKey: .body) {
+            content = value
+        } else {
+            throw DecodingError.keyNotFound(
+                CodingKeys.content,
+                DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "No wiki file content field")
+            )
+        }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case content
+        case markdown
+        case text
+        case body
+    }
+}
+
+private struct ArchitectureDiagramCodeBlock: View {
+    let text: String
+    let minHeight: CGFloat
+
+    var body: some View {
+        ScrollView([.horizontal, .vertical], showsIndicators: true) {
+            Text(text)
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundColor(AppColors.textPrimary)
+                .textSelection(.enabled)
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(minHeight: minHeight)
+        .background(AppColors.backgroundPrimary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(AppColors.border, lineWidth: 0.5)
+        )
+    }
+}
+
+private struct ArchitectureDiagramSheet: View {
+    let markdown: String
+    @Environment(\.dismiss) private var dismiss
+    @State private var scale: CGFloat = 1
+    @State private var lastScale: CGFloat = 1
+
+    var body: some View {
+        NavigationStack {
+            ScrollView([.horizontal, .vertical], showsIndicators: true) {
+                Text(markdown)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundColor(AppColors.textPrimary)
+                    .textSelection(.enabled)
+                    .padding(16)
+                    .scaleEffect(scale, anchor: .topLeading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .gesture(
+                        MagnificationGesture()
+                            .onChanged { value in
+                                scale = min(max(lastScale * value, 0.75), 2.8)
+                            }
+                            .onEnded { _ in
+                                lastScale = scale
+                            }
+                    )
+            }
+            .background(AppColors.backgroundPrimary.ignoresSafeArea())
+            .navigationTitle("Architecture")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Close") { dismiss() }
+                        .foregroundColor(AppColors.accentElectric)
+                }
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button {
+                        scale = max(0.75, scale - 0.15)
+                        lastScale = scale
+                    } label: {
+                        Image(systemName: "minus.magnifyingglass")
+                    }
+                    Button {
+                        scale = min(2.8, scale + 0.15)
+                        lastScale = scale
+                    } label: {
+                        Image(systemName: "plus.magnifyingglass")
+                    }
+                }
+            }
+        }
+    }
+}
+
+private enum ArchitectureDiagramSnapshot {
+    static let markdown = """
+    # Architecture — Visual Map
+
+    ## 1. The 5-Layer Stack
+
+    ```mermaid
+    flowchart TB
+        classDef surface fill:#cce5ff,stroke:#004085,color:#000
+        classDef integration fill:#d4edda,stroke:#155724,color:#000
+        classDef backbone fill:#fff3cd,stroke:#856404,color:#000
+        classDef nerve fill:#f8d7da,stroke:#721c24,color:#000
+        classDef actor fill:#e2e3e5,stroke:#383d41,color:#000
+
+        subgraph L1["LAYER 1 — Surfaces (what Tony touches)"]
+            Pod["Pod (iPad/iPhone)"]
+            Chat["Chat"]
+            iMsg["iMessage"]
+        end
+
+        subgraph L2["LAYER 2 — Schoolhouse OS (integration loop)"]
+            SH["Schoolhouse — protocols · standards · workflows · doctrine binding"]
+        end
+
+        subgraph L3["LAYER 3 — Substrate"]
+            ORCA["3a. ORCA (backend truth · endpoints · projects · tickets · boards · notes)"]
+            MEM["3b. Memory (daily logs · Chroma · per-agent · Spine V1)"]
+            CMP["3c. Compute (Spark · Kimi · Claude · Mermaid · cascade triage)"]
+        end
+
+        subgraph L4["LAYER 4 — Nerve (the wire)"]
+            NATS["NATS · Track B envelope · sign chain"]
+        end
+
+        subgraph L5["LAYER 5 — Actors + Observability"]
+            Agents["Agents (Aloha · Maui · Coral · Reef · Rooster · Chief)"]
+            Fish["Fish Fleet (Starfish · Chieffish · Roosterfish) + Workers (Pearl · Mermaid · Turtle · Miner)"]
+            Petals["Petals + Watchdogs"]
+        end
+
+        Pod -->|reads| ORCA
+        Chat -->|reads| ORCA
+        iMsg -->|reads| ORCA
+        SH -->|orchestrates| ORCA
+        SH -->|orchestrates| MEM
+        SH -->|orchestrates| CMP
+        ORCA <-->|envelopes| NATS
+        MEM <-->|envelopes| NATS
+        CMP <-->|envelopes| NATS
+        Agents <-->|publish/subscribe| NATS
+        Fish -->|directive queues| Agents
+        Petals -->|alerts| Agents
+        Petals -->|metrics| ORCA
+
+        L1 ~~~ L2 ~~~ L3 ~~~ L4 ~~~ L5
+
+        class L1 surface
+        class L2 integration
+        class L3 backbone
+        class L4 nerve
+        class L5 actor
+    ```
+
+    ## 2. The Operating Rhythm
+
+    ```mermaid
+    flowchart LR
+        D["1. DESIGN<br>Aloha + Maui<br>Spec / ADR / Standard"]
+        B["2. BUILD<br>Codex / Compute<br>Commits + work-log"]
+        C["3. CODIFY<br>Aloha + Maui<br>DDS / SOP / Catalog"]
+        L["4. LEARN<br>ORCA<br>Suggestions · Memory · Flow"]
+        E["5. EARN<br>Chief<br>P&L · Funding · Outcomes"]
+        D --> B --> C --> L --> E
+        E -.->|next cycle| D
+    ```
+
+    ## 3. Boards Overlay
+
+    ```mermaid
+    flowchart TB
+        subgraph LAYER1["L1 Surfaces"]
+            pod[pod]
+            chat[chat]
+        end
+        subgraph LAYER2["L2 Integration"]
+            gov[governance]
+        end
+        subgraph LAYER3["L3 Substrate"]
+            orca[orca]
+            memory[memory]
+            compute[compute]
+        end
+        subgraph LAYER4["L4 Nerve"]
+            nerve[nerve]
+        end
+        subgraph LAYER5["L5 Observability"]
+            obs[observability]
+        end
+        subgraph CROSSCUT["Cross-cutting / Strategic"]
+            ns[north-star]
+        end
+    ```
+    """
 }
 
 // MARK: - Flywheel loop diagram
