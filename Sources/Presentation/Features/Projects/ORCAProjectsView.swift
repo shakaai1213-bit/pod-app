@@ -3,39 +3,59 @@ import SwiftUI
 // MARK: - Lifecycle Stage
 
 enum ProjectLifecycleStage: String, CaseIterable {
+    case assessment = "assessment"
+    case definition = "definition"
     case blueprint = "blueprint"
-    case dds = "dds"
-    case build = "build"
-    case sop = "sop"
-    case maintain = "maintain"
+    case scoping = "scoping"
+    case active = "active"
+    case inProgress = "in-progress"
+    case handoff = "handoff"
+    case live = "live"
+    case closed = "closed"
+    case cancelled = "cancelled"
 
     var displayName: String {
         switch self {
+        case .assessment: return "Assessment"
+        case .definition: return "Definition"
         case .blueprint: return "Blueprint"
-        case .dds:      return "DDS"
-        case .build:    return "Build"
-        case .sop:      return "SOP"
-        case .maintain: return "Maintain"
+        case .scoping: return "Scoping"
+        case .active: return "Active"
+        case .inProgress: return "In Progress"
+        case .handoff: return "Handoff"
+        case .live: return "Live"
+        case .closed: return "Closed"
+        case .cancelled: return "Cancelled"
         }
     }
 
     var color: Color {
         switch self {
-        case .blueprint: return Color(hexString: "64748B")  // gray
-        case .dds:      return Color(hexString: "3B82F6")  // blue
-        case .build:    return Color(hexString: "F97316")  // orange
-        case .sop:      return Color(hexString: "9333EA")  // purple
-        case .maintain: return Color(hexString: "22C55E")  // green
+        case .assessment: return Color(hexString: "64748B")
+        case .definition: return Color(hexString: "0EA5E9")
+        case .blueprint: return Color(hexString: "3B82F6")
+        case .scoping: return Color(hexString: "8B5CF6")
+        case .active: return AppColors.accentSuccess
+        case .inProgress: return Color(hexString: "F97316")
+        case .handoff: return Color(hexString: "14B8A6")
+        case .live: return AppColors.accentSuccess
+        case .closed: return AppColors.textTertiary
+        case .cancelled: return AppColors.accentDanger
         }
     }
 
     var icon: String {
         switch self {
+        case .assessment: return "magnifyingglass"
+        case .definition: return "text.page"
         case .blueprint: return "doc.text"
-        case .dds:       return "ruler.fill"
-        case .build:     return "hammer"
-        case .sop:       return "book"
-        case .maintain:  return "arrow.triangle.2.circlepath"
+        case .scoping: return "scope"
+        case .active: return "play.circle.fill"
+        case .inProgress: return "hammer"
+        case .handoff: return "arrowshape.turn.up.right.fill"
+        case .live: return "bolt.fill"
+        case .closed: return "checkmark.circle.fill"
+        case .cancelled: return "xmark.circle.fill"
         }
     }
 }
@@ -156,7 +176,8 @@ struct ORCAProjectsView: View {
                 return true
             }
             .filter { p in
-                selectedStage == nil || p.stage == selectedStage?.rawValue
+                guard let selectedStage else { return true }
+                return p.stage == selectedStage.rawValue
             }
             .sorted { $0.priority < $1.priority }  // P1 first
 
@@ -387,19 +408,20 @@ private struct ORCAProjectCard: View {
 
     @ViewBuilder
     private var stageBadge: some View {
-        if let stage = project.stage,
-           let lifecycleStage = ProjectLifecycleStage(rawValue: stage) {
+        if let stage = project.stage {
+            let lifecycleStage = ProjectLifecycleStage(rawValue: stage)
+            let badgeColor = lifecycleStage?.color ?? AppColors.textTertiary
             HStack(spacing: 3) {
-                Image(systemName: lifecycleStage.icon)
+                Image(systemName: lifecycleStage?.icon ?? "tag.fill")
                     .font(.system(size: 9, weight: .medium))
-                Text(lifecycleStage.displayName.uppercased())
+                Text((lifecycleStage?.displayName ?? stage.replacingOccurrences(of: "_", with: " ")).uppercased())
                     .font(.system(size: 9, weight: .bold))
                     .kerning(0.3)
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
-            .background(lifecycleStage.color)
+            .background(badgeColor)
             .clipShape(Capsule())
         }
     }
@@ -493,7 +515,7 @@ private struct NewProjectSheet: View {
     @State private var name = ""
     @State private var goal = ""
     @State private var priority = 3
-    @State private var selectedStage: ProjectLifecycleStage = .blueprint
+    @State private var selectedStage: ProjectLifecycleStage = .assessment
 
     var body: some View {
         NavigationStack {

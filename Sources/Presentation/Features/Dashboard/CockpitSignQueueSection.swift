@@ -103,106 +103,53 @@ struct CockpitSignQueueSection: View {
     // MARK: - Row
 
     private func row(_ item: CockpitSignItem) -> some View {
-        HStack(spacing: 10) {
-            // Tappable info area — opens detail sheet with full body
-            Button {
+        PodReviewCard(
+            item: reviewItem(for: item),
+            isBusy: model.busyIds.contains(item.id)
+        ) { action in
+            switch action.id {
+            case "sign":
+                Task { await model.sign(item) }
+            case "pass":
+                Task { await model.countermand(item) }
+            default:
                 detailItem = item
-            } label: {
-                HStack(spacing: 10) {
-                    // Kind icon
-                    ZStack {
-                        Circle()
-                            .fill(item.kind.tint.opacity(0.18))
-                            .frame(width: 28, height: 28)
-                        Image(systemName: item.kind.icon)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(item.kind.tint)
-                    }
-
-                    // Title + gate + expand hint
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(item.title)
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(AppColors.textPrimary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-
-                        HStack(spacing: 4) {
-                            Text(item.kind.label)
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundColor(item.kind.tint)
-                            if item.kind == .ticket {
-                                Text("·")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(AppColors.textTertiary)
-                                Text(item.shortRef)
-                                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                                    .foregroundColor(AppColors.textSecondary)
-                            }
-                            Text("·")
-                                .font(.system(size: 10))
-                                .foregroundColor(AppColors.textTertiary)
-                            Text(item.gateLabel)
-                                .font(.system(size: 10))
-                                .foregroundColor(AppColors.textTertiary)
-                                .lineLimit(1)
-                            if !item.body.isEmpty {
-                                Text("·")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(AppColors.textTertiary)
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 9, weight: .semibold))
-                                    .foregroundColor(AppColors.textTertiary)
-                            }
-                        }
-                    }
-
-                    Spacer(minLength: 6)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            // Actions
-            if model.busyIds.contains(item.id) {
-                ProgressView()
-                    .progressViewStyle(.circular)
-                    .scaleEffect(0.6)
-            } else {
-                HStack(spacing: 6) {
-                    Button {
-                        Task { await model.sign(item) }
-                    } label: {
-                        Text("Sign")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(AppColors.accentElectric)
-                            .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-
-                    Button {
-                        Task { await model.countermand(item) }
-                    } label: {
-                        Text("Pass")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(AppColors.textSecondary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(AppColors.backgroundTertiary)
-                            .clipShape(Capsule())
-                            .overlay(
-                                Capsule().strokeBorder(AppColors.border, lineWidth: 0.5)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                }
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            detailItem = item
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+    }
+
+    private func reviewItem(for item: CockpitSignItem) -> PodReviewItem {
+        let shortRef = item.kind == .ticket ? " · \(item.shortRef)" : ""
+        let priority = item.priority?.uppercased()
+        return PodReviewItem(
+            id: item.id,
+            eyebrow: "\(item.kind.label)\(shortRef)",
+            title: item.title,
+            detail: item.body,
+            status: item.gateLabel,
+            statusColor: item.kind.tint,
+            provenance: [priority, "Dashboard"].compactMap { $0 },
+            actions: [
+                PodReviewAction(
+                    id: "sign",
+                    title: "Sign",
+                    systemImage: "checkmark.seal.fill",
+                    style: .success
+                ),
+                PodReviewAction(
+                    id: "pass",
+                    title: "Pass",
+                    systemImage: "arrow.uturn.left",
+                    style: .neutral
+                )
+            ]
+        )
     }
 
     // MARK: - States
