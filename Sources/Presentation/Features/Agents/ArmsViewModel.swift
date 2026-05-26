@@ -468,8 +468,8 @@ private struct ArmTagDTO: Decodable {
             lastFetched: data?.lastFetched,
             agentSubject: routing?.agentSubject,
             workspace: routing?.workspace,
-            canWake: routing?.canWake ?? name.lowercased() != "fund",
-            protected: routing?.protected ?? name.lowercased() == "fund",
+            canWake: routing?.canWake ?? (name.lowercased() != "fund"),
+            protected: routing?.protected ?? (name.lowercased() == "fund"),
             protectionReason: routing?.protectionReason,
             lastWakeDeliveryStatus: data?.lastWakeDeliveryStatus,
             lastWakeEnvelopeId: data?.lastWakeEnvelopeId
