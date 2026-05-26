@@ -15,6 +15,7 @@ struct WorkView: View {
     @State private var selectedFlowItem: TicketFlowItem?
     @State private var boardsModel = WorkBoardsModel()
     @State private var selectedBoard: WorkBoardSummary?
+    @State private var showingBoardsArchitecture = false
 
     var body: some View {
         NavigationStack {
@@ -72,6 +73,18 @@ struct WorkView: View {
             }
             .fullScreenCover(item: $selectedBoard) { board in
                 WorkBoardDetailView(board: board)
+            }
+            .fullScreenCover(isPresented: $showingBoardsArchitecture) {
+                WorkBoardsArchitectureView(
+                    boards: boardsModel.boards,
+                    sourceLabel: boardsModel.sourceLabel,
+                    onSelectBoard: { board in
+                        showingBoardsArchitecture = false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                            selectedBoard = board
+                        }
+                    }
+                )
             }
             // Hidden navigation links for full-list push
             .navigationDestination(isPresented: $pushProjects) {
@@ -486,6 +499,14 @@ struct WorkView: View {
                 Text(boardsModel.sourceLabel)
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .foregroundColor(boardsModel.sourceLabel == "ORCA" ? AppColors.accentSuccess : AppColors.textTertiary)
+                Button {
+                    showingBoardsArchitecture = true
+                } label: {
+                    Text("View all")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(AppColors.accentElectric)
+                }
+                .buttonStyle(.plain)
                 Button {
                     Task { await boardsModel.load(force: true) }
                 } label: {
@@ -2452,6 +2473,195 @@ private struct WorkBoardBreakdownItem: Identifiable, Hashable {
     var id: String { label }
     let label: String
     let count: Int
+}
+
+private struct WorkBoardsArchitectureView: View {
+    let boards: [WorkBoardSummary]
+    let sourceLabel: String
+    let onSelectBoard: (WorkBoardSummary) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    private var groupedBoards: [(layer: String, boards: [WorkBoardSummary])] {
+        let grouped = Dictionary(grouping: boards) { board in
+            let raw = board.layer?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return raw?.isEmpty == false ? raw! : "uncategorized"
+        }
+        return grouped
+            .map { (layer: $0.key, boards: $0.value.sorted { $0.displayName < $1.displayName }) }
+            .sorted {
+                if $0.layer == "uncategorized" { return false }
+                if $1.layer == "uncategorized" { return true }
+                return $0.layer < $1.layer
+            }
+    }
+
+    private var totalProjects: Int {
+        boards.reduce(0) { $0 + $1.projectCount }
+    }
+
+    private var totalActive: Int {
+        boards.reduce(0) { $0 + $1.activeCount }
+    }
+
+    private var totalTickets: Int {
+        boards.reduce(0) { $0 + $1.ticketCount }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    header
+                    totalsGrid
+                    ForEach(groupedBoards, id: \.layer) { group in
+                        architectureGroup(group.layer, boards: group.boards)
+                    }
+                }
+                .padding(16)
+                .padding(.bottom, 40)
+            }
+            .background(AppColors.backgroundPrimary.ignoresSafeArea())
+            .navigationTitle("Boards")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Label("Close", systemImage: "xmark")
+                    }
+                    .foregroundColor(AppColors.accentElectric)
+                }
+            }
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("BOARD ARCHITECTURE")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(AppColors.textTertiary)
+                    .kerning(0.5)
+                Spacer()
+                Text(sourceLabel)
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundColor(sourceLabel == "ORCA" ? AppColors.accentSuccess : AppColors.textTertiary)
+            }
+
+            Text("Boards grouped by ORCA architecture layer. Tap any board to open its projects and direct tickets.")
+                .font(.system(size: 13))
+                .foregroundColor(AppColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppColors.border, lineWidth: 0.5))
+    }
+
+    private var totalsGrid: some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+            architectureMetric("Boards", "\(boards.count)")
+            architectureMetric("Projects", "\(totalProjects)")
+            architectureMetric("Active", "\(totalActive)")
+            architectureMetric("Tickets", "\(totalTickets)")
+        }
+    }
+
+    private func architectureGroup(_ layer: String, boards: [WorkBoardSummary]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Text(layer.uppercased())
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(AppColors.textTertiary)
+                Text("· \(boards.count)")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(AppColors.textTertiary)
+                Spacer()
+            }
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                ForEach(boards) { board in
+                    Button {
+                        onSelectBoard(board)
+                    } label: {
+                        architectureBoardTile(board)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func architectureBoardTile(_ board: WorkBoardSummary) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 7) {
+                Text(board.icon)
+                    .font(.system(size: 18))
+                    .frame(width: 26, height: 26)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(board.displayName)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(AppColors.textPrimary)
+                        .lineLimit(1)
+                    Text(board.component ?? board.slug)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(AppColors.textTertiary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+
+            if let description = board.boardDescription, !description.isEmpty {
+                Text(description)
+                    .font(.system(size: 11))
+                    .foregroundColor(AppColors.textSecondary)
+                    .lineLimit(2)
+            }
+
+            HStack(spacing: 5) {
+                architecturePill("\(board.projectCount)p")
+                architecturePill("\(board.activeCount)a")
+                if board.ticketCount > 0 {
+                    architecturePill("\(board.ticketCount)t")
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 104, alignment: .topLeading)
+        .padding(10)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppColors.border, lineWidth: 0.5))
+    }
+
+    private func architectureMetric(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title.uppercased())
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(AppColors.textTertiary)
+            Text(value)
+                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .foregroundColor(AppColors.textPrimary)
+                .monospacedDigit()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppColors.border, lineWidth: 0.5))
+    }
+
+    private func architecturePill(_ value: String) -> some View {
+        Text(value)
+            .font(.system(size: 10, weight: .bold, design: .monospaced))
+            .foregroundColor(AppColors.textSecondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(AppColors.backgroundTertiary)
+            .clipShape(Capsule())
+    }
 }
 
 private struct WorkBoardDetailView: View {

@@ -36,10 +36,6 @@ struct AgentsView: View {
                         .padding(.horizontal, 16)
                         .padding(.bottom, 14)
 
-                    agentsSection
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 14)
-
                     lanesStrip
                         .padding(.horizontal, 16)
                         .padding(.bottom, 14)
@@ -124,7 +120,11 @@ struct AgentsView: View {
                     focusCardView(card)
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            selectedFocusCard = card
+                            if let agent = agentForFocusCard(card) {
+                                selectedAgent = agent
+                            } else {
+                                selectedFocusCard = card
+                            }
                         }
                 }
             }
@@ -134,7 +134,8 @@ struct AgentsView: View {
     }
 
     private func focusCardView(_ card: AgentFocusCard) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let agent = agentForFocusCard(card)
+        return VStack(alignment: .leading, spacing: 8) {
             // Header row
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(card.emoji)
@@ -142,7 +143,18 @@ struct AgentsView: View {
                 Text(card.displayName)
                     .font(.system(size: 16, weight: .bold))
                     .foregroundColor(AppColors.textPrimary)
+                if let agent {
+                    focusStatusPill(agent)
+                }
                 Spacer(minLength: 8)
+                if let unread = agent.map({ viewModel.unreadCount(for: $0.name) }), unread > 0 {
+                    Text("\(unread)")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(Color.red))
+                }
                 Text(card.lastUpdatedLabel)
                     .font(.system(size: 11))
                     .foregroundColor(AppColors.textTertiary)
@@ -155,6 +167,26 @@ struct AgentsView: View {
                 .foregroundColor(AppColors.textSecondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
+
+            if let agent {
+                HStack(spacing: 6) {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(agent.status.color)
+                    Text(agent.currentTask ?? agent.role)
+                        .font(.system(size: 11))
+                        .foregroundColor(AppColors.textSecondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    Text((agent.lastActivity ?? Date()).relativeFormatted)
+                        .font(.system(size: 10))
+                        .foregroundColor(AppColors.textTertiary)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(agent.status.color.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+            }
 
             Divider()
 
@@ -260,6 +292,25 @@ struct AgentsView: View {
             RoundedRectangle(cornerRadius: Theme.radiusMedium)
                 .strokeBorder(card.tint.opacity(0.35), lineWidth: 1)
         )
+    }
+
+    private func agentForFocusCard(_ card: AgentFocusCard) -> Agent? {
+        viewModel.agents.first { $0.name.lowercased() == card.id }
+    }
+
+    private func focusStatusPill(_ agent: Agent) -> some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(agent.status.color)
+                .frame(width: 6, height: 6)
+            Text(agent.status.displayName.lowercased())
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(agent.status.color)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(agent.status.color.opacity(0.12))
+        .clipShape(Capsule())
     }
 
     private var deputyStrip: some View {
