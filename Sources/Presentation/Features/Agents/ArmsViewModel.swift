@@ -4,6 +4,7 @@ import SwiftUI
 @Observable
 final class ArmsViewModel {
     var arms: [ArmTag] = ArmTag.placeholderArms
+    var chiefArms: [ArmTag] = ArmTag.placeholderChiefArms
     var agents: [AgentSummary] = []
     var directiveDrafts: [String: String] = [:]
     var expandedShipArms: Set<String> = []
@@ -32,6 +33,13 @@ final class ArmsViewModel {
 
     @MainActor
     func loadArms() async {
+        async let mauiTask: Void = loadMauiArms()
+        async let chiefTask: Void = loadChiefArms()
+        _ = await (mauiTask, chiefTask)
+    }
+
+    @MainActor
+    private func loadMauiArms() async {
         do {
             let response: ArmTagsResponse = try await apiClient.get(path: "/api/v1/jarvis/arm-tags")
             let routingResponse: ArmRoutingResponse? = try? await apiClient.get(path: "/api/v1/jarvis/arm-routing")
@@ -39,18 +47,48 @@ final class ArmsViewModel {
             let directivesResponse: ArmDirectivesResponse? = try? await apiClient.get(path: "/api/v1/jarvis/arm-directives")
             let directivesByName = Dictionary(uniqueKeysWithValues: (directivesResponse?.directives ?? []).map { ($0.name.lowercased(), $0.toDomain()) })
             var shipsByName: [String: [ArmShip]] = [:]
-            for arm in ArmTag.canonicalNames {
+            for arm in ArmTag.mauiNames {
                 shipsByName[arm] = (try? await loadShips(forKey: arm, limit: 5)) ?? []
             }
-            shipHistoryByArm = shipsByName
+            shipHistoryByArm.merge(shipsByName) { _, new in new }
             let liveByName = Dictionary(uniqueKeysWithValues: response.arms.map {
                 let key = $0.name.lowercased()
-                return (key, $0.toDomain(routing: routingByName[key], directive: directivesByName[key], fallbackLastShip: shipsByName[key]?.first))
+                let arm = $0.toDomain(routing: routingByName[key], directive: directivesByName[key], fallbackLastShip: shipsByName[key]?.first)
+                return (arm.name.lowercased(), arm)
             })
-            arms = ArmTag.canonicalNames.map { liveByName[$0] ?? ArmTag.placeholder(named: $0) }
+            arms = ArmTag.mauiNames.map { liveByName[$0] ?? ArmTag.placeholder(named: $0, family: .maui) }
         } catch {
             errorMessage = "Arms tags unavailable."
             arms = ArmTag.placeholderArms
+        }
+    }
+
+    @MainActor
+    private func loadChiefArms() async {
+        do {
+            let response: ArmStateRegistryResponse = try await apiClient.get(path: "/api/v1/state-registry?prefix=chief_arm.&limit=100")
+            let statusByName = Dictionary(uniqueKeysWithValues: response.items.compactMap { item -> (String, StateRegistryTagDTO)? in
+                guard item.tagId.hasPrefix("chief_arm."), item.tagId.hasSuffix(".status") else { return nil }
+                return (item.armName(suffix: ".status"), item)
+            })
+            let directivesByName = Dictionary(uniqueKeysWithValues: response.items.compactMap { item -> (String, ArmDirective)? in
+                guard item.tagId.hasPrefix("chief_arm."), item.tagId.hasSuffix(".directive") else { return nil }
+                return (item.armName(suffix: ".directive"), item.toDirective())
+            })
+            var shipsByName: [String: [ArmShip]] = [:]
+            for arm in ArmTag.chiefNames {
+                shipsByName[arm] = (try? await loadShips(forKey: arm, limit: 5)) ?? []
+            }
+            shipHistoryByArm.merge(shipsByName) { _, new in new }
+            chiefArms = ArmTag.chiefNames.map { name in
+                statusByName[name]?.toArmTag(
+                    name: name,
+                    directive: directivesByName[name],
+                    fallbackLastShip: shipsByName[name]?.first
+                ) ?? ArmTag.placeholder(named: name, family: .chief)
+            }
+        } catch {
+            chiefArms = ArmTag.placeholderChiefArms
         }
     }
 
@@ -103,6 +141,34 @@ final class ArmsViewModel {
             await load()
         } catch {
             toast = ArmsToast(message: "Directive failed", isError: true)
+        }
+    }
+
+    @MainActor
+    func greenLight(_ arm: ArmTag) async {
+        let key = arm.name.lowercased()
+        guard arm.canGreenLight else { return }
+        busyArms.insert(key)
+        defer { busyArms.remove(key) }
+
+        do {
+            let _: ArmDirectiveWriteResponse? = try? await apiClient.patch(
+                path: "/api/v1/jarvis/arm-directives/\(key)/status",
+                body: ArmDirectiveStatusPatchRequest(
+                    status: nil,
+                    intentState: "green_lit",
+                    reportedBy: "tony",
+                    note: "Green Light from Pod"
+                )
+            )
+            let response: WakeResponse = try await apiClient.post(
+                path: "/api/v1/jarvis/arm-tags/\(key)/wake",
+                body: WakeRequest(postedBy: "tony", note: arm.directive)
+            )
+            toast = ArmsToast(message: response.toastMessage, isError: response.deliveryStatus == "failed")
+            await load()
+        } catch {
+            toast = ArmsToast(message: "Green Light failed", isError: true)
         }
     }
 
@@ -221,10 +287,12 @@ struct AgentSummary: Identifiable, Hashable {
 }
 
 struct ArmTag: Identifiable, Hashable {
-    static let canonicalNames = ["pod", "orca", "compute", "memory", "schoolhouse", "jarvis", "fund", "nats"]
+    static let mauiNames = ["architecture", "pod", "orca", "compute", "memory", "schoolhouse", "jarvis", "nats", "fish", "fund"]
+    static let chiefNames = ["chief-trading", "chief-fund", "chief-mac-infra", "chief-data", "chief-research"]
 
     let id: String
     let name: String
+    let family: ArmFamily
     let state: String
     let currentWork: String
     let ticketRef: String?
@@ -249,10 +317,15 @@ struct ArmTag: Identifiable, Hashable {
     let directiveDoneAt: Date?
     let directivePostedBy: String?
     let directiveTraceId: String?
+    let proposedByArm: Bool
+    let intentState: String?
+    let needsEngagement: Bool
+    let needsEngagementReason: String?
     let lastShip: ArmShip?
 
     var displayName: String {
         switch name.lowercased() {
+        case "architecture": return "Architecture Arm"
         case "pod": return "Pod Arm"
         case "orca": return "ORCA Arm"
         case "compute": return "Compute Arm"
@@ -261,6 +334,12 @@ struct ArmTag: Identifiable, Hashable {
         case "jarvis": return "Jarvis Arm"
         case "fund": return "Fund Arm"
         case "nats": return "NATS Arm"
+        case "fish": return "Fish Arm"
+        case "chief-trading": return "Chief Trading Arm"
+        case "chief-fund": return "Chief Fund Arm"
+        case "chief-mac-infra": return "Chief Mac Infra Arm"
+        case "chief-data": return "Chief Data Arm"
+        case "chief-research": return "Chief Research Arm"
         default: return name.capitalized + " Arm"
         }
     }
@@ -269,6 +348,10 @@ struct ArmTag: Identifiable, Hashable {
 
     var canPostDirective: Bool {
         canWake && !protected
+    }
+
+    var canGreenLight: Bool {
+        canWake && !protected && proposedByArm && intentState?.lowercased() == "proposed" && directive?.isEmpty == false
     }
 
     var directivePlaceholder: String {
@@ -301,6 +384,9 @@ struct ArmTag: Identifiable, Hashable {
     }
 
     var directiveStatusLabel: String {
+        if let intentState, !intentState.isEmpty, intentState.lowercased() != "green_lit" {
+            return intentState.replacingOccurrences(of: "_", with: " ")
+        }
         guard let directiveStatus, !directiveStatus.isEmpty else {
             return directive?.isEmpty == false ? "queued" : "none"
         }
@@ -308,6 +394,14 @@ struct ArmTag: Identifiable, Hashable {
     }
 
     var directiveStatusColor: Color {
+        switch intentState?.lowercased() {
+        case "proposed":
+            return AppColors.accentElectric
+        case "reviewed":
+            return AppColors.accentWarning
+        default:
+            break
+        }
         switch directiveStatus?.lowercased() {
         case "completed":
             return AppColors.accentSuccess
@@ -359,20 +453,26 @@ struct ArmTag: Identifiable, Hashable {
     }
 
     static var placeholderArms: [ArmTag] {
-        canonicalNames.map { placeholder(named: $0) }
+        mauiNames.map { placeholder(named: $0, family: .maui) }
     }
 
-    static func placeholder(named name: String) -> ArmTag {
-        ArmTag(
-            id: name,
+    static var placeholderChiefArms: [ArmTag] {
+        chiefNames.map { placeholder(named: $0, family: .chief) }
+    }
+
+    static func placeholder(named name: String, family: ArmFamily = .maui) -> ArmTag {
+        let isProtectedFund = name.lowercased() == "fund" || name.lowercased() == "chief-fund"
+        return ArmTag(
+            id: "\(family.rawValue)-\(name)",
             name: name,
+            family: family,
             state: "idle",
             currentWork: "Waiting for Jarvis tag data.",
             ticketRef: nil,
             evidenceRef: nil,
             blockedOn: nil,
             directive: nil,
-            owner: "maui",
+            owner: family == .chief ? "chief" : "maui",
             quality: "yellow",
             updatedAt: nil,
             ttlSeconds: nil,
@@ -381,15 +481,19 @@ struct ArmTag: Identifiable, Hashable {
             lastFetched: nil,
             agentSubject: nil,
             workspace: nil,
-            canWake: name.lowercased() != "fund",
-            protected: name.lowercased() == "fund",
-            protectionReason: name.lowercased() == "fund" ? "Protected lane" : nil,
+            canWake: !isProtectedFund,
+            protected: isProtectedFund,
+            protectionReason: isProtectedFund ? "Tier-4 protected lane" : nil,
             lastWakeDeliveryStatus: nil,
             lastWakeEnvelopeId: nil,
             directiveStatus: nil,
             directiveDoneAt: nil,
             directivePostedBy: nil,
             directiveTraceId: nil,
+            proposedByArm: false,
+            intentState: nil,
+            needsEngagement: false,
+            needsEngagementReason: nil,
             lastShip: nil
         )
     }
@@ -400,6 +504,69 @@ struct ArmTag: Identifiable, Hashable {
         if seconds < 3_600 { return "\(seconds / 60)m ago" }
         if seconds < 86_400 { return "\(seconds / 3_600)h ago" }
         return "\(seconds / 86_400)d ago"
+    }
+}
+
+enum ArmFamily: String, CaseIterable, Identifiable {
+    case maui
+    case chief
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .maui: return "Maui Arms"
+        case .chief: return "Chief Arms"
+        }
+    }
+}
+
+private extension AgentRunJSONValue {
+    var stringValue: String? {
+        switch self {
+        case .string(let text):
+            let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return clean.isEmpty ? nil : clean
+        case .int(let value):
+            return "\(value)"
+        case .double(let value):
+            return "\(value)"
+        case .bool(let value):
+            return value ? "true" : "false"
+        default:
+            return nil
+        }
+    }
+
+    var boolValue: Bool? {
+        switch self {
+        case .bool(let value):
+            return value
+        case .string(let text):
+            switch text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "true", "yes", "1":
+                return true
+            case "false", "no", "0":
+                return false
+            default:
+                return nil
+            }
+        default:
+            return nil
+        }
+    }
+
+    var intValue: Int? {
+        switch self {
+        case .int(let value):
+            return value
+        case .double(let value):
+            return Int(value)
+        case .string(let text):
+            return Int(text.trimmingCharacters(in: .whitespacesAndNewlines))
+        default:
+            return nil
+        }
     }
 }
 
@@ -525,6 +692,107 @@ private struct ArmDirectivesResponse: Decodable {
     let directives: [ArmDirectiveDTO]
 }
 
+private struct ArmStateRegistryResponse: Decodable {
+    let items: [StateRegistryTagDTO]
+}
+
+private struct StateRegistryTagDTO: Decodable {
+    let tagId: String
+    let value: [String: AgentRunJSONValue]
+    let quality: String?
+    let updatedAt: Date?
+    let ttlSeconds: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case value, quality
+        case tagId = "tag_id"
+        case updatedAt = "updated_at"
+        case ttlSeconds = "ttl_seconds"
+    }
+
+    func armName(suffix: String) -> String {
+        tagId
+            .replacingOccurrences(of: "chief_arm.", with: "")
+            .replacingOccurrences(of: suffix, with: "")
+            .lowercased()
+    }
+
+    func toDirective() -> ArmDirective {
+        ArmDirective(
+            name: armName(suffix: ".directive"),
+            tag: tagId,
+            directive: string("directive"),
+            status: string("directive_status") ?? string("status"),
+            postedBy: string("posted_by"),
+            note: string("note"),
+            traceId: string("trace_id"),
+            doneAt: date("done_at"),
+            proposedByArm: bool("proposed_by_arm"),
+            intentState: string("intent_state"),
+            needsEngagement: bool("needs_engagement") ?? false,
+            needsEngagementReason: string("needs_engagement_reason")
+        )
+    }
+
+    func toArmTag(name: String, directive: ArmDirective?, fallbackLastShip: ArmShip?) -> ArmTag {
+        let protected = name == "chief-fund"
+        return ArmTag(
+            id: "chief-\(name)",
+            name: name,
+            family: .chief,
+            state: string("state") ?? "idle",
+            currentWork: string("current_work") ?? "No current work set.",
+            ticketRef: string("ticket_ref"),
+            evidenceRef: string("evidence_ref"),
+            blockedOn: string("blocked_on"),
+            directive: directive?.directive ?? string("directive"),
+            owner: string("owner") ?? "chief",
+            quality: string("quality") ?? quality ?? "yellow",
+            updatedAt: date("updated_at") ?? updatedAt,
+            ttlSeconds: int("ttl_s") ?? ttlSeconds,
+            source: string("source"),
+            sourceDetail: string("source_detail"),
+            lastFetched: date("last_fetched"),
+            agentSubject: "agents.chief.inbox",
+            workspace: nil,
+            canWake: !protected,
+            protected: protected,
+            protectionReason: protected ? "Tier-4: Chief/Rooster/Tony approval required" : nil,
+            lastWakeDeliveryStatus: string("last_wake_delivery_status"),
+            lastWakeEnvelopeId: string("last_wake_envelope_id"),
+            directiveStatus: directive?.status ?? string("directive_status"),
+            directiveDoneAt: directive?.doneAt,
+            directivePostedBy: directive?.postedBy,
+            directiveTraceId: directive?.traceId,
+            proposedByArm: directive?.proposedByArm ?? bool("proposed_by_arm") ?? false,
+            intentState: directive?.intentState ?? string("intent_state"),
+            needsEngagement: directive?.needsEngagement ?? bool("needs_engagement") ?? false,
+            needsEngagementReason: directive?.needsEngagementReason ?? string("needs_engagement_reason"),
+            lastShip: fallbackLastShip
+        )
+    }
+
+    private func string(_ key: String) -> String? {
+        guard let raw = value[key] else { return nil }
+        return raw.stringValue
+    }
+
+    private func bool(_ key: String) -> Bool? {
+        guard let raw = value[key] else { return nil }
+        return raw.boolValue
+    }
+
+    private func int(_ key: String) -> Int? {
+        guard let raw = value[key] else { return nil }
+        return raw.intValue
+    }
+
+    private func date(_ key: String) -> Date? {
+        guard let text = string(key) else { return nil }
+        return ISO8601DateFormatter().date(from: text)
+    }
+}
+
 private struct ArmDirectiveDTO: Decodable {
     let name: String
     let tag: String
@@ -544,7 +812,11 @@ private struct ArmDirectiveDTO: Decodable {
             postedBy: string("posted_by"),
             note: string("note"),
             traceId: string("trace_id"),
-            doneAt: date("done_at")
+            doneAt: date("done_at"),
+            proposedByArm: bool("proposed_by_arm"),
+            intentState: string("intent_state"),
+            needsEngagement: bool("needs_engagement") ?? false,
+            needsEngagementReason: string("needs_engagement_reason")
         )
     }
 
@@ -570,6 +842,11 @@ private struct ArmDirectiveDTO: Decodable {
         return ISO8601DateFormatter().date(from: text)
     }
 
+    private func bool(_ key: String) -> Bool? {
+        guard let value = valueDict[key] ?? tagData[key] else { return nil }
+        return value.boolValue
+    }
+
     private var valueDict: [String: AgentRunJSONValue] {
         guard case .object(let value)? = tagData["value"] else { return [:] }
         return value
@@ -585,6 +862,10 @@ private struct ArmDirective: Hashable {
     let note: String?
     let traceId: String?
     let doneAt: Date?
+    let proposedByArm: Bool?
+    let intentState: String?
+    let needsEngagement: Bool
+    let needsEngagementReason: String?
 }
 
 private struct ArmRoutingResponse: Decodable {
@@ -711,9 +992,12 @@ private struct ArmTagDTO: Decodable {
 
     func toDomain(routing: ArmRoutingEntryDTO?, directive: ArmDirective?, fallbackLastShip: ArmShip?) -> ArmTag {
         let data = tagData?.value
+        let key = name.lowercased()
+        let normalizedName = key == "arch" ? "architecture" : key
         return ArmTag(
-            id: name.lowercased(),
-            name: name.lowercased(),
+            id: "maui-\(normalizedName)",
+            name: normalizedName,
+            family: .maui,
             state: data?.state ?? "idle",
             currentWork: data?.currentWork ?? "No current work set.",
             ticketRef: data?.ticketRef,
@@ -729,8 +1013,8 @@ private struct ArmTagDTO: Decodable {
             lastFetched: data?.lastFetched,
             agentSubject: routing?.agentSubject,
             workspace: routing?.workspace,
-            canWake: routing?.canWake ?? (name.lowercased() != "fund"),
-            protected: routing?.protected ?? (name.lowercased() == "fund"),
+            canWake: routing?.canWake ?? (normalizedName != "fund"),
+            protected: routing?.protected ?? (normalizedName == "fund"),
             protectionReason: routing?.protectionReason,
             lastWakeDeliveryStatus: data?.lastWakeDeliveryStatus,
             lastWakeEnvelopeId: data?.lastWakeEnvelopeId,
@@ -738,7 +1022,11 @@ private struct ArmTagDTO: Decodable {
             directiveDoneAt: directive?.doneAt,
             directivePostedBy: directive?.postedBy,
             directiveTraceId: directive?.traceId,
-            lastShip: data?.lastShip?.resolvedArm(name.lowercased()) ?? fallbackLastShip
+            proposedByArm: directive?.proposedByArm ?? data?.proposedByArm ?? false,
+            intentState: directive?.intentState ?? data?.intentState,
+            needsEngagement: directive?.needsEngagement ?? data?.needsEngagement ?? false,
+            needsEngagementReason: directive?.needsEngagementReason ?? data?.needsEngagementReason,
+            lastShip: data?.lastShip?.resolvedArm(normalizedName) ?? fallbackLastShip
         )
     }
 }
@@ -772,6 +1060,10 @@ private struct ArmTagDataDTO: Decodable {
     let lastFetched: Date?
     let lastWakeDeliveryStatus: String?
     let lastWakeEnvelopeId: String?
+    let proposedByArm: Bool?
+    let intentState: String?
+    let needsEngagement: Bool?
+    let needsEngagementReason: String?
     let lastShip: ArmShip?
 
     enum CodingKeys: String, CodingKey {
@@ -790,7 +1082,27 @@ private struct ArmTagDataDTO: Decodable {
         case lastFetched = "last_fetched"
         case lastWakeDeliveryStatus = "last_wake_delivery_status"
         case lastWakeEnvelopeId = "last_wake_envelope_id"
+        case proposedByArm = "proposed_by_arm"
+        case intentState = "intent_state"
+        case needsEngagement = "needs_engagement"
+        case needsEngagementReason = "needs_engagement_reason"
         case lastShip = "last_ship"
+    }
+}
+
+private struct ArmDirectiveStatusPatchRequest: Encodable {
+    let status: String?
+    let intentState: String?
+    let reportedBy: String
+    let note: String?
+    let evidenceRef: String? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case intentState = "intent_state"
+        case reportedBy = "reported_by"
+        case note
+        case evidenceRef = "evidence_ref"
     }
 }
 

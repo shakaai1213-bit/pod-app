@@ -3,6 +3,7 @@ import SwiftUI
 struct ArmsTabView: View {
     @State private var viewModel = ArmsViewModel()
     @State private var selectedAgent: Agent?
+    @State private var selectedFamily: ArmFamily = .maui
 
     var body: some View {
         NavigationStack {
@@ -18,6 +19,10 @@ struct ArmsTabView: View {
                             .padding(.horizontal, 16)
                             .padding(.bottom, 12)
                     }
+
+                    armFamilyPicker
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 14)
 
                     armsSection
                         .padding(.horizontal, 16)
@@ -83,14 +88,26 @@ struct ArmsTabView: View {
 
     private var armsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("ARMS", count: viewModel.arms.count)
+            sectionHeader(selectedFamily.title.uppercased(), count: selectedArms.count)
 
             VStack(spacing: 10) {
-                ForEach(viewModel.arms) { arm in
+                ForEach(selectedArms) { arm in
                     armCard(arm)
                 }
             }
         }
+    }
+
+    private var selectedArms: [ArmTag] {
+        selectedFamily == .maui ? viewModel.arms : viewModel.chiefArms
+    }
+
+    private var armFamilyPicker: some View {
+        Picker("Arm family", selection: $selectedFamily) {
+            Text("Maui Arms (\(viewModel.arms.count))").tag(ArmFamily.maui)
+            Text("Chief Arms (\(viewModel.chiefArms.count))").tag(ArmFamily.chief)
+        }
+        .pickerStyle(.segmented)
     }
 
     private var teamSection: some View {
@@ -194,6 +211,9 @@ struct ArmsTabView: View {
                 if let directive = arm.directive, !directive.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     directiveRow(directive, arm: arm)
                 }
+                if arm.needsEngagement {
+                    needsEngagementRow(arm)
+                }
                 lastShipRow(arm)
                 if viewModel.isShipsExpanded(arm) {
                     shipHistoryRows(for: arm)
@@ -222,7 +242,17 @@ struct ArmsTabView: View {
                 .buttonStyle(.plain)
                 .disabled(!arm.canPostDirective || viewModel.isBusy(arm) || (viewModel.directiveDrafts[arm.name.lowercased()] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
-                Text("No live wake is sent here. Arms read this tag on activation and report status back to ORCA.")
+                if arm.canGreenLight {
+                    Button {
+                        Task { await viewModel.greenLight(arm) }
+                    } label: {
+                        actionLabel(title: "Green Light", systemImage: "checkmark.seal.fill", isBusy: viewModel.isBusy(arm))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.isBusy(arm))
+                }
+
+                Text("Directives stay in ORCA. Green Light uses the arm's existing directive and the arm reports status back here.")
                     .font(.system(size: 11))
                     .foregroundColor(AppColors.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -292,6 +322,12 @@ struct ArmsTabView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             FlowLayout(horizontalSpacing: 5, verticalSpacing: 5) {
+                if arm.proposedByArm {
+                    directiveMetaPill("proposed by arm")
+                }
+                if let intentState = arm.intentState, !intentState.isEmpty {
+                    directiveMetaPill(intentState.replacingOccurrences(of: "_", with: " "))
+                }
                 if let postedBy = arm.directivePostedBy, !postedBy.isEmpty {
                     directiveMetaPill("by \(postedBy)")
                 }
@@ -305,6 +341,30 @@ struct ArmsTabView: View {
         }
         .padding(10)
         .background(arm.directiveStatusColor.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func needsEngagementRow(_ arm: ArmTag) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "person.crop.circle.badge.exclamationmark")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(AppColors.accentWarning)
+                .frame(width: 58, alignment: .leading)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Need engagement")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(AppColors.accentWarning)
+                if let reason = arm.needsEngagementReason, !reason.isEmpty {
+                    Text(reason)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(AppColors.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .background(AppColors.accentWarning.opacity(0.1))
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
@@ -514,6 +574,7 @@ struct ArmsTabView: View {
 
     private func icon(for arm: ArmTag) -> String {
         switch arm.name.lowercased() {
+        case "architecture": return "map"
         case "pod": return "iphone"
         case "orca": return "server.rack"
         case "compute": return "cpu"
@@ -522,6 +583,12 @@ struct ArmsTabView: View {
         case "jarvis": return "waveform.path.ecg"
         case "fund": return "lock.shield"
         case "nats": return "dot.radiowaves.left.and.right"
+        case "fish": return "fish"
+        case "chief-trading": return "chart.line.uptrend.xyaxis"
+        case "chief-fund": return "lock.shield"
+        case "chief-mac-infra": return "desktopcomputer"
+        case "chief-data": return "externaldrive.connected.to.line.below"
+        case "chief-research": return "magnifyingglass"
         default: return "person.crop.circle"
         }
     }
