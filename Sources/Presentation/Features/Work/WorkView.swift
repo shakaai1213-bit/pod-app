@@ -70,7 +70,7 @@ struct WorkView: View {
                 flowDetailSheet(flow)
                     .presentationDetents([.medium, .large])
             }
-            .sheet(item: $selectedBoard) { board in
+            .fullScreenCover(item: $selectedBoard) { board in
                 WorkBoardDetailView(board: board)
             }
             // Hidden navigation links for full-list push
@@ -2148,6 +2148,15 @@ private struct WorkBoardSummary: Identifiable, Hashable {
             ?? name.replacingOccurrences(of: "-", with: " ").capitalized
     }
 
+    var contextLabel: String {
+        [layer, component]
+            .compactMap { value in
+                guard let value, !value.isEmpty else { return nil }
+                return value
+            }
+            .joined(separator: " · ")
+    }
+
     static let orderedSlugs = [
         "north-star", "pod", "chat", "orca", "memory", "compute", "nerve", "observability", "governance"
     ]
@@ -2368,6 +2377,28 @@ private final class WorkBoardDetailModel {
     private(set) var isLoading = false
     private(set) var error: String?
 
+    var activeProjects: [ProjectDTO] {
+        projects.filter { project in
+            let status = project.status.lowercased()
+            return status != "done" && status != "archived"
+        }
+    }
+
+    var projectStageBreakdown: [WorkBoardBreakdownItem] {
+        breakdown(projects.map { project in
+            let value = project.stage ?? project.status
+            return value.isEmpty ? "uncategorized" : value
+        })
+    }
+
+    var ticketStatusBreakdown: [WorkBoardBreakdownItem] {
+        breakdown(directTickets.map { $0.status.isEmpty ? "open" : $0.status })
+    }
+
+    var ticketPriorityBreakdown: [WorkBoardBreakdownItem] {
+        breakdown(directTickets.map { ($0.priority?.isEmpty == false ? $0.priority : nil) ?? "normal" })
+    }
+
     func load(board: WorkBoardSummary) async {
         if isLoading { return }
         isLoading = true
@@ -2406,6 +2437,21 @@ private final class WorkBoardDetailModel {
             return ([], "Direct tickets unavailable.")
         }
     }
+
+    private func breakdown(_ values: [String]) -> [WorkBoardBreakdownItem] {
+        Dictionary(grouping: values.map { $0.normalizedBoardLabel }, by: { $0 })
+            .map { WorkBoardBreakdownItem(label: $0.key, count: $0.value.count) }
+            .sorted {
+                if $0.count == $1.count { return $0.label < $1.label }
+                return $0.count > $1.count
+            }
+    }
+}
+
+private struct WorkBoardBreakdownItem: Identifiable, Hashable {
+    var id: String { label }
+    let label: String
+    let count: Int
 }
 
 private struct WorkBoardDetailView: View {
@@ -2416,8 +2462,10 @@ private struct WorkBoardDetailView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 18) {
                     boardHero
+                    boardOverviewGrid
+                    boardBreakdowns
                     boardProjects
                     boardTickets
                     if let error = model.error {
@@ -2434,8 +2482,12 @@ private struct WorkBoardDetailView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Close") { dismiss() }
-                        .foregroundColor(AppColors.accentElectric)
+                    Button {
+                        dismiss()
+                    } label: {
+                        Label("Close", systemImage: "xmark")
+                    }
+                    .foregroundColor(AppColors.accentElectric)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -2450,21 +2502,28 @@ private struct WorkBoardDetailView: View {
                 await model.load(board: board)
             }
         }
-        .presentationDetents([.large])
     }
 
     private var boardHero: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
                 Text(board.icon)
-                    .font(.system(size: 34))
+                    .font(.system(size: 38))
+                    .frame(width: 48, height: 48)
+                    .background(AppColors.backgroundTertiary)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(board.displayName.uppercased())
-                        .font(.system(size: 18, weight: .bold))
+                        .font(.system(size: 22, weight: .bold))
                         .foregroundColor(AppColors.textPrimary)
-                    Text([board.layer, board.component].compactMap { $0 }.joined(separator: " · "))
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(AppColors.textSecondary)
+                    Text(board.slug)
+                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        .foregroundColor(AppColors.textTertiary)
+                    if !board.contextLabel.isEmpty {
+                        Text(board.contextLabel)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(AppColors.textSecondary)
+                    }
                 }
                 Spacer()
             }
@@ -2476,71 +2535,129 @@ private struct WorkBoardDetailView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            HStack(spacing: 8) {
-                boardPill("\(board.projectCount) projects")
-                boardPill("\(board.activeCount) active")
-                boardPill("\(board.ticketCount) tickets")
-            }
+            Text("Board command window")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(AppColors.accentElectric)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(AppColors.accentElectric.opacity(0.12))
+                .clipShape(Capsule())
         }
-        .padding(14)
+        .padding(16)
         .background(AppColors.backgroundSecondary)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppColors.border, lineWidth: 0.5))
     }
 
+    private var boardOverviewGrid: some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+            boardMetricCard(title: "Projects", value: "\(model.projects.isEmpty ? board.projectCount : model.projects.count)", detail: "\(model.activeProjects.count) active")
+            boardMetricCard(title: "Tickets", value: "\(model.directTickets.isEmpty ? board.ticketCount : model.directTickets.count)", detail: "direct to board")
+            boardMetricCard(title: "Stages", value: "\(model.projectStageBreakdown.count)", detail: "project lanes")
+            boardMetricCard(title: "Source", value: model.isLoading ? "..." : "ORCA", detail: "live breakdown")
+        }
+    }
+
+    private var boardBreakdowns: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("BREAKDOWN", count: model.projectStageBreakdown.count + model.ticketStatusBreakdown.count)
+
+            VStack(alignment: .leading, spacing: 12) {
+                breakdownGroup(title: "Project stages", items: model.projectStageBreakdown, empty: "No project stages yet.")
+                breakdownGroup(title: "Ticket status", items: model.ticketStatusBreakdown, empty: "No direct ticket statuses yet.")
+                breakdownGroup(title: "Ticket priority", items: model.ticketPriorityBreakdown, empty: "No direct ticket priorities yet.")
+            }
+            .padding(12)
+            .background(AppColors.backgroundSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppColors.border, lineWidth: 0.5))
+        }
+    }
+
     private var boardProjects: some View {
         boardListSection(title: "PROJECTS", count: model.projects.count, empty: "No projects on this board yet.") {
-            ForEach(model.projects) { project in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(project.name)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(AppColors.textPrimary)
-                        .lineLimit(2)
-                    HStack(spacing: 6) {
-                        boardPill(project.stage ?? project.status)
-                        boardPill("P\(project.priority)")
-                        Spacer(minLength: 0)
-                    }
+            ForEach(Array(model.projects.enumerated()), id: \.element.id) { idx, project in
+                if idx > 0 {
+                    Divider().background(AppColors.border)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
+                projectBreakdownRow(project)
             }
         }
     }
 
     private var boardTickets: some View {
         boardListSection(title: "DIRECT TICKETS", count: model.directTickets.count, empty: "No direct tickets on this board.") {
-            ForEach(model.directTickets) { ticket in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(ticket.title)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(AppColors.textPrimary)
-                        .lineLimit(2)
-                    HStack(spacing: 6) {
-                        boardPill(ticket.status)
-                        if let priority = ticket.priority {
-                            boardPill(priority)
-                        }
-                        Spacer(minLength: 0)
-                    }
+            ForEach(Array(model.directTickets.enumerated()), id: \.element.id) { idx, ticket in
+                if idx > 0 {
+                    Divider().background(AppColors.border)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
+                ticketBreakdownRow(ticket)
             }
         }
     }
 
+    private func projectBreakdownRow(_ project: ProjectDTO) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(project.name)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(AppColors.textPrimary)
+                        .lineLimit(2)
+                    if let summary = project.goal ?? project.description, !summary.isEmpty {
+                        Text(summary)
+                            .font(.system(size: 12))
+                            .foregroundColor(AppColors.textSecondary)
+                            .lineLimit(2)
+                    }
+                }
+                Spacer(minLength: 0)
+                Text(String(project.id.uuidString.replacingOccurrences(of: "-", with: "").prefix(6)))
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundColor(AppColors.textTertiary)
+            }
+
+            HStack(spacing: 6) {
+                boardPill(project.stage ?? project.status)
+                boardPill(project.status)
+                boardPill("P\(project.priority)")
+                if let due = project.dueDate {
+                    boardPill(due.formatted(date: .abbreviated, time: .omitted))
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+    }
+
+    private func ticketBreakdownRow(_ ticket: WorkBoardTicketSummary) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .top, spacing: 8) {
+                Text(ticket.title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(AppColors.textPrimary)
+                    .lineLimit(2)
+                Spacer(minLength: 0)
+                Text(String(ticket.id.replacingOccurrences(of: "-", with: "").prefix(6)))
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundColor(AppColors.textTertiary)
+            }
+            HStack(spacing: 6) {
+                boardPill(ticket.status)
+                if let priority = ticket.priority {
+                    boardPill(priority)
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+    }
+
     private func boardListSection<Content: View>(title: String, count: Int, empty: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Text(title)
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(AppColors.textTertiary)
-                Text("· \(count)")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(AppColors.textTertiary)
-                Spacer()
-            }
+            sectionTitle(title, count: count)
 
             if model.isLoading && count == 0 {
                 ProgressView()
@@ -2558,6 +2675,71 @@ private struct WorkBoardDetailView: View {
                 }
                 .background(AppColors.backgroundSecondary)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppColors.border, lineWidth: 0.5))
+            }
+        }
+    }
+
+    private func sectionTitle(_ title: String, count: Int) -> some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(AppColors.textTertiary)
+            Text("· \(count)")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(AppColors.textTertiary)
+            Spacer()
+        }
+    }
+
+    private func boardMetricCard(title: String, value: String, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title.uppercased())
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(AppColors.textTertiary)
+            Text(value)
+                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .foregroundColor(AppColors.textPrimary)
+                .monospacedDigit()
+            Text(detail)
+                .font(.system(size: 11))
+                .foregroundColor(AppColors.textSecondary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppColors.border, lineWidth: 0.5))
+    }
+
+    private func breakdownGroup(title: String, items: [WorkBoardBreakdownItem], empty: String) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title.uppercased())
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(AppColors.textTertiary)
+            if items.isEmpty {
+                Text(empty)
+                    .font(.system(size: 12))
+                    .foregroundColor(AppColors.textTertiary)
+            } else {
+                FlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                    ForEach(items) { item in
+                        HStack(spacing: 5) {
+                            Text(item.label)
+                                .lineLimit(1)
+                            Text("\(item.count)")
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .foregroundColor(AppColors.textTertiary)
+                        }
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(AppColors.textSecondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(AppColors.backgroundTertiary)
+                        .clipShape(Capsule())
+                    }
+                }
             }
         }
     }
@@ -2607,5 +2789,14 @@ private extension KeyedDecodingContainer {
             if let value = try? decodeIfPresent(String.self, forKey: key), let intValue = Int(value) { return intValue }
         }
         return nil
+    }
+}
+
+private extension String {
+    var normalizedBoardLabel: String {
+        trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .lowercased()
     }
 }
