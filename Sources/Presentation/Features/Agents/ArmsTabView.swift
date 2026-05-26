@@ -194,6 +194,10 @@ struct ArmsTabView: View {
                 if let directive = arm.directive, !directive.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     directiveRow(directive, arm: arm)
                 }
+                lastShipRow(arm)
+                if viewModel.isShipsExpanded(arm) {
+                    shipHistoryRows(for: arm)
+                }
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -313,6 +317,75 @@ struct ArmsTabView: View {
             .padding(.vertical, 2)
             .background(AppColors.backgroundTertiary.opacity(0.75))
             .clipShape(Capsule())
+    }
+
+    private func lastShipRow(_ arm: ArmTag) -> some View {
+        Button {
+            Task { await viewModel.toggleShips(for: arm) }
+        } label: {
+            HStack(alignment: .top, spacing: 8) {
+                Circle()
+                    .fill(arm.lastShip?.reviewColor ?? AppColors.textTertiary)
+                    .frame(width: 8, height: 8)
+                    .padding(.top, 5)
+                    .frame(width: 58, alignment: .leading)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Last shipped: \(arm.lastShipLabel)")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(AppColors.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let lastShip = arm.lastShip {
+                        Text("\(lastShip.area) · \(lastShip.gate) · \(lastShip.sha) · \(lastShip.reviewLabel)")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(lastShip.reviewColor)
+                            .lineLimit(1)
+                    }
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: viewModel.isShipsExpanded(arm) ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(AppColors.textTertiary)
+                    .padding(.top, 3)
+            }
+            .padding(10)
+            .background((arm.lastShip?.reviewColor ?? AppColors.textTertiary).opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func shipHistoryRows(for arm: ArmTag) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(viewModel.ships(for: arm)) { ship in
+                HStack(alignment: .top, spacing: 8) {
+                    Circle()
+                        .fill(ship.reviewColor)
+                        .frame(width: 7, height: 7)
+                        .padding(.top, 5)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(ship.subject)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(AppColors.textPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text("\(ship.timestamp.formatted(date: .abbreviated, time: .shortened)) · \(ship.area) · \(ship.gate) · \(ship.sha) · \(ship.reviewLabel)")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(AppColors.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+        .padding(10)
+        .background(AppColors.backgroundPrimary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(AppColors.border, lineWidth: 0.5)
+        )
     }
 
     private func protectedRow(_ reason: String) -> some View {

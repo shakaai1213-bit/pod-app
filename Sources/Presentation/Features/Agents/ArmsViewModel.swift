@@ -6,6 +6,8 @@ final class ArmsViewModel {
     var arms: [ArmTag] = ArmTag.placeholderArms
     var agents: [AgentSummary] = []
     var directiveDrafts: [String: String] = [:]
+    var expandedShipArms: Set<String> = []
+    var shipHistoryByArm: [String: [ArmShip]] = [:]
     var busyArms: Set<String> = []
     var isLoading = false
     var errorMessage: String?
@@ -36,8 +38,14 @@ final class ArmsViewModel {
             let routingByName = Dictionary(uniqueKeysWithValues: (routingResponse?.routing ?? []).map { ($0.arm.lowercased(), $0) })
             let directivesResponse: ArmDirectivesResponse? = try? await apiClient.get(path: "/api/v1/jarvis/arm-directives")
             let directivesByName = Dictionary(uniqueKeysWithValues: (directivesResponse?.directives ?? []).map { ($0.name.lowercased(), $0.toDomain()) })
+            var shipsByName: [String: [ArmShip]] = [:]
+            for arm in ArmTag.canonicalNames {
+                shipsByName[arm] = (try? await loadShips(forKey: arm, limit: 5)) ?? []
+            }
+            shipHistoryByArm = shipsByName
             let liveByName = Dictionary(uniqueKeysWithValues: response.arms.map {
-                ($0.name.lowercased(), $0.toDomain(routing: routingByName[$0.name.lowercased()], directive: directivesByName[$0.name.lowercased()]))
+                let key = $0.name.lowercased()
+                return (key, $0.toDomain(routing: routingByName[key], directive: directivesByName[key], fallbackLastShip: shipsByName[key]?.first))
             })
             arms = ArmTag.canonicalNames.map { liveByName[$0] ?? ArmTag.placeholder(named: $0) }
         } catch {
@@ -128,6 +136,42 @@ final class ArmsViewModel {
     func isBusy(_ arm: ArmTag) -> Bool {
         busyArms.contains(arm.name.lowercased())
     }
+
+    @MainActor
+    func toggleShips(for arm: ArmTag) async {
+        let key = arm.name.lowercased()
+        if expandedShipArms.contains(key) {
+            expandedShipArms.remove(key)
+            return
+        }
+        expandedShipArms.insert(key)
+        if shipHistoryByArm[key] == nil {
+            await loadShips(for: arm)
+        }
+    }
+
+    func isShipsExpanded(_ arm: ArmTag) -> Bool {
+        expandedShipArms.contains(arm.name.lowercased())
+    }
+
+    func ships(for arm: ArmTag) -> [ArmShip] {
+        shipHistoryByArm[arm.name.lowercased()] ?? arm.lastShip.map { [$0] } ?? []
+    }
+
+    @MainActor
+    private func loadShips(for arm: ArmTag) async {
+        let key = arm.name.lowercased()
+        do {
+            shipHistoryByArm[key] = try await loadShips(forKey: key, limit: 5)
+        } catch {
+            shipHistoryByArm[key] = arm.lastShip.map { [$0] } ?? []
+        }
+    }
+
+    private func loadShips(forKey key: String, limit: Int) async throws -> [ArmShip] {
+        let response: ArmShipsResponse = try await apiClient.get(path: "/api/v1/jarvis/arm-ships?arm=\(key)&limit=\(limit)")
+        return response.ships.map { $0.toDomain(fallbackArm: key) }
+    }
 }
 
 struct ArmsToast: Equatable {
@@ -205,6 +249,7 @@ struct ArmTag: Identifiable, Hashable {
     let directiveDoneAt: Date?
     let directivePostedBy: String?
     let directiveTraceId: String?
+    let lastShip: ArmShip?
 
     var displayName: String {
         switch name.lowercased() {
@@ -284,6 +329,11 @@ struct ArmTag: Identifiable, Hashable {
         return "fresh · \(age)"
     }
 
+    var lastShipLabel: String {
+        guard let lastShip else { return "No ships recorded" }
+        return "\(lastShip.subject) · \(Self.relativeAge(from: lastShip.timestamp))"
+    }
+
     var stateLabel: String {
         state.replacingOccurrences(of: "_", with: " ")
     }
@@ -339,7 +389,8 @@ struct ArmTag: Identifiable, Hashable {
             directiveStatus: nil,
             directiveDoneAt: nil,
             directivePostedBy: nil,
-            directiveTraceId: nil
+            directiveTraceId: nil,
+            lastShip: nil
         )
     }
 
@@ -352,8 +403,122 @@ struct ArmTag: Identifiable, Hashable {
     }
 }
 
+struct ArmShip: Identifiable, Hashable, Decodable {
+    let arm: String
+    let subject: String
+    let timestamp: Date
+    let sha: String
+    let area: String
+    let gate: String
+    let alohaReviewStatus: String
+    let tag: String?
+
+    enum CodingKeys: String, CodingKey {
+        case arm, subject, timestamp, sha, area, gate, tag
+        case alohaReviewStatus = "aloha_review_status"
+    }
+
+    init(
+        arm: String,
+        subject: String,
+        timestamp: Date,
+        sha: String,
+        area: String,
+        gate: String,
+        alohaReviewStatus: String,
+        tag: String?
+    ) {
+        self.arm = arm
+        self.subject = subject
+        self.timestamp = timestamp
+        self.sha = sha
+        self.area = area
+        self.gate = gate
+        self.alohaReviewStatus = alohaReviewStatus
+        self.tag = tag
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.arm = (try? container.decode(String.self, forKey: .arm)) ?? ""
+        self.subject = try container.decode(String.self, forKey: .subject)
+        self.timestamp = try container.decode(Date.self, forKey: .timestamp)
+        self.sha = (try? container.decode(String.self, forKey: .sha)) ?? "WORKTREE"
+        self.area = (try? container.decode(String.self, forKey: .area)) ?? "ORCA"
+        self.gate = (try? container.decode(String.self, forKey: .gate)) ?? "follow-on"
+        self.alohaReviewStatus = (try? container.decode(String.self, forKey: .alohaReviewStatus)) ?? "pending"
+        self.tag = try? container.decode(String.self, forKey: .tag)
+    }
+
+    func resolvedArm(_ fallback: String) -> ArmShip {
+        guard arm.isEmpty else { return self }
+        return ArmShip(
+            arm: fallback,
+            subject: subject,
+            timestamp: timestamp,
+            sha: sha,
+            area: area,
+            gate: gate,
+            alohaReviewStatus: alohaReviewStatus,
+            tag: tag
+        )
+    }
+
+    var id: String {
+        "\(arm)-\(timestamp.timeIntervalSince1970)-\(sha)-\(subject)"
+    }
+
+    var reviewLabel: String {
+        alohaReviewStatus.replacingOccurrences(of: "_", with: " ")
+    }
+
+    var reviewColor: Color {
+        switch alohaReviewStatus.lowercased() {
+        case "acked":
+            return AppColors.accentSuccess
+        case "revision_requested":
+            return AppColors.accentDanger
+        default:
+            return AppColors.accentWarning
+        }
+    }
+}
+
 private struct ArmTagsResponse: Decodable {
     let arms: [ArmTagDTO]
+}
+
+private struct ArmShipsResponse: Decodable {
+    let ships: [ArmShipDTO]
+}
+
+private struct ArmShipDTO: Decodable {
+    let arm: String?
+    let subject: String
+    let timestamp: Date
+    let sha: String?
+    let area: String?
+    let gate: String?
+    let alohaReviewStatus: String?
+    let tag: String?
+
+    enum CodingKeys: String, CodingKey {
+        case arm, subject, timestamp, sha, area, gate, tag
+        case alohaReviewStatus = "aloha_review_status"
+    }
+
+    func toDomain(fallbackArm: String) -> ArmShip {
+        ArmShip(
+            arm: arm ?? fallbackArm,
+            subject: subject,
+            timestamp: timestamp,
+            sha: sha ?? "WORKTREE",
+            area: area ?? "ORCA",
+            gate: gate ?? "follow-on",
+            alohaReviewStatus: alohaReviewStatus ?? "pending",
+            tag: tag
+        )
+    }
 }
 
 private struct ArmDirectivesResponse: Decodable {
@@ -384,7 +549,7 @@ private struct ArmDirectiveDTO: Decodable {
     }
 
     private func string(_ key: String) -> String? {
-        guard let value = tagData[key] else { return nil }
+        guard let value = valueDict[key] ?? tagData[key] else { return nil }
         switch value {
         case .string(let text):
             let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -403,6 +568,11 @@ private struct ArmDirectiveDTO: Decodable {
     private func date(_ key: String) -> Date? {
         guard let text = string(key) else { return nil }
         return ISO8601DateFormatter().date(from: text)
+    }
+
+    private var valueDict: [String: AgentRunJSONValue] {
+        guard case .object(let value)? = tagData["value"] else { return [:] }
+        return value
     }
 }
 
@@ -539,7 +709,7 @@ private struct ArmTagDTO: Decodable {
         case tagData = "tag_data"
     }
 
-    func toDomain(routing: ArmRoutingEntryDTO?, directive: ArmDirective?) -> ArmTag {
+    func toDomain(routing: ArmRoutingEntryDTO?, directive: ArmDirective?, fallbackLastShip: ArmShip?) -> ArmTag {
         let data = tagData?.value
         return ArmTag(
             id: name.lowercased(),
@@ -567,7 +737,8 @@ private struct ArmTagDTO: Decodable {
             directiveStatus: directive?.status,
             directiveDoneAt: directive?.doneAt,
             directivePostedBy: directive?.postedBy,
-            directiveTraceId: directive?.traceId
+            directiveTraceId: directive?.traceId,
+            lastShip: data?.lastShip?.resolvedArm(name.lowercased()) ?? fallbackLastShip
         )
     }
 }
@@ -601,6 +772,7 @@ private struct ArmTagDataDTO: Decodable {
     let lastFetched: Date?
     let lastWakeDeliveryStatus: String?
     let lastWakeEnvelopeId: String?
+    let lastShip: ArmShip?
 
     enum CodingKeys: String, CodingKey {
         case state
@@ -618,6 +790,7 @@ private struct ArmTagDataDTO: Decodable {
         case lastFetched = "last_fetched"
         case lastWakeDeliveryStatus = "last_wake_delivery_status"
         case lastWakeEnvelopeId = "last_wake_envelope_id"
+        case lastShip = "last_ship"
     }
 }
 
