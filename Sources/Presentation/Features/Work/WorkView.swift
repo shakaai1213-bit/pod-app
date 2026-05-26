@@ -13,6 +13,8 @@ struct WorkView: View {
     @State private var pushProjectId: UUID? = nil
     @State private var pushTicketId: String? = nil
     @State private var selectedFlowItem: TicketFlowItem?
+    @State private var boardsModel = WorkBoardsModel()
+    @State private var selectedBoard: WorkBoardSummary?
 
     var body: some View {
         NavigationStack {
@@ -31,6 +33,10 @@ struct WorkView: View {
                         .padding(.horizontal, 16)
                         .padding(.bottom, 16)
 
+                    boardsSection
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
+
                     projectsSection
                         .padding(.horizontal, 16)
                         .padding(.bottom, 16)
@@ -41,8 +47,14 @@ struct WorkView: View {
                 }
             }
             .background(AppColors.backgroundPrimary.ignoresSafeArea())
-            .refreshable { await model.load() }
-            .task { await model.load() }
+            .refreshable {
+                await model.load()
+                await boardsModel.load(force: true)
+            }
+            .task {
+                await model.load()
+                await boardsModel.load()
+            }
             .task { await model.startFlowReviewPolling() }
             .onAppear {
                 configureReviewerIdentity()
@@ -57,6 +69,9 @@ struct WorkView: View {
             .sheet(item: $selectedFlowItem) { flow in
                 flowDetailSheet(flow)
                     .presentationDetents([.medium, .large])
+            }
+            .sheet(item: $selectedBoard) { board in
+                WorkBoardDetailView(board: board)
             }
             // Hidden navigation links for full-list push
             .navigationDestination(isPresented: $pushProjects) {
@@ -456,6 +471,106 @@ struct WorkView: View {
             ),
         ])
         return actions
+    }
+
+    // MARK: - Boards Section
+
+    private var boardsSection: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("BOARDS · \(boardsModel.boards.count)")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(AppColors.textTertiary)
+                    .kerning(0.5)
+                Spacer()
+                Text(boardsModel.sourceLabel)
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundColor(boardsModel.sourceLabel == "ORCA" ? AppColors.accentSuccess : AppColors.textTertiary)
+                Button {
+                    Task { await boardsModel.load(force: true) }
+                } label: {
+                    Image(systemName: boardsModel.isLoading ? "hourglass" : "arrow.clockwise")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(AppColors.accentElectric)
+                }
+                .buttonStyle(.plain)
+                .disabled(boardsModel.isLoading)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(boardsModel.boards) { board in
+                        Button {
+                            selectedBoard = board
+                        } label: {
+                            workBoardTile(board)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    if boardsModel.isLoading {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                            .frame(width: 44, height: 52)
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.bottom, boardsModel.error == nil ? 10 : 6)
+            }
+
+            if let error = boardsModel.error {
+                Text(error)
+                    .font(.system(size: 10))
+                    .foregroundColor(AppColors.textTertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 10)
+            }
+        }
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                .strokeBorder(AppColors.border, lineWidth: 0.5)
+        )
+    }
+
+    private func workBoardTile(_ board: WorkBoardSummary) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 5) {
+                Text(board.icon)
+                    .font(.system(size: 14))
+                Text(board.displayName)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(AppColors.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+
+            HStack(spacing: 5) {
+                Text("\(board.projectCount)p")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundColor(AppColors.textSecondary)
+                Text("\(board.activeCount)a")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundColor(AppColors.accentElectric)
+                if board.ticketCount > 0 {
+                    Text("\(board.ticketCount)t")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundColor(AppColors.textTertiary)
+                }
+            }
+        }
+        .frame(width: 92, height: 52, alignment: .topLeading)
+        .padding(8)
+        .background(AppColors.backgroundPrimary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(AppColors.border, lineWidth: 0.5)
+        )
     }
 
     // MARK: - Projects Section
@@ -2010,4 +2125,487 @@ struct WorkTicketRow: Identifiable {
 private struct AgentNameOnly: Decodable {
     let id: String
     let name: String
+}
+
+// MARK: - Work Boards
+
+private struct WorkBoardSummary: Identifiable, Hashable {
+    let id: String
+    let slug: String
+    let name: String
+    let layer: String?
+    let component: String?
+    let boardDescription: String?
+    let projectCount: Int
+    let activeCount: Int
+    let ticketCount: Int
+
+    var icon: String { Self.iconMap[slug] ?? "📋" }
+
+    var displayName: String {
+        (component?.isEmpty == false ? component : nil)
+            ?? Self.displayNameMap[slug]
+            ?? name.replacingOccurrences(of: "-", with: " ").capitalized
+    }
+
+    static let orderedSlugs = [
+        "north-star", "pod", "chat", "orca", "memory", "compute", "nerve", "observability", "governance"
+    ]
+
+    static let iconMap: [String: String] = [
+        "north-star": "⭐", "pod": "📱", "chat": "💬", "orca": "🐋", "memory": "🧠",
+        "compute": "🧮", "nerve": "⚡", "observability": "🌸", "governance": "⚖️"
+    ]
+
+    static let displayNameMap: [String: String] = [
+        "north-star": "north-star", "pod": "pod", "chat": "chat", "orca": "orca", "memory": "memory",
+        "compute": "compute", "nerve": "nerve", "observability": "observability", "governance": "governance"
+    ]
+}
+
+@MainActor
+@Observable
+private final class WorkBoardsModel {
+    private(set) var boards: [WorkBoardSummary] = WorkBoardSummary.orderedSlugs.map {
+        WorkBoardSummary(
+            id: $0,
+            slug: $0,
+            name: $0,
+            layer: nil,
+            component: nil,
+            boardDescription: nil,
+            projectCount: 0,
+            activeCount: 0,
+            ticketCount: 0
+        )
+    }
+    private(set) var isLoading = false
+    private(set) var error: String?
+    private(set) var sourceLabel = "SNAPSHOT"
+
+    func load(force: Bool = false) async {
+        if isLoading { return }
+        if !force && sourceLabel == "ORCA" { return }
+
+        isLoading = true
+        error = nil
+        defer { isLoading = false }
+
+        do {
+            let response: WorkBoardListResponse = try await APIClient.shared.get(path: "/api/v1/boards")
+            boards = Self.ordered(response.items.map(\.summary))
+            sourceLabel = "ORCA"
+        } catch {
+            boards = Self.ordered(boards)
+            sourceLabel = "SNAPSHOT"
+            self.error = "Boards unavailable; showing canonical board map."
+        }
+    }
+
+    private static func ordered(_ boards: [WorkBoardSummary]) -> [WorkBoardSummary] {
+        var bySlug = Dictionary(uniqueKeysWithValues: boards.map { ($0.slug, $0) })
+        let canonical = WorkBoardSummary.orderedSlugs.map { slug in
+            bySlug.removeValue(forKey: slug) ?? WorkBoardSummary(
+                id: slug,
+                slug: slug,
+                name: slug,
+                layer: nil,
+                component: nil,
+                boardDescription: nil,
+                projectCount: 0,
+                activeCount: 0,
+                ticketCount: 0
+            )
+        }
+        return canonical + bySlug.values.sorted { $0.slug < $1.slug }
+    }
+}
+
+private struct WorkBoardListResponse: Decodable {
+    let items: [WorkBoardDTO]
+
+    init(from decoder: Decoder) throws {
+        if var unkeyed = try? decoder.unkeyedContainer() {
+            var values: [WorkBoardDTO] = []
+            while !unkeyed.isAtEnd {
+                values.append(try unkeyed.decode(WorkBoardDTO.self))
+            }
+            items = values
+            return
+        }
+
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        items = try container.decode([WorkBoardDTO].self, forKey: .items)
+    }
+
+    private enum CodingKeys: String, CodingKey { case items }
+}
+
+private struct WorkBoardDTO: Decodable {
+    let id: String
+    let slug: String
+    let name: String
+    let layer: String?
+    let component: String?
+    let description: String?
+    let projectCount: Int?
+    let projectsCount: Int?
+    let totalProjects: Int?
+    let activeCount: Int?
+    let activeProjects: Int?
+    let activeProjectCount: Int?
+    let ticketCount: Int?
+    let ticketsCount: Int?
+    let directTicketCount: Int?
+
+    var summary: WorkBoardSummary {
+        WorkBoardSummary(
+            id: id,
+            slug: slug,
+            name: name,
+            layer: layer,
+            component: component,
+            boardDescription: description,
+            projectCount: projectCount ?? projectsCount ?? totalProjects ?? 0,
+            activeCount: activeCount ?? activeProjects ?? activeProjectCount ?? 0,
+            ticketCount: ticketCount ?? ticketsCount ?? directTicketCount ?? 0
+        )
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeWorkFlexibleString(forKey: .id)
+        slug = try container.decodeWorkFlexibleStringIfPresent(forKey: .slug) ?? id
+        name = try container.decodeWorkFlexibleStringIfPresent(forKey: .name) ?? slug
+        layer = try container.decodeWorkFlexibleStringIfPresent(forKey: .layer)
+        component = try container.decodeWorkFlexibleStringIfPresent(forKey: .component)
+        description = try container.decodeWorkFlexibleStringIfPresent(keys: [.description, .objective])
+        projectCount = try container.decodeWorkFlexibleIntIfPresent(keys: [.projectCount, .projectsCount, .totalProjects])
+        projectsCount = nil
+        totalProjects = nil
+        activeCount = try container.decodeWorkFlexibleIntIfPresent(keys: [.activeCount, .activeProjects, .activeProjectCount])
+        activeProjects = nil
+        activeProjectCount = nil
+        ticketCount = try container.decodeWorkFlexibleIntIfPresent(keys: [.ticketCount, .ticketsCount, .directTicketCount])
+        ticketsCount = nil
+        directTicketCount = nil
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, slug, name, layer, component, description, objective
+        case projectCount = "project_count"
+        case projectsCount = "projects_count"
+        case totalProjects = "total_projects"
+        case activeCount = "active_count"
+        case activeProjects = "active_projects"
+        case activeProjectCount = "active_project_count"
+        case ticketCount = "ticket_count"
+        case ticketsCount = "tickets_count"
+        case directTicketCount = "direct_ticket_count"
+    }
+}
+
+private struct WorkBoardProjectListResponse: Decodable {
+    let items: [ProjectDTO]
+
+    init(from decoder: Decoder) throws {
+        if var unkeyed = try? decoder.unkeyedContainer() {
+            var values: [ProjectDTO] = []
+            while !unkeyed.isAtEnd {
+                values.append(try unkeyed.decode(ProjectDTO.self))
+            }
+            items = values
+            return
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        items = try container.decode([ProjectDTO].self, forKey: .items)
+    }
+
+    private enum CodingKeys: String, CodingKey { case items }
+}
+
+private struct WorkBoardTicketSummary: Identifiable, Decodable {
+    let id: String
+    let title: String
+    let status: String
+    let priority: String?
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeWorkFlexibleString(forKey: .id)
+        title = try container.decodeWorkFlexibleStringIfPresent(forKey: .title) ?? "Untitled ticket"
+        status = try container.decodeWorkFlexibleStringIfPresent(forKey: .status) ?? "open"
+        priority = try container.decodeWorkFlexibleStringIfPresent(forKey: .priority)
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, title, status, priority }
+}
+
+private struct WorkBoardTicketListResponse: Decodable {
+    let items: [WorkBoardTicketSummary]
+
+    init(from decoder: Decoder) throws {
+        if var unkeyed = try? decoder.unkeyedContainer() {
+            var values: [WorkBoardTicketSummary] = []
+            while !unkeyed.isAtEnd {
+                values.append(try unkeyed.decode(WorkBoardTicketSummary.self))
+            }
+            items = values
+            return
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        items = try container.decode([WorkBoardTicketSummary].self, forKey: .items)
+    }
+
+    private enum CodingKeys: String, CodingKey { case items }
+}
+
+@MainActor
+@Observable
+private final class WorkBoardDetailModel {
+    private(set) var projects: [ProjectDTO] = []
+    private(set) var directTickets: [WorkBoardTicketSummary] = []
+    private(set) var isLoading = false
+    private(set) var error: String?
+
+    func load(board: WorkBoardSummary) async {
+        if isLoading { return }
+        isLoading = true
+        error = nil
+        defer { isLoading = false }
+
+        async let projectsTask = loadProjects(board: board)
+        async let ticketsTask = loadTickets(board: board)
+        let (loadedProjects, loadedTickets) = await (projectsTask, ticketsTask)
+
+        projects = loadedProjects.projects
+        directTickets = loadedTickets.tickets
+        error = [loadedProjects.error, loadedTickets.error].compactMap { $0 }.joined(separator: " ")
+        if error?.isEmpty == true { error = nil }
+    }
+
+    private func loadProjects(board: WorkBoardSummary) async -> (projects: [ProjectDTO], error: String?) {
+        do {
+            let response: WorkBoardProjectListResponse = try await APIClient.shared.get(path: "/api/v1/boards/\(board.id)/projects")
+            return (response.items, nil)
+        } catch {
+            do {
+                let response: WorkBoardProjectListResponse = try await APIClient.shared.get(path: "/api/v1/projects?board_id=\(board.id)")
+                return (response.items, nil)
+            } catch {
+                return ([], "Projects unavailable.")
+            }
+        }
+    }
+
+    private func loadTickets(board: WorkBoardSummary) async -> (tickets: [WorkBoardTicketSummary], error: String?) {
+        do {
+            let response: WorkBoardTicketListResponse = try await APIClient.shared.get(path: "/api/v1/boards/\(board.id)/tickets")
+            return (response.items, nil)
+        } catch {
+            return ([], "Direct tickets unavailable.")
+        }
+    }
+}
+
+private struct WorkBoardDetailView: View {
+    let board: WorkBoardSummary
+    @State private var model = WorkBoardDetailModel()
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    boardHero
+                    boardProjects
+                    boardTickets
+                    if let error = model.error {
+                        Text(error)
+                            .font(.system(size: 11))
+                            .foregroundColor(AppColors.textTertiary)
+                    }
+                }
+                .padding(16)
+                .padding(.bottom, 40)
+            }
+            .background(AppColors.backgroundPrimary.ignoresSafeArea())
+            .navigationTitle(board.displayName)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Close") { dismiss() }
+                        .foregroundColor(AppColors.accentElectric)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        Task { await model.load(board: board) }
+                    } label: {
+                        Image(systemName: model.isLoading ? "hourglass" : "arrow.clockwise")
+                    }
+                    .disabled(model.isLoading)
+                }
+            }
+            .task {
+                await model.load(board: board)
+            }
+        }
+        .presentationDetents([.large])
+    }
+
+    private var boardHero: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(board.icon)
+                    .font(.system(size: 34))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(board.displayName.uppercased())
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(AppColors.textPrimary)
+                    Text([board.layer, board.component].compactMap { $0 }.joined(separator: " · "))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(AppColors.textSecondary)
+                }
+                Spacer()
+            }
+
+            if let description = board.boardDescription, !description.isEmpty {
+                Text(description)
+                    .font(.system(size: 13))
+                    .foregroundColor(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: 8) {
+                boardPill("\(board.projectCount) projects")
+                boardPill("\(board.activeCount) active")
+                boardPill("\(board.ticketCount) tickets")
+            }
+        }
+        .padding(14)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppColors.border, lineWidth: 0.5))
+    }
+
+    private var boardProjects: some View {
+        boardListSection(title: "PROJECTS", count: model.projects.count, empty: "No projects on this board yet.") {
+            ForEach(model.projects) { project in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(project.name)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(AppColors.textPrimary)
+                        .lineLimit(2)
+                    HStack(spacing: 6) {
+                        boardPill(project.stage ?? project.status)
+                        boardPill("P\(project.priority)")
+                        Spacer(minLength: 0)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+            }
+        }
+    }
+
+    private var boardTickets: some View {
+        boardListSection(title: "DIRECT TICKETS", count: model.directTickets.count, empty: "No direct tickets on this board.") {
+            ForEach(model.directTickets) { ticket in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(ticket.title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(AppColors.textPrimary)
+                        .lineLimit(2)
+                    HStack(spacing: 6) {
+                        boardPill(ticket.status)
+                        if let priority = ticket.priority {
+                            boardPill(priority)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+            }
+        }
+    }
+
+    private func boardListSection<Content: View>(title: String, count: Int, empty: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Text(title)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(AppColors.textTertiary)
+                Text("· \(count)")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(AppColors.textTertiary)
+                Spacer()
+            }
+
+            if model.isLoading && count == 0 {
+                ProgressView()
+                    .frame(maxWidth: .infinity, minHeight: 72)
+            } else if count == 0 {
+                Text(empty)
+                    .font(.system(size: 12))
+                    .foregroundColor(AppColors.textTertiary)
+                    .frame(maxWidth: .infinity, minHeight: 56, alignment: .center)
+                    .background(AppColors.backgroundSecondary)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                VStack(spacing: 0) {
+                    content()
+                }
+                .background(AppColors.backgroundSecondary)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+        }
+    }
+
+    private func boardPill(_ value: String) -> some View {
+        Text(value)
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundColor(AppColors.textSecondary)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(AppColors.backgroundTertiary)
+            .clipShape(Capsule())
+    }
+}
+
+private extension KeyedDecodingContainer {
+    func decodeWorkFlexibleString(forKey key: Key) throws -> String {
+        if let value = try? decode(String.self, forKey: key) { return value }
+        if let value = try? decode(UUID.self, forKey: key) { return value.uuidString }
+        if let value = try? decode(Int.self, forKey: key) { return String(value) }
+        throw DecodingError.keyNotFound(
+            key,
+            DecodingError.Context(codingPath: codingPath, debugDescription: "No string-like value for \(key.stringValue)")
+        )
+    }
+
+    func decodeWorkFlexibleStringIfPresent(forKey key: Key) throws -> String? {
+        if let value = try? decodeIfPresent(String.self, forKey: key) { return value }
+        if let value = try? decodeIfPresent(UUID.self, forKey: key) { return value.uuidString }
+        if let value = try? decodeIfPresent(Int.self, forKey: key) { return String(value) }
+        return nil
+    }
+
+    func decodeWorkFlexibleStringIfPresent(keys: [Key]) throws -> String? {
+        for key in keys {
+            if let value = try decodeWorkFlexibleStringIfPresent(forKey: key) {
+                return value
+            }
+        }
+        return nil
+    }
+
+    func decodeWorkFlexibleIntIfPresent(keys: [Key]) throws -> Int? {
+        for key in keys {
+            if let value = try? decodeIfPresent(Int.self, forKey: key) { return value }
+            if let value = try? decodeIfPresent(Double.self, forKey: key) { return Int(value) }
+            if let value = try? decodeIfPresent(String.self, forKey: key), let intValue = Int(value) { return intValue }
+        }
+        return nil
+    }
 }
