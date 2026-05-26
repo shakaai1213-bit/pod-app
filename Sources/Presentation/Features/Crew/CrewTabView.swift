@@ -32,13 +32,7 @@ struct CrewTabView: View {
     @State private var segment: Segment = .agents
 
     var body: some View {
-        VStack(spacing: 0) {
-            segmentPicker
-                .padding(.horizontal, AppTheme.spacingMD)
-                .padding(.top, AppTheme.spacingSM)
-                .padding(.bottom, AppTheme.spacingXS)
-                .background(AppColors.backgroundPrimary)
-
+        ZStack(alignment: .bottom) {
             Group {
                 switch segment {
                 case .agents:
@@ -48,8 +42,29 @@ struct CrewTabView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            segmentDock
         }
         .background(AppColors.backgroundPrimary)
+    }
+
+    private var segmentDock: some View {
+        segmentPicker
+            .padding(.horizontal, AppTheme.spacingMD)
+            .padding(.top, AppTheme.spacingXS)
+            .padding(.bottom, AppTheme.spacingMD)
+            .background(
+                LinearGradient(
+                    colors: [
+                        AppColors.backgroundPrimary.opacity(0),
+                        AppColors.backgroundPrimary.opacity(0.92),
+                        AppColors.backgroundPrimary
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea(edges: .bottom)
+            )
     }
 
     private var segmentPicker: some View {
@@ -72,7 +87,7 @@ struct CrewTabView: View {
                 .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
                 .foregroundColor(isSelected ? AppColors.accentElectric : AppColors.textSecondary)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, AppTheme.spacingXS + 2)
+                .frame(minHeight: 44)
                 .background(
                     RoundedRectangle(cornerRadius: AppTheme.radiusMedium)
                         .fill(isSelected ? AppColors.backgroundPrimary : Color.clear)
