@@ -598,6 +598,11 @@ private struct ORCAProjectDetailView: View {
     @State private var noteStatus: String?
     @State private var automationStatus: String?
     @State private var automationBusyAction: String?
+    @State private var generationNote = ""
+    @State private var showingMilestoneEditor = false
+    @State private var milestoneEditorTitle = ""
+    @State private var milestoneEditorDescription = ""
+    @State private var editingMilestoneId: String?
 
     private var activeProject: ProjectDTO {
         workingProject ?? project
@@ -637,6 +642,16 @@ private struct ORCAProjectDetailView: View {
             .sheet(isPresented: $showingNewTask) {
                 NewORCATaskSheet(projectId: project.id, viewModel: viewModel) { newTask in
                     tasks.append(newTask)
+                }
+            }
+            .sheet(isPresented: $showingMilestoneEditor) {
+                ProjectMilestoneEditorSheet(
+                    titleText: $milestoneEditorTitle,
+                    descriptionText: $milestoneEditorDescription,
+                    isEditingProposal: editingMilestoneId != nil,
+                    isSaving: automationBusyAction == "milestone-editor"
+                ) { title, description in
+                    Task { await submitMilestoneEditor(title: title, description: description) }
                 }
             }
             .task {
@@ -695,6 +710,17 @@ private struct ORCAProjectDetailView: View {
                 Spacer(minLength: 0)
 
                 Button {
+                    openMilestoneEditor(for: nil)
+                } label: {
+                    Label("Add", systemImage: "plus")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .tint(AppColors.accentSuccess)
+                .disabled(automationBusyAction != nil)
+
+                Button {
                     Task { await generateMilestones() }
                 } label: {
                     Label(automationBusyAction == "generate" ? "Generating" : "Generate", systemImage: "sparkles")
@@ -705,6 +731,14 @@ private struct ORCAProjectDetailView: View {
                 .tint(AppColors.accentElectric)
                 .disabled(automationBusyAction != nil)
             }
+
+            TextField("Optional generation note", text: $generationNote, axis: .vertical)
+                .font(.caption)
+                .lineLimit(1...3)
+                .textInputAutocapitalization(.sentences)
+                .padding(Theme.sm)
+                .background(AppColors.backgroundTertiary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
 
             if let runId = activeProject.lastGenerationRunId, !runId.isEmpty {
                 Label("Last generation \(runId)", systemImage: "point.topleft.down.curvedto.point.bottomright.up")
@@ -750,19 +784,21 @@ private struct ORCAProjectDetailView: View {
                         PodReviewCard(
                             item: milestoneReviewItem(for: proposal),
                             isBusy: automationBusyAction?.hasSuffix(proposal.id) == true,
-                            onAction: { action in
-                                switch action.id {
-                                case "accept":
-                                    Task { await acceptMilestone(proposal.id) }
-                                case "drop":
-                                    Task { await dropMilestone(proposal.id) }
-                                default:
-                                    break
-                                }
+	                            onAction: { action in
+	                                switch action.id {
+                                case "edit":
+                                    openMilestoneEditor(for: proposal)
+	                                case "accept":
+	                                    Task { await acceptMilestone(proposal.id) }
+	                                case "drop":
+	                                    Task { await dropMilestone(proposal.id) }
+	                                default:
+	                                    break
+	                                }
                             }
-                        )
-                    }
-                }
+	                        )
+	                    }
+	                }
             }
         }
     }
@@ -970,10 +1006,11 @@ private struct ORCAProjectDetailView: View {
             provenance: provenance,
             traceId: proposal.runId ?? activeProject.lastGenerationRunId,
             artifactHash: proposal.artifactHash,
-            actions: [
-                PodReviewAction(id: "accept", title: "Accept", systemImage: "checkmark", style: .success),
-                PodReviewAction(id: "drop", title: "Drop", systemImage: "xmark", style: .destructive)
-            ]
+	            actions: [
+                PodReviewAction(id: "edit", title: "Edit", systemImage: "pencil", style: .primary),
+	                PodReviewAction(id: "accept", title: "Accept", systemImage: "checkmark", style: .success),
+	                PodReviewAction(id: "drop", title: "Drop", systemImage: "xmark", style: .destructive)
+	            ]
         )
     }
 
@@ -982,13 +1019,15 @@ private struct ORCAProjectDetailView: View {
         automationBusyAction = "generate"
         automationStatus = nil
         defer { automationBusyAction = nil }
-        do {
-            workingProject = try await viewModel.generateMilestones(projectId: activeProject.id)
-            automationStatus = "Milestone generation requested through ORCA."
-        } catch {
-            automationStatus = "Couldn't generate milestones: \(error.localizedDescription)"
-        }
-    }
+	        do {
+	            workingProject = try await viewModel.generateMilestones(projectId: activeProject.id, note: generationNote)
+	            let usedNote = !generationNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+	            generationNote = ""
+	            automationStatus = usedNote ? "Milestone regeneration requested with Pod note." : "Milestone generation requested through ORCA."
+	        } catch {
+	            automationStatus = "Couldn't generate milestones: \(error.localizedDescription)"
+	        }
+	    }
 
     @MainActor
     private func acceptMilestone(_ milestoneId: String) async {
@@ -1025,8 +1064,86 @@ private struct ORCAProjectDetailView: View {
             workingProject = try await viewModel.advanceToScoping(projectId: activeProject.id)
             automationStatus = "Project advanced to Scoping."
         } catch {
-            automationStatus = "Couldn't advance to Scoping: \(error.localizedDescription)"
+	            automationStatus = "Couldn't advance to Scoping: \(error.localizedDescription)"
+	        }
+	    }
+
+    private func openMilestoneEditor(for proposal: ProjectMilestoneProposalDTO?) {
+        editingMilestoneId = proposal?.id
+        milestoneEditorTitle = proposal?.title ?? ""
+        milestoneEditorDescription = proposal?.description ?? ""
+        showingMilestoneEditor = true
+    }
+
+    @MainActor
+    private func submitMilestoneEditor(title: String, description: String) async {
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanDescription = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTitle.isEmpty else { return }
+
+        automationBusyAction = "milestone-editor"
+        automationStatus = nil
+        defer { automationBusyAction = nil }
+
+        do {
+            if let editingMilestoneId {
+                workingProject = try await viewModel.acceptMilestone(
+                    projectId: activeProject.id,
+                    milestoneId: editingMilestoneId,
+                    edits: ProjectMilestoneEdits(
+                        title: cleanTitle,
+                        outcome: cleanDescription.isEmpty ? nil : cleanDescription
+                    )
+                )
+                automationStatus = "Edited milestone accepted into ORCA."
+            } else {
+                workingProject = try await viewModel.addMilestone(
+                    projectId: activeProject.id,
+                    title: cleanTitle,
+                    description: cleanDescription.isEmpty ? nil : cleanDescription
+                )
+                automationStatus = "Manual milestone added to ORCA."
+            }
+            showingMilestoneEditor = false
+            self.editingMilestoneId = nil
+            milestoneEditorTitle = ""
+            milestoneEditorDescription = ""
+        } catch {
+            automationStatus = "Couldn't save milestone: \(error.localizedDescription)"
         }
+    }
+	}
+
+private struct ProjectMilestoneEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var titleText: String
+    @Binding var descriptionText: String
+    let isEditingProposal: Bool
+    let isSaving: Bool
+    let onSubmit: (String, String) -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Milestone title", text: $titleText)
+                TextField("Description", text: $descriptionText, axis: .vertical)
+                    .lineLimit(3...6)
+            }
+            .navigationTitle(isEditingProposal ? "Edit Milestone" : "Add Milestone")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(isEditingProposal ? "Accept" : "Add") {
+                        onSubmit(titleText, descriptionText)
+                    }
+                    .disabled(titleText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving)
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 }
 

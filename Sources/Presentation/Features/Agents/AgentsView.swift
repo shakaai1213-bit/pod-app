@@ -84,11 +84,22 @@ struct AgentsView: View {
             .task {
                 await focusModel.load()
                 await viewModel.loadAgents()
+                consumePendingActivationAgent()
                 viewModel.subscribeToAgentState()
                 await viewModel.loadAllInboxTails()
             }
             .onDisappear { viewModel.disconnectSSE() }
         }
+    }
+
+    @MainActor
+    private func consumePendingActivationAgent() {
+        let name = UserDefaults.standard.string(forKey: "pod.pendingActivationAgentName")?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard let name, !name.isEmpty else { return }
+        UserDefaults.standard.removeObject(forKey: "pod.pendingActivationAgentName")
+        selectedAgent = viewModel.agents.first { $0.name.lowercased() == name }
     }
 
     // MARK: - FOCUS CARDS
@@ -178,6 +189,33 @@ struct AgentsView: View {
                     roadmapRow("90d", card.roadmap.d90)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            Divider()
+
+            // THIS WEEK — from GET /api/v1/agents/{name}/weekly-plan (graceful 404 = nil)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("THIS WEEK")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(AppColors.textTertiary)
+                    .kerning(0.5)
+                if let milestones = card.thisWeek {
+                    ForEach(Array(milestones.prefix(5).enumerated()), id: \.element.id) { _, milestone in
+                        HStack(alignment: .firstTextBaseline, spacing: 4) {
+                            Text(milestone.statusDot)
+                                .font(.system(size: 11))
+                            Text(milestone.title)
+                                .font(.system(size: 11))
+                                .foregroundColor(AppColors.textPrimary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                    }
+                } else {
+                    Text("—")
+                        .font(.system(size: 11))
+                        .foregroundColor(AppColors.textTertiary)
+                }
             }
 
             Divider()
@@ -786,7 +824,22 @@ private struct AgentFocusFish: Hashable {
 }
 
 // L7c reshape (SPEC-POD-AGENT-FOCUS-CARDS v1, Tony 2026-05-25):
-// Card = STRETCH (3 aspirational items) + ROADMAP (30d/60d/90d) + Fish + Today's 3.
+// Card = STRETCH (3 aspirational items) + ROADMAP (30d/60d/90d) + THIS WEEK + Fish + Today's 3.
+
+private struct WeeklyMilestone: Identifiable, Hashable, Decodable {
+    let id: String
+    let title: String
+    let status: String  // "planned" | "shipped" | "dropped"
+
+    var statusDot: String {
+        switch status {
+        case "shipped": return "✅"
+        case "dropped": return "❌"
+        default:        return "🔲"
+        }
+    }
+}
+
 private struct AgentRoadmap: Hashable {
     let d30: String
     let d60: String
@@ -802,6 +855,7 @@ private struct AgentFocusCard: Identifiable, Hashable {
     let charter: String
     let stretch: [String]            // 3 aspirational areas (REFRAME)
     let roadmap: AgentRoadmap         // 30d / 60d / 90d trajectory
+    let thisWeek: [WeeklyMilestone]?  // Weekly plan milestones from /api/v1/agents/{name}/weekly-plan
     let focusAreas: [AgentFocusArea]  // Today's 3 from morning daily log
     let fish: AgentFocusFish
     let lastLogExcerpt: String?
@@ -835,6 +889,7 @@ private struct AgentFocusCard: Identifiable, Hashable {
             charter: meta.charter,
             stretch: AgentFocusDefaults.stretch[agentId] ?? ["", "", ""],
             roadmap: AgentFocusDefaults.roadmap[agentId] ?? .empty,
+            thisWeek: nil,
             focusAreas: [
                 AgentFocusArea(id: "1", label: "Waiting for morning log", evidenceRef: nil),
                 AgentFocusArea(id: "2", label: "", evidenceRef: nil),
@@ -939,12 +994,17 @@ private final class AgentFocusCardsModel {
     }
 
     private static func loadCard(agentId: String) async -> AgentFocusCard {
-        do {
-            let dto: AgentFocusCardDTO = try await APIClient.shared.get(path: "/api/v1/agents/\(agentId)/focus-card")
-            return dto.toDomain(fallbackId: agentId)
-        } catch {
-            return AgentFocusCard.skeleton(agentId: agentId)
-        }
+        // Fetch focus card + weekly plan concurrently; graceful fallback on either.
+        async let focusCardResult: AgentFocusCardDTO? = {
+            (try? await APIClient.shared.get(path: "/api/v1/agents/\(agentId)/focus-card"))
+        }()
+        async let weeklyPlanResult: [WeeklyMilestone]? = {
+            (try? await APIClient.shared.get(path: "/api/v1/agents/\(agentId)/weekly-plan"))
+        }()
+
+        let (dto, weeklyPlan) = await (focusCardResult, weeklyPlanResult)
+        guard let dto else { return AgentFocusCard.skeleton(agentId: agentId) }
+        return dto.toDomain(fallbackId: agentId, weeklyPlan: weeklyPlan)
     }
 }
 
@@ -958,6 +1018,7 @@ private struct AgentFocusCardDTO: Decodable {
     let lastUpdated: Date?
     let stretch: [String]?
     let roadmap: RoadmapDTO?
+    let thisWeek: [WeeklyMilestone]?
 
     enum CodingKeys: String, CodingKey {
         case charter, fish, stretch, roadmap
@@ -966,9 +1027,10 @@ private struct AgentFocusCardDTO: Decodable {
         case focusAreas = "focus_areas"
         case lastLogExcerpt = "last_log_excerpt"
         case lastUpdated = "last_updated"
+        case thisWeek = "this_week"
     }
 
-    func toDomain(fallbackId: String) -> AgentFocusCard {
+    func toDomain(fallbackId: String, weeklyPlan: [WeeklyMilestone]? = nil) -> AgentFocusCard {
         let id = agentId.lowercased()
         let meta = AgentFocusDefaults.mainAgentMeta[id] ?? AgentFocusDefaults.mainAgentMeta[fallbackId]!
         let normalizedAreas = Array(focusAreas.prefix(3)).enumerated().map { idx, area in
@@ -990,6 +1052,9 @@ private struct AgentFocusCardDTO: Decodable {
         let fishValue = fish.map { AgentFocusFish(name: $0.name, icon: $0.icon) }
             ?? AgentFocusDefaults.fish[id] ?? AgentFocusFish(name: "—", icon: "—")
 
+        // weekly-plan endpoint takes precedence; DTO field is fallback; nil = endpoint not live yet.
+        let thisWeekValue = weeklyPlan ?? thisWeek
+
         return AgentFocusCard(
             agentId: id,
             displayName: displayName.replacingOccurrences(of: meta.emoji, with: "").trimmingCharacters(in: .whitespacesAndNewlines),
@@ -997,6 +1062,7 @@ private struct AgentFocusCardDTO: Decodable {
             charter: charter.isEmpty ? meta.charter : charter,
             stretch: stretchValues,
             roadmap: roadmapValue,
+            thisWeek: thisWeekValue,
             focusAreas: paddedAreas,
             fish: fishValue,
             lastLogExcerpt: lastLogExcerpt,

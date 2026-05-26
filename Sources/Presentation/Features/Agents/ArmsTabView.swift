@@ -186,13 +186,20 @@ struct ArmsTabView: View {
                 valueRow(label: "Ticket", value: arm.ticketRef ?? "—")
                 valueRow(label: "Blocked", value: arm.blockedOn ?? "—")
                 valueRow(label: "Evidence", value: arm.evidenceRef ?? "—")
+                valueRow(label: "Fresh", value: arm.freshnessLabel)
+                valueRow(label: "Route", value: arm.routeSummary)
+                valueRow(label: "Wake", value: arm.wakeSummary)
+                valueRow(label: "Source", value: arm.sourceSummary)
+                if arm.protected, let reason = arm.protectionReason, !reason.isEmpty {
+                    protectedRow(reason)
+                }
                 if let directive = arm.directive, !directive.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     directiveRow(directive)
                 }
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                TextField(arm.isFund ? "Manual only" : "Post directive…", text: viewModel.draftBinding(for: arm), axis: .vertical)
+                TextField(arm.directivePlaceholder, text: viewModel.draftBinding(for: arm), axis: .vertical)
                     .lineLimit(2...4)
                     .font(.system(size: 13))
                     .foregroundColor(AppColors.textPrimary)
@@ -203,24 +210,24 @@ struct ArmsTabView: View {
                         RoundedRectangle(cornerRadius: 8)
                             .strokeBorder(AppColors.border, lineWidth: 0.5)
                     )
-                    .disabled(arm.isFund)
+                    .disabled(!arm.canPostDirective)
 
                 HStack(spacing: 10) {
                     Button {
                         Task { await viewModel.postDirective(for: arm) }
                     } label: {
-                        actionLabel(title: arm.isFund ? "Manual only" : "Post", systemImage: "paperplane.fill", isBusy: viewModel.isBusy(arm))
+                        actionLabel(title: arm.canPostDirective ? "Post" : "Manual only", systemImage: "paperplane.fill", isBusy: viewModel.isBusy(arm))
                     }
                     .buttonStyle(.plain)
-                    .disabled(arm.isFund || viewModel.isBusy(arm) || (viewModel.directiveDrafts[arm.name.lowercased()] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(!arm.canPostDirective || viewModel.isBusy(arm) || (viewModel.directiveDrafts[arm.name.lowercased()] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                     Button {
                         wakeTarget = arm
                     } label: {
-                        actionLabel(title: arm.isFund ? "Manual only" : "Wake", systemImage: "bell.badge.fill", isBusy: viewModel.isBusy(arm))
+                        actionLabel(title: arm.canWake ? "Wake" : "Manual only", systemImage: "bell.badge.fill", isBusy: viewModel.isBusy(arm))
                     }
                     .buttonStyle(.plain)
-                    .disabled(arm.isFund || viewModel.isBusy(arm))
+                    .disabled(!arm.canWake || viewModel.isBusy(arm))
                 }
             }
         }
@@ -277,6 +284,23 @@ struct ArmsTabView: View {
         }
         .padding(10)
         .background(AppColors.accentElectric.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func protectedRow(_ reason: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "lock.shield")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(AppColors.accentWarning)
+                .frame(width: 58, alignment: .leading)
+            Text(reason)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(AppColors.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .background(AppColors.accentWarning.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
@@ -356,10 +380,12 @@ struct ArmsTabView: View {
                 Text("Wake \(arm.displayName)?")
                     .font(.system(size: 22, weight: .bold))
                     .foregroundColor(AppColors.textPrimary)
-                Text("It will receive the current Jarvis tag context, including current work, ticket reference, blockers, evidence, quality, and directive.")
+                Text("It will receive the current Jarvis tag context, including current work, ticket reference, blockers, evidence, quality, directive, and route metadata.")
                     .font(.system(size: 14))
                     .foregroundColor(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
+                valueRow(label: "Route", value: arm.routeSummary)
+                valueRow(label: "Fresh", value: arm.freshnessLabel)
 
                 Spacer()
 

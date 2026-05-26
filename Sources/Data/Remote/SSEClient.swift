@@ -43,6 +43,29 @@ public actor SSEStreamManager {
         case error(StreamError)
     }
 
+    public enum ConnectionState: String, Sendable {
+        case idle
+        case connecting
+        case connected
+        case reconnecting
+        case stale
+        case failed
+        case disconnected
+    }
+
+    public struct StreamHealth: Sendable {
+        public let state: ConnectionState
+        public let lastConnectedAt: Date?
+        public let lastEventAt: Date?
+        public let lastErrorDescription: String?
+        public let reconnectAttempt: Int
+
+        public var isStale: Bool {
+            guard state == .connected, let lastEventAt else { return state == .stale }
+            return Date().timeIntervalSince(lastEventAt) > 30
+        }
+    }
+
     /// Stream mode determines how `SSEDelegate` decodes the `data:` body.
     /// `/chat/channels/<id>/stream` emits `event: message` with MessageNewPayload;
     /// `/tickets/stream` emits envelopes whose SSE event-name is the envelope
@@ -57,6 +80,13 @@ public actor SSEStreamManager {
     private var dataTask: URLSessionDataTask?
     private var session: URLSession?
     private var isCancelled: Bool = false
+    private var health = StreamHealth(
+        state: .idle,
+        lastConnectedAt: nil,
+        lastEventAt: nil,
+        lastErrorDescription: nil,
+        reconnectAttempt: 0
+    )
 
     // MARK: - Public API
 
@@ -68,6 +98,7 @@ public actor SSEStreamManager {
         baseURL: String
     ) -> AsyncThrowingStream<SSEEvent, Error> {
         isCancelled = false
+        markConnecting()
         let urlString = "\(baseURL)/api/v1/chat/channels/\(channelId)/stream"
         guard URL(string: urlString) != nil else {
             return AsyncThrowingStream { continuation in
@@ -128,6 +159,7 @@ public actor SSEStreamManager {
         baseURL: String
     ) -> AsyncThrowingStream<SSEEvent, Error> {
         isCancelled = false
+        markConnecting()
         let urlString = "\(baseURL)/api/v1/tickets/stream"
         guard URL(string: urlString) != nil else {
             return AsyncThrowingStream { continuation in
@@ -183,6 +215,7 @@ public actor SSEStreamManager {
     /// Called by SSEDelegate on error.
     func handleError(_ error: Error?) {
         guard !isCancelled else { return }
+        markFailed(error)
         dataTask = nil
         session?.invalidateAndCancel()
         session = nil
@@ -191,10 +224,81 @@ public actor SSEStreamManager {
     /// Cancel the current stream.
     public func disconnect() {
         isCancelled = true
+        health = StreamHealth(
+            state: .disconnected,
+            lastConnectedAt: health.lastConnectedAt,
+            lastEventAt: health.lastEventAt,
+            lastErrorDescription: nil,
+            reconnectAttempt: health.reconnectAttempt
+        )
         dataTask?.cancel()
         dataTask = nil
         session?.invalidateAndCancel()
         session = nil
+    }
+
+    public func currentHealth() -> StreamHealth {
+        if health.isStale {
+            return StreamHealth(
+                state: .stale,
+                lastConnectedAt: health.lastConnectedAt,
+                lastEventAt: health.lastEventAt,
+                lastErrorDescription: health.lastErrorDescription,
+                reconnectAttempt: health.reconnectAttempt
+            )
+        }
+        return health
+    }
+
+    func markConnected() {
+        let now = Date()
+        health = StreamHealth(
+            state: .connected,
+            lastConnectedAt: now,
+            lastEventAt: now,
+            lastErrorDescription: nil,
+            reconnectAttempt: 0
+        )
+    }
+
+    func markEvent() {
+        health = StreamHealth(
+            state: health.state == .connected ? .connected : health.state,
+            lastConnectedAt: health.lastConnectedAt,
+            lastEventAt: Date(),
+            lastErrorDescription: health.lastErrorDescription,
+            reconnectAttempt: health.reconnectAttempt
+        )
+    }
+
+    func markReconnecting() {
+        health = StreamHealth(
+            state: .reconnecting,
+            lastConnectedAt: health.lastConnectedAt,
+            lastEventAt: health.lastEventAt,
+            lastErrorDescription: health.lastErrorDescription,
+            reconnectAttempt: health.reconnectAttempt + 1
+        )
+    }
+
+    private func markConnecting() {
+        health = StreamHealth(
+            state: .connecting,
+            lastConnectedAt: health.lastConnectedAt,
+            lastEventAt: health.lastEventAt,
+            lastErrorDescription: nil,
+            reconnectAttempt: health.reconnectAttempt
+        )
+    }
+
+    private func markFailed(_ error: Error?) {
+        health = StreamHealth(
+            state: error == nil ? .disconnected : .failed,
+            lastConnectedAt: health.lastConnectedAt,
+            lastEventAt: health.lastEventAt,
+            lastErrorDescription: error?.localizedDescription,
+            reconnectAttempt: health.reconnectAttempt
+        )
     }
 
     private func parseAndDispatch(_ chunk: String) {
@@ -291,6 +395,7 @@ private final class SSEDelegate: NSObject, URLSessionDataDelegate {
     private func dispatchEvent(type: String, data: String) {
         // "connected" and "keepalive" are stream-agnostic.
         if type == "keepalive" {
+            Task { [weak manager] in await manager?.markEvent() }
             continuation.yield(.keepalive)
             return
         }
@@ -304,6 +409,7 @@ private final class SSEDelegate: NSObject, URLSessionDataDelegate {
                 let decoder = JSONDecoder()
                 decoder.dateDecodingStrategy = .iso8601
                 if let payload = try? decoder.decode(MessageNewPayload.self, from: jsonData) {
+                    Task { [weak manager] in await manager?.markEvent() }
                     continuation.yield(.message(payload))
                 } else {
                     continuation.yield(.error(.decodingFailed("Could not decode MessageNewPayload")))
@@ -317,6 +423,7 @@ private final class SSEDelegate: NSObject, URLSessionDataDelegate {
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
             if let envelope = try? decoder.decode(TicketLifecycleEnvelope.self, from: jsonData) {
+                Task { [weak manager] in await manager?.markEvent() }
                 continuation.yield(.ticketLifecycle(envelope))
             }
             // Silent skip on undecodable — backend may add future event types
@@ -327,6 +434,7 @@ private final class SSEDelegate: NSObject, URLSessionDataDelegate {
     private func yieldConnectedOnce() {
         guard !didYieldConnected else { return }
         didYieldConnected = true
+        Task { [weak manager] in await manager?.markConnected() }
         continuation.yield(.connected)
     }
 

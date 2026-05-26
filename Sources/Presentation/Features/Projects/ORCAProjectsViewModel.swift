@@ -134,7 +134,7 @@ final class ORCAProjectsViewModel {
         // Optimistic update
         if let idx = projects.firstIndex(where: { $0.id == projectId }) {
             let old = projects[idx]
-            let updated = ProjectDTO(
+            var updated = ProjectDTO(
                 id: old.id, name: old.name, goal: old.goal,
                 description: old.description, status: toStatus,
                 priority: old.priority, projectedCost: old.projectedCost,
@@ -144,6 +144,10 @@ final class ORCAProjectsViewModel {
                 completedAt: toStatus == KanbanStatus.done.rawValue ? Date() : nil,
                 dueDate: old.dueDate, stage: old.stage
             )
+            updated.automationEnabled = old.automationEnabled
+            updated.proposedMilestones = old.proposedMilestones
+            updated.milestones = old.milestones
+            updated.lastGenerationRunId = old.lastGenerationRunId
             projects[idx] = updated
         }
 
@@ -157,20 +161,26 @@ final class ORCAProjectsViewModel {
         }
     }
 
-    func generateMilestones(projectId: UUID) async throws -> ProjectDTO {
-        let updated = try await repo.generateMilestones(projectId: projectId)
+    func generateMilestones(projectId: UUID, note: String? = nil) async throws -> ProjectDTO {
+        let updated = try await repo.generateMilestones(projectId: projectId, note: note)
         replaceProject(updated)
         return updated
     }
 
-    func acceptMilestone(projectId: UUID, milestoneId: String) async throws -> ProjectDTO {
-        let updated = try await repo.acceptMilestone(projectId: projectId, milestoneId: milestoneId)
+    func acceptMilestone(projectId: UUID, milestoneId: String, edits: ProjectMilestoneEdits? = nil) async throws -> ProjectDTO {
+        let updated = try await repo.acceptMilestone(projectId: projectId, milestoneId: milestoneId, edits: edits)
         replaceProject(updated)
         return updated
     }
 
-    func dropMilestone(projectId: UUID, milestoneId: String) async throws -> ProjectDTO {
-        let updated = try await repo.dropMilestone(projectId: projectId, milestoneId: milestoneId)
+    func dropMilestone(projectId: UUID, milestoneId: String, reason: String = "Dropped from Pod Projects review.") async throws -> ProjectDTO {
+        let updated = try await repo.dropMilestone(projectId: projectId, milestoneId: milestoneId, reason: reason)
+        replaceProject(updated)
+        return updated
+    }
+
+    func addMilestone(projectId: UUID, title: String, description: String?) async throws -> ProjectDTO {
+        let updated = try await repo.addMilestone(projectId: projectId, title: title, description: description)
         replaceProject(updated)
         return updated
     }

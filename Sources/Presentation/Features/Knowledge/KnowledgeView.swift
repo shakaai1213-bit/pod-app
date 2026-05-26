@@ -39,6 +39,7 @@ enum KnowledgeChip: String, CaseIterable, Identifiable {
 
 struct KnowledgeView: View {
 
+    @EnvironmentObject private var appState: AppState
     @State private var viewModel = KnowledgeViewModel()
     @State private var showingEditor = false
     @State private var editingStandard: Standard?
@@ -121,7 +122,14 @@ struct KnowledgeView: View {
                     errorMessage: viewModel.wikiDocumentsErrorMessage
                 )
             }
+            .onAppear {
+                configureReviewerIdentity()
+            }
+            .onChange(of: appState.currentUser?.name) { _, _ in
+                configureReviewerIdentity()
+            }
             .task {
+                configureReviewerIdentity()
                 await viewModel.loadStandards()
                 await viewModel.loadWikiContext()
                 await viewModel.loadWikiDocuments()
@@ -135,6 +143,10 @@ struct KnowledgeView: View {
                 await viewModel.loadMemoryCandidates()
             }
         }
+    }
+
+    private func configureReviewerIdentity() {
+        viewModel.configureReviewerIdentity(from: appState.currentUser?.name ?? appState.authManager.currentUser?.name)
     }
 
     // MARK: - Chip Nav (L4)
@@ -1316,24 +1328,43 @@ struct KnowledgeView: View {
                             .foregroundColor(AppColors.textTertiary)
                     }
 
-                    LazyVStack(spacing: Theme.xs) {
-                        ForEach(queue.items.prefix(6)) { item in
-                            MemoryCandidateRow(
-                                candidate: item,
-                                isBusy: viewModel.memoryActionCandidateIds.contains(item.id),
-                                onApproveChroma: {
-                                    Task { await viewModel.approveMemoryCandidate(item, target: "chroma") }
-                                },
-                                onApproveAgentMemory: {
-                                    Task { await viewModel.approveMemoryCandidate(item, target: "agent_memory_md") }
-                                },
-                                onReject: {
-                                    Task { await viewModel.rejectMemoryCandidate(item) }
-                                },
-                                onDefer: {
-                                    Task { await viewModel.deferMemoryCandidate(item) }
+                    LazyVStack(alignment: .leading, spacing: Theme.sm) {
+                        ForEach(memoryCandidateGroups(for: queue.items)) { group in
+                            VStack(alignment: .leading, spacing: Theme.xs) {
+                                HStack(spacing: Theme.xs) {
+                                    Text(group.title.uppercased())
+                                        .font(.caption2.weight(.bold))
+                                        .foregroundColor(AppColors.textTertiary)
+                                    Text("\(group.items.count)")
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundColor(group.color)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(group.color.opacity(0.12))
+                                        .clipShape(Capsule())
+                                    Spacer(minLength: 0)
                                 }
-                            )
+
+                                ForEach(group.items) { item in
+                                    MemoryCandidateRow(
+                                        candidate: item,
+                                        isBusy: viewModel.memoryActionCandidateIds.contains(item.id),
+                                        approvalLockReason: approvalLockReason(for: item),
+                                        onApproveChroma: {
+                                            Task { await viewModel.approveMemoryCandidate(item, target: "chroma") }
+                                        },
+                                        onApproveAgentMemory: {
+                                            Task { await viewModel.approveMemoryCandidate(item, target: "agent_memory_md") }
+                                        },
+                                        onReject: {
+                                            Task { await viewModel.rejectMemoryCandidate(item) }
+                                        },
+                                        onDefer: {
+                                            Task { await viewModel.deferMemoryCandidate(item) }
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -1395,6 +1426,41 @@ struct KnowledgeView: View {
         .padding(Theme.xs)
         .background(AppColors.backgroundTertiary)
         .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+    }
+
+    private func memoryCandidateGroups(for items: [DailyLogExtractionCandidate]) -> [MemoryCandidateGroup] {
+        let groups: [(MemoryCandidateGroup.Kind, [DailyLogExtractionCandidate])] = [
+            (.sensitive, items.filter { memoryGroupKind(for: $0) == .sensitive }),
+            (.safe, items.filter { memoryGroupKind(for: $0) == .safe }),
+            (.deferred, items.filter { memoryGroupKind(for: $0) == .deferred }),
+            (.committed, items.filter { memoryGroupKind(for: $0) == .committed }),
+            (.rejected, items.filter { memoryGroupKind(for: $0) == .rejected }),
+            (.other, items.filter { memoryGroupKind(for: $0) == .other }),
+        ]
+        return groups
+            .filter { !$0.1.isEmpty }
+            .map { MemoryCandidateGroup(kind: $0.0, items: $0.1) }
+    }
+
+    private func memoryGroupKind(for candidate: DailyLogExtractionCandidate) -> MemoryCandidateGroup.Kind {
+        let lifecycle = candidate.effectiveLifecycle.lowercased()
+        if lifecycle == "deferred" { return .deferred }
+        if lifecycle == "approved" || lifecycle == "promoted" || lifecycle == "committed" { return .committed }
+        if lifecycle == "rejected" { return .rejected }
+        if candidate.isSensitive || !candidate.pendingApprovals.isEmpty { return .sensitive }
+        if ["candidate", "pending", "review_required", "needs_review"].contains(lifecycle) { return .safe }
+        return .other
+    }
+
+    private func approvalLockReason(for candidate: DailyLogExtractionCandidate) -> String? {
+        let reviewer = viewModel.reviewerIdentity
+        let waitingOn = candidate.pendingApprovals.isEmpty ? candidate.requiredReviewers : candidate.pendingApprovals
+        guard candidate.isSensitive || !waitingOn.isEmpty else { return nil }
+        guard !waitingOn.isEmpty else { return "Sensitive candidate needs explicit reviewer gate." }
+        guard waitingOn.contains(where: { $0.caseInsensitiveCompare(reviewer) == .orderedSame }) else {
+            return "Approval locked until \(waitingOn.joined(separator: ", ")) reviews."
+        }
+        return nil
     }
 
     // MARK: - Category Grid
@@ -1561,6 +1627,7 @@ struct KnowledgeView: View {
 private struct MemoryCandidateRow: View {
     let candidate: DailyLogExtractionCandidate
     let isBusy: Bool
+    let approvalLockReason: String?
     let onApproveChroma: () -> Void
     let onApproveAgentMemory: () -> Void
     let onReject: () -> Void
@@ -1602,6 +1669,10 @@ private struct MemoryCandidateRow: View {
         candidate.candidateId?.isEmpty == false
     }
 
+    private var canApprove: Bool {
+        canTakeAction && approvalLockReason == nil
+    }
+
     private var reviewItem: PodReviewItem {
         var provenance = [
             candidate.agent.capitalized,
@@ -1632,12 +1703,18 @@ private struct MemoryCandidateRow: View {
             provenance.append("\(Int(confidence * 100))% confidence")
         }
         provenance.append(contentsOf: candidate.tags.prefix(3).map { "#\($0)" })
+        let detail = [candidate.reviewReason, approvalLockReason]
+            .compactMap { value -> String? in
+                guard let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+                return value
+            }
+            .joined(separator: " ")
 
         return PodReviewItem(
             id: candidate.id,
             eyebrow: "Memory candidate",
             title: candidate.text,
-            detail: candidate.reviewReason,
+            detail: detail.isEmpty ? nil : detail,
             status: candidate.effectiveLifecycle.replacingOccurrences(of: "_", with: " "),
             statusColor: statusColor,
             provenance: provenance,
@@ -1649,14 +1726,14 @@ private struct MemoryCandidateRow: View {
                     title: "Chroma",
                     systemImage: "externaldrive.badge.checkmark",
                     style: .success,
-                    isDisabled: !canTakeAction || candidate.effectiveLifecycle == "approved"
+                    isDisabled: !canApprove || candidate.effectiveLifecycle == "approved"
                 ),
                 PodReviewAction(
                     id: "approve-agent-memory",
                     title: "Memory.md",
                     systemImage: "book.closed",
                     style: .primary,
-                    isDisabled: !canTakeAction || candidate.effectiveLifecycle == "approved"
+                    isDisabled: !canApprove || candidate.effectiveLifecycle == "approved"
                 ),
                 PodReviewAction(
                     id: "defer",
@@ -1674,6 +1751,44 @@ private struct MemoryCandidateRow: View {
                 ),
             ]
         )
+    }
+}
+
+private struct MemoryCandidateGroup: Identifiable {
+    enum Kind: String {
+        case sensitive
+        case safe
+        case deferred
+        case committed
+        case rejected
+        case other
+    }
+
+    let kind: Kind
+    let items: [DailyLogExtractionCandidate]
+
+    var id: String { kind.rawValue }
+
+    var title: String {
+        switch kind {
+        case .sensitive: return "Sensitive / gated"
+        case .safe: return "Safe review"
+        case .deferred: return "Deferred"
+        case .committed: return "Committed"
+        case .rejected: return "Rejected"
+        case .other: return "Other"
+        }
+    }
+
+    var color: Color {
+        switch kind {
+        case .sensitive: return AppColors.accentWarning
+        case .safe: return AppColors.accentElectric
+        case .deferred: return AppColors.textSecondary
+        case .committed: return AppColors.accentSuccess
+        case .rejected: return AppColors.accentDanger
+        case .other: return AppColors.textTertiary
+        }
     }
 }
 

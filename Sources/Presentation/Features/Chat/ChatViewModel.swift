@@ -244,6 +244,7 @@ final class ChatViewModel {
                 if Task.isCancelled { break }
 
                 // Reconnect backoff — use DispatchSource timer to avoid iOS 26 Task.sleep bug
+                await manager.markReconnecting()
                 let reconnectSeconds = Double(backoffNanos) / 1_000_000_000.0
                 await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
                     var fired = false

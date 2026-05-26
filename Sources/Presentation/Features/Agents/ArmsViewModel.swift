@@ -32,7 +32,11 @@ final class ArmsViewModel {
     func loadArms() async {
         do {
             let response: ArmTagsResponse = try await apiClient.get(path: "/api/v1/jarvis/arm-tags")
-            let liveByName = Dictionary(uniqueKeysWithValues: response.arms.map { ($0.name.lowercased(), $0.toDomain()) })
+            let routingResponse: ArmRoutingResponse? = try? await apiClient.get(path: "/api/v1/jarvis/arm-routing")
+            let routingByName = Dictionary(uniqueKeysWithValues: (routingResponse?.routing ?? []).map { ($0.arm.lowercased(), $0) })
+            let liveByName = Dictionary(uniqueKeysWithValues: response.arms.map {
+                ($0.name.lowercased(), $0.toDomain(routing: routingByName[$0.name.lowercased()]))
+            })
             arms = ArmTag.canonicalNames.map { liveByName[$0] ?? ArmTag.placeholder(named: $0) }
         } catch {
             errorMessage = "Arms tags unavailable."
@@ -75,7 +79,7 @@ final class ArmsViewModel {
     func postDirective(for arm: ArmTag) async {
         let key = arm.name.lowercased()
         let directive = (directiveDrafts[key] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !directive.isEmpty, !arm.isFund else { return }
+        guard !directive.isEmpty, arm.canPostDirective else { return }
         busyArms.insert(key)
         defer { busyArms.remove(key) }
 
@@ -95,7 +99,7 @@ final class ArmsViewModel {
     @MainActor
     func wake(_ arm: ArmTag, note: String = "") async {
         let key = arm.name.lowercased()
-        guard !arm.isFund else { return }
+        guard arm.canWake else { return }
         busyArms.insert(key)
         defer { busyArms.remove(key) }
 
@@ -104,7 +108,7 @@ final class ArmsViewModel {
                 path: "/api/v1/jarvis/arm-tags/\(key)/wake",
                 body: WakeRequest(postedBy: "maui", note: note.isEmpty ? nil : note)
             )
-            toast = ArmsToast(message: response.dispatched ? "Dispatched ✅" : "Dispatch queued", isError: false)
+            toast = ArmsToast(message: response.toastMessage, isError: response.deliveryStatus == "failed")
             await load()
         } catch {
             toast = ArmsToast(message: "Wake failed", isError: true)
@@ -185,6 +189,16 @@ struct ArmTag: Identifiable, Hashable {
     let quality: String
     let updatedAt: Date?
     let ttlSeconds: Int?
+    let source: String?
+    let sourceDetail: String?
+    let lastFetched: Date?
+    let agentSubject: String?
+    let workspace: String?
+    let canWake: Bool
+    let protected: Bool
+    let protectionReason: String?
+    let lastWakeDeliveryStatus: String?
+    let lastWakeEnvelopeId: String?
 
     var displayName: String {
         switch name.lowercased() {
@@ -201,6 +215,48 @@ struct ArmTag: Identifiable, Hashable {
     }
 
     var isFund: Bool { name.lowercased() == "fund" }
+
+    var canPostDirective: Bool {
+        canWake && !protected
+    }
+
+    var directivePlaceholder: String {
+        canPostDirective ? "Post directive..." : manualOnlyTitle
+    }
+
+    var manualOnlyTitle: String {
+        if let protectionReason, !protectionReason.isEmpty {
+            return protectionReason
+        }
+        return "Manual only"
+    }
+
+    var sourceSummary: String {
+        guard let source, !source.isEmpty else { return "unknown" }
+        return sourceDetail.map { "\(source): \($0)" } ?? source
+    }
+
+    var routeSummary: String {
+        guard let agentSubject, !agentSubject.isEmpty else { return "No wake route" }
+        return workspace.map { "\(agentSubject) · \($0)" } ?? agentSubject
+    }
+
+    var wakeSummary: String {
+        guard let lastWakeDeliveryStatus, !lastWakeDeliveryStatus.isEmpty else { return "No wake recorded" }
+        if let lastWakeEnvelopeId, !lastWakeEnvelopeId.isEmpty {
+            return "\(lastWakeDeliveryStatus) · \(String(lastWakeEnvelopeId.prefix(18)))"
+        }
+        return lastWakeDeliveryStatus
+    }
+
+    var freshnessLabel: String {
+        guard let updatedAt else { return "unknown" }
+        let age = Self.relativeAge(from: updatedAt)
+        if let ttlSeconds, Date().timeIntervalSince(updatedAt) > Double(ttlSeconds) {
+            return "stale · \(age)"
+        }
+        return "fresh · \(age)"
+    }
 
     var stateLabel: String {
         state.replacingOccurrences(of: "_", with: " ")
@@ -243,13 +299,51 @@ struct ArmTag: Identifiable, Hashable {
             owner: "maui",
             quality: "yellow",
             updatedAt: nil,
-            ttlSeconds: nil
+            ttlSeconds: nil,
+            source: nil,
+            sourceDetail: nil,
+            lastFetched: nil,
+            agentSubject: nil,
+            workspace: nil,
+            canWake: name.lowercased() != "fund",
+            protected: name.lowercased() == "fund",
+            protectionReason: name.lowercased() == "fund" ? "Protected lane" : nil,
+            lastWakeDeliveryStatus: nil,
+            lastWakeEnvelopeId: nil
         )
+    }
+
+    private static func relativeAge(from date: Date) -> String {
+        let seconds = max(0, Int(Date().timeIntervalSince(date)))
+        if seconds < 60 { return "\(seconds)s ago" }
+        if seconds < 3_600 { return "\(seconds / 60)m ago" }
+        if seconds < 86_400 { return "\(seconds / 3_600)h ago" }
+        return "\(seconds / 86_400)d ago"
     }
 }
 
 private struct ArmTagsResponse: Decodable {
     let arms: [ArmTagDTO]
+}
+
+private struct ArmRoutingResponse: Decodable {
+    let routing: [ArmRoutingEntryDTO]
+}
+
+private struct ArmRoutingEntryDTO: Decodable {
+    let arm: String
+    let agentSubject: String?
+    let workspace: String?
+    let canWake: Bool
+    let protected: Bool
+    let protectionReason: String?
+
+    enum CodingKeys: String, CodingKey {
+        case arm, workspace, protected
+        case agentSubject = "agent_subject"
+        case canWake = "can_wake"
+        case protectionReason = "protection_reason"
+    }
 }
 
 private struct AgentSummaryDTO: Codable {
@@ -347,15 +441,15 @@ private enum AgentSummaryFallbacks {
 
 private struct ArmTagDTO: Decodable {
     let name: String
-    let tagData: ArmTagDataDTO?
+    let tagData: ArmTagRecordDTO?
 
     enum CodingKeys: String, CodingKey {
         case name
         case tagData = "tag_data"
     }
 
-    func toDomain() -> ArmTag {
-        let data = tagData
+    func toDomain(routing: ArmRoutingEntryDTO?) -> ArmTag {
+        let data = tagData?.value
         return ArmTag(
             id: name.lowercased(),
             name: name.lowercased(),
@@ -366,10 +460,33 @@ private struct ArmTagDTO: Decodable {
             blockedOn: data?.blockedOn,
             directive: data?.directive,
             owner: data?.owner,
-            quality: data?.quality ?? "yellow",
-            updatedAt: data?.updatedAt,
-            ttlSeconds: data?.ttlSeconds
+            quality: data?.quality ?? tagData?.quality ?? "yellow",
+            updatedAt: data?.updatedAt ?? tagData?.updatedAt,
+            ttlSeconds: data?.ttlSeconds ?? tagData?.ttlSeconds,
+            source: data?.source,
+            sourceDetail: data?.sourceDetail,
+            lastFetched: data?.lastFetched,
+            agentSubject: routing?.agentSubject,
+            workspace: routing?.workspace,
+            canWake: routing?.canWake ?? name.lowercased() != "fund",
+            protected: routing?.protected ?? name.lowercased() == "fund",
+            protectionReason: routing?.protectionReason,
+            lastWakeDeliveryStatus: data?.lastWakeDeliveryStatus,
+            lastWakeEnvelopeId: data?.lastWakeEnvelopeId
         )
+    }
+}
+
+private struct ArmTagRecordDTO: Decodable {
+    let value: ArmTagDataDTO?
+    let quality: String?
+    let updatedAt: Date?
+    let ttlSeconds: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case value, quality
+        case updatedAt = "updated_at"
+        case ttlSeconds = "ttl_s"
     }
 }
 
@@ -384,6 +501,11 @@ private struct ArmTagDataDTO: Decodable {
     let quality: String?
     let updatedAt: Date?
     let ttlSeconds: Int?
+    let source: String?
+    let sourceDetail: String?
+    let lastFetched: Date?
+    let lastWakeDeliveryStatus: String?
+    let lastWakeEnvelopeId: String?
 
     enum CodingKeys: String, CodingKey {
         case state
@@ -396,6 +518,11 @@ private struct ArmTagDataDTO: Decodable {
         case quality
         case updatedAt = "updated_at"
         case ttlSeconds = "ttl_s"
+        case source
+        case sourceDetail = "source_detail"
+        case lastFetched = "last_fetched"
+        case lastWakeDeliveryStatus = "last_wake_delivery_status"
+        case lastWakeEnvelopeId = "last_wake_envelope_id"
     }
 }
 
@@ -430,10 +557,25 @@ private struct WakeResponse: Decodable {
     let envelopeId: String?
     let arm: String?
     let contextSummary: String?
+    let deliveryStatus: String?
 
     enum CodingKeys: String, CodingKey {
         case dispatched, arm
         case envelopeId = "envelope_id"
         case contextSummary = "context_summary"
+        case deliveryStatus = "delivery_status"
+    }
+
+    var toastMessage: String {
+        switch deliveryStatus {
+        case "confirmed":
+            return "Wake delivered"
+        case "failed":
+            return "Wake failed"
+        case "unconfirmed":
+            return "Wake unconfirmed"
+        default:
+            return dispatched ? "Wake dispatched" : "Wake queued"
+        }
     }
 }

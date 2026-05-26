@@ -16,6 +16,11 @@ struct ProjectUpdateRequest: Encodable {
     }
 }
 
+struct ProjectMilestoneEdits: Encodable {
+    let title: String?
+    let outcome: String?
+}
+
 // MARK: - Project Repository
 
 actor ProjectRepository {
@@ -44,34 +49,85 @@ actor ProjectRepository {
         return try await api.patch(path: "/api/v1/projects/\(id)", body: body)
     }
 
-    func generateMilestones(projectId: UUID) async throws -> ProjectDTO {
+    func generateMilestones(projectId: UUID, note: String? = nil) async throws -> ProjectDTO {
         struct Body: Encodable {
             let source = "pod.projects.automation"
+            let contextOverrides: ContextOverrides?
+
+            enum CodingKeys: String, CodingKey {
+                case source
+                case contextOverrides = "context_overrides"
+            }
         }
-        return try await api.post(
+
+        struct ContextOverrides: Encodable {
+            let additionalNote: String
+
+            enum CodingKeys: String, CodingKey {
+                case additionalNote = "additional_note"
+            }
+        }
+
+        let cleanNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let overrides = cleanNote.flatMap { value in
+            value.isEmpty ? nil : ContextOverrides(additionalNote: value)
+        }
+        let response: ProjectMilestoneActionResponseDTO = try await api.post(
             path: "/api/v1/projects/\(projectId)/generate-milestones",
-            body: Body()
+            body: Body(contextOverrides: overrides)
         )
+        return response.project
     }
 
-    func acceptMilestone(projectId: UUID, milestoneId: String) async throws -> ProjectDTO {
+    func acceptMilestone(projectId: UUID, milestoneId: String, edits: ProjectMilestoneEdits? = nil) async throws -> ProjectDTO {
         struct Body: Encodable {
-            let source = "pod.projects.automation"
+            let edits: ProjectMilestoneEdits?
+            let actor = "pod.projects.automation"
         }
-        return try await api.post(
+        let response: ProjectMilestoneActionResponseDTO = try await api.post(
             path: "/api/v1/projects/\(projectId)/milestones/\(milestoneId)/accept",
-            body: Body()
+            body: Body(edits: edits)
         )
+        return response.project
     }
 
-    func dropMilestone(projectId: UUID, milestoneId: String) async throws -> ProjectDTO {
+    func dropMilestone(projectId: UUID, milestoneId: String, reason: String = "Dropped from Pod Projects review.") async throws -> ProjectDTO {
         struct Body: Encodable {
-            let source = "pod.projects.automation"
+            let reason: String
+            let actor = "pod.projects.automation"
         }
-        return try await api.post(
+        let response: ProjectMilestoneActionResponseDTO = try await api.post(
             path: "/api/v1/projects/\(projectId)/milestones/\(milestoneId)/drop",
-            body: Body()
+            body: Body(reason: reason)
         )
+        return response.project
+    }
+
+    func addMilestone(projectId: UUID, title: String, description: String?) async throws -> ProjectDTO {
+        struct Body: Encodable {
+            let title: String
+            let outcome: String
+            let size = "medium"
+            let dependsOn: [String] = []
+            let rationale: String?
+            let actor = "pod.projects.automation"
+
+            enum CodingKeys: String, CodingKey {
+                case title, outcome, size, rationale, actor
+                case dependsOn = "depends_on"
+            }
+        }
+        let cleanOutcome = description?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let outcome = cleanOutcome.flatMap { value in value.isEmpty ? nil : value }
+        let response: ProjectMilestoneActionResponseDTO = try await api.post(
+            path: "/api/v1/projects/\(projectId)/milestones",
+            body: Body(
+                title: title,
+                outcome: outcome ?? title,
+                rationale: outcome
+            )
+        )
+        return response.project
     }
 
     func advanceToScoping(projectId: UUID) async throws -> ProjectDTO {
@@ -183,4 +239,8 @@ private struct ProjectListResponse: Decodable {
     private enum CodingKeys: String, CodingKey {
         case items
     }
+}
+
+private struct ProjectMilestoneActionResponseDTO: Decodable {
+    let project: ProjectDTO
 }

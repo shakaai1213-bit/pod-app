@@ -12,15 +12,18 @@ struct LabView: View {
     @State private var boardsModel = LabBoardsModel()
     @State private var selectedBoard: LabBoardSummary?
     @State private var architectureModel = ArchitectureDiagramModel()
+    @State private var workflowCatalogModel = LabWorkflowCatalogModel()
+    @State private var natsHealthModel = LabNATSHealthModel()
     @State private var showingArchitectureSheet = false
     @State private var stackExpanded     = true
     @State private var fishExpanded      = false
     @State private var workflowsExpanded = false
+    @State private var boardsExpanded    = false
     @State private var flywheelExpanded  = true
     @State private var buildingExpanded  = true
     @State private var retiredExpanded      = false
     @State private var teamBuildingExpanded = true
-    @State private var expandedThemes: Set<String> = ["strategy", "surfaces", "substrate", "health", "doctrine"]
+    @State private var expandedThemes: Set<String> = ["strategy"]
 
     var body: some View {
         NavigationStack {
@@ -36,24 +39,28 @@ struct LabView: View {
                     workflowsSection
                     flywheelSection
                     buildingSection
-                    retiredSection
-                    boardsSection
-                    architectureSection
                     teamBuildingSection
+                    retiredSection
+                    architectureSection
+                    boardsSection
                 }
                 .frame(maxWidth: 920, alignment: .leading)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 80)
             }
             .background(AppColors.backgroundPrimary.ignoresSafeArea())
-            .task {
-                await boardsModel.load()
-                await architectureModel.load()
-            }
-            .refreshable {
-                await boardsModel.load(force: true)
-                await architectureModel.load(force: true)
-            }
+                .task {
+                    await boardsModel.load()
+                    await architectureModel.load()
+                    await workflowCatalogModel.load()
+                    await natsHealthModel.load()
+                }
+                .refreshable {
+                    await boardsModel.load(force: true)
+                    await architectureModel.load(force: true)
+                    await workflowCatalogModel.load(force: true)
+                    await natsHealthModel.load()
+                }
             .sheet(item: $selectedBoard) { board in
                 LabBoardDetailView(board: board)
             }
@@ -135,60 +142,75 @@ struct LabView: View {
 
     private var boardsSection: some View {
         sectionCard {
-            HStack(spacing: 8) {
-                Image(systemName: "square.grid.2x2.fill")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(AppColors.accentElectric)
-                VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 5) {
-                        Text("BOARDS")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(AppColors.textPrimary)
-                        Text("\(boardsModel.boards.count)")
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
-                            .foregroundColor(AppColors.textSecondary)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(AppColors.backgroundTertiary.opacity(0.65))
-                            .clipShape(Capsule())
+            sectionHeader(title: "BOARDS", count: boardsModel.boards.count, expanded: boardsExpanded, rightLabel: boardsModel.sourceLabel) {
+                Task { await boardsModel.load(force: true) }
+            }
+            .onTapGesture {
+                withAnimation(.easeInOut(duration: 0.15)) { boardsExpanded.toggle() }
+            }
+        } body: {
+            if boardsExpanded {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(Self.boardThemes.enumerated()), id: \.element.id) { idx, theme in
+                        let themeBoards = boardsModel.boards.filter { theme.slugs.contains($0.slug) }
+                        themeGroupRow(theme: theme, boards: themeBoards)
+                        if idx < Self.boardThemes.count - 1 {
+                            Divider()
+                                .padding(.horizontal, 12)
+                        }
                     }
-                    Text("System board map")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(AppColors.textTertiary)
-                }
-                Spacer()
-                if boardsModel.isLoading {
-                    ProgressView()
-                        .scaleEffect(0.65)
-                } else {
-                    Button {
-                        Task { await boardsModel.load(force: true) }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 11, weight: .semibold))
+                    if let error = boardsModel.error {
+                        Text(error)
+                            .font(.system(size: 10))
                             .foregroundColor(AppColors.textTertiary)
+                            .padding(.horizontal, 12)
+                            .padding(.bottom, 8)
+                    }
+                }
+            } else {
+                boardSummaryStrip
+            }
+        }
+    }
+
+    private var boardSummaryStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(boardsModel.boards.prefix(9)) { board in
+                    Button {
+                        selectedBoard = board
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(board.icon)
+                                .font(.system(size: 12))
+                            Text(board.displayName)
+                                .font(.system(size: 10, weight: .semibold))
+                                .lineLimit(1)
+                            Text("\(board.activeCount)")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .foregroundColor(AppColors.textTertiary)
+                        }
+                        .foregroundColor(AppColors.textSecondary)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 5)
+                        .background(AppColors.backgroundPrimary)
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(AppColors.border, lineWidth: 0.5))
                     }
                     .buttonStyle(.plain)
                 }
-            }
-        } body: {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(Self.boardThemes.enumerated()), id: \.element.id) { idx, theme in
-                    let themeBoards = boardsModel.boards.filter { theme.slugs.contains($0.slug) }
-                    themeGroupRow(theme: theme, boards: themeBoards)
-                    if idx < Self.boardThemes.count - 1 {
-                        Divider()
-                            .padding(.horizontal, 12)
-                    }
+                if boardsModel.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.65)
                 }
-                if let error = boardsModel.error {
-                    Text(error)
-                        .font(.system(size: 10))
+                if boardsModel.boards.isEmpty && !boardsModel.isLoading {
+                    Text(boardsModel.error ?? "Boards unavailable")
+                        .font(.system(size: 11))
                         .foregroundColor(AppColors.textTertiary)
-                        .padding(.horizontal, 12)
-                        .padding(.bottom, 8)
                 }
             }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 12)
         }
     }
 
@@ -382,7 +404,9 @@ struct LabView: View {
 
     private var stackSection: some View {
         sectionCard {
-            sectionHeader(title: "STACK", count: LabContent.stack.count, expanded: stackExpanded)
+            sectionHeader(title: "STACK", count: LabContent.stack.count, expanded: stackExpanded, rightLabel: natsHealthModel.badgeLabel) {
+                Task { await natsHealthModel.load() }
+            }
                 .onTapGesture {
                     withAnimation(.easeInOut(duration: 0.15)) { stackExpanded.toggle() }
                 }
@@ -421,12 +445,27 @@ struct LabView: View {
             }
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 4) {
-                statusPill(layer.status)
+                if layer.id == "nats" {
+                    natsStatusPill
+                } else {
+                    statusPill(layer.status)
+                }
                 ownerChip(layer.owner)
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
+    }
+
+    private var natsStatusPill: some View {
+        Text(natsHealthModel.displayStatus)
+            .font(.system(size: 10, weight: .bold))
+            .foregroundColor(natsHealthModel.statusColor)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(natsHealthModel.statusColor.opacity(0.12))
+            .clipShape(Capsule())
+            .accessibilityLabel("NATS \(natsHealthModel.displayStatus)")
     }
 
     // MARK: - FISH section
@@ -467,7 +506,8 @@ struct LabView: View {
     // Surfaces the canonical doctrine catalog so Tony + new agents can see procedure without grepping.
 
     private var workflowsSection: some View {
-        let total = LabContent.workflows.reduce(0) { $0 + $1.items.count }
+        let groups = workflowCatalogModel.groups
+        let total = groups.reduce(0) { $0 + $1.items.count }
         return sectionCard {
             sectionHeader(title: "WORKFLOWS + PROTOCOLS", count: total, expanded: workflowsExpanded)
                 .onTapGesture {
@@ -476,7 +516,27 @@ struct LabView: View {
         } body: {
             if workflowsExpanded {
                 VStack(alignment: .leading, spacing: 14) {
-                    ForEach(LabContent.workflows) { group in
+                    HStack(spacing: 6) {
+                        Text(workflowCatalogModel.sourceLabel)
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundColor(workflowCatalogModel.sourceLabel == "ORCA" ? AppColors.accentSuccess : AppColors.textTertiary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(AppColors.backgroundTertiary.opacity(0.75))
+                            .clipShape(Capsule())
+                        if workflowCatalogModel.isLoading {
+                            ProgressView()
+                                .scaleEffect(0.65)
+                        }
+                        if let error = workflowCatalogModel.error {
+                            Text(error)
+                                .font(.system(size: 10))
+                                .foregroundColor(AppColors.textTertiary)
+                                .lineLimit(2)
+                        }
+                    }
+
+                    ForEach(groups) { group in
                         workflowGroupView(group)
                     }
                 }
@@ -934,6 +994,7 @@ private final class LabBoardsModel {
     }
     private(set) var isLoading = false
     private(set) var error: String?
+    private(set) var sourceLabel = "SNAPSHOT"
 
     func load(force: Bool = false) async {
         if isLoading { return }
@@ -947,8 +1008,10 @@ private final class LabBoardsModel {
             let response: LabBoardListResponse = try await APIClient.shared.get(path: "/api/v1/boards")
             let loaded = response.items.map(\.summary)
             boards = Self.ordered(loaded)
+            sourceLabel = "ORCA"
         } catch {
             boards = Self.ordered(boards)
+            sourceLabel = "SNAPSHOT"
             self.error = "Boards unavailable; showing canonical board map."
         }
     }
@@ -970,6 +1033,61 @@ private final class LabBoardsModel {
         }
         return canonical + bySlug.values.sorted { $0.slug < $1.slug }
     }
+}
+
+// MARK: - NATS health
+
+@MainActor
+@Observable
+private final class LabNATSHealthModel {
+    private(set) var status: String?
+    private(set) var detail: String?
+    private(set) var isLoading = false
+
+    var displayStatus: String {
+        if isLoading && status == nil { return "CHECKING" }
+        return (status ?? "UNKNOWN").uppercased()
+    }
+
+    var badgeLabel: String {
+        "NATS \(displayStatus)"
+    }
+
+    var statusColor: Color {
+        switch (status ?? "").lowercased() {
+        case "ok", "healthy", "live", "green":
+            return AppColors.accentSuccess
+        case "degraded", "warn", "warning", "yellow":
+            return AppColors.accentWarning
+        case "down", "failed", "error", "red":
+            return AppColors.accentDanger
+        default:
+            return AppColors.textTertiary
+        }
+    }
+
+    func load() async {
+        if isLoading { return }
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            let response: LabNATSHealthResponse = try await APIClient.shared.get(path: "/api/v1/nats/health")
+            status = response.status ?? response.health ?? response.state ?? "unknown"
+            detail = response.message ?? response.summary
+        } catch {
+            status = "unknown"
+            detail = "NATS health endpoint unavailable."
+        }
+    }
+}
+
+private struct LabNATSHealthResponse: Decodable {
+    let status: String?
+    let health: String?
+    let state: String?
+    let message: String?
+    let summary: String?
 }
 
 private struct LabBoardListResponse: Decodable {
@@ -1420,6 +1538,116 @@ private extension KeyedDecodingContainer {
 }
 
 // MARK: - Architecture diagram
+
+@MainActor
+@Observable
+private final class LabWorkflowCatalogModel {
+    private(set) var groups = LabContent.workflows
+    private(set) var isLoading = false
+    private(set) var error: String?
+    private(set) var sourceLabel = "SNAPSHOT"
+
+    func load(force: Bool = false) async {
+        if isLoading { return }
+        if !force && sourceLabel == "ORCA" { return }
+
+        isLoading = true
+        error = nil
+        defer { isLoading = false }
+
+        async let protocolsResponse: WikiFileResponse = APIClient.shared.get(path: "/api/v1/wiki/file?path=sops/PROTOCOLS-INDEX.md")
+        async let workflowsResponse: WikiFileResponse = APIClient.shared.get(path: "/api/v1/wiki/file?path=workflows/INDEX.md")
+
+        do {
+            let (protocols, workflows) = try await (protocolsResponse, workflowsResponse)
+            let parsedGroups = Self.makeGroups(protocolsMarkdown: protocols.content, workflowsMarkdown: workflows.content)
+            guard !parsedGroups.isEmpty else {
+                groups = LabContent.workflows
+                sourceLabel = "SNAPSHOT"
+                error = "Showing bundled workflow snapshot; wiki indexes parsed empty."
+                return
+            }
+            groups = parsedGroups
+            sourceLabel = "ORCA"
+        } catch {
+            groups = LabContent.workflows
+            sourceLabel = "SNAPSHOT"
+            self.error = "Showing bundled workflow snapshot; wiki indexes unavailable."
+        }
+    }
+
+    private static func makeGroups(protocolsMarkdown: String, workflowsMarkdown: String) -> [LabWorkflowGroup] {
+        var result: [LabWorkflowGroup] = []
+        let workflowItems = workflowRows(from: workflowsMarkdown)
+        if !workflowItems.isEmpty {
+            result.append(LabWorkflowGroup(title: "Canonical workflow index", items: workflowItems))
+        }
+        let protocolItems = protocolRows(from: protocolsMarkdown)
+        if !protocolItems.isEmpty {
+            result.append(LabWorkflowGroup(title: "Canonical protocol index", items: protocolItems))
+        }
+        return result
+    }
+
+    private static func workflowRows(from markdown: String) -> [LabWorkflowItem] {
+        markdown
+            .components(separatedBy: "\n")
+            .compactMap { line -> LabWorkflowItem? in
+                let columns = markdownTableColumns(line)
+                guard columns.count >= 3, columns[0].contains("](") else { return nil }
+                let workflow = stripMarkdown(columns[0])
+                let roles = stripMarkdown(columns[1])
+                let trigger = stripMarkdown(columns[2])
+                return LabWorkflowItem(
+                    title: "\(workflow) — \(roles)",
+                    status: trigger,
+                    statusColor: AppColors.accentElectric
+                )
+            }
+    }
+
+    private static func protocolRows(from markdown: String) -> [LabWorkflowItem] {
+        markdown
+            .components(separatedBy: "\n")
+            .compactMap { line -> LabWorkflowItem? in
+                let columns = markdownTableColumns(line)
+                guard columns.count >= 4, columns[0].contains("PROTOCOL-") else { return nil }
+                let proto = stripMarkdown(columns[0])
+                let cadence = stripMarkdown(columns[1])
+                let owner = stripMarkdown(columns[2])
+                let enforcement = stripMarkdown(columns[3])
+                return LabWorkflowItem(
+                    title: "\(proto) — \(cadence) · \(owner)",
+                    status: enforcement,
+                    statusColor: AppColors.accentSuccess
+                )
+            }
+    }
+
+    private static func markdownTableColumns(_ line: String) -> [String] {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("|"), trimmed.hasSuffix("|"), !trimmed.contains("---") else { return [] }
+        return trimmed
+            .dropFirst()
+            .dropLast()
+            .split(separator: "|", omittingEmptySubsequences: false)
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+    }
+
+    private static func stripMarkdown(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "`", with: "")
+            .replacingOccurrences(of: "**", with: "")
+            .replacingOccurrences(of: "🌸", with: "")
+            .replacingOccurrences(of: "🪸", with: "")
+            .replacingOccurrences(of: "🐡", with: "")
+            .replacingOccurrences(of: "🐓", with: "")
+            .replacingOccurrences(of: "🌋", with: "")
+            .replacingOccurrences(of: "🦅", with: "")
+            .replacingOccurrences(of: #"^\[(.*?)\]\(.*?\)"#, with: "$1", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
 
 @MainActor
 @Observable

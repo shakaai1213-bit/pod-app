@@ -1093,6 +1093,7 @@ final class KnowledgeViewModel {
     var storageHygieneMessage: String?
     var memoryPromotionMessage: String?
     var memoryActionMessage: String?
+    var reviewerIdentity = "maui"
 
     // MARK: - Computed
 
@@ -1145,6 +1146,15 @@ final class KnowledgeViewModel {
     init() {
         loadLocalFavorites()
         loadRecentStandards()
+    }
+
+    func configureReviewerIdentity(from name: String?) {
+        let fallback = "maui"
+        let cleaned = (name ?? fallback)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "-")
+        reviewerIdentity = cleaned.isEmpty ? fallback : cleaned
     }
 
     // MARK: - Load
@@ -1579,7 +1589,7 @@ final class KnowledgeViewModel {
             let response: MemoryCandidateActionResponse = try await APIClient.shared.post(
                 path: path,
                 body: MemoryApproveRequest(
-                    reviewer: "maui",
+                    reviewer: reviewerIdentity,
                     target: target,
                     targetPath: targetPath,
                     reviewerNotes: "Approved from Pod Knowledge.",
@@ -1615,7 +1625,7 @@ final class KnowledgeViewModel {
             let response: MemoryCandidateActionResponse = try await APIClient.shared.post(
                 path: path,
                 body: MemoryRejectRequest(
-                    reviewer: "maui",
+                    reviewer: reviewerIdentity,
                     reason: "Rejected from Pod Knowledge review.",
                     visibleToOriginator: true
                 )
@@ -1648,7 +1658,7 @@ final class KnowledgeViewModel {
             let response: MemoryCandidateActionResponse = try await APIClient.shared.post(
                 path: path,
                 body: MemoryDeferRequest(
-                    reviewer: "maui",
+                    reviewer: reviewerIdentity,
                     reason: "Deferred from Pod Knowledge review.",
                     deferUntil: Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date()
                 )
@@ -1799,7 +1809,7 @@ final class KnowledgeViewModel {
         let request = DoctrineReviewActionRequest(
             docId: item.id,
             action: action,
-            reviewer: "maui",
+            reviewer: reviewerIdentity,
             note: note,
             requiredForAgents: action == .promoteToCanonical ? [] : nil,
             enforcedByPetal: nil

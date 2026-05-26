@@ -380,6 +380,7 @@ final class CockpitSignQueueModel {
     var isLoading = false
     var error: String?
     var busyIds: Set<String> = []
+    private var locallyResolvedIds: Set<String> = []
 
     @MainActor
     func load() async {
@@ -460,7 +461,9 @@ final class CockpitSignQueueModel {
 
         // Sort: urgent tickets first, then by kind (notes signal doctrine, tickets signal action)
         let priOrder: [String: Int] = ["urgent": 0, "high": 1, "medium": 2, "low": 3]
-        items = combined.sorted { a, b in
+        items = combined
+            .filter { !locallyResolvedIds.contains($0.id) }
+            .sorted { a, b in
             let aPri = priOrder[a.priority?.lowercased() ?? ""] ?? 9
             let bPri = priOrder[b.priority?.lowercased() ?? ""] ?? 9
             if aPri != bPri { return aPri < bPri }
@@ -485,7 +488,9 @@ final class CockpitSignQueueModel {
                     path: "/api/v1/notes/\(item.rawId)",
                     body: PatchBody(signState: "live")
                 )
+                locallyResolvedIds.insert(item.id)
                 items.removeAll { $0.id == item.id }
+                await load()
             } catch {
                 self.error = "Couldn't sign note. Retry."
             }
@@ -500,7 +505,9 @@ final class CockpitSignQueueModel {
                     path: "/api/v1/tickets/\(item.rawId)",
                     body: PatchBody(approvalState: "approved")
                 )
+                locallyResolvedIds.insert(item.id)
                 items.removeAll { $0.id == item.id }
+                await load()
             } catch {
                 self.error = "Couldn't approve ticket. Retry."
             }
@@ -510,6 +517,7 @@ final class CockpitSignQueueModel {
     @MainActor
     func countermand(_ item: CockpitSignItem) async {
         // "Pass" = defer / not-now. For v1 we just remove from local list — full countermand backend later.
+        locallyResolvedIds.insert(item.id)
         items.removeAll { $0.id == item.id }
     }
 }

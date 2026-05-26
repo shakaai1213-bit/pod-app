@@ -696,9 +696,46 @@ struct ProjectMilestoneProposalDTO: Codable, Identifiable, Hashable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case id, title, description, status, dependencies, route, model
+        case milestoneId = "milestone_id"
+        case outcome
+        case dependsOn = "depends_on"
         case artifactHash = "artifact_hash"
         case runId = "run_id"
+        case sourceRunId = "source_run_id"
         case createdAt = "created_at"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(String.self, forKey: .id)
+            ?? container.decodeIfPresent(String.self, forKey: .milestoneId)
+            ?? UUID().uuidString
+        title = try container.decode(String.self, forKey: .title)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+            ?? container.decodeIfPresent(String.self, forKey: .outcome)
+        status = try container.decodeIfPresent(String.self, forKey: .status)
+        dependencies = try container.decodeIfPresent([String].self, forKey: .dependencies)
+            ?? container.decodeIfPresent([String].self, forKey: .dependsOn)
+        route = try container.decodeIfPresent(String.self, forKey: .route)
+        model = try container.decodeIfPresent(String.self, forKey: .model)
+        artifactHash = try container.decodeIfPresent(String.self, forKey: .artifactHash)
+        runId = try container.decodeIfPresent(String.self, forKey: .runId)
+            ?? container.decodeIfPresent(String.self, forKey: .sourceRunId)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encodeIfPresent(description, forKey: .description)
+        try container.encodeIfPresent(status, forKey: .status)
+        try container.encodeIfPresent(dependencies, forKey: .dependencies)
+        try container.encodeIfPresent(route, forKey: .route)
+        try container.encodeIfPresent(model, forKey: .model)
+        try container.encodeIfPresent(artifactHash, forKey: .artifactHash)
+        try container.encodeIfPresent(runId, forKey: .runId)
+        try container.encodeIfPresent(createdAt, forKey: .createdAt)
     }
 }
 
@@ -712,8 +749,33 @@ struct ProjectMilestoneDTO: Codable, Identifiable, Hashable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case id, title, description, status
+        case milestoneId = "milestone_id"
+        case outcome
         case acceptedAt = "accepted_at"
         case sourceRunId = "source_run_id"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(String.self, forKey: .id)
+            ?? container.decodeIfPresent(String.self, forKey: .milestoneId)
+            ?? UUID().uuidString
+        title = try container.decode(String.self, forKey: .title)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+            ?? container.decodeIfPresent(String.self, forKey: .outcome)
+        status = try container.decodeIfPresent(String.self, forKey: .status)
+        acceptedAt = try container.decodeIfPresent(Date.self, forKey: .acceptedAt)
+        sourceRunId = try container.decodeIfPresent(String.self, forKey: .sourceRunId)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encodeIfPresent(description, forKey: .description)
+        try container.encodeIfPresent(status, forKey: .status)
+        try container.encodeIfPresent(acceptedAt, forKey: .acceptedAt)
+        try container.encodeIfPresent(sourceRunId, forKey: .sourceRunId)
     }
 }
 

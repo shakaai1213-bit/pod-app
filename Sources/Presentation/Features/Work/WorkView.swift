@@ -8,6 +8,7 @@ struct WorkView: View {
     @State private var model = WorkViewModel()
     @State private var pushProjects = false
     @State private var pushTickets = false
+    @State private var pushAgents = false
     @State private var pushProjectId: UUID? = nil
     @State private var pushTicketId: String? = nil
     @State private var selectedFlowItem: TicketFlowItem?
@@ -19,7 +20,11 @@ struct WorkView: View {
                     pageHeader
                         .padding(.horizontal, 20)
                         .padding(.top, 60)
-                        .padding(.bottom, 20)
+                        .padding(.bottom, 12)
+
+                    workHealthStrip
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 12)
 
                     suggestionsSection
                         .padding(.horizontal, 16)
@@ -58,6 +63,9 @@ struct WorkView: View {
             }
             .navigationDestination(isPresented: $pushTickets) {
                 TicketsView()
+            }
+            .navigationDestination(isPresented: $pushAgents) {
+                AgentsView()
             }
             .overlay(alignment: .bottom) {
                 if let toast = model.priorityToast {
@@ -121,6 +129,68 @@ struct WorkView: View {
                 .font(.system(size: 14))
                 .foregroundColor(AppColors.textSecondary)
         }
+    }
+
+    private var workHealthStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 7) {
+                healthChip(
+                    title: "Suggestions",
+                    count: model.schoolhouseDigest?.attentionStack.count ?? model.suggestions.count,
+                    error: model.suggestionsError,
+                    isLoading: model.isLoadingSuggestions
+                ) { Task { await model.loadSuggestions() } }
+                healthChip(
+                    title: "Projects",
+                    count: model.projects.count,
+                    error: model.projectsError,
+                    isLoading: model.isLoadingProjects
+                ) { Task { await model.loadProjects() } }
+                healthChip(
+                    title: "Tickets",
+                    count: model.openTicketCount,
+                    error: model.ticketsError,
+                    isLoading: model.isLoadingTickets
+                ) { Task { await model.loadTickets() } }
+                healthChip(
+                    title: "Flow",
+                    count: model.ticketFlowReview?.counts.total ?? 0,
+                    error: model.ticketFlowErrorMessage,
+                    isLoading: false
+                ) { Task { await model.loadTicketFlowReview() } }
+            }
+            .padding(.horizontal, 2)
+        }
+    }
+
+    private func healthChip(
+        title: String,
+        count: Int,
+        error: String?,
+        isLoading: Bool,
+        retry: @escaping () -> Void
+    ) -> some View {
+        let hasError = error != nil
+        let color = hasError ? AppColors.accentWarning : AppColors.accentSuccess
+        return Button(action: retry) {
+            HStack(spacing: 5) {
+                Image(systemName: isLoading ? "hourglass" : (hasError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"))
+                    .font(.system(size: 10, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 11, weight: .semibold))
+                Text("\(count)")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundColor(AppColors.textTertiary)
+            }
+            .foregroundColor(color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(color.opacity(0.10))
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(color.opacity(0.16), lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(error ?? "\(title) loaded")
     }
 
     // MARK: - Suggestions Section
@@ -240,22 +310,32 @@ struct WorkView: View {
             if let activation = digest.activation, !activation.items.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(activation.items.prefix(4)) { item in
-                        HStack(alignment: .top, spacing: 6) {
-                            Image(systemName: "person.crop.circle.badge.exclamationmark")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundColor(AppColors.accentWarning)
-                                .frame(width: 14, height: 14)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text("\(item.agentName.capitalized) · \(item.statusLabel)")
+                        Button {
+                            UserDefaults.standard.set(item.agentName, forKey: "pod.pendingActivationAgentName")
+                            pushAgents = true
+                        } label: {
+                            HStack(alignment: .top, spacing: 6) {
+                                Image(systemName: "person.crop.circle.badge.exclamationmark")
                                     .font(.system(size: 11, weight: .semibold))
-                                    .foregroundColor(AppColors.textPrimary)
-                                    .lineLimit(1)
-                                Text(item.recommendedAction)
-                                    .font(.system(size: 10))
-                                    .foregroundColor(AppColors.textSecondary)
-                                    .lineLimit(2)
+                                    .foregroundColor(AppColors.accentWarning)
+                                    .frame(width: 14, height: 14)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text("\(item.agentName.capitalized) · \(item.statusLabel)")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundColor(AppColors.textPrimary)
+                                        .lineLimit(1)
+                                    Text(item.recommendedAction)
+                                        .font(.system(size: 10))
+                                        .foregroundColor(AppColors.textSecondary)
+                                        .lineLimit(2)
+                                }
+                                Spacer(minLength: 0)
+                                Image(systemName: "arrow.right.circle")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundColor(AppColors.textTertiary)
                             }
                         }
+                        .buttonStyle(.plain)
                     }
                 }
                 .padding(.top, 2)

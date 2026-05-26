@@ -3781,6 +3781,7 @@ final class TicketsViewModel {
                 if Task.isCancelled { break }
                 self.liveStatus = .reconnecting
                 self.liveStatusDetail = "Reconnecting live ticket updates..."
+                await manager.markReconnecting()
                 await TaskSafeSleep.sleep(nanoseconds: backoffNanos)
                 backoffNanos = min(backoffNanos * 2, 30_000_000_000)  // cap 30s
             }

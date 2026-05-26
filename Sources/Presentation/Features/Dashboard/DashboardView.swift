@@ -21,11 +21,11 @@ struct DashboardView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.md) {
-                    // 1. Tier 1 sign queue — "what needs your eyes"
-                    CockpitSignQueueSection()
-
-                    // 2. Agent status strip — 6 dots + status
+                    // 1. Agent status strip — fast lab pulse before owner-action queues.
                     agentStatusStrip
+
+                    // 2. Tier 1 sign queue — "what needs your eyes"
+                    CockpitSignQueueSection()
 
                     // 3. Compact briefing + doctrine velocity line
                     cockpitBriefingLine
