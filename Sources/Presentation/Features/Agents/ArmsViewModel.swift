@@ -34,8 +34,10 @@ final class ArmsViewModel {
             let response: ArmTagsResponse = try await apiClient.get(path: "/api/v1/jarvis/arm-tags")
             let routingResponse: ArmRoutingResponse? = try? await apiClient.get(path: "/api/v1/jarvis/arm-routing")
             let routingByName = Dictionary(uniqueKeysWithValues: (routingResponse?.routing ?? []).map { ($0.arm.lowercased(), $0) })
+            let directivesResponse: ArmDirectivesResponse? = try? await apiClient.get(path: "/api/v1/jarvis/arm-directives")
+            let directivesByName = Dictionary(uniqueKeysWithValues: (directivesResponse?.directives ?? []).map { ($0.name.lowercased(), $0.toDomain()) })
             let liveByName = Dictionary(uniqueKeysWithValues: response.arms.map {
-                ($0.name.lowercased(), $0.toDomain(routing: routingByName[$0.name.lowercased()]))
+                ($0.name.lowercased(), $0.toDomain(routing: routingByName[$0.name.lowercased()], directive: directivesByName[$0.name.lowercased()]))
             })
             arms = ArmTag.canonicalNames.map { liveByName[$0] ?? ArmTag.placeholder(named: $0) }
         } catch {
@@ -84,12 +86,12 @@ final class ArmsViewModel {
         defer { busyArms.remove(key) }
 
         do {
-            let _: DirectiveResponse = try await apiClient.patch(
-                path: "/api/v1/jarvis/arm-tags/\(key)/directive",
-                body: DirectiveRequest(directive: directive, postedBy: "maui")
+            let response: ArmDirectiveWriteResponse = try await apiClient.put(
+                path: "/api/v1/jarvis/arm-directives/\(key)",
+                body: ArmDirectiveCreateRequest(directive: directive, postedBy: "maui")
             )
             directiveDrafts[key] = ""
-            toast = ArmsToast(message: "Directive queued", isError: false)
+            toast = ArmsToast(message: response.toastMessage, isError: false)
             await load()
         } catch {
             toast = ArmsToast(message: "Directive failed", isError: true)
@@ -199,6 +201,10 @@ struct ArmTag: Identifiable, Hashable {
     let protectionReason: String?
     let lastWakeDeliveryStatus: String?
     let lastWakeEnvelopeId: String?
+    let directiveStatus: String?
+    let directiveDoneAt: Date?
+    let directivePostedBy: String?
+    let directiveTraceId: String?
 
     var displayName: String {
         switch name.lowercased() {
@@ -247,6 +253,26 @@ struct ArmTag: Identifiable, Hashable {
             return "\(lastWakeDeliveryStatus) · \(String(lastWakeEnvelopeId.prefix(18)))"
         }
         return lastWakeDeliveryStatus
+    }
+
+    var directiveStatusLabel: String {
+        guard let directiveStatus, !directiveStatus.isEmpty else {
+            return directive?.isEmpty == false ? "queued" : "none"
+        }
+        return directiveStatus.replacingOccurrences(of: "_", with: " ")
+    }
+
+    var directiveStatusColor: Color {
+        switch directiveStatus?.lowercased() {
+        case "completed":
+            return AppColors.accentSuccess
+        case "blocked", "cancelled":
+            return AppColors.accentDanger
+        case "in_progress", "received":
+            return AppColors.accentWarning
+        default:
+            return directive?.isEmpty == false ? AppColors.accentElectric : AppColors.textTertiary
+        }
     }
 
     var freshnessLabel: String {
@@ -309,7 +335,11 @@ struct ArmTag: Identifiable, Hashable {
             protected: name.lowercased() == "fund",
             protectionReason: name.lowercased() == "fund" ? "Protected lane" : nil,
             lastWakeDeliveryStatus: nil,
-            lastWakeEnvelopeId: nil
+            lastWakeEnvelopeId: nil,
+            directiveStatus: nil,
+            directiveDoneAt: nil,
+            directivePostedBy: nil,
+            directiveTraceId: nil
         )
     }
 
@@ -324,6 +354,67 @@ struct ArmTag: Identifiable, Hashable {
 
 private struct ArmTagsResponse: Decodable {
     let arms: [ArmTagDTO]
+}
+
+private struct ArmDirectivesResponse: Decodable {
+    let directives: [ArmDirectiveDTO]
+}
+
+private struct ArmDirectiveDTO: Decodable {
+    let name: String
+    let tag: String
+    let tagData: [String: AgentRunJSONValue]
+
+    enum CodingKeys: String, CodingKey {
+        case name, tag
+        case tagData = "tag_data"
+    }
+
+    func toDomain() -> ArmDirective {
+        ArmDirective(
+            name: name,
+            tag: tag,
+            directive: string("directive"),
+            status: string("directive_status") ?? string("status"),
+            postedBy: string("posted_by"),
+            note: string("note"),
+            traceId: string("trace_id"),
+            doneAt: date("done_at")
+        )
+    }
+
+    private func string(_ key: String) -> String? {
+        guard let value = tagData[key] else { return nil }
+        switch value {
+        case .string(let text):
+            let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return clean.isEmpty ? nil : clean
+        case .int(let value):
+            return "\(value)"
+        case .double(let value):
+            return "\(value)"
+        case .bool(let value):
+            return value ? "true" : "false"
+        default:
+            return nil
+        }
+    }
+
+    private func date(_ key: String) -> Date? {
+        guard let text = string(key) else { return nil }
+        return ISO8601DateFormatter().date(from: text)
+    }
+}
+
+private struct ArmDirective: Hashable {
+    let name: String
+    let tag: String
+    let directive: String?
+    let status: String?
+    let postedBy: String?
+    let note: String?
+    let traceId: String?
+    let doneAt: Date?
 }
 
 private struct ArmRoutingResponse: Decodable {
@@ -448,7 +539,7 @@ private struct ArmTagDTO: Decodable {
         case tagData = "tag_data"
     }
 
-    func toDomain(routing: ArmRoutingEntryDTO?) -> ArmTag {
+    func toDomain(routing: ArmRoutingEntryDTO?, directive: ArmDirective?) -> ArmTag {
         let data = tagData?.value
         return ArmTag(
             id: name.lowercased(),
@@ -458,7 +549,7 @@ private struct ArmTagDTO: Decodable {
             ticketRef: data?.ticketRef,
             evidenceRef: data?.evidenceRef,
             blockedOn: data?.blockedOn,
-            directive: data?.directive,
+            directive: directive?.directive ?? data?.directive,
             owner: data?.owner,
             quality: data?.quality ?? tagData?.quality ?? "yellow",
             updatedAt: data?.updatedAt ?? tagData?.updatedAt,
@@ -472,7 +563,11 @@ private struct ArmTagDTO: Decodable {
             protected: routing?.protected ?? (name.lowercased() == "fund"),
             protectionReason: routing?.protectionReason,
             lastWakeDeliveryStatus: data?.lastWakeDeliveryStatus,
-            lastWakeEnvelopeId: data?.lastWakeEnvelopeId
+            lastWakeEnvelopeId: data?.lastWakeEnvelopeId,
+            directiveStatus: directive?.status,
+            directiveDoneAt: directive?.doneAt,
+            directivePostedBy: directive?.postedBy,
+            directiveTraceId: directive?.traceId
         )
     }
 }
@@ -526,20 +621,38 @@ private struct ArmTagDataDTO: Decodable {
     }
 }
 
-private struct DirectiveRequest: Encodable {
+private struct ArmDirectiveCreateRequest: Encodable {
     let directive: String
     let postedBy: String
+    let note: String? = nil
+    let traceId: String? = nil
+    let ttlSeconds: Int = 86_400
 
     enum CodingKeys: String, CodingKey {
         case directive
         case postedBy = "posted_by"
+        case note
+        case traceId = "trace_id"
+        case ttlSeconds = "ttl_seconds"
     }
 }
 
-private struct DirectiveResponse: Decodable {
-    let updated: Bool?
-    let arm: String?
-    let directive: String?
+private struct ArmDirectiveWriteResponse: Decodable {
+    let updated: Bool
+    let arm: String
+    let tag: String
+    let directiveStatus: String
+    let doneAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case updated, arm, tag
+        case directiveStatus = "directive_status"
+        case doneAt = "done_at"
+    }
+
+    var toastMessage: String {
+        "Directive \(directiveStatus.replacingOccurrences(of: "_", with: " "))"
+    }
 }
 
 private struct WakeRequest: Encodable {

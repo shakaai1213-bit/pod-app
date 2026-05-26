@@ -2,7 +2,6 @@ import SwiftUI
 
 struct ArmsTabView: View {
     @State private var viewModel = ArmsViewModel()
-    @State private var wakeTarget: ArmTag?
     @State private var selectedAgent: Agent?
 
     var body: some View {
@@ -32,10 +31,6 @@ struct ArmsTabView: View {
             .background(AppColors.backgroundPrimary.ignoresSafeArea())
             .refreshable { await viewModel.load() }
             .task { await viewModel.startPolling() }
-            .sheet(item: $wakeTarget) { arm in
-                wakeConfirmationSheet(arm)
-                    .presentationDetents([.medium])
-            }
             .sheet(item: $selectedAgent) { agent in
                 AgentDetailSheet(agent: agent)
             }
@@ -190,11 +185,14 @@ struct ArmsTabView: View {
                 valueRow(label: "Route", value: arm.routeSummary)
                 valueRow(label: "Wake", value: arm.wakeSummary)
                 valueRow(label: "Source", value: arm.sourceSummary)
+                if arm.directive != nil || arm.directiveStatus != nil {
+                    valueRow(label: "Directive", value: arm.directiveStatusLabel)
+                }
                 if arm.protected, let reason = arm.protectionReason, !reason.isEmpty {
                     protectedRow(reason)
                 }
                 if let directive = arm.directive, !directive.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    directiveRow(directive)
+                    directiveRow(directive, arm: arm)
                 }
             }
 
@@ -212,23 +210,18 @@ struct ArmsTabView: View {
                     )
                     .disabled(!arm.canPostDirective)
 
-                HStack(spacing: 10) {
-                    Button {
-                        Task { await viewModel.postDirective(for: arm) }
-                    } label: {
-                        actionLabel(title: arm.canPostDirective ? "Post" : "Manual only", systemImage: "paperplane.fill", isBusy: viewModel.isBusy(arm))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!arm.canPostDirective || viewModel.isBusy(arm) || (viewModel.directiveDrafts[arm.name.lowercased()] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                    Button {
-                        wakeTarget = arm
-                    } label: {
-                        actionLabel(title: arm.canWake ? "Wake" : "Manual only", systemImage: "bell.badge.fill", isBusy: viewModel.isBusy(arm))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!arm.canWake || viewModel.isBusy(arm))
+                Button {
+                    Task { await viewModel.postDirective(for: arm) }
+                } label: {
+                    actionLabel(title: arm.canPostDirective ? "Post Directive" : "Manual only", systemImage: "paperplane.fill", isBusy: viewModel.isBusy(arm))
                 }
+                .buttonStyle(.plain)
+                .disabled(!arm.canPostDirective || viewModel.isBusy(arm) || (viewModel.directiveDrafts[arm.name.lowercased()] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                Text("No live wake is sent here. Arms read this tag on activation and report status back to ORCA.")
+                    .font(.system(size: 11))
+                    .foregroundColor(AppColors.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(14)
@@ -270,21 +263,56 @@ struct ArmsTabView: View {
         }
     }
 
-    private func directiveRow(_ directive: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "text.badge.checkmark")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(AppColors.accentElectric)
-                .frame(width: 58, alignment: .leading)
+    private func directiveRow(_ directive: String, arm: ArmTag) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 7) {
+                Image(systemName: arm.directiveStatus?.lowercased() == "completed" ? "checkmark.seal.fill" : "text.badge.checkmark")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(arm.directiveStatusColor)
+                Text("OPC DIRECTIVE")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(AppColors.textTertiary)
+                Text(arm.directiveStatusLabel)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(arm.directiveStatusColor)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(arm.directiveStatusColor.opacity(0.12))
+                    .clipShape(Capsule())
+                Spacer(minLength: 0)
+            }
+
             Text(directive)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(AppColors.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
+
+            FlowLayout(horizontalSpacing: 5, verticalSpacing: 5) {
+                if let postedBy = arm.directivePostedBy, !postedBy.isEmpty {
+                    directiveMetaPill("by \(postedBy)")
+                }
+                if let doneAt = arm.directiveDoneAt {
+                    directiveMetaPill("done \(doneAt.formatted(date: .abbreviated, time: .shortened))")
+                }
+                if let traceId = arm.directiveTraceId, !traceId.isEmpty {
+                    directiveMetaPill(String(traceId.prefix(16)))
+                }
+            }
         }
         .padding(10)
-        .background(AppColors.accentElectric.opacity(0.08))
+        .background(arm.directiveStatusColor.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func directiveMetaPill(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundColor(AppColors.textTertiary)
+            .lineLimit(1)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(AppColors.backgroundTertiary.opacity(0.75))
+            .clipShape(Capsule())
     }
 
     private func protectedRow(_ reason: String) -> some View {
@@ -371,52 +399,6 @@ struct ArmsTabView: View {
         }
         .padding(.horizontal, 14)
         .frame(height: 56)
-    }
-
-    private func wakeConfirmationSheet(_ arm: ArmTag) -> some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
-                stateChip(arm)
-                Text("Wake \(arm.displayName)?")
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundColor(AppColors.textPrimary)
-                Text("It will receive the current Jarvis tag context, including current work, ticket reference, blockers, evidence, quality, directive, and route metadata.")
-                    .font(.system(size: 14))
-                    .foregroundColor(AppColors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                valueRow(label: "Route", value: arm.routeSummary)
-                valueRow(label: "Fresh", value: arm.freshnessLabel)
-
-                Spacer()
-
-                Button {
-                    wakeTarget = nil
-                    Task { await viewModel.wake(arm) }
-                } label: {
-                    Label("Dispatch Wake", systemImage: "bell.badge.fill")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(Color.black)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 13)
-                        .background(AppColors.textPrimary)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    wakeTarget = nil
-                } label: {
-                    Text("Cancel")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(AppColors.textSecondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(20)
-            .background(AppColors.backgroundPrimary)
-        }
     }
 
     private func toastView(_ toast: ArmsToast) -> some View {
