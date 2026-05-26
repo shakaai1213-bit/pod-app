@@ -220,6 +220,23 @@ struct WorkView: View {
                 Spacer(minLength: 0)
             }
 
+            if digest.worker.pendingReviewCount > 0 {
+                Button {
+                    UserDefaults.standard.set("mermaid", forKey: "pod.pendingAgentRunReviewLane")
+                    pushTickets = true
+                } label: {
+                    Label("Review Mermaid runs", systemImage: "checkmark.seal")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(AppColors.accentWarning)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .background(AppColors.accentWarning.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                }
+                .buttonStyle(.plain)
+            }
+
             if let activation = digest.activation, !activation.items.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(activation.items.prefix(4)) { item in

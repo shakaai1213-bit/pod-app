@@ -80,6 +80,7 @@ struct TicketsView: View {
     @State private var showingBackfillReview = false
     @State private var showingBacklogReprocessReview = false
     @State private var showingAgentRunReviewQueue = false
+    @State private var agentRunReviewLaneFilter: String? = nil
 
     private var selectedTicket: Binding<Ticket?> {
         Binding(
@@ -138,6 +139,7 @@ struct TicketsView: View {
             .task {
                 await viewModel.load()
                 await loadAgents()
+                await consumePendingAgentRunReview()
                 viewModel.startLiveUpdates()  // b9bbe115: subscribe to /tickets/stream
             }
             .onDisappear {
@@ -188,7 +190,7 @@ struct TicketsView: View {
                 }
             }
             .sheet(isPresented: $showingAgentRunReviewQueue) {
-                AgentRunReviewQueueSheet(viewModel: viewModel) { ticketId in
+                AgentRunReviewQueueSheet(viewModel: viewModel, laneFilter: agentRunReviewLaneFilter) { ticketId in
                     showingAgentRunReviewQueue = false
                     if viewModel.ticket(withId: ticketId) != nil {
                         selectedTicketId = ticketId
@@ -201,6 +203,17 @@ struct TicketsView: View {
                 Text(viewModel.errorMessage ?? "")
             }
         }
+    }
+
+    @MainActor
+    private func consumePendingAgentRunReview() async {
+        let lane = UserDefaults.standard.string(forKey: "pod.pendingAgentRunReviewLane")?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let lane, !lane.isEmpty else { return }
+        UserDefaults.standard.removeObject(forKey: "pod.pendingAgentRunReviewLane")
+        agentRunReviewLaneFilter = lane
+        showingAgentRunReviewQueue = true
+        await viewModel.loadAgentRunReviewQueue()
     }
 
     // MARK: - Status Filter Bar
@@ -355,6 +368,7 @@ struct TicketsView: View {
                     }
                     Spacer(minLength: 0)
                     Button {
+                        agentRunReviewLaneFilter = nil
                         showingAgentRunReviewQueue = true
                         Task { await viewModel.loadAgentRunReviewQueue() }
                     } label: {
@@ -503,6 +517,7 @@ struct TicketsView: View {
 
     private struct AgentRunReviewQueueSheet: View {
         let viewModel: TicketsViewModel
+        let laneFilter: String?
         let onOpenTicket: (String) -> Void
         @Environment(\.dismiss) private var dismiss
 
@@ -511,13 +526,13 @@ struct TicketsView: View {
                 List {
                     Section {
                         HStack(spacing: 10) {
-                            summaryMetric("Needs Review", value: viewModel.agentRunReviewQueue.count, color: AppColors.accentWarning)
+                            summaryMetric("Needs Review", value: visibleRuns.count, color: AppColors.accentWarning)
                             summaryMetric("Tickets", value: ticketCount, color: AppColors.accentElectric)
                             summaryMetric("Failed", value: failedCount, color: AppColors.accentDanger)
                         }
                         .listRowBackground(AppColors.backgroundSecondary)
                     } footer: {
-                        Text("ORCA terminal execution runs from /api/v1/agent-runs?review_required=true. Review decisions write back to the Agent Run record.")
+                        Text(reviewFooter)
                     }
 
                     Section {
@@ -588,16 +603,16 @@ struct TicketsView: View {
                                 .foregroundColor(AppColors.accentWarning)
                                 .listRowBackground(AppColors.backgroundSecondary)
                         }
-                    } else if viewModel.agentRunReviewQueue.isEmpty {
+                    } else if visibleRuns.isEmpty {
                         Section {
-                            Text("No agent runs currently need owner review.")
+                            Text(emptyReviewText)
                                 .font(.caption)
                                 .foregroundColor(AppColors.textTertiary)
                                 .listRowBackground(AppColors.backgroundSecondary)
                         }
                     } else {
                         Section("Runs") {
-                            ForEach(viewModel.agentRunReviewQueue) { run in
+                            ForEach(visibleRuns) { run in
                                 reviewRunRow(run)
                                     .listRowBackground(AppColors.backgroundSecondary)
                             }
@@ -615,7 +630,7 @@ struct TicketsView: View {
                 }
                 .scrollContentBackground(.hidden)
                 .background(AppColors.backgroundPrimary)
-                .navigationTitle("Run Review")
+                .navigationTitle(reviewTitle)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
@@ -645,11 +660,35 @@ struct TicketsView: View {
         }
 
         private var ticketCount: Int {
-            Set(viewModel.agentRunReviewQueue.map(\.ticketId)).count
+            Set(visibleRuns.map(\.ticketId)).count
         }
 
         private var failedCount: Int {
-            viewModel.agentRunReviewQueue.filter { $0.status == .failed || $0.status == .blocked }.count
+            visibleRuns.filter { $0.status == .failed || $0.status == .blocked }.count
+        }
+
+        private var visibleRuns: [AgentRun] {
+            guard let laneFilter, !laneFilter.isEmpty else { return viewModel.agentRunReviewQueue }
+            return viewModel.agentRunReviewQueue.filter { ($0.workerLane ?? "").caseInsensitiveCompare(laneFilter) == .orderedSame }
+        }
+
+        private var reviewTitle: String {
+            guard let laneFilter, !laneFilter.isEmpty else { return "Run Review" }
+            return "\(laneFilter.capitalized) Review"
+        }
+
+        private var reviewFooter: String {
+            guard let laneFilter, !laneFilter.isEmpty else {
+                return "ORCA terminal execution runs from /api/v1/agent-runs?review_required=true. Review decisions write back to the Agent Run record."
+            }
+            return "Filtered to \(laneFilter) runs from /api/v1/agent-runs?review_required=true. Review decisions write back to the Agent Run record."
+        }
+
+        private var emptyReviewText: String {
+            guard let laneFilter, !laneFilter.isEmpty else {
+                return "No agent runs currently need owner review."
+            }
+            return "No \(laneFilter) runs currently need owner review."
         }
 
         private func summaryMetric(_ label: String, value: Int, color: Color) -> some View {
