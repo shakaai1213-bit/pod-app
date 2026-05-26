@@ -9,6 +9,7 @@ struct WorkView: View {
     @State private var pushProjects = false
     @State private var pushTickets = false
     @State private var pushAgents = false
+    @State private var pushKnowledge = false
     @State private var pushProjectId: UUID? = nil
     @State private var pushTicketId: String? = nil
     @State private var selectedFlowItem: TicketFlowItem?
@@ -66,6 +67,9 @@ struct WorkView: View {
             }
             .navigationDestination(isPresented: $pushAgents) {
                 AgentsView()
+            }
+            .navigationDestination(isPresented: $pushKnowledge) {
+                KnowledgeView()
             }
             .overlay(alignment: .bottom) {
                 if let toast = model.priorityToast {
@@ -234,7 +238,15 @@ struct WorkView: View {
                             item: suggestionReviewItem(suggestion),
                             isBusy: model.suggestionActionIds.contains(suggestion.id.uuidString),
                             onAction: { action in
-                                Task { await model.handleSuggestionAction(action.id, suggestion: suggestion) }
+                                if action.id == "open-memory-candidate" {
+                                    if let candidateId = suggestion.memoryCandidateId {
+                                        UserDefaults.standard.set(candidateId, forKey: "pod.pendingMemoryCandidateId")
+                                    }
+                                    UserDefaults.standard.set(KnowledgeChip.memory.rawValue, forKey: "pod.pendingKnowledgeChip")
+                                    pushKnowledge = true
+                                } else {
+                                    Task { await model.handleSuggestionAction(action.id, suggestion: suggestion) }
+                                }
                             }
                         )
                     }
@@ -387,7 +399,7 @@ struct WorkView: View {
 
         return PodReviewItem(
             id: suggestion.id.uuidString,
-            eyebrow: "Schoolhouse suggestion",
+            eyebrow: suggestion.reviewEyebrow,
             title: suggestion.title,
             detail: suggestion.summary,
             status: "\(suggestion.riskLevel.uppercased()) · \(suggestion.status)",
@@ -401,7 +413,19 @@ struct WorkView: View {
 
     private func suggestionActions(for suggestion: SchoolhouseSuggestion) -> [PodReviewAction] {
         let isTerminal = ["accepted", "dismissed", "expired", "converted"].contains(suggestion.status.lowercased())
-        return [
+        var actions: [PodReviewAction] = []
+        if suggestion.isMemoryCandidateReview {
+            actions.append(
+                PodReviewAction(
+                    id: "open-memory-candidate",
+                    title: "Open",
+                    systemImage: "brain.head.profile",
+                    style: .primary,
+                    isDisabled: false
+                )
+            )
+        }
+        actions.append(contentsOf: [
             PodReviewAction(
                 id: "accept",
                 title: "Accept",
@@ -430,7 +454,8 @@ struct WorkView: View {
                 style: .destructive,
                 isDisabled: isTerminal
             ),
-        ]
+        ])
+        return actions
     }
 
     // MARK: - Projects Section
@@ -1892,6 +1917,21 @@ struct SchoolhouseSuggestion: Decodable, Identifiable, Hashable {
     var artifactHash: String? {
         stringValue(for: ["sha256", "artifact_hash", "hash"], in: provenance)
             ?? stringValue(for: ["sha256", "artifact_hash", "hash"], in: sourceRefs)
+    }
+
+    var isMemoryCandidateReview: Bool {
+        kind == "memory_candidate_review"
+            || source == "orca.memory_candidates"
+            || memoryCandidateId != nil
+    }
+
+    var memoryCandidateId: String? {
+        stringValue(for: ["candidate_id", "memory_candidate_id"], in: sourceRefs)
+            ?? stringValue(for: ["candidate_id", "memory_candidate_id"], in: provenance)
+    }
+
+    var reviewEyebrow: String {
+        isMemoryCandidateReview ? "Memory candidate review" : "Schoolhouse suggestion"
     }
 
     var ticketPriority: String {

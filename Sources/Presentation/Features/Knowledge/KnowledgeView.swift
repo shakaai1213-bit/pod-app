@@ -124,12 +124,14 @@ struct KnowledgeView: View {
             }
             .onAppear {
                 configureReviewerIdentity()
+                consumePendingKnowledgeIntent()
             }
             .onChange(of: appState.currentUser?.name) { _, _ in
                 configureReviewerIdentity()
             }
             .task {
                 configureReviewerIdentity()
+                consumePendingKnowledgeIntent()
                 await viewModel.loadStandards()
                 await viewModel.loadWikiContext()
                 await viewModel.loadWikiDocuments()
@@ -147,6 +149,18 @@ struct KnowledgeView: View {
 
     private func configureReviewerIdentity() {
         viewModel.configureReviewerIdentity(from: appState.currentUser?.name ?? appState.authManager.currentUser?.name)
+    }
+
+    private func consumePendingKnowledgeIntent() {
+        if let rawChip = UserDefaults.standard.string(forKey: "pod.pendingKnowledgeChip"),
+           let chip = KnowledgeChip(rawValue: rawChip) {
+            selectedChip = chip
+            UserDefaults.standard.removeObject(forKey: "pod.pendingKnowledgeChip")
+        }
+        if UserDefaults.standard.string(forKey: "pod.pendingMemoryCandidateId") != nil {
+            selectedChip = .memory
+            UserDefaults.standard.removeObject(forKey: "pod.pendingMemoryCandidateId")
+        }
     }
 
     // MARK: - Chip Nav (L4)
