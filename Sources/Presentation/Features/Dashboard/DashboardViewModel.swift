@@ -180,7 +180,7 @@ final class DashboardViewModel {
                 path: "/api/v1/state-registry?prefix=ticket.&limit=6"
             )
             let memoryResponse: StateRegistryResponse = try await apiClient.get(
-                path: "/api/v1/state-registry?prefix=memory.&limit=4"
+                path: "/api/v1/state-registry?prefix=memory.&limit=8"
             )
             stateTags = response.items + workerResponse.items + ticketResponse.items + memoryResponse.items
             staleStateTagCount = response.summary.stale + workerResponse.summary.stale + ticketResponse.summary.stale + memoryResponse.summary.stale
