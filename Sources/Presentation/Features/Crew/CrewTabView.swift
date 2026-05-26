@@ -32,17 +32,19 @@ struct CrewTabView: View {
     @State private var segment: Segment = .agents
 
     var body: some View {
-        Group {
-            switch segment {
-            case .agents:
-                AgentsView()
-            case .arms:
-                ArmsTabView()
+        ZStack(alignment: .bottom) {
+            Group {
+                switch segment {
+                case .agents:
+                    AgentsView()
+                case .arms:
+                    ArmsTabView()
+                }
             }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
             segmentDock
+                .padding(.bottom, 84)
         }
         .background(AppColors.backgroundPrimary)
     }
