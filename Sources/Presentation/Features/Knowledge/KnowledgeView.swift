@@ -1318,6 +1318,10 @@ struct KnowledgeView: View {
                         RegistryStat(value: viewModel.memoryLifecycleCounts["deferred"] ?? 0, label: "deferred")
                     }
 
+                    if let ops = viewModel.memoryOps {
+                        memoryOpsRow(ops)
+                    }
+
                     if let extraction = viewModel.dailyLogExtraction {
                         dailyLogCoverageRow(extraction.summary)
                     }
@@ -1407,6 +1411,62 @@ struct KnowledgeView: View {
                     .foregroundColor(isComplete ? AppColors.accentSuccess : AppColors.accentWarning)
                 Text("Daily coverage: \(coverage)")
                     .font(.caption.weight(.semibold))
+                    .foregroundColor(AppColors.textSecondary)
+            }
+
+            if !missing.isEmpty {
+                Text("Missing: \(missing)")
+                    .font(.caption2)
+                    .foregroundColor(AppColors.accentWarning)
+                    .lineLimit(2)
+            } else if !present.isEmpty {
+                Text("Present: \(present)")
+                    .font(.caption2)
+                    .foregroundColor(AppColors.textTertiary)
+                    .lineLimit(2)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.xs)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+    }
+
+    private func memoryOpsRow(_ ops: MemoryOpsResponse) -> some View {
+        let coverage = ops.coverageStatus.replacingOccurrences(of: "_", with: " ").capitalized
+        let laneTitle = ops.laneMode.replacingOccurrences(of: "_", with: " ").capitalized
+        let isComplete = ops.coverageStatus == "complete"
+        let missing = ops.missingAgents.joined(separator: ", ")
+        let present = ops.presentAgents.joined(separator: ", ")
+
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: Theme.xs) {
+                Image(systemName: "square.stack.3d.up.fill")
+                    .font(.caption2)
+                    .foregroundColor(AppColors.accentElectric)
+                Text("Lane: \(laneTitle)")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(AppColors.textSecondary)
+                Spacer(minLength: 0)
+                Text("\(ops.durableTotal) durable")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundColor(AppColors.accentElectric)
+            }
+
+            HStack(spacing: Theme.sm) {
+                Text("Pending \(ops.pendingReview)")
+                Text("Sensitive \(ops.sensitiveWaiting)")
+                Text("Extract \(ops.latestExtractCandidates)")
+            }
+            .font(.caption2)
+            .foregroundColor(AppColors.textTertiary)
+
+            HStack(spacing: Theme.xs) {
+                Image(systemName: isComplete ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                    .font(.caption2)
+                    .foregroundColor(isComplete ? AppColors.accentSuccess : AppColors.accentWarning)
+                Text("Coverage: \(coverage)")
+                    .font(.caption2.weight(.semibold))
                     .foregroundColor(AppColors.textSecondary)
             }
 

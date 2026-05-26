@@ -815,12 +815,41 @@ struct MemoryCandidateQueueSummary: Codable, Hashable, Sendable {
     }
 }
 
+struct MemoryOpsResponse: Codable, Hashable, Sendable {
+    let laneMode: String
+    let durableTotal: Int
+    let durableByLifecycle: [String: Int]
+    let pendingReview: Int
+    let sensitiveWaiting: Int
+    let latestExtractCandidates: Int
+    let presentAgents: [String]
+    let missingAgents: [String]
+    let coverageStatus: String
+    let generatedAt: Date?
+    let artifactPath: String?
+
+    enum CodingKeys: String, CodingKey {
+        case laneMode = "lane_mode"
+        case durableTotal = "durable_total"
+        case durableByLifecycle = "durable_by_lifecycle"
+        case pendingReview = "pending_review"
+        case sensitiveWaiting = "sensitive_waiting"
+        case latestExtractCandidates = "latest_extract_candidates"
+        case presentAgents = "present_agents"
+        case missingAgents = "missing_agents"
+        case coverageStatus = "coverage_status"
+        case generatedAt = "generated_at"
+        case artifactPath = "artifact_path"
+    }
+}
+
 struct MemoryCandidateQueueResponse: Codable, Hashable, Sendable {
     let artifactPath: String
     let artifactUpdatedAt: Date
     let generatedAt: Date?
     let summary: MemoryCandidateQueueSummary
     let items: [DailyLogExtractionCandidate]
+    let ops: MemoryOpsResponse?
     let overlayPath: String
     let auditPath: String
     let exportDir: String
@@ -830,6 +859,7 @@ struct MemoryCandidateQueueResponse: Codable, Hashable, Sendable {
         case artifactPath = "artifact_path"
         case artifactUpdatedAt = "artifact_updated_at"
         case generatedAt = "generated_at"
+        case ops
         case overlayPath = "overlay_path"
         case auditPath = "audit_path"
         case exportDir = "export_dir"
@@ -1051,6 +1081,7 @@ final class KnowledgeViewModel {
     var runtimeBurnDownExports: [RuntimeClassificationSyncArtifact] = []
     var dailyLogExtraction: DailyLogExtractionResponse?
     var memoryCandidateQueue: MemoryCandidateQueueResponse?
+    var memoryOps: MemoryOpsResponse?
     var notes: [OrcaNote] = []
     var noteGovernanceAudit: NoteGovernanceAuditResponse?
     var noteGovernanceQueue: NoteGovernanceQueueResponse?
@@ -1134,6 +1165,10 @@ final class KnowledgeViewModel {
 
     var memoryLifecycleCounts: [String: Int] {
         Dictionary(grouping: memoryCandidateQueue?.items ?? [], by: \.effectiveLifecycle).mapValues(\.count)
+    }
+
+    var durableLifecycleCounts: [String: Int] {
+        memoryOps?.durableByLifecycle ?? [:]
     }
 
     // MARK: - Private
@@ -1429,12 +1464,14 @@ final class KnowledgeViewModel {
             await MainActor.run {
                 self.dailyLogExtraction = extraction
                 self.memoryCandidateQueue = queue
+                self.memoryOps = queue.ops
                 self.isLoadingMemoryCandidates = false
             }
         } catch {
             await MainActor.run {
                 self.dailyLogExtraction = nil
                 self.memoryCandidateQueue = nil
+                self.memoryOps = nil
                 self.memoryCandidatesErrorMessage = error.localizedDescription
                 self.isLoadingMemoryCandidates = false
             }
@@ -1693,6 +1730,7 @@ final class KnowledgeViewModel {
                     byReviewState: byReviewState
                 ),
                 items: updatedItems,
+                ops: queue.ops,
                 overlayPath: queue.overlayPath,
                 auditPath: queue.auditPath,
                 exportDir: queue.exportDir
