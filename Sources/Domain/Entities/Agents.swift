@@ -99,7 +99,7 @@ enum AgentRosterPolicy {
     }
 
     static func isActiveOrSupport(_ agent: Agent) -> Bool {
-        agent.rosterLane == .activeMain || agent.rosterLane == .supportRuntime || isActiveOrSupport(agent.name)
+        agent.rosterLane == .activeMain || agent.rosterLane == .supportRuntime
     }
 
     static func isDormantOrArchived(_ name: String) -> Bool {
@@ -122,8 +122,8 @@ enum AgentRosterPolicy {
         agents
             .filter { isActiveOrSupport($0) }
             .sorted { lhs, rhs in
-                let lhsKey = sortKey(for: lhs.name)
-                let rhsKey = sortKey(for: rhs.name)
+                let lhsKey = laneSortKey(lhs.rosterLane)
+                let rhsKey = laneSortKey(rhs.rosterLane)
                 if lhsKey != rhsKey { return lhsKey < rhsKey }
                 return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
             }
@@ -133,11 +133,17 @@ enum AgentRosterPolicy {
         agents
             .filter { isDormantOrArchived($0) }
             .sorted { lhs, rhs in
-                let lhsKey = dormantSortKey(for: lhs.name)
-                let rhsKey = dormantSortKey(for: rhs.name)
-                if lhsKey != rhsKey { return lhsKey < rhsKey }
                 return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
             }
+    }
+
+    private static func laneSortKey(_ lane: AgentRosterLane) -> Int {
+        switch lane {
+        case .activeMain: return 0
+        case .supportRuntime: return 1
+        case .unknown: return 2
+        case .dormantArchive: return 3
+        }
     }
 }
 

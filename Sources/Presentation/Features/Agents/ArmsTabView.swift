@@ -2,7 +2,6 @@ import SwiftUI
 
 struct ArmsTabView: View {
     @State private var viewModel = ArmsViewModel()
-    @State private var selectedAgent: Agent?
     @State private var selectedFamily: ArmFamily = .maui
 
     var body: some View {
@@ -26,19 +25,12 @@ struct ArmsTabView: View {
 
                     armsSection
                         .padding(.horizontal, 16)
-                        .padding(.bottom, 18)
-
-                    teamSection
-                        .padding(.horizontal, 16)
                         .padding(.bottom, 90)
                 }
             }
             .background(AppColors.backgroundPrimary.ignoresSafeArea())
             .refreshable { await viewModel.load() }
             .task { await viewModel.startPolling() }
-            .sheet(item: $selectedAgent) { agent in
-                AgentDetailSheet(agent: agent)
-            }
             .overlay(alignment: .bottom) {
                 if let toast = viewModel.toast {
                     toastView(toast)
@@ -60,10 +52,10 @@ struct ArmsTabView: View {
     private var pageHeader: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Arms + Team")
+                Text("Arms Dispatch")
                     .font(.system(size: 28, weight: .bold))
                     .foregroundColor(AppColors.textPrimary)
-                Text("Codex arm dispatch and live crew focus.")
+                Text("Directive, wake, and last-ship control. Agent presence lives on the Agents side of Crew.")
                     .font(.system(size: 14))
                     .foregroundColor(AppColors.textSecondary)
             }
@@ -108,48 +100,6 @@ struct ArmsTabView: View {
             Text("Chief Arms (\(viewModel.chiefArms.count))").tag(ArmFamily.chief)
         }
         .pickerStyle(.segmented)
-    }
-
-    private var teamSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("TEAM", count: viewModel.agents.count, suffix: "active")
-
-            VStack(spacing: 0) {
-                if viewModel.agents.isEmpty {
-                    HStack(spacing: 8) {
-                        Image(systemName: "person.3.sequence")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(AppColors.textTertiary)
-                        Text("No active team agents available.")
-                            .font(.system(size: 12))
-                            .foregroundColor(AppColors.textTertiary)
-                        Spacer()
-                    }
-                    .padding(14)
-                } else {
-                    ForEach(Array(viewModel.agents.enumerated()), id: \.element.id) { idx, agent in
-                        VStack(spacing: 0) {
-                            if idx > 0 {
-                                Divider()
-                                    .background(AppColors.border)
-                                    .padding(.leading, 56)
-                            }
-                            agentRow(agent)
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    selectedAgent = agent.agent
-                                }
-                        }
-                    }
-                }
-            }
-            .background(AppColors.backgroundSecondary)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.radiusMedium)
-                    .strokeBorder(AppColors.border, lineWidth: 0.5)
-            )
-        }
     }
 
     private func sectionHeader(_ title: String, count: Int, suffix: String? = nil) -> some View {
@@ -484,56 +434,6 @@ struct ArmsTabView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
-    private func agentRow(_ agent: AgentSummary) -> some View {
-        HStack(spacing: 10) {
-            ZStack {
-                Circle()
-                    .fill(Color(hexString: agent.avatarColor).opacity(0.18))
-                    .frame(width: 28, height: 28)
-                Circle()
-                    .strokeBorder(Color(hexString: agent.avatarColor).opacity(0.42), lineWidth: 0.75)
-                    .frame(width: 28, height: 28)
-                Text(agent.glyph)
-                    .font(.system(size: 16))
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(agent.name)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(AppColors.textPrimary)
-                        .lineLimit(1)
-
-                    Circle()
-                        .fill(agent.statusColor)
-                        .frame(width: 6, height: 6)
-                        .accessibilityLabel("Status \(agent.status.displayName)")
-
-                    if !agent.natsLaneOk {
-                        Image(systemName: "antenna.radiowaves.left.and.right.slash")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundColor(AppColors.accentWarning)
-                    }
-                }
-
-                Text(agent.macLabel)
-                    .font(.system(size: 11))
-                    .foregroundColor(AppColors.textTertiary)
-            }
-
-            Spacer(minLength: 6)
-
-            Text(agent.currentFocus ?? "No focus set")
-                .font(.system(size: 12))
-                .foregroundColor(AppColors.textTertiary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: 150, alignment: .trailing)
-        }
-        .padding(.horizontal, 14)
-        .frame(height: 56)
-    }
-
     private func toastView(_ toast: ArmsToast) -> some View {
         HStack(spacing: 8) {
             Image(systemName: toast.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
@@ -588,6 +488,7 @@ struct ArmsTabView: View {
         case "chief-fund": return "lock.shield"
         case "chief-mac-infra": return "desktopcomputer"
         case "chief-data": return "externaldrive.connected.to.line.below"
+        case "chief-predictions": return "waveform.path.ecg.rectangle"
         case "chief-research": return "magnifyingglass"
         default: return "person.crop.circle"
         }

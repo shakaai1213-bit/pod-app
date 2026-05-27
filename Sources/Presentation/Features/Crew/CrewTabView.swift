@@ -2,9 +2,9 @@ import SwiftUI
 
 // MARK: - Crew Tab (L2 — SPEC-POD-LAYOUT-REVAMP-2026-W22 §4)
 //
-// Merges Agents + Arms+Team into one tab with a segmented picker.
-// "Agents" segment surfaces 4 of 5 spec sections: Focus, Agents roster, Workers, Protected Chief/Fund.
-// "Arms" segment surfaces the 8 Codex arm cards (with Wake/Post) + TEAM strip.
+// Merges Agents + Arms into one tab with a segmented picker.
+// "Agents" segment surfaces Focus, Agents roster, and Workers.
+// "Dispatch" segment surfaces the arm cards with Wake/Post routing.
 // Tap-to-detail preserved via the existing AgentDetailSheet and arm detail flows.
 
 struct CrewTabView: View {
@@ -16,15 +16,15 @@ struct CrewTabView: View {
 
         var title: String {
             switch self {
-            case .agents: return "Agents · Focus · Workers · Fund"
-            case .arms:   return "Arms Dispatch · Team"
+            case .agents: return "Agents · Focus · Workers"
+            case .arms:   return "Arm Dispatch"
             }
         }
 
         var shortTitle: String {
             switch self {
             case .agents: return "Agents"
-            case .arms:   return "Arms"
+            case .arms:   return "Dispatch"
             }
         }
     }

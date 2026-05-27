@@ -516,6 +516,7 @@ private struct NewProjectSheet: View {
     @State private var goal = ""
     @State private var priority = 3
     @State private var selectedStage: ProjectLifecycleStage = .assessment
+    @State private var selectedBoardId = ""
 
     var body: some View {
         NavigationStack {
@@ -542,6 +543,43 @@ private struct NewProjectSheet: View {
                         Text(stage.displayName).tag(stage)
                     }
                 }
+
+                Section("Board") {
+                    Picker("Board", selection: $selectedBoardId) {
+                        if viewModel.boardOptions.isEmpty {
+                            Text("Select after ORCA loads").tag("")
+                        }
+                        ForEach(viewModel.boardOptions) { board in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(board.displayName)
+                                if !board.detail.isEmpty {
+                                    Text(board.detail)
+                                        .font(.caption)
+                                        .foregroundColor(AppColors.textSecondary)
+                                }
+                            }
+                            .tag(board.id)
+                        }
+                    }
+                    .disabled(viewModel.isLoadingBoardOptions || viewModel.boardOptions.isEmpty)
+
+                    if viewModel.isLoadingBoardOptions {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                            Text("Loading live ORCA boards")
+                                .font(.caption)
+                                .foregroundColor(AppColors.textSecondary)
+                        }
+                    } else if let message = viewModel.boardOptionsMessage {
+                        Text(message)
+                            .font(.caption)
+                            .foregroundColor(AppColors.textSecondary)
+                    } else {
+                        Text("Board is saved to ORCA as this project's primary board and is required on create.")
+                            .font(.caption)
+                            .foregroundColor(AppColors.textSecondary)
+                    }
+                }
             }
             .navigationTitle("New Project")
             .navigationBarTitleDisplayMode(.inline)
@@ -556,16 +594,23 @@ private struct NewProjectSheet: View {
                                 name: name,
                                 goal: goal.isEmpty ? nil : goal,
                                 priority: priority,
-                                stage: selectedStage.rawValue
+                                stage: selectedStage.rawValue,
+                                boardId: selectedBoardId.isEmpty ? nil : selectedBoardId
                             )
                             dismiss()
                         }
                     }
-                    .disabled(name.isEmpty)
+                    .disabled(name.isEmpty || selectedBoardId.isEmpty)
                 }
             }
         }
         .presentationDetents([.medium])
+        .task {
+            await viewModel.loadBoardOptions()
+            if selectedBoardId.isEmpty {
+                selectedBoardId = viewModel.boardOptions.first(where: { $0.slug == "pod" })?.id ?? viewModel.boardOptions.first?.id ?? ""
+            }
+        }
     }
 
     private func priorityColor(_ p: Int) -> Color {

@@ -791,7 +791,7 @@ struct ConversationView: View {
     private var deliveryTruthText: String {
         switch viewModel.selectedDeliveryMode {
         case .compute:
-            return "\(agent.name) compute persona, not live runtime"
+            return "\(agent.name) compute helper, not live runtime"
         case .liveInbox:
             return "\(agent.name) live inbox handoff"
         case .agentRun:
@@ -1606,7 +1606,7 @@ struct ConversationView: View {
         }
         switch viewModel.selectedDeliveryMode {
         case .compute:
-            return "\(agent.name) compute persona"
+            return "\(agent.name) compute helper"
         case .agentRun:
             return "ORCA Agent Run"
         case .liveInbox:
@@ -2011,7 +2011,7 @@ struct DMBubble: View {
         if !message.content.isEmpty { return message.content }
         switch deliveryState {
         case .computeRunning:
-            return "Waiting for the compute persona answer..."
+            return "Waiting for the compute helper answer..."
         case .agentRunQueued:
             return "Agent Run queued in ORCA..."
         case .agentRunRunning:
@@ -2026,7 +2026,7 @@ struct DMBubble: View {
     private var streamingStatusText: String {
         switch deliveryState {
         case .computeRunning:
-            return "Compute persona accepted."
+            return "Compute helper accepted."
         case .agentRunQueued:
             return "Agent Run queued."
         case .agentRunRunning:
@@ -2132,6 +2132,7 @@ struct DMBubble: View {
 
     private var provenanceIcon: String {
         switch provenance {
+        case .coordinationReview: return "person.2.wave.2"
         case .liveInbox: return "tray.full"
         case .compute: return "cpu"
         case .agentRun: return "bolt.badge.clock"
@@ -2144,6 +2145,7 @@ struct DMBubble: View {
 
     private var provenanceColor: Color {
         switch provenance {
+        case .coordinationReview: return AppColors.accentSuccess
         case .liveInbox: return AppColors.accentSuccess
         case .compute: return AppColors.accentElectric
         case .agentRun: return AppColors.accentAgent
@@ -2165,7 +2167,7 @@ struct DMBubble: View {
             return AppColors.backgroundSecondary
         case .protected:
             return AppColors.accentWarning.opacity(0.10)
-        case .liveInbox, .compute:
+        case .coordinationReview, .liveInbox, .compute:
             return AppColors.backgroundTertiary
         case .agentRun:
             return AppColors.accentAgent.opacity(0.10)
@@ -2182,7 +2184,7 @@ struct DMBubble: View {
             return AppColors.borderActive
         case .protected:
             return AppColors.accentWarning.opacity(0.45)
-        case .liveInbox, .compute:
+        case .coordinationReview, .liveInbox, .compute:
             return AppColors.border
         case .agentRun:
             return AppColors.accentAgent.opacity(0.35)
@@ -2297,7 +2299,7 @@ private struct MessageDeliveryLedger: View {
         case .routing:
             return "Routing through ORCA"
         case .computeRunning:
-            return "\(agent.name) compute accepted; waiting"
+            return "\(agent.name) compute helper accepted; waiting"
         case .waitingForLiveAgent:
             return "\(agent.name) inbox accepted; waiting"
         case .claimedByAgent:
@@ -2324,8 +2326,10 @@ private struct MessageDeliveryLedger: View {
     private var provenanceText: String {
         switch DMResponseProvenance.parse(message.provenance)
             ?? DMResponseProvenance(deliveryMode: message.deliveryMode, source: message.source, lane: message.lane) {
+        case .coordinationReview:
+            return "\(agent.name) coordination review"
         case .compute:
-            return "\(agent.name) compute persona"
+            return "\(agent.name) compute helper"
         case .liveInbox:
             return "\(agent.name) live inbox"
         case .agentRun:

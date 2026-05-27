@@ -519,22 +519,10 @@ final class CaptainsLogViewModel {
                 }
             }
 
-            struct NotesResponse: Decodable {
-                let items: [NoteListItem]?
-                // API may return plain array
-            }
-
-            // Try paginated first, fall back to array.
-            // Backend param is `note_type` (not `type`); also filter by source so only
+            // Backend returns a plain array. Param is `note_type` (not `type`); also filter by source so only
             // entries authored via Pod's Captain's Log surface, not other parking_lot notes.
             let path = "/api/v1/notes?note_type=parking_lot&source=pod.captains_log&limit=50"
-            let items: [NoteListItem]
-            if let paginated: NotesResponse = try? await APIClient.shared.get(path: path),
-               let list = paginated.items {
-                items = list
-            } else {
-                items = (try? await APIClient.shared.get(path: path)) ?? []
-            }
+            let items: [NoteListItem] = try await APIClient.shared.get(path: path)
 
             entries = items.map { note in
                 CaptainsLogEntry(
@@ -548,8 +536,7 @@ final class CaptainsLogViewModel {
                 )
             }
         } catch {
-            // Notes parking_lot type not yet extended — show empty state gracefully
-            self.error = nil  // quiet error; backend extension pending
+            self.error = "Couldn't load Captain's Log."
             entries = []
         }
     }

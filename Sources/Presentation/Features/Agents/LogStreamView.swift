@@ -127,8 +127,13 @@ struct LogStreamView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(viewModel.filteredLogs(for: selectedFilter)) { entry in
-                        logEntryRow(entry)
+                    let logs = viewModel.filteredLogs(for: selectedFilter)
+                    if logs.isEmpty {
+                        logEmptyState
+                    } else {
+                        ForEach(logs) { entry in
+                            logEntryRow(entry)
+                        }
                     }
                 }
                 .padding(.horizontal, Theme.sm)
@@ -145,6 +150,27 @@ struct LogStreamView: View {
         }
     }
 
+    private var logEmptyState: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "terminal")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppColors.accentWarning)
+                Text("No live log entries")
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(AppColors.textPrimary)
+            }
+            Text(viewModel.emptyStateMessage)
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(AppColors.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(AppColors.accentWarning.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
     private func logEntryRow(_ entry: LogEntry) -> some View {
         Text(entry.formatted)
             .font(.system(size: 12, design: .monospaced))
@@ -159,10 +185,10 @@ struct LogStreamView: View {
     private var statusBar: some View {
         HStack {
             Circle()
-                .fill(viewModel.isConnected ? AppColors.accentSuccess : AppColors.accentDanger)
+                .fill(viewModel.streamState.color)
                 .frame(width: 8, height: 8)
 
-            Text(viewModel.isConnected ? "Connected" : "Disconnected")
+            Text(viewModel.streamState.label)
                 .font(.system(size: 12))
                 .foregroundStyle(AppColors.textTertiary)
 
@@ -211,6 +237,32 @@ enum LogFilter: CaseIterable {
         case .all:      return AppColors.textSecondary
         case .errors:  return AppColors.accentDanger
         case .warnings: return AppColors.accentWarning
+        }
+    }
+}
+
+enum LogStreamConnectionState {
+    case disconnected
+    case connecting
+    case waiting
+    case connected
+    case unavailable
+
+    var label: String {
+        switch self {
+        case .disconnected: return "Disconnected"
+        case .connecting: return "Connecting"
+        case .waiting: return "Waiting for ORCA"
+        case .connected: return "Connected"
+        case .unavailable: return "Unavailable"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .connected: return AppColors.accentSuccess
+        case .connecting, .waiting: return AppColors.accentWarning
+        case .disconnected, .unavailable: return AppColors.accentDanger
         }
     }
 }
@@ -269,8 +321,23 @@ extension Date {
 final class LogStreamViewModel: @unchecked Sendable {
 
     var entries: [LogEntry] = []
-    var isConnected: Bool = false
+    var streamState: LogStreamConnectionState = .disconnected
     var errorCount: Int = 0
+
+    var emptyStateMessage: String {
+        switch streamState {
+        case .connecting:
+            return "Pod opened the ORCA log request and is waiting for the stream to respond."
+        case .waiting:
+            return "Pod is waiting for the ORCA log stream. Demo log rows are intentionally disabled so this surface never looks live unless ORCA sends real entries."
+        case .connected:
+            return "The ORCA stream is connected, but no entries match the current filter."
+        case .unavailable:
+            return "The ORCA log stream is unavailable for this agent. No fallback or demo rows are shown."
+        case .disconnected:
+            return "The ORCA log stream is disconnected."
+        }
+    }
 
     private let agentId: UUID
     private var eventSource: URLSessionDataTask?
@@ -289,41 +356,47 @@ final class LogStreamViewModel: @unchecked Sendable {
         #else
         let urlString = "http://100.76.196.40:8000/api/v1/agents/\(agentId.uuidString)/logs/stream"
         #endif
-        guard let url = URL(string: urlString) else { return }
+        guard let url = URL(string: urlString) else {
+            streamState = .unavailable
+            return
+        }
 
         var request = URLRequest(url: url)
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         request.timeoutInterval = .infinity
 
+        streamState = .connecting
         let session = URLSession(configuration: .default)
         eventSource = session.dataTask(with: request) { [weak self] data, _, error in
             guard let self = self else { return }
 
             if error != nil {
                 Task { @MainActor in
-                    self.isConnected = false
+                    self.streamState = .unavailable
                 }
                 return
             }
 
-            guard let data = data, let chunk = String(data: data, encoding: .utf8) else { return }
+            guard let data = data, let chunk = String(data: data, encoding: .utf8) else {
+                Task { @MainActor in
+                    self.streamState = .unavailable
+                }
+                return
+            }
 
             Task { @MainActor in
                 self.processChunk(chunk)
             }
         }
 
-        await MainActor.run { self.isConnected = true }
         eventSource?.resume()
-
-        // Load mock logs for demo
-        await loadMockLogs()
+        streamState = .waiting
     }
 
     func disconnect() {
         eventSource?.cancel()
         eventSource = nil
-        isConnected = false
+        streamState = .disconnected
     }
 
     // MARK: - Filter
@@ -388,6 +461,7 @@ final class LogStreamViewModel: @unchecked Sendable {
 
         let entry = LogEntry(timestamp: timestamp, level: level, message: message, source: source)
         entries.append(entry)
+        streamState = .connected
 
         if level == .error {
             errorCount += 1
@@ -403,29 +477,4 @@ final class LogStreamViewModel: @unchecked Sendable {
         }
     }
 
-    // MARK: - Mock Logs
-
-    @MainActor
-    private func loadMockLogs() async {
-        let now = Date()
-        let mockEntries: [LogEntry] = [
-            LogEntry(timestamp: now.addingTimeInterval(-30), level: .info, message: "Agent session initialized", source: "core"),
-            LogEntry(timestamp: now.addingTimeInterval(-28), level: .info, message: "Loading system prompt from config", source: "config"),
-            LogEntry(timestamp: now.addingTimeInterval(-25), level: .debug, message: "Model: gpt-4o | Temperature: 0.7", source: "llm"),
-            LogEntry(timestamp: now.addingTimeInterval(-22), level: .info, message: "Connected to message broker", source: "broker"),
-            LogEntry(timestamp: now.addingTimeInterval(-20), level: .info, message: "Subscribed to channels: projects, general, alerts", source: "broker"),
-            LogEntry(timestamp: now.addingTimeInterval(-18), level: .info, message: "Starting task: PR #42 review", source: "task"),
-            LogEntry(timestamp: now.addingTimeInterval(-15), level: .debug, message: "Fetching diff for branch feature/auth-refresh", source: "git"),
-            LogEntry(timestamp: now.addingTimeInterval(-12), level: .info, message: "Analyzing 847 changed lines across 12 files", source: "review"),
-            LogEntry(timestamp: now.addingTimeInterval(-10), level: .warn, message: "High cyclomatic complexity detected in auth/middleware.swift (score: 18)", source: "review"),
-            LogEntry(timestamp: now.addingTimeInterval(-8), level: .info, message: "3 inline comments posted to PR #42", source: "github"),
-            LogEntry(timestamp: now.addingTimeInterval(-5), level: .debug, message: "Token usage: 12,450 input / 340 output", source: "llm"),
-            LogEntry(timestamp: now.addingTimeInterval(-3), level: .info, message: "Task completed — summary posted to #projects", source: "task"),
-            LogEntry(timestamp: now.addingTimeInterval(-1), level: .info, message: "Idle — waiting for next assignment", source: "core"),
-        ]
-
-        for entry in mockEntries {
-            entries.append(entry)
-        }
-    }
 }

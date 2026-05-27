@@ -313,6 +313,10 @@ private struct DashboardTicketFlowItemDTO: Decodable {
     let ownerAgent: String?
     let supportLane: String?
     let workerLane: String?
+    let recommendedRuntime: String?
+    let recommendedSurface: String?
+    let runtimeReason: String?
+    let handoffSubject: String?
     let approvalState: String?
     let approvalGate: String?
     let autonomyLevel: String?
@@ -331,6 +335,10 @@ private struct DashboardTicketFlowItemDTO: Decodable {
         case ownerAgent = "owner_agent"
         case supportLane = "support_lane"
         case workerLane = "worker_lane"
+        case recommendedRuntime = "recommended_runtime"
+        case recommendedSurface = "recommended_surface"
+        case runtimeReason = "runtime_reason"
+        case handoffSubject = "handoff_subject"
         case approvalState = "approval_state"
         case approvalGate = "approval_gate"
         case autonomyLevel = "autonomy_level"
@@ -349,6 +357,10 @@ private struct DashboardTicketFlowItemDTO: Decodable {
             ownerAgent: ownerAgent ?? "unassigned",
             supportLane: supportLane,
             workerLane: workerLane,
+            recommendedRuntime: recommendedRuntime,
+            recommendedSurface: recommendedSurface,
+            runtimeReason: runtimeReason,
+            handoffSubject: handoffSubject,
             approvalState: approvalState ?? "not_required",
             approvalGate: approvalGate,
             autonomyLevel: autonomyLevel ?? "owner-review",

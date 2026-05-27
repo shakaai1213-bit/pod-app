@@ -1328,8 +1328,8 @@ struct KnowledgeView: View {
                         RegistryStat(value: queue.items.count, label: "candidates")
                         RegistryStat(value: viewModel.dailyLogExtraction?.records.count ?? 0, label: "logs")
                         RegistryStat(value: viewModel.dailyLogExtraction?.summary.presentAgents.count ?? 0, label: "agents")
+                        RegistryStat(value: viewModel.durablePendingCount, label: "pending")
                         RegistryStat(value: viewModel.memoryLifecycleCounts["approved"] ?? 0, label: "approved")
-                        RegistryStat(value: viewModel.memoryLifecycleCounts["deferred"] ?? 0, label: "deferred")
                     }
 
                     if let ops = viewModel.memoryOps {
@@ -1339,6 +1339,8 @@ struct KnowledgeView: View {
                     if let extraction = viewModel.dailyLogExtraction {
                         dailyLogCoverageRow(extraction.summary)
                     }
+
+                    memorySearchSurface
 
                     if let generatedAt = queue.generatedAt {
                         Text("Generated \(generatedAt.formatted(date: .abbreviated, time: .shortened))")
@@ -1500,6 +1502,75 @@ struct KnowledgeView: View {
         .padding(Theme.xs)
         .background(AppColors.backgroundTertiary)
         .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+    }
+
+    private var memorySearchSurface: some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            HStack(spacing: Theme.xs) {
+                Image(systemName: "magnifyingglass")
+                    .font(.caption)
+                    .foregroundColor(AppColors.textTertiary)
+
+                TextField("Search durable memory, fish research, Chief graph…", text: $viewModel.memoryQueryText)
+                    .font(.caption)
+                    .foregroundColor(AppColors.textPrimary)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .onSubmit {
+                        Task { await viewModel.queryMemory() }
+                    }
+
+                if viewModel.isLoadingMemoryQuery {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                } else {
+                    Button {
+                        Task { await viewModel.queryMemory() }
+                    } label: {
+                        Image(systemName: "arrow.up.forward.app")
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(AppColors.accentElectric)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Run memory query")
+                }
+            }
+            .padding(.horizontal, Theme.xs)
+            .padding(.vertical, Theme.xs)
+            .background(AppColors.backgroundTertiary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+
+            if let error = viewModel.memoryQueryErrorMessage {
+                Text(error)
+                    .font(.caption2)
+                    .foregroundColor(AppColors.accentWarning)
+            } else if let response = viewModel.memoryQueryResponse {
+                if response.items.isEmpty {
+                    Text("No memory matches yet.")
+                        .font(.caption2)
+                        .foregroundColor(AppColors.textTertiary)
+                } else {
+                    VStack(alignment: .leading, spacing: Theme.xs) {
+                        HStack(spacing: Theme.xs) {
+                            Text("MEMORY SEARCH")
+                                .font(.caption2.weight(.bold))
+                                .foregroundColor(AppColors.textTertiary)
+                            Text("\(response.total)")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundColor(AppColors.accentElectric)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(AppColors.accentElectric.opacity(0.12))
+                                .clipShape(Capsule())
+                            Spacer()
+                        }
+                        ForEach(response.items.prefix(4)) { item in
+                            MemoryQueryResultRow(item: item)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private func memoryCandidateGroups(for items: [DailyLogExtractionCandidate]) -> [MemoryCandidateGroup] {
@@ -1825,6 +1896,61 @@ private struct MemoryCandidateRow: View {
                 ),
             ]
         )
+    }
+}
+
+private struct MemoryQueryResultRow: View {
+    let item: MemoryQueryResult
+
+    private var sourceColor: Color {
+        switch item.scope {
+        case "chief_graph":
+            return AppColors.accentWarning
+        case "durable":
+            return AppColors.accentSuccess
+        default:
+            return AppColors.accentElectric
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: Theme.xs) {
+                Text(item.sourceLabel.uppercased())
+                    .font(.caption2.weight(.bold))
+                    .foregroundColor(sourceColor)
+                if item.protected {
+                    Text("PROTECTED")
+                        .font(.caption2.weight(.bold))
+                        .foregroundColor(AppColors.accentWarning)
+                }
+                Spacer()
+                Text(String(format: "%.1f", item.score))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundColor(AppColors.textTertiary)
+            }
+
+            Text(item.title)
+                .font(.caption.weight(.semibold))
+                .foregroundColor(AppColors.textPrimary)
+                .lineLimit(2)
+
+            Text(item.snippet)
+                .font(.caption2)
+                .foregroundColor(AppColors.textSecondary)
+                .lineLimit(3)
+
+            if let path = item.path, !path.isEmpty {
+                Text(path)
+                    .font(.caption2)
+                    .foregroundColor(AppColors.textTertiary)
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.xs)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
     }
 }
 

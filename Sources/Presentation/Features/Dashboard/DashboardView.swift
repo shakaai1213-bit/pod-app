@@ -7,8 +7,10 @@ struct DashboardView: View {
     @EnvironmentObject private var appState: AppState
     @State private var viewModel = DashboardViewModel()
     @State private var briefingModel = DashboardBriefingDoctrineModel()
+    @State private var fundLandingModel = FundLandingViewModel()
     @State private var selectedAgent: Agent?
     @State private var selectedBriefingSheet: DashboardBriefingSheetKind?
+    @State private var showingFundLanding = false
     @State private var showingSettings = false
     @AppStorage("orca_display_name") private var displayName: String = "Captain"
 
@@ -24,13 +26,16 @@ struct DashboardView: View {
                     // 1. Agent status strip — fast lab pulse before owner-action queues.
                     agentStatusStrip
 
-                    // 2. Tier 1 sign queue — "what needs your eyes"
+                    // 2. Protected Fund visibility — read-only, no controls.
+                    dashboardFundLandingCard
+
+                    // 3. Tier 1 sign queue — "what needs your eyes"
                     CockpitSignQueueSection()
 
-                    // 3. Compact briefing + doctrine velocity line
+                    // 4. Compact briefing + doctrine velocity line
                     cockpitBriefingLine
 
-                    // 4. Top flow card — one blocker, tap → Work
+                    // 5. Top flow card — one blocker, tap → Work
                     cockpitFlowCard
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -47,6 +52,7 @@ struct DashboardView: View {
                         Task {
                             await viewModel.loadDashboard()
                             await briefingModel.load(force: true)
+                            await fundLandingModel.load()
                         }
                     } label: {
                         Image(systemName: viewModel.isLoading ? "hourglass" : "arrow.clockwise")
@@ -76,14 +82,127 @@ struct DashboardView: View {
             .sheet(isPresented: $showingSettings) {
                 SettingsView()
             }
+            .sheet(isPresented: $showingFundLanding) {
+                FundLandingDetailSheet(landing: fundLandingModel.landing)
+                    .presentationDetents([.medium, .large])
+            }
             .task {
                 await viewModel.loadDashboard()
                 await briefingModel.load()
+                await fundLandingModel.load()
             }
             .task {
                 await viewModel.startFlowReviewPolling()
             }
         }
+    }
+
+    // MARK: - Fund Landing
+
+    private var dashboardFundLandingCard: some View {
+        Button {
+            showingFundLanding = true
+        } label: {
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(spacing: 8) {
+                    Image(systemName: "lock.shield.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(AppColors.accentWarning)
+
+                    Text("FUND")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(AppColors.textTertiary)
+                        .tracking(0.5)
+
+                    Spacer()
+
+                    if fundLandingModel.isLoading {
+                        ProgressView()
+                            .scaleEffect(0.65)
+                    } else if let landing = fundLandingModel.landing {
+                        dashboardFundStatusPill(
+                            landing.isAvailable ? "LIVE" : "DEGRADED",
+                            color: landing.isAvailable ? AppColors.accentSuccess : AppColors.accentWarning
+                        )
+                    } else {
+                        dashboardFundStatusPill("WAITING", color: AppColors.textTertiary)
+                    }
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(AppColors.textTertiary)
+                }
+
+                if let landing = fundLandingModel.landing {
+                    Text(landing.headline ?? landing.degradedReason ?? "Fund landing is waiting for ORCA.")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(AppColors.textPrimary)
+                        .lineLimit(2)
+
+                    HStack(spacing: 8) {
+                        dashboardFundMetric("Mode", landing.mode ?? "-")
+                        dashboardFundMetric("Ready", landing.readiness ?? "-")
+                        dashboardFundMetric("P&L", dashboardMoney(landing.netPnlUsd))
+                        dashboardFundMetric("Sharpe", dashboardNumber(landing.sharpe))
+                    }
+
+                    Text("ORCA \(landing.route) · \(landing.freshnessLabel) · read-only")
+                        .font(.system(size: 10))
+                        .foregroundColor(AppColors.textTertiary)
+                        .lineLimit(1)
+                } else {
+                    Text(fundLandingModel.errorMessage ?? "Waiting for ORCA Fund landing route.")
+                        .font(.system(size: 12))
+                        .foregroundColor(AppColors.textSecondary)
+                        .lineLimit(2)
+                }
+            }
+            .padding(12)
+            .background(AppColors.backgroundSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                    .strokeBorder(AppColors.accentWarning.opacity(0.2), lineWidth: 0.75)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func dashboardFundMetric(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label.uppercased())
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(AppColors.textTertiary)
+            Text(value)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(AppColors.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(7)
+        .background(AppColors.backgroundPrimary)
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+    }
+
+    private func dashboardFundStatusPill(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.system(size: 10, weight: .bold))
+            .foregroundColor(color)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(color.opacity(0.12))
+            .clipShape(Capsule())
+    }
+
+    private func dashboardMoney(_ value: Double?) -> String {
+        guard let value else { return "-" }
+        return value.formatted(.currency(code: "USD").precision(.fractionLength(2)))
+    }
+
+    private func dashboardNumber(_ value: Double?) -> String {
+        guard let value else { return "-" }
+        return value.formatted(.number.precision(.fractionLength(3)))
     }
 
     // MARK: - Cockpit Briefing Line (compact — combines briefing + doctrine)
@@ -1003,6 +1122,176 @@ private enum DashboardBriefingSheetKind: String, Identifiable {
     case doctrine
 
     var id: String { rawValue }
+}
+
+private struct FundLandingDetailSheet: View {
+    let landing: FundLanding?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "lock.shield.fill")
+                            .foregroundColor(AppColors.accentWarning)
+                        Text("Read-only Fund landing")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(AppColors.textPrimary)
+                        Spacer()
+                    }
+
+                    if let landing {
+                        Text(landing.headline ?? landing.degradedReason ?? "No Fund landing summary available.")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(AppColors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                            detailMetric("Status", landing.status)
+                            detailMetric("Mode", landing.mode ?? "-")
+                            detailMetric("Readiness", landing.readiness ?? "-")
+                            detailMetric("Account", money(landing.accountUsd))
+                            detailMetric("Net P&L", money(landing.netPnlUsd))
+                            detailMetric("Closed", landing.closedTrades.map(String.init) ?? "-")
+                            detailMetric("Sharpe", number(landing.sharpe))
+                            detailMetric("Gate", boolLabel(landing.gateReady))
+                            detailMetric("Kill", landing.killSwitchStatus ?? "-")
+                            detailMetric("REQ-008", req008Label(landing))
+                            detailMetric("Breached", boolLabel(landing.req008Breached))
+                            detailMetric("Promote", landing.promotionDecision ?? "-")
+                            detailMetric("Landing", landing.summary?.agentLandingReady == true ? "ready" : "-")
+                            detailMetric("Data App", landing.summary?.dataApplicationStatus ?? landing.agentLanding?.dataApplication?.status ?? "-")
+                        }
+
+                        if let agentLanding = landing.agentLanding {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("AGENT LANDING")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(AppColors.textTertiary)
+                                if let canonicalDoc = agentLanding.canonicalDoc {
+                                    Text("Canonical: \(canonicalDoc)")
+                                }
+                                if let localPointer = agentLanding.localPointer {
+                                    Text("Local pointer: \(localPointer)")
+                                }
+                                if let dataApplication = agentLanding.dataApplication {
+                                    Text("Data application: \(dataApplication.status ?? "unknown") · research-only · trading_actionable=\(dataApplication.tradingActionable == true ? "true" : "false")")
+                                    if let rawDataPolicy = dataApplication.rawDataPolicy {
+                                        Text(rawDataPolicy)
+                                    }
+                                }
+                                if let howToStart = agentLanding.howToStart, !howToStart.isEmpty {
+                                    Text("How to start")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundColor(AppColors.textTertiary)
+                                    ForEach(howToStart, id: \.self) { step in
+                                        Text(step)
+                                    }
+                                }
+                                if let standards = agentLanding.standards, !standards.isEmpty {
+                                    Text("Standards")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundColor(AppColors.textTertiary)
+                                    ForEach(standards, id: \.self) { standard in
+                                        Text(standard)
+                                            .lineLimit(2)
+                                    }
+                                }
+                            }
+                            .font(.system(size: 11))
+                            .foregroundColor(AppColors.textSecondary)
+                            .textSelection(.enabled)
+                            .padding(12)
+                            .background(AppColors.backgroundSecondary)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+
+                        if !landing.blockers.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("BLOCKERS")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(AppColors.textTertiary)
+                                ForEach(landing.blockers, id: \.self) { blocker in
+                                    Text(blocker)
+                                        .font(.system(size: 13))
+                                        .foregroundColor(AppColors.textSecondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                            .padding(12)
+                            .background(AppColors.backgroundSecondary)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("SOURCE")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(AppColors.textTertiary)
+                            Text("ORCA \(landing.route)")
+                            Text(landing.sourceArtifact)
+                            Text("\(landing.freshnessLabel) · generated \(landing.generatedAt ?? "-")")
+                            Text(landing.podPolicy)
+                        }
+                        .font(.system(size: 11))
+                        .foregroundColor(AppColors.textSecondary)
+                        .textSelection(.enabled)
+                    } else {
+                        Text("Fund landing is not available from ORCA yet.")
+                            .font(.system(size: 14))
+                            .foregroundColor(AppColors.textSecondary)
+                    }
+                }
+                .padding(18)
+            }
+            .background(AppColors.backgroundPrimary)
+            .navigationTitle("Fund")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func detailMetric(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label.uppercased())
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(AppColors.textTertiary)
+            Text(value)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(AppColors.textPrimary)
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func money(_ value: Double?) -> String {
+        guard let value else { return "-" }
+        return value.formatted(.currency(code: "USD").precision(.fractionLength(2)))
+    }
+
+    private func number(_ value: Double?) -> String {
+        guard let value else { return "-" }
+        return value.formatted(.number.precision(.fractionLength(3)))
+    }
+
+    private func boolLabel(_ value: Bool?) -> String {
+        guard let value else { return "-" }
+        return value ? "Yes" : "No"
+    }
+
+    private func req008Label(_ landing: FundLanding) -> String {
+        let concentration = landing.req008OiConcentrationEth.map { $0.formatted(.number.precision(.fractionLength(2))) } ?? "-"
+        let threshold = landing.req008ThresholdPercent.map { $0.formatted(.number.precision(.fractionLength(1))) } ?? "-"
+        return "\(concentration)/\(threshold)%"
+    }
 }
 
 @MainActor

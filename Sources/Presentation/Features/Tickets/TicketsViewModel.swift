@@ -26,6 +26,10 @@ struct Ticket: Identifiable, Sendable, Hashable {
     let desiredOutcome: String?
     let triageId: String?
     let triageTraceId: String?
+    let recommendedRuntime: String?
+    let recommendedSurface: String?
+    let runtimeReason: String?
+    let handoffSubject: String?
     let chatThreadId: String?
     let parentTicketId: String?       // POD-4: subtask hierarchy
     let lessonsLearned: String?       // POD-4: lessons-learned capture
@@ -59,6 +63,10 @@ struct Ticket: Identifiable, Sendable, Hashable {
         desiredOutcome: String? = nil,
         triageId: String? = nil,
         triageTraceId: String? = nil,
+        recommendedRuntime: String? = nil,
+        recommendedSurface: String? = nil,
+        runtimeReason: String? = nil,
+        handoffSubject: String? = nil,
         chatThreadId: String? = nil,
         parentTicketId: String?,
         lessonsLearned: String?,
@@ -91,6 +99,10 @@ struct Ticket: Identifiable, Sendable, Hashable {
         self.desiredOutcome = desiredOutcome
         self.triageId = triageId
         self.triageTraceId = triageTraceId
+        self.recommendedRuntime = recommendedRuntime
+        self.recommendedSurface = recommendedSurface
+        self.runtimeReason = runtimeReason
+        self.handoffSubject = handoffSubject
         self.chatThreadId = chatThreadId
         self.parentTicketId = parentTicketId
         self.lessonsLearned = lessonsLearned
@@ -271,6 +283,7 @@ struct AgentRun: Identifiable, Sendable, Hashable {
     let evidence: String?
     let error: String?
     let artifacts: [String: AgentRunJSONValue]?
+    let guardrails: [String: AgentRunJSONValue]?
     let reviewStatus: String?
     let reviewedBy: String?
     let reviewedAt: Date?
@@ -317,6 +330,32 @@ struct AgentRun: Identifiable, Sendable, Hashable {
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         return parts.prefix(4).joined(separator: " / ")
+    }
+
+    var runtimeHandoffLabel: String? {
+        let runtime = routeValue("recommended_runtime")
+        let surface = routeValue("recommended_surface")
+        let subject = routeValue("handoff_subject")
+        guard let runtime, !runtime.isEmpty else { return nil }
+        let surfaceText = (surface?.isEmpty == false) ? " via \(surface!)" : ""
+        let subjectText = (subject?.isEmpty == false) ? " · \(subject!)" : ""
+        return "\(runtime)\(surfaceText)\(subjectText)"
+    }
+
+    private func routeValue(_ key: String) -> String? {
+        if let value = guardrails?[key]?.displayValue, !value.isEmpty, value != "null" {
+            return value
+        }
+        if let value = artifacts?[key]?.displayValue, !value.isEmpty, value != "null" {
+            return value
+        }
+        if case .object(let route)? = artifacts?["runtime_route"],
+           let value = route[key]?.displayValue,
+           !value.isEmpty,
+           value != "null" {
+            return value
+        }
+        return nil
     }
 }
 
@@ -933,6 +972,10 @@ struct TicketDispatchPreview: Sendable, Hashable {
     let workerLane: String
     let toolPolicy: String
     let computeTag: String
+    let recommendedRuntime: String?
+    let recommendedSurface: String?
+    let runtimeReason: String?
+    let handoffSubject: String?
     let approvalRequired: Bool
     let protectedLane: Bool
     let nextState: String
@@ -946,6 +989,10 @@ struct TicketEvidenceSummary: Sendable, Hashable {
     let failedRunCount: Int
     let approvalCount: Int
     let dispatchCount: Int
+    let queuedRunCount: Int
+    let runningRunCount: Int
+    let waitingRunCount: Int
+    let retryingRunCount: Int
     let latestRunStatus: AgentRunStatus?
     let latestRunRoute: String?
     let latestRoutePacket: [String: AgentRunJSONValue]?
@@ -982,6 +1029,10 @@ struct TicketListSummary: Sendable, Hashable {
     let approvalCount: Int
     let dispatchCount: Int
     let workerReviewRequiredCount: Int
+    let queuedRunCount: Int
+    let runningRunCount: Int
+    let waitingRunCount: Int
+    let retryingRunCount: Int
     let latestRun: TicketListRunSummary?
     let latestActivity: String?
     let latestActivityAt: Date?
@@ -1030,6 +1081,10 @@ struct TicketFlowItem: Identifiable, Sendable, Hashable {
     let ownerAgent: String
     let supportLane: String?
     let workerLane: String?
+    let recommendedRuntime: String?
+    let recommendedSurface: String?
+    let runtimeReason: String?
+    let handoffSubject: String?
     let approvalState: String
     let approvalGate: String?
     let autonomyLevel: String
@@ -1093,6 +1148,10 @@ private struct TicketFlowItemDTO: Decodable {
     let ownerAgent: String?
     let supportLane: String?
     let workerLane: String?
+    let recommendedRuntime: String?
+    let recommendedSurface: String?
+    let runtimeReason: String?
+    let handoffSubject: String?
     let approvalState: String?
     let approvalGate: String?
     let autonomyLevel: String?
@@ -1111,6 +1170,10 @@ private struct TicketFlowItemDTO: Decodable {
         case ownerAgent = "owner_agent"
         case supportLane = "support_lane"
         case workerLane = "worker_lane"
+        case recommendedRuntime = "recommended_runtime"
+        case recommendedSurface = "recommended_surface"
+        case runtimeReason = "runtime_reason"
+        case handoffSubject = "handoff_subject"
         case approvalState = "approval_state"
         case approvalGate = "approval_gate"
         case autonomyLevel = "autonomy_level"
@@ -1129,9 +1192,13 @@ private struct TicketFlowItemDTO: Decodable {
             ownerAgent: ownerAgent ?? "unassigned",
             supportLane: supportLane,
             workerLane: workerLane,
+            recommendedRuntime: recommendedRuntime,
+            recommendedSurface: recommendedSurface,
+            runtimeReason: runtimeReason,
+            handoffSubject: handoffSubject,
             approvalState: approvalState ?? "not_required",
             approvalGate: approvalGate,
-            autonomyLevel: autonomyLevel ?? "owner-review",
+            autonomyLevel: autonomyLevel ?? "inspect_only",
             dispatchable: dispatchable ?? false,
             noiseReview: noiseReview ?? false,
             protected: protected ?? false,
@@ -1166,6 +1233,10 @@ struct TicketDTO: Codable, Identifiable {
     let desiredOutcome: String?
     let triageId: String?
     let triageTraceId: String?
+    let recommendedRuntime: String?
+    let recommendedSurface: String?
+    let runtimeReason: String?
+    let handoffSubject: String?
     let chatThreadId: String?
     let parentTicketId: String?     // POD-4
     let lessonsLearned: String?    // POD-4
@@ -1192,6 +1263,10 @@ struct TicketDTO: Codable, Identifiable {
         case desiredOutcome     = "desired_outcome"
         case triageId           = "triage_id"
         case triageTraceId      = "triage_trace_id"
+        case recommendedRuntime = "recommended_runtime"
+        case recommendedSurface = "recommended_surface"
+        case runtimeReason      = "runtime_reason"
+        case handoffSubject     = "handoff_subject"
         case chatThreadId       = "chat_thread_id"
         case parentTicketId     = "parent_ticket_id"
         case lessonsLearned     = "lessons_learned"
@@ -1227,6 +1302,10 @@ struct TicketDTO: Codable, Identifiable {
             desiredOutcome: desiredOutcome,
             triageId: triageId,
             triageTraceId: triageTraceId,
+            recommendedRuntime: recommendedRuntime,
+            recommendedSurface: recommendedSurface,
+            runtimeReason: runtimeReason,
+            handoffSubject: handoffSubject,
             chatThreadId: chatThreadId,
             parentTicketId: parentTicketId,
             lessonsLearned: lessonsLearned,
@@ -1281,11 +1360,15 @@ final class TicketsViewModel {
     var newComputeTag = "classify"
     var newApprovalState = "not_required"
     var newApprovalGate = ""
-    var newAutonomyLevel = "owner_review"
+    var newAutonomyLevel = "inspect_only"
     var newWorkerLane = "mermaid"
     var newToolPolicy = "bounded_workspace_edits_owner_review"
     var newAcceptanceCriteria = ""
     var newDoneMeans = ""
+    var newBoardId = ""
+    var newBoardOptions: [TicketBoardOption] = []
+    var isLoadingBoardOptions = false
+    var boardOptionsMessage: String?
     var roughIntake = ""
     var isDrafting = false
     var draftMessage: String?
@@ -1659,7 +1742,7 @@ final class TicketsViewModel {
                 do {
                     let response: PaginatedResponse<AgentDTO> = try await api.get(path: "/api/v1/agents")
                     for agent in response.items {
-                        if AgentRosterPolicy.isActiveOrSupport(agent.name) {
+                        if agent.domainRosterLane == .activeMain || agent.domainRosterLane == .supportRuntime {
                             agentNames[agent.id] = agent.name
                         } else {
                             agentNames[agent.id] = "Dormant: \(agent.name.capitalized)"
@@ -1758,7 +1841,7 @@ final class TicketsViewModel {
         do {
             let response: PaginatedResponse<AgentDTO> = try await api.get(path: "/api/v1/agents")
             guard let agent = response.items.first(where: { $0.id == agentId }) else { return agentId }
-            if AgentRosterPolicy.isActiveOrSupport(agent.name) {
+            if agent.domainRosterLane == .activeMain || agent.domainRosterLane == .supportRuntime {
                 return agent.name
             }
             return "Dormant: \(agent.name.capitalized)"
@@ -2272,6 +2355,10 @@ final class TicketsViewModel {
             failedRunCount: max(runs.filter { $0.status == .failed || $0.status == .blocked }.count, listSummary?.failedRunCount ?? 0),
             approvalCount: max(approvalCount, listSummary?.approvalCount ?? 0),
             dispatchCount: max(dispatchCount, listSummary?.dispatchCount ?? 0),
+            queuedRunCount: max(runs.filter { $0.status == .queued }.count, listSummary?.queuedRunCount ?? 0),
+            runningRunCount: max(runs.filter { $0.status == .running }.count, listSummary?.runningRunCount ?? 0),
+            waitingRunCount: max(runs.filter { $0.status == .waitingForHuman }.count, listSummary?.waitingRunCount ?? 0),
+            retryingRunCount: max(runs.filter { $0.status == .retrying }.count, listSummary?.retryingRunCount ?? 0),
             latestRunStatus: latestRun?.status ?? latestListRun?.status,
             latestRunRoute: latestRun.flatMap(Self.routeLabel(for:)) ?? latestListRun.flatMap(Self.routeLabel(for:)),
             latestRoutePacket: listSummary?.latestRoutePacket,
@@ -2625,6 +2712,35 @@ final class TicketsViewModel {
     // MARK: - Create
 
     @MainActor
+    func loadBoardOptions() async {
+        if isLoadingBoardOptions { return }
+        isLoadingBoardOptions = true
+        boardOptionsMessage = nil
+        defer { isLoadingBoardOptions = false }
+
+        do {
+            let response: TicketBoardListResponse = try await api.get(path: "/api/v1/boards")
+            newBoardOptions = response.items
+                .map(\.option)
+                .sorted { lhs, rhs in
+                    let lhsIndex = TicketBoardOption.preferredSlugs.firstIndex(of: lhs.slug) ?? Int.max
+                    let rhsIndex = TicketBoardOption.preferredSlugs.firstIndex(of: rhs.slug) ?? Int.max
+                    if lhsIndex != rhsIndex { return lhsIndex < rhsIndex }
+                    return lhs.displayName < rhs.displayName
+                }
+            if newBoardId.isEmpty {
+                newBoardId = Self.defaultBoardId(from: newBoardOptions, ticketType: newTicketType, tags: newTags)
+            }
+            if newBoardOptions.isEmpty {
+                boardOptionsMessage = "ORCA returned no boards. Board selection is required before create."
+            }
+        } catch {
+            newBoardOptions = []
+            boardOptionsMessage = "ORCA boards unavailable. Board selection is required before create."
+        }
+    }
+
+    @MainActor
     func draftTicketFromIntake(agents: [AgentDTO]) async {
         let intake = roughIntake.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !intake.isEmpty else { return }
@@ -2641,6 +2757,7 @@ final class TicketsViewModel {
             newTicketType = draft.ticketType
             newTags = draft.tags.joined(separator: ", ")
             newComputeTag = draft.computeTag
+            newBoardId = Self.defaultBoardId(from: newBoardOptions, ticketType: newTicketType, tags: newTags)
             newAcceptanceCriteria = Self.defaultAcceptanceCriteria(from: draft.description)
             newDoneMeans = Self.defaultDoneMeans(from: draft.description)
             newAssigneeAgentId = Self.agentId(for: draft.suggestedAgentId, agents: agents) ?? ""
@@ -2655,6 +2772,7 @@ final class TicketsViewModel {
             newTicketType = draft.ticketType
             newTags = draft.tags.joined(separator: ", ")
             newComputeTag = draft.computeTag
+            newBoardId = Self.defaultBoardId(from: newBoardOptions, ticketType: newTicketType, tags: newTags)
             newAcceptanceCriteria = Self.defaultAcceptanceCriteria(from: draft.description)
             newDoneMeans = Self.defaultDoneMeans(from: draft.description)
             newAssigneeAgentId = Self.agentId(for: draft.suggestedAgentId, agents: agents) ?? ""
@@ -2718,9 +2836,12 @@ final class TicketsViewModel {
             newTags = Self.mergingTags(newTags, ["worker:\(worker)"])
         }
         newTags = Self.mergingTags(newTags, preview.tags)
+        if newBoardId.isEmpty {
+            newBoardId = Self.defaultBoardId(from: newBoardOptions, ticketType: newTicketType, tags: newTags)
+        }
         newApprovalState = preview.needsApproval ? "waiting_for_human" : "not_required"
         newApprovalGate = preview.approvalGate ?? ""
-        newAutonomyLevel = preview.needsApproval ? "protected_approval_required" : "owner_review"
+        newAutonomyLevel = preview.needsApproval ? "protected_approval_required" : "inspect_only"
 
         if preview.needsApproval {
             newAcceptanceCriteria = Self.appendMissingLine(
@@ -2739,6 +2860,10 @@ final class TicketsViewModel {
     @MainActor
     func createTicket() async {
         guard !newTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard !newBoardId.isEmpty else {
+            boardOptionsMessage = "Choose an ORCA board before creating this ticket."
+            return
+        }
         isCreating = true
         defer { isCreating = false }
 
@@ -2766,6 +2891,12 @@ final class TicketsViewModel {
             desiredOutcome: newDoneMeans.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : newDoneMeans.trimmingCharacters(in: .whitespacesAndNewlines),
             triageId: directionPreview?.triageId,
             triageTraceId: directionPreview?.traceId,
+            recommendedRuntime: directionPreview?.recommendedRuntime,
+            recommendedSurface: directionPreview?.recommendedSurface,
+            runtimeReason: directionPreview?.runtimeReason,
+            handoffSubject: directionPreview?.handoffSubject,
+            handoffPacket: Self.handoffPacket(for: directionPreview),
+            boardId: newBoardId,
             parentTicketId: nil,
             lessonsLearned: nil
         )
@@ -2781,11 +2912,12 @@ final class TicketsViewModel {
             newComputeTag = "classify"
             newApprovalState = "not_required"
             newApprovalGate = ""
-            newAutonomyLevel = "owner_review"
+            newAutonomyLevel = "inspect_only"
             newWorkerLane = "mermaid"
             newToolPolicy = "bounded_workspace_edits_owner_review"
             newAcceptanceCriteria = ""
             newDoneMeans = ""
+            newBoardId = Self.defaultBoardId(from: newBoardOptions, ticketType: newTicketType, tags: newTags)
             roughIntake = ""
             draftMessage = nil
             directionPreview = nil
@@ -2801,6 +2933,29 @@ final class TicketsViewModel {
 
     private static func apiPriority(_ priority: TicketPriority) -> String {
         priority == .normal ? "medium" : priority.rawValue
+    }
+
+    private static func defaultBoardId(from boards: [TicketBoardOption], ticketType: String, tags: String) -> String {
+        let searchable = "\(ticketType) \(tags)".lowercased()
+        let preferredSlug: String
+        if searchable.contains("chat") {
+            preferredSlug = "chat"
+        } else if searchable.contains("memory") || searchable.contains("knowledge") {
+            preferredSlug = "memory"
+        } else if searchable.contains("compute") || searchable.contains("runtime") {
+            preferredSlug = "compute"
+        } else if searchable.contains("nats") || searchable.contains("nerve") {
+            preferredSlug = "nerve"
+        } else if searchable.contains("governance") || searchable.contains("dds") || searchable.contains("sop") {
+            preferredSlug = "governance"
+        } else if searchable.contains("pod") || searchable.contains("ui") {
+            preferredSlug = "pod"
+        } else if searchable.contains("orca") || searchable.contains("ticket") || searchable.contains("project") {
+            preferredSlug = "orca"
+        } else {
+            preferredSlug = "pod"
+        }
+        return boards.first(where: { $0.slug == preferredSlug })?.id ?? boards.first?.id ?? ""
     }
 
     private static func parseTags(_ value: String) -> [String]? {
@@ -2852,6 +3007,24 @@ final class TicketsViewModel {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    private static func handoffPacket(for preview: TicketDirectionPreview?) -> [String: String] {
+        [
+            "surface": "pod_tickets",
+            "triage_id": preview?.triageId ?? "",
+            "triage_trace_id": preview?.traceId ?? "",
+            "intent_type": preview?.intentType ?? "",
+            "recommended_lane": preview?.recommendedLane ?? "",
+            "owner_agent": preview?.suggestedOwner ?? "",
+            "worker_lane": preview?.suggestedWorker ?? "",
+            "recommended_runtime": preview?.recommendedRuntime ?? "unknown",
+            "recommended_surface": preview?.recommendedSurface ?? "pod_tickets",
+            "runtime_reason": preview?.runtimeReason ?? "",
+            "handoff_subject": preview?.handoffSubject ?? "",
+            "compute_route": preview?.suggestedComputeRoute ?? "auto",
+            "next_action": preview?.nextAction ?? "",
+        ].filter { !$0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+
     private static func toolPolicy(forWorkerLane workerLane: String) -> String {
         switch workerLane.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "protected-chief-review":
@@ -2889,7 +3062,7 @@ final class TicketsViewModel {
         let normalized = suggested.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !normalized.isEmpty else { return nil }
         return agents.first { agent in
-            AgentRosterPolicy.isActiveOrSupport(agent.name)
+            (agent.domainRosterLane == .activeMain || agent.domainRosterLane == .supportRuntime)
                 && (agent.name.lowercased() == normalized || agent.id.lowercased() == normalized)
         }?.id
     }
@@ -4455,6 +4628,12 @@ private struct CreateTicketBody: Encodable {
     let desiredOutcome: String?
     let triageId: String?
     let triageTraceId: String?
+    let recommendedRuntime: String?
+    let recommendedSurface: String?
+    let runtimeReason: String?
+    let handoffSubject: String?
+    let handoffPacket: [String: String]
+    let boardId: String?
     let parentTicketId: String?   // POD-4: subtask hierarchy
     let lessonsLearned: String?  // POD-4: lessons-learned capture
 
@@ -4472,8 +4651,116 @@ private struct CreateTicketBody: Encodable {
         case desiredOutcome = "desired_outcome"
         case triageId = "triage_id"
         case triageTraceId = "triage_trace_id"
+        case recommendedRuntime = "recommended_runtime"
+        case recommendedSurface = "recommended_surface"
+        case runtimeReason = "runtime_reason"
+        case handoffSubject = "handoff_subject"
+        case handoffPacket = "handoff_packet"
+        case boardId = "board_id"
         case parentTicketId  = "parent_ticket_id"
         case lessonsLearned  = "lessons_learned"
+    }
+}
+
+struct TicketBoardOption: Identifiable, Sendable, Hashable {
+    let id: String
+    let slug: String
+    let name: String
+    let layer: String?
+    let component: String?
+
+    var icon: String { Self.iconMap[slug] ?? "square.grid.2x2" }
+    var displayName: String { component?.isEmpty == false ? component! : name }
+    var detail: String {
+        [slug, layer]
+            .compactMap { value in
+                guard let value, !value.isEmpty else { return nil }
+                return value
+            }
+            .joined(separator: " · ")
+    }
+
+    static let preferredSlugs = [
+        "north-star", "pod", "surfaces", "orca", "memory", "compute", "nerve",
+        "governance", "jarvis", "schoolhouse", "fund", "products", "tools"
+    ]
+
+    private static let iconMap: [String: String] = [
+        "north-star": "star.fill", "pod": "iphone", "surfaces": "bubble.left.and.bubble.right",
+        "orca": "server.rack",
+        "memory": "brain", "compute": "cpu", "nerve": "bolt",
+        "governance": "scalemass", "jarvis": "point.3.connected.trianglepath.dotted",
+        "schoolhouse": "building.columns", "fund": "lock.shield",
+        "products": "shippingbox", "tools": "wrench.and.screwdriver"
+    ]
+}
+
+private struct TicketBoardListResponse: Decodable {
+    let items: [TicketBoardDTO]
+
+    init(from decoder: Decoder) throws {
+        if var unkeyed = try? decoder.unkeyedContainer() {
+            var values: [TicketBoardDTO] = []
+            while !unkeyed.isAtEnd {
+                values.append(try unkeyed.decode(TicketBoardDTO.self))
+            }
+            items = values
+            return
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        items = try container.decode([TicketBoardDTO].self, forKey: .items)
+    }
+
+    private enum CodingKeys: String, CodingKey { case items }
+}
+
+private struct TicketBoardDTO: Decodable {
+    let id: String
+    let slug: String
+    let name: String
+    let layer: String?
+    let component: String?
+
+    var option: TicketBoardOption {
+        TicketBoardOption(id: id, slug: slug, name: name, layer: layer, component: component)
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeTicketFlexibleString(forKey: .id)
+        slug = try container.decodeTicketFlexibleStringIfPresent(forKey: .slug) ?? id
+        name = try container.decodeTicketFlexibleStringIfPresent(forKey: .name) ?? slug
+        layer = try container.decodeTicketFlexibleStringIfPresent(forKey: .layer)
+        component = try container.decodeTicketFlexibleStringIfPresent(forKey: .component)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, slug, name, layer, component
+    }
+}
+
+private extension KeyedDecodingContainer {
+    func decodeTicketFlexibleString(forKey key: Key) throws -> String {
+        if let value = try? decode(String.self, forKey: key) {
+            return value
+        }
+        if let value = try? decode(Int.self, forKey: key) {
+            return "\(value)"
+        }
+        if let value = try? decode(UUID.self, forKey: key) {
+            return value.uuidString
+        }
+        throw DecodingError.typeMismatch(
+            String.self,
+            DecodingError.Context(codingPath: codingPath + [key], debugDescription: "Expected string-compatible value")
+        )
+    }
+
+    func decodeTicketFlexibleStringIfPresent(forKey key: Key) throws -> String? {
+        if !contains(key) || (try? decodeNil(forKey: key)) == true {
+            return nil
+        }
+        return try decodeTicketFlexibleString(forKey: key)
     }
 }
 
@@ -4491,6 +4778,10 @@ struct TicketDirectionPreview: Sendable, Hashable {
     let nextAction: String
     let reason: String
     let approvalGate: String?
+    let recommendedRuntime: String?
+    let recommendedSurface: String?
+    let runtimeReason: String?
+    let handoffSubject: String?
     let tags: [String]
 
     init(response: MermanTicketDirectionResponse) {
@@ -4507,6 +4798,10 @@ struct TicketDirectionPreview: Sendable, Hashable {
         self.nextAction = response.nextAction
         self.reason = response.reason
         self.approvalGate = response.approvalGate
+        self.recommendedRuntime = response.recommendedRuntime
+        self.recommendedSurface = response.recommendedSurface
+        self.runtimeReason = response.runtimeReason
+        self.handoffSubject = response.handoffSubject
         self.tags = response.tags
     }
 
@@ -4540,6 +4835,10 @@ struct MermanTicketDirectionResponse: Decodable {
     let nextAction: String
     let reason: String
     let approvalGate: String?
+    let recommendedRuntime: String?
+    let recommendedSurface: String?
+    let runtimeReason: String?
+    let handoffSubject: String?
     let tags: [String]
 
     enum CodingKeys: String, CodingKey {
@@ -4556,6 +4855,10 @@ struct MermanTicketDirectionResponse: Decodable {
         case nextAction = "next_action"
         case reason
         case approvalGate = "approval_gate"
+        case recommendedRuntime = "recommended_runtime"
+        case recommendedSurface = "recommended_surface"
+        case runtimeReason = "runtime_reason"
+        case handoffSubject = "handoff_subject"
         case tags
     }
 }
@@ -4779,6 +5082,10 @@ private struct AgentRunDispatchPreviewDTO: Decodable {
     let workerLane: String
     let toolPolicy: String
     let computeTag: String
+    let recommendedRuntime: String?
+    let recommendedSurface: String?
+    let runtimeReason: String?
+    let handoffSubject: String?
     let approvalRequired: Bool
     let protectedLane: Bool
     let nextState: String
@@ -4792,6 +5099,10 @@ private struct AgentRunDispatchPreviewDTO: Decodable {
         case workerLane = "worker_lane"
         case toolPolicy = "tool_policy"
         case computeTag = "compute_tag"
+        case recommendedRuntime = "recommended_runtime"
+        case recommendedSurface = "recommended_surface"
+        case runtimeReason = "runtime_reason"
+        case handoffSubject = "handoff_subject"
         case approvalRequired = "approval_required"
         case protectedLane = "protected_lane"
         case nextState = "next_state"
@@ -4804,6 +5115,10 @@ private struct AgentRunDispatchPreviewDTO: Decodable {
             workerLane: workerLane,
             toolPolicy: toolPolicy,
             computeTag: computeTag,
+            recommendedRuntime: recommendedRuntime,
+            recommendedSurface: recommendedSurface,
+            runtimeReason: runtimeReason,
+            handoffSubject: handoffSubject,
             approvalRequired: approvalRequired,
             protectedLane: protectedLane,
             nextState: nextState,
@@ -4867,6 +5182,7 @@ struct AgentRunDTO: Decodable {
     let evidence: String?
     let error: String?
     let artifacts: [String: AgentRunJSONValue]?
+    let guardrails: [String: AgentRunJSONValue]?
     let reviewStatus: String?
     let reviewedBy: String?
     let reviewedAt: Date?
@@ -4877,7 +5193,7 @@ struct AgentRunDTO: Decodable {
     let completedAt: Date?
 
     enum CodingKeys: String, CodingKey {
-        case id, status, caller, source, lane, backend, model, tier, outcome, evidence, error, artifacts
+        case id, status, caller, source, lane, backend, model, tier, outcome, evidence, error, artifacts, guardrails
         case ticketId = "ticket_id"
         case agentId = "agent_id"
         case runType = "run_type"
@@ -4922,6 +5238,7 @@ struct AgentRunDTO: Decodable {
             evidence: evidence,
             error: error,
             artifacts: artifacts,
+            guardrails: guardrails,
             reviewStatus: reviewStatus,
             reviewedBy: reviewedBy,
             reviewedAt: reviewedAt,
@@ -4980,6 +5297,10 @@ struct TicketListSummaryDTO: Decodable {
     let approvalCount: Int
     let dispatchCount: Int
     let workerReviewRequiredCount: Int?
+    let queuedRunCount: Int?
+    let runningRunCount: Int?
+    let waitingRunCount: Int?
+    let retryingRunCount: Int?
     let latestRun: TicketListRunSummaryDTO?
     let latestActivity: String?
     let latestActivityAt: Date?
@@ -4996,6 +5317,10 @@ struct TicketListSummaryDTO: Decodable {
         case approvalCount = "approval_count"
         case dispatchCount = "dispatch_count"
         case workerReviewRequiredCount = "worker_review_required_count"
+        case queuedRunCount = "queued_run_count"
+        case runningRunCount = "running_run_count"
+        case waitingRunCount = "waiting_run_count"
+        case retryingRunCount = "retrying_run_count"
         case latestRun = "latest_run"
         case latestActivity = "latest_activity"
         case latestActivityAt = "latest_activity_at"
@@ -5014,6 +5339,10 @@ struct TicketListSummaryDTO: Decodable {
             approvalCount: approvalCount,
             dispatchCount: dispatchCount,
             workerReviewRequiredCount: workerReviewRequiredCount ?? 0,
+            queuedRunCount: queuedRunCount ?? 0,
+            runningRunCount: runningRunCount ?? 0,
+            waitingRunCount: waitingRunCount ?? 0,
+            retryingRunCount: retryingRunCount ?? 0,
             latestRun: latestRun?.toDomain(),
             latestActivity: latestActivity,
             latestActivityAt: latestActivityAt,

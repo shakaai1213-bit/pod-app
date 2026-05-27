@@ -644,6 +644,8 @@ struct PaginatedResponse<T: Codable>: Codable {
 
 struct ProjectDTO: Codable, Identifiable {
     let id: UUID
+    let boardId: UUID?
+    let boardIds: [UUID]?
     let name: String
     let goal: String?
     let description: String?
@@ -666,6 +668,8 @@ struct ProjectDTO: Codable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case id, name, goal, description, status, priority, stage
+        case boardId = "board_id"
+        case boardIds = "board_ids"
         case projectedCost = "projected_cost"
         case actualCost = "actual_cost"
         case createdBy = "created_by"
@@ -865,9 +869,11 @@ struct ProjectCreateRequest: Encodable {
     let priority: Int?
     let stage: String?
     let dueDate: Date?
+    let boardId: String?
 
     enum CodingKeys: String, CodingKey {
         case name, goal, description, priority, stage
         case dueDate = "due_date"
+        case boardId = "board_id"
     }
 }

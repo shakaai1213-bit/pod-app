@@ -35,8 +35,8 @@ actor ProjectRepository {
         return response.items
     }
 
-    func createProject(name: String, goal: String? = nil, priority: Int = 3, stage: String = "blueprint") async throws -> ProjectDTO {
-        let body = ProjectCreateRequest(name: name, goal: goal, description: nil, priority: priority, stage: stage, dueDate: nil)
+    func createProject(name: String, goal: String? = nil, priority: Int = 3, stage: String = "blueprint", boardId: String? = nil) async throws -> ProjectDTO {
+        let body = ProjectCreateRequest(name: name, goal: goal, description: nil, priority: priority, stage: stage, dueDate: nil, boardId: boardId)
         return try await api.post(path: "/api/v1/projects/", body: body)
     }
 

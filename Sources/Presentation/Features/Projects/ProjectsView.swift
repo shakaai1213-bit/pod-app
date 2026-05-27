@@ -16,6 +16,7 @@ struct ProjectsView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Theme.lg) {
+                    legacyTruthBanner
                     myTasksSection
                     boardGroupsSection
                     allBoardsSection
@@ -27,6 +28,7 @@ struct ProjectsView: View {
             .refreshable {
                 await viewModel.loadBoards()
                 await viewModel.loadMyTasks()
+                await viewModel.loadTeamMembers()
             }
             .searchable(
                 text: Binding(
@@ -53,13 +55,35 @@ struct ProjectsView: View {
                 NewTaskSheet(viewModel: viewModel)
             }
             .sheet(isPresented: $showingMyTasks) {
-                MyTasksFullView(tasks: viewModel.sortedMyTasks, members: ProjectsViewModel.mockMembers)
+                MyTasksFullView(tasks: viewModel.sortedMyTasks, members: viewModel.teamMembers)
             }
             .task {
                 await viewModel.loadBoards()
                 await viewModel.loadMyTasks()
+                await viewModel.loadTeamMembers()
             }
         }
+    }
+
+    private var legacyTruthBanner: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AppColors.accentWarning)
+                Text("LEGACY PROJECTS")
+                    .podTextStyle(.label, color: AppColors.accentWarning)
+                Spacer()
+            }
+            Text(viewModel.errorMessage ?? "Use Work > Projects for the ORCA-backed project cockpit. This legacy board view does not show mock data when ORCA is unavailable.")
+                .podTextStyle(.caption, color: AppColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .background(AppColors.accentWarning.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppColors.accentWarning.opacity(0.2), lineWidth: 0.5))
+        .padding(.top, Theme.sm)
     }
 
     // MARK: - My Tasks Section
@@ -82,7 +106,7 @@ struct ProjectsView: View {
             } else {
                 VStack(spacing: Theme.xs) {
                     ForEach(viewModel.sortedMyTasks.prefix(5)) { task in
-                        MyTaskRow(task: task, members: ProjectsViewModel.mockMembers) {
+                        MyTaskRow(task: task, members: viewModel.teamMembers) {
                             contextMenuTask = task
                         }
                     }

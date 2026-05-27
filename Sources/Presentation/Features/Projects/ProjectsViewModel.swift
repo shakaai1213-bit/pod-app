@@ -10,8 +10,10 @@ final class ProjectsViewModel {
 
     var boardGroups: [BoardGroup] = []
     var myTasks: [ProjectTask] = []
+    var teamMembers: [TeamMember] = []
     var selectedBoard: Board?
     var isLoading: Bool = false
+    var errorMessage: String?
 
     var filterAssignee: UUID?
     var filterTag: String?
@@ -64,7 +66,10 @@ final class ProjectsViewModel {
     // MARK: - Loading
 
     func loadBoards() async {
-        await MainActor.run { isLoading = true }
+        await MainActor.run {
+            isLoading = true
+            errorMessage = nil
+        }
 
         // Try /api/v1/boards first (paginated). Falls back to /api/v1/projects/ (flat array) if it 500s.
         var boards: [Board] = []
@@ -110,9 +115,52 @@ final class ProjectsViewModel {
                 )
                 self.boardGroups = [group]
             } else {
-                self.loadMockData()
+                self.boardGroups = []
+                self.errorMessage = "ORCA boards/projects unavailable. Legacy Projects no longer falls back to mock boards."
             }
             self.isLoading = false
+        }
+    }
+
+    func loadTeamMembers() async {
+        do {
+            let response: PaginatedResponse<AgentDTO> = try await apiClient.get(path: "/api/v1/agents?status=active,support&limit=100")
+            let members = response.items.map { dto in
+                TeamMember(
+                    id: UUID(uuidString: dto.id) ?? UUID(),
+                    name: dto.name,
+                    avatarColor: dto.avatarColor ?? "#3B82F6"
+                )
+            }
+            await MainActor.run {
+                self.teamMembers = members
+            }
+        } catch {
+            await MainActor.run {
+                self.teamMembers = []
+            }
+        }
+    }
+
+    func boardTasks(boardId: UUID) async -> [ProjectTask] {
+        do {
+            let response: PaginatedResponse<TaskDTO> = try await apiClient.get(path: "/api/v1/boards/\(boardId)/tasks")
+            return response.items.map { dto -> ProjectTask in
+                ProjectTask(
+                    id: UUID(uuidString: dto.id) ?? UUID(),
+                    projectId: boardId,
+                    title: dto.title,
+                    description: dto.description ?? "",
+                    status: mapTaskStatus(dto.status),
+                    stage: mapTaskStage(dto.stage),
+                    assigneeId: (dto.assignedAgentId ?? dto.assigneeId).flatMap { UUID(uuidString: $0) },
+                    dueDate: dto.dueAt ?? dto.dueDate,
+                    priority: mapPriority(dto.priority),
+                    tags: dto.tags ?? []
+                )
+            }
+        } catch {
+            return []
         }
     }
 
@@ -177,7 +225,10 @@ final class ProjectsViewModel {
             let tasks: [ProjectTask] = try await apiClient.get(path: "/api/v1/tasks/me")
             await MainActor.run { self.myTasks = tasks }
         } catch {
-            await MainActor.run { self.myTasks = Self.mockTasks }
+            await MainActor.run {
+                self.myTasks = []
+                self.errorMessage = "ORCA task list unavailable. Legacy Projects no longer falls back to mock tasks."
+            }
         }
     }
 
@@ -254,11 +305,6 @@ final class ProjectsViewModel {
         }
     }
 
-    // MARK: - Mock Data
-
-    private func loadMockData() {
-        boardGroups = Self.mockBoardGroups
-    }
 }
 
 // MARK: - Board Group
@@ -349,114 +395,6 @@ struct MoveTaskRequest: Encodable {
 }
 
 struct EmptyBody: Encodable {}
-
-// MARK: - Mock Data
-
-extension ProjectsViewModel {
-
-    static let mockMembers: [TeamMember] = [
-        TeamMember(id: UUID(), name: "Alex Chen", avatarColor: "3B82F6"),
-        TeamMember(id: UUID(), name: "Sam Rivera", avatarColor: "22C55E"),
-        TeamMember(id: UUID(), name: "Jordan Lee", avatarColor: "A855F7"),
-        TeamMember(id: UUID(), name: "Casey Kim", avatarColor: "F97316"),
-    ]
-
-    static let mockBoardGroups: [BoardGroup] = [
-        BoardGroup(
-            id: UUID(),
-            name: "Engineering",
-            boards: [
-                Board(id: UUID(), name: "Backend API", description: "REST & GraphQL endpoints", stageCounts: [.plan: 3, .dev: 5, .verify: 2, .test: 1, .done: 8], taskCount: 19, completedTaskCount: 8, lastActivity: Date().addingTimeInterval(-3600)),
-                Board(id: UUID(), name: "iOS App", description: "Native SwiftUI application", stageCounts: [.plan: 2, .dev: 8, .verify: 3, .test: 2, .done: 12], taskCount: 27, completedTaskCount: 12, lastActivity: Date().addingTimeInterval(-600)),
-                Board(id: UUID(), name: "Infrastructure", description: "CI/CD, monitoring, and deployment", stageCounts: [.plan: 1, .dev: 2, .verify: 1, .test: 0, .done: 5], taskCount: 9, completedTaskCount: 5, lastActivity: Date().addingTimeInterval(-86400)),
-            ],
-            taskCount: 55,
-            completedTaskCount: 25
-        ),
-        BoardGroup(
-            id: UUID(),
-            name: "Product",
-            boards: [
-                Board(id: UUID(), name: "Q1 Roadmap", description: "Feature planning and prioritization", stageCounts: [.plan: 5, .dev: 3, .verify: 2, .test: 1, .done: 4], taskCount: 15, completedTaskCount: 4, lastActivity: Date().addingTimeInterval(-7200)),
-                Board(id: UUID(), name: "User Research", description: "Interviews and usability studies", stageCounts: [.plan: 2, .dev: 1, .verify: 1, .test: 0, .done: 3], taskCount: 7, completedTaskCount: 3, lastActivity: Date().addingTimeInterval(-172800)),
-            ],
-            taskCount: 22,
-            completedTaskCount: 7
-        ),
-        BoardGroup(
-            id: UUID(),
-            name: "Design",
-            boards: [
-                Board(id: UUID(), name: "Design System", description: "Component library and tokens", stageCounts: [.plan: 4, .dev: 6, .verify: 2, .test: 1, .done: 10], taskCount: 23, completedTaskCount: 10, lastActivity: Date().addingTimeInterval(-1800)),
-            ],
-            taskCount: 23,
-            completedTaskCount: 10
-        ),
-    ]
-
-    static let mockTasks: [ProjectTask] = [
-        ProjectTask(
-            id: UUID(),
-            projectId: UUID(),
-            title: "Implement JWT refresh token flow",
-            description: "Add refresh token rotation and proper expiration handling",
-            status: .inProgress,
-            stage: .dev,
-            assigneeId: mockMembers[0].id,
-            dueDate: Date().addingTimeInterval(-86400), // yesterday → overdue
-            priority: .high,
-            tags: ["security", "backend"]
-        ),
-        ProjectTask(
-            id: UUID(),
-            projectId: UUID(),
-            title: "Fix iOS push notification badge count",
-            description: "Badge count not clearing when messages are read",
-            status: .todo,
-            stage: .plan,
-            assigneeId: mockMembers[1].id,
-            dueDate: Date(),
-            priority: .critical,
-            tags: ["ios", "bug"]
-        ),
-        ProjectTask(
-            id: UUID(),
-            projectId: UUID(),
-            title: "Add rate limiting to message API",
-            description: "Implement per-user rate limits for the chat endpoint",
-            status: .todo,
-            stage: .verify,
-            assigneeId: mockMembers[2].id,
-            dueDate: Date().addingTimeInterval(86400), // tomorrow
-            priority: .medium,
-            tags: ["api", "performance"]
-        ),
-        ProjectTask(
-            id: UUID(),
-            projectId: UUID(),
-            title: "Design onboarding flow screens",
-            description: "Create 5 screens for the new user onboarding experience",
-            status: .todo,
-            stage: .plan,
-            assigneeId: mockMembers[3].id,
-            dueDate: Date().addingTimeInterval(172800),
-            priority: .low,
-            tags: ["design", "ux"]
-        ),
-        ProjectTask(
-            id: UUID(),
-            projectId: UUID(),
-            title: "Write unit tests for auth module",
-            description: "Achieve 80% coverage on the authentication module",
-            status: .inProgress,
-            stage: .test,
-            assigneeId: mockMembers[0].id,
-            dueDate: Date().addingTimeInterval(259200),
-            priority: .high,
-            tags: ["testing", "backend"]
-        ),
-    ]
-}
 
 // MARK: - Safe Array Access
 

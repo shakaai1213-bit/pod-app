@@ -208,6 +208,7 @@ struct BoardDetailView: View {
                     KanbanColumn(
                         stage: stage,
                         tasks: tasksByStage[stage] ?? [],
+                        members: viewModel.teamMembers,
                         isCollapsed: collapsedStages.contains(stage),
                         onToggleCollapse: {
                             if collapsedStages.contains(stage) {
@@ -245,6 +246,7 @@ struct BoardDetailView: View {
                 KanbanColumn(
                     stage: selectedStage,
                     tasks: stageTasks,
+                    members: viewModel.teamMembers,
                     isCollapsed: false,
                     onToggleCollapse: {},
                     onTaskTap: { task in selectedTask = task },
@@ -278,9 +280,7 @@ struct BoardDetailView: View {
 
     private func loadTasks() async {
         isLoading = true
-        // Load tasks for this board from API
-        // For now, use filtered mock tasks
-        tasks = Self.mockTasksForBoard(boardId: board.id)
+        tasks = await viewModel.boardTasks(boardId: board.id)
         isLoading = false
     }
 
@@ -292,27 +292,6 @@ struct BoardDetailView: View {
             }
         }
     }
-
-    private static func mockTasksForBoard(boardId: UUID) -> [ProjectTask] {
-        let members = ProjectsViewModel.mockMembers
-        return ProjectStage.allCases.flatMap { stage in
-            let count = Int.random(in: 2...5)
-            return (0..<count).map { i in
-                ProjectTask(
-                    id: UUID(),
-                    projectId: boardId,
-                    title: "\(stage.displayName) task \(i + 1)",
-                    description: "Description for \(stage.displayName) task \(i + 1)",
-                    status: stage == .done ? .done : .todo,
-                    stage: stage,
-                    assigneeId: members.randomElement()?.id,
-                    dueDate: Bool.random() ? Date().addingTimeInterval(Double.random(in: -86400...604800)) : nil,
-                    priority: Priority.allCases.randomElement()!,
-                    tags: Array(["backend", "frontend", "bug", "feature", "docs"].shuffled().prefix(2))
-                )
-            }
-        }
-    }
 }
 
 // MARK: - Kanban Column
@@ -320,6 +299,7 @@ struct BoardDetailView: View {
 private struct KanbanColumn: View {
     let stage: ProjectStage
     let tasks: [ProjectTask]
+    let members: [TeamMember]
     let isCollapsed: Bool
     let onToggleCollapse: () -> Void
     let onTaskTap: (ProjectTask) -> Void
@@ -334,12 +314,12 @@ private struct KanbanColumn: View {
                 ScrollView(.vertical, showsIndicators: false) {
                     LazyVStack(spacing: Theme.xs) {
                         ForEach(tasks) { task in
-                            TaskCardView(task: task, members: ProjectsViewModel.mockMembers)
+                            TaskCardView(task: task, members: members)
                                 .onTapGesture {
                                     onTaskTap(task)
                                 }
                                 .draggable(task.id.uuidString) {
-                                    TaskCardView(task: task, members: ProjectsViewModel.mockMembers)
+                                    TaskCardView(task: task, members: members)
                                         .frame(width: 256)
                                         .opacity(0.8)
                                 }

@@ -11,6 +11,9 @@ final class ORCAProjectsViewModel {
     var selectedProject: ProjectDTO?
     var tasks: [ProjectTaskDTO] = []
     var errorMessage: String?
+    var boardOptions: [ProjectBoardOption] = []
+    var isLoadingBoardOptions = false
+    var boardOptionsMessage: String?
 
     private let repo = ProjectRepository()
 
@@ -84,6 +87,31 @@ final class ORCAProjectsViewModel {
         isLoading = false
     }
 
+    func loadBoardOptions() async {
+        if isLoadingBoardOptions { return }
+        isLoadingBoardOptions = true
+        boardOptionsMessage = nil
+        defer { isLoadingBoardOptions = false }
+
+        do {
+            let response: ProjectBoardListResponse = try await APIClient.shared.get(path: "/api/v1/boards")
+            boardOptions = response.items
+                .map(\.option)
+                .sorted { lhs, rhs in
+                    let lhsIndex = ProjectBoardOption.preferredSlugs.firstIndex(of: lhs.slug) ?? Int.max
+                    let rhsIndex = ProjectBoardOption.preferredSlugs.firstIndex(of: rhs.slug) ?? Int.max
+                    if lhsIndex != rhsIndex { return lhsIndex < rhsIndex }
+                    return lhs.displayName < rhs.displayName
+                }
+            if boardOptions.isEmpty {
+                boardOptionsMessage = "ORCA returned no boards."
+            }
+        } catch {
+            boardOptions = []
+            boardOptionsMessage = "ORCA boards unavailable."
+        }
+    }
+
     func loadTasks(projectId: UUID) async {
         do {
             tasks = try await repo.listTasks(projectId: projectId)
@@ -121,9 +149,9 @@ final class ORCAProjectsViewModel {
 
     // MARK: - Mutations
 
-    func createProject(name: String, goal: String? = nil, priority: Int = 3, stage: String = "blueprint") async {
+    func createProject(name: String, goal: String? = nil, priority: Int = 3, stage: String = "blueprint", boardId: String? = nil) async {
         do {
-            let new = try await repo.createProject(name: name, goal: goal, priority: priority, stage: stage)
+            let new = try await repo.createProject(name: name, goal: goal, priority: priority, stage: stage, boardId: boardId)
             projects.insert(new, at: 0)
         } catch {
             print("Failed to create project: \(error)")
@@ -135,7 +163,8 @@ final class ORCAProjectsViewModel {
         if let idx = projects.firstIndex(where: { $0.id == projectId }) {
             let old = projects[idx]
             var updated = ProjectDTO(
-                id: old.id, name: old.name, goal: old.goal,
+                id: old.id, boardId: old.boardId, boardIds: old.boardIds,
+                name: old.name, goal: old.goal,
                 description: old.description, status: toStatus,
                 priority: old.priority, projectedCost: old.projectedCost,
                 actualCost: old.actualCost, createdBy: old.createdBy,
@@ -234,5 +263,97 @@ final class ORCAProjectsViewModel {
             tasks = oldTasks
             errorMessage = "Failed to move project task: \(error.localizedDescription)"
         }
+    }
+}
+
+struct ProjectBoardOption: Identifiable, Sendable, Hashable {
+    let id: String
+    let slug: String
+    let name: String
+    let layer: String?
+    let component: String?
+
+    var displayName: String { component?.isEmpty == false ? component! : name }
+    var detail: String {
+        [slug, layer]
+            .compactMap { value in
+                guard let value, !value.isEmpty else { return nil }
+                return value
+            }
+            .joined(separator: " · ")
+    }
+
+    static let preferredSlugs = [
+        "north-star", "pod", "surfaces", "orca", "memory", "compute", "nerve",
+        "governance", "jarvis", "schoolhouse", "fund", "products", "tools"
+    ]
+}
+
+private struct ProjectBoardListResponse: Decodable {
+    let items: [ProjectBoardDTO]
+
+    init(from decoder: Decoder) throws {
+        if var unkeyed = try? decoder.unkeyedContainer() {
+            var values: [ProjectBoardDTO] = []
+            while !unkeyed.isAtEnd {
+                values.append(try unkeyed.decode(ProjectBoardDTO.self))
+            }
+            items = values
+            return
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        items = try container.decode([ProjectBoardDTO].self, forKey: .items)
+    }
+
+    private enum CodingKeys: String, CodingKey { case items }
+}
+
+private struct ProjectBoardDTO: Decodable {
+    let id: String
+    let slug: String
+    let name: String
+    let layer: String?
+    let component: String?
+
+    var option: ProjectBoardOption {
+        ProjectBoardOption(id: id, slug: slug, name: name, layer: layer, component: component)
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeProjectFlexibleString(forKey: .id)
+        slug = try container.decodeProjectFlexibleStringIfPresent(forKey: .slug) ?? id
+        name = try container.decodeProjectFlexibleStringIfPresent(forKey: .name) ?? slug
+        layer = try container.decodeProjectFlexibleStringIfPresent(forKey: .layer)
+        component = try container.decodeProjectFlexibleStringIfPresent(forKey: .component)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, slug, name, layer, component
+    }
+}
+
+private extension KeyedDecodingContainer {
+    func decodeProjectFlexibleString(forKey key: Key) throws -> String {
+        if let value = try? decode(String.self, forKey: key) {
+            return value
+        }
+        if let value = try? decode(Int.self, forKey: key) {
+            return "\(value)"
+        }
+        if let value = try? decode(UUID.self, forKey: key) {
+            return value.uuidString
+        }
+        throw DecodingError.typeMismatch(
+            String.self,
+            DecodingError.Context(codingPath: codingPath + [key], debugDescription: "Expected string-compatible value")
+        )
+    }
+
+    func decodeProjectFlexibleStringIfPresent(forKey key: Key) throws -> String? {
+        if !contains(key) || (try? decodeNil(forKey: key)) == true {
+            return nil
+        }
+        return try decodeProjectFlexibleString(forKey: key)
     }
 }

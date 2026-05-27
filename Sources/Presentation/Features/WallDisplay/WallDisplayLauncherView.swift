@@ -89,8 +89,8 @@ struct WallDisplayLauncherView: View {
                 .podTextStyle(.body, color: AppColors.textSecondary)
 
             Text(
-                "Shows live agent statuses, activity feed, and system health. "
-                + "Designed for dedicated wall-mounted iPad displays."
+                "Currently shows a snapshot-backed ambient view. "
+                + "Use Crew and Runtime for live ORCA truth until Wall Display is wired to ORCA."
             )
             .podTextStyle(.caption, color: AppColors.textTertiary)
             .multilineTextAlignment(.center)

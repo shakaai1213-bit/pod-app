@@ -1,13 +1,157 @@
 import SwiftUI
+import Observation
 
 // MARK: - Agents View (Cockpit, per SPEC-POD-AGENTS-TAB-2026-05-23)
 // Slice 1: section frames + headers + design tokens wired. Data + actions in subsequent slices.
+
+@Observable
+final class FundLandingViewModel {
+    var landing: FundLanding?
+    var isLoading = false
+    var errorMessage: String?
+
+    private let apiClient: APIClient
+
+    init(apiClient: APIClient = .shared) {
+        self.apiClient = apiClient
+    }
+
+    @MainActor
+    func load() async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        do {
+            landing = try await apiClient.get(path: "/api/v1/fund/landing")
+        } catch {
+            errorMessage = "Fund landing unavailable from ORCA"
+        }
+    }
+}
+
+struct FundLanding: Decodable {
+    let status: String
+    let schemaVersion: String
+    let route: String
+    let sourceArtifact: String
+    let sourceReadable: Bool
+    let sourceFresh: Bool
+    let sourceMtime: String?
+    let sourceAgeSeconds: Int?
+    let generatedAt: String?
+    let podPolicy: String
+    let verifiedFinancialDataAvailable: Bool
+    let mode: String?
+    let readiness: String?
+    let headline: String?
+    let accountUsd: Double?
+    let netPnlUsd: Double?
+    let closedTrades: Int?
+    let sharpe: Double?
+    let gateReady: Bool?
+    let killSwitchStatus: String?
+    let req008OiConcentrationEth: Double?
+    let req008ThresholdPercent: Double?
+    let req008Breached: Bool?
+    let promotionDecision: String?
+    let algoControlStatus: String?
+    let blockers: [String]
+    let degradedReason: String?
+    let summary: FundLandingSummary?
+    let agentLanding: FundAgentLanding?
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case schemaVersion = "schema_version"
+        case route
+        case sourceArtifact = "source_artifact"
+        case sourceReadable = "source_readable"
+        case sourceFresh = "source_fresh"
+        case sourceMtime = "source_mtime"
+        case sourceAgeSeconds = "source_age_seconds"
+        case generatedAt = "generated_at"
+        case podPolicy = "pod_policy"
+        case verifiedFinancialDataAvailable = "verified_financial_data_available"
+        case mode
+        case readiness
+        case headline
+        case accountUsd = "account_usd"
+        case netPnlUsd = "net_pnl_usd"
+        case closedTrades = "closed_trades"
+        case sharpe
+        case gateReady = "gate_ready"
+        case killSwitchStatus = "kill_switch_status"
+        case req008OiConcentrationEth = "req008_oi_concentration_eth"
+        case req008ThresholdPercent = "req008_threshold_percent"
+        case req008Breached = "req008_breached"
+        case promotionDecision = "promotion_decision"
+        case algoControlStatus = "algo_control_status"
+        case blockers
+        case degradedReason = "degraded_reason"
+        case summary
+        case agentLanding = "agent_landing"
+    }
+
+    var isAvailable: Bool { status == "available" }
+    var freshnessLabel: String {
+        if let sourceAgeSeconds {
+            if sourceAgeSeconds < 60 { return "\(sourceAgeSeconds)s old" }
+            if sourceAgeSeconds < 3_600 { return "\(sourceAgeSeconds / 60)m old" }
+            return "\(sourceAgeSeconds / 3_600)h old"
+        }
+        return sourceFresh ? "fresh" : "unknown age"
+    }
+}
+
+struct FundLandingSummary: Decodable {
+    let agentLandingReady: Bool?
+    let dataApplicationStatus: String?
+
+    enum CodingKeys: String, CodingKey {
+        case agentLandingReady = "agent_landing_ready"
+        case dataApplicationStatus = "data_application_status"
+    }
+}
+
+struct FundAgentLanding: Decodable {
+    let canonicalDoc: String?
+    let localPointer: String?
+    let dataApplication: FundDataApplication?
+    let howToStart: [String]?
+    let standards: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case canonicalDoc = "canonical_doc"
+        case localPointer = "local_pointer"
+        case dataApplication = "data_application"
+        case howToStart = "how_to_start"
+        case standards
+    }
+}
+
+struct FundDataApplication: Decodable {
+    let status: String?
+    let intendedUse: String?
+    let tradingActionable: Bool?
+    let rawDataPolicy: String?
+    let feedCount: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case intendedUse = "intended_use"
+        case tradingActionable = "trading_actionable"
+        case rawDataPolicy = "raw_data_policy"
+        case feedCount = "feed_count"
+    }
+}
 
 struct AgentsView: View {
 
     @EnvironmentObject private var appState: AppState
     @State private var viewModel = AgentsViewModel()
     @State private var focusModel = AgentFocusCardsModel()
+    @State private var fundLandingModel = FundLandingViewModel()
     @State private var selectedAgent: Agent?
     @State private var selectedFocusCard: AgentFocusCard?
     @State private var showingLogStream: Agent?
@@ -32,23 +176,11 @@ struct AgentsView: View {
                         .padding(.horizontal, 16)
                         .padding(.bottom, 14)
 
-                    protectedChiefFundSection
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 14)
-
                     lanesStrip
                         .padding(.horizontal, 16)
                         .padding(.bottom, 14)
 
                     workersSection
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 14)
-
-                    computeStrip
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 10)
-
-                    natsStrip
                         .padding(.horizontal, 16)
                         .padding(.bottom, 80)
                 }
@@ -56,6 +188,7 @@ struct AgentsView: View {
             .background(AppColors.backgroundPrimary.ignoresSafeArea())
             .refreshable {
                 await focusModel.load(force: true)
+                await fundLandingModel.load()
                 await viewModel.loadAgents()
                 await viewModel.loadAllInboxTails()
             }
@@ -79,6 +212,7 @@ struct AgentsView: View {
             }
             .task {
                 await focusModel.load()
+                await fundLandingModel.load()
                 await viewModel.loadAgents()
                 consumePendingActivationAgent()
                 viewModel.subscribeToAgentState()
@@ -406,6 +540,8 @@ struct AgentsView: View {
                 .background(AppColors.accentWarning.opacity(0.07))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
 
+            fundLandingCard
+
             LazyVGrid(columns: [
                 GridItem(.flexible(), spacing: 8),
                 GridItem(.flexible(), spacing: 8)
@@ -468,6 +604,151 @@ struct AgentsView: View {
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(AppColors.accentWarning.opacity(0.18), lineWidth: 1)
         )
+    }
+
+    private var fundLandingCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "lock.shield")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(AppColors.accentWarning)
+                Text("Fund Landing")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(AppColors.textPrimary)
+                Spacer()
+                if fundLandingModel.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                } else if let landing = fundLandingModel.landing {
+                    statusPill(landing.isAvailable ? "ORCA LIVE" : "DEGRADED", color: landing.isAvailable ? AppColors.accentSuccess : AppColors.accentWarning)
+                } else {
+                    statusPill("WAITING", color: AppColors.textTertiary)
+                }
+            }
+
+            if let landing = fundLandingModel.landing {
+                Text(landing.headline ?? landing.degradedReason ?? "No Fund landing artifact available.")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                LazyVGrid(columns: [
+                    GridItem(.flexible(), spacing: 8),
+                    GridItem(.flexible(), spacing: 8)
+                ], spacing: 8) {
+                    fundMetric("Mode", landing.mode ?? "—")
+                    fundMetric("Readiness", landing.readiness ?? "—")
+                    fundMetric("Account", money(landing.accountUsd))
+                    fundMetric("Net P&L", money(landing.netPnlUsd))
+                    fundMetric("Trades", landing.closedTrades.map(String.init) ?? "—")
+                    fundMetric("Sharpe", number(landing.sharpe))
+                    fundMetric("Gate", boolLabel(landing.gateReady))
+                    fundMetric("Kill", landing.killSwitchStatus ?? "—")
+                    fundMetric("REQ-008", req008Label(landing))
+                    fundMetric("Promote", landing.promotionDecision ?? "—")
+                    fundMetric("Landing", landing.summary?.agentLandingReady == true ? "ready" : "—")
+                    fundMetric("Data App", landing.summary?.dataApplicationStatus ?? landing.agentLanding?.dataApplication?.status ?? "—")
+                }
+
+                if let agentLanding = landing.agentLanding {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("Agent start")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(AppColors.textTertiary)
+                        if let canonicalDoc = agentLanding.canonicalDoc {
+                            Text(canonicalDoc)
+                                .font(.system(size: 10))
+                                .foregroundColor(AppColors.textSecondary)
+                                .lineLimit(2)
+                        }
+                        if let dataApplication = agentLanding.dataApplication {
+                            Text("Data application: \(dataApplication.status ?? "unknown") · research-only · trading_actionable=\(dataApplication.tradingActionable == true ? "true" : "false")")
+                                .font(.system(size: 10))
+                                .foregroundColor(AppColors.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+
+                if !landing.blockers.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Blockers")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(AppColors.textTertiary)
+                        ForEach(landing.blockers, id: \.self) { blocker in
+                            Text("• \(blocker)")
+                                .font(.system(size: 11))
+                                .foregroundColor(AppColors.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+
+                Text("Source: ORCA \(landing.route) · \(landing.freshnessLabel) · read-only")
+                    .font(.system(size: 10))
+                    .foregroundColor(AppColors.textTertiary)
+                    .lineLimit(2)
+            } else {
+                Text(fundLandingModel.errorMessage ?? "Waiting for ORCA Fund landing route.")
+                    .font(.system(size: 12))
+                    .foregroundColor(AppColors.textSecondary)
+            }
+        }
+        .padding(12)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(AppColors.accentWarning.opacity(0.22), lineWidth: 1)
+        )
+    }
+
+    private func fundMetric(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label.uppercased())
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(AppColors.textTertiary)
+            Text(value)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(AppColors.textPrimary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(8)
+        .background(AppColors.backgroundPrimary)
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+    }
+
+    private func statusPill(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.system(size: 10, weight: .bold))
+            .foregroundColor(color)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(color.opacity(0.12))
+            .clipShape(Capsule())
+    }
+
+    private func money(_ value: Double?) -> String {
+        guard let value else { return "—" }
+        return value.formatted(.currency(code: "USD").precision(.fractionLength(2)))
+    }
+
+    private func number(_ value: Double?) -> String {
+        guard let value else { return "—" }
+        return value.formatted(.number.precision(.fractionLength(3)))
+    }
+
+    private func boolLabel(_ value: Bool?) -> String {
+        guard let value else { return "—" }
+        return value ? "Yes" : "No"
+    }
+
+    private func req008Label(_ landing: FundLanding) -> String {
+        let concentration = landing.req008OiConcentrationEth.map { $0.formatted(.number.precision(.fractionLength(2))) } ?? "—"
+        let threshold = landing.req008ThresholdPercent.map { $0.formatted(.number.precision(.fractionLength(1))) } ?? "—"
+        let breached = landing.req008Breached == true ? "breach" : "ok"
+        return "\(concentration)/\(threshold)% · \(breached)"
     }
 
     // MARK: - Page Header
@@ -560,7 +841,7 @@ struct AgentsView: View {
         switch agentsFilter {
         case .all:      return AgentRosterPolicy.filterActive(all) + AgentRosterPolicy.filterDormant(all)
         case .active:   return all.filter { $0.rosterLane == .activeMain }
-                             .sorted { AgentRosterPolicy.sortKey(for: $0.name) < AgentRosterPolicy.sortKey(for: $1.name) }
+                             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         case .support:  return all.filter { $0.rosterLane == .supportRuntime }
                              .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         case .archived: return AgentRosterPolicy.filterDormant(all)
@@ -768,65 +1049,6 @@ struct AgentsView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .frame(minHeight: 56)
-    }
-
-    // MARK: - COMPUTE strip (§6) — placeholders this slice
-
-    private var computeStrip: some View {
-        HStack(spacing: 16) {
-            Text("COMPUTE")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundColor(AppColors.textPrimary)
-            stripStat("—", "calls/hr")
-            stripStat("—", "mix")
-            stripStat("—", "anon")
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 14)
-        .frame(height: 60)
-        .background(AppColors.backgroundSecondary)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.radiusMedium)
-                .strokeBorder(AppColors.border, lineWidth: 0.5)
-        )
-    }
-
-    // MARK: - NATS strip (§7) — placeholders this slice
-
-    private var natsStrip: some View {
-        HStack(spacing: 12) {
-            Text("NATS")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundColor(AppColors.textPrimary)
-            Circle().fill(AppColors.textTertiary).frame(width: 8, height: 8)
-            Text("status pending")
-                .font(.system(size: 12))
-                .foregroundColor(AppColors.textTertiary)
-            Spacer(minLength: 0)
-            Text("last: —")
-                .font(.system(size: 11))
-                .foregroundColor(AppColors.textTertiary)
-        }
-        .padding(.horizontal, 14)
-        .frame(height: 48)
-        .background(AppColors.backgroundSecondary)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.radiusMedium)
-                .strokeBorder(AppColors.border, lineWidth: 0.5)
-        )
-    }
-
-    private func stripStat(_ value: String, _ label: String) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(value)
-                .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                .foregroundColor(AppColors.textPrimary)
-            Text(label)
-                .font(.system(size: 10))
-                .foregroundColor(AppColors.textTertiary)
-        }
     }
 
     // MARK: - Skeleton / Empty helpers

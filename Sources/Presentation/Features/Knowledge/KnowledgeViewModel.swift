@@ -1,6 +1,52 @@
 import Foundation
 import os.log
 
+enum JSONValue: Codable, Hashable, Sendable {
+    case string(String)
+    case number(Double)
+    case bool(Bool)
+    case object([String: JSONValue])
+    case array([JSONValue])
+    case null
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            self = .null
+        } else if let value = try? container.decode(Bool.self) {
+            self = .bool(value)
+        } else if let value = try? container.decode(Double.self) {
+            self = .number(value)
+        } else if let value = try? container.decode(String.self) {
+            self = .string(value)
+        } else if let value = try? container.decode([String: JSONValue].self) {
+            self = .object(value)
+        } else if let value = try? container.decode([JSONValue].self) {
+            self = .array(value)
+        } else {
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unsupported JSON value")
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .string(let value):
+            try container.encode(value)
+        case .number(let value):
+            try container.encode(value)
+        case .bool(let value):
+            try container.encode(value)
+        case .object(let value):
+            try container.encode(value)
+        case .array(let value):
+            try container.encode(value)
+        case .null:
+            try container.encodeNil()
+        }
+    }
+}
+
 struct WikiDocument: Identifiable, Codable, Hashable, Sendable {
     var id: String { path }
     let path: String
@@ -801,6 +847,53 @@ struct MemoryCandidateActionResponse: Codable, Hashable, Sendable {
     }
 }
 
+struct MemoryQueryRequest: Codable, Sendable {
+    let query: String
+    let scopes: [String]
+    let limit: Int
+    let includeProtected: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case query, scopes, limit
+        case includeProtected = "include_protected"
+    }
+}
+
+struct MemoryQueryResult: Codable, Identifiable, Hashable, Sendable {
+    var id: String { "\(scope)|\(sourceRef)|\(title)|\(path ?? "")" }
+    let scope: String
+    let sourceType: String
+    let sourceLabel: String
+    let sourceRef: String
+    let title: String
+    let snippet: String
+    let path: String?
+    let score: Double
+    let protected: Bool
+    let provenance: [String: JSONValue]?
+
+    enum CodingKeys: String, CodingKey {
+        case scope, title, snippet, path, score, protected, provenance
+        case sourceType = "source_type"
+        case sourceLabel = "source_label"
+        case sourceRef = "source_ref"
+    }
+}
+
+struct MemoryQueryResponse: Codable, Hashable, Sendable {
+    let query: String
+    let total: Int
+    let scopesUsed: [String]
+    let skippedScopes: [String]
+    let items: [MemoryQueryResult]
+
+    enum CodingKeys: String, CodingKey {
+        case query, total, items
+        case scopesUsed = "scopes_used"
+        case skippedScopes = "skipped_scopes"
+    }
+}
+
 struct MemoryCandidateQueueSummary: Codable, Hashable, Sendable {
     let total: Int
     let byLifecycle: [String: Int]
@@ -1082,6 +1175,8 @@ final class KnowledgeViewModel {
     var dailyLogExtraction: DailyLogExtractionResponse?
     var memoryCandidateQueue: MemoryCandidateQueueResponse?
     var memoryOps: MemoryOpsResponse?
+    var memoryQueryText: String = ""
+    var memoryQueryResponse: MemoryQueryResponse?
     var notes: [OrcaNote] = []
     var noteGovernanceAudit: NoteGovernanceAuditResponse?
     var noteGovernanceQueue: NoteGovernanceQueueResponse?
@@ -1097,6 +1192,7 @@ final class KnowledgeViewModel {
     var isLoadingRuntimeReviewQueue: Bool = false
     var isLoadingRuntimeSync: Bool = false
     var isLoadingMemoryCandidates: Bool = false
+    var isLoadingMemoryQuery: Bool = false
     var isLoadingNotes: Bool = false
     var isExportingReviewSync: Bool = false
     var isExportingRuntimeSync: Bool = false
@@ -1118,6 +1214,7 @@ final class KnowledgeViewModel {
     var runtimeSyncMessage: String?
     var runtimeBurnDownMessage: String?
     var memoryCandidatesErrorMessage: String?
+    var memoryQueryErrorMessage: String?
     var notesErrorMessage: String?
     var noteGovernanceErrorMessage: String?
     var noteGovernanceExportMessage: String?
@@ -1169,6 +1266,13 @@ final class KnowledgeViewModel {
 
     var durableLifecycleCounts: [String: Int] {
         memoryOps?.durableByLifecycle ?? [:]
+    }
+
+    var durablePendingCount: Int {
+        (memoryCandidateQueue?.items ?? []).filter {
+            let lifecycle = $0.effectiveLifecycle.lowercased()
+            return lifecycle == "candidate" || lifecycle == "pending" || lifecycle == "waiting_sensitive_review"
+        }.count
     }
 
     // MARK: - Private
@@ -1474,6 +1578,42 @@ final class KnowledgeViewModel {
                 self.memoryOps = nil
                 self.memoryCandidatesErrorMessage = error.localizedDescription
                 self.isLoadingMemoryCandidates = false
+            }
+        }
+    }
+
+    func queryMemory() async {
+        let query = memoryQueryText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else {
+            await MainActor.run {
+                self.memoryQueryResponse = nil
+                self.memoryQueryErrorMessage = nil
+            }
+            return
+        }
+
+        isLoadingMemoryQuery = true
+        memoryQueryErrorMessage = nil
+        defer { isLoadingMemoryQuery = false }
+
+        do {
+            let response: MemoryQueryResponse = try await APIClient.shared.post(
+                path: "/api/v1/memory/query",
+                body: MemoryQueryRequest(
+                    query: query,
+                    scopes: ["durable", "starfish", "research", "chief_graph"],
+                    limit: 8,
+                    includeProtected: true
+                )
+            )
+            await MainActor.run {
+                self.memoryQueryResponse = response
+                self.memoryQueryErrorMessage = nil
+            }
+        } catch {
+            await MainActor.run {
+                self.memoryQueryResponse = nil
+                self.memoryQueryErrorMessage = "Memory search unavailable: \(error.localizedDescription)"
             }
         }
     }

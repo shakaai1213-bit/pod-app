@@ -81,6 +81,97 @@ struct MacroPrediction: Identifiable {
     let conviction: Double       // 0.0 – 1.0
 }
 
+struct EarningsQualitySurface {
+    let generatedAt: String?
+    let policy: String
+    let topTen: [EarningsQualityCandidate]
+    let chartSetups: [ChartSetupLevel]
+    let sectorTrends: [SectorETFTrend]
+    let gates: [EvidenceGate]
+    let evidenceRefs: [String]
+}
+
+struct EarningsQualityCandidate: Identifiable {
+    let id: String
+    let ticker: String
+    let score: Double?
+    let headline: String?
+    let qualityNote: String?
+}
+
+struct ChartSetupLevel: Identifiable {
+    let id: String
+    let ticker: String
+    let setup: String?
+    let support: Double?
+    let resistance: Double?
+    let stop: Double?
+    let target: Double?
+}
+
+struct SectorETFTrend: Identifiable {
+    let id: String
+    let symbol: String
+    let trend: String
+    let score: Double?
+    let note: String?
+}
+
+struct EvidenceGate: Identifiable {
+    let id: String
+    let name: String
+    let status: String
+    let note: String?
+}
+
+struct MarketPredictionBrief {
+    let generatedAt: String?
+    let asOfDate: String?
+    let marketRows: [MarketTrendPrediction]
+    let earningsRows: [WeekAheadEarningsPrediction]
+    let calibration: PredictionCalibrationSummary?
+}
+
+struct MarketTrendPrediction: Identifiable {
+    let id: String
+    let symbol: String
+    let name: String?
+    let assetClass: String?
+    let lastPrice: Double?
+    let return30d: Double?
+    let return60d: Double?
+    let return90d: Double?
+    let prediction30d: String?
+    let prediction60d: String?
+    let prediction90d: String?
+    let confidence30d: Double?
+    let confidence60d: Double?
+    let confidence90d: Double?
+}
+
+struct WeekAheadEarningsPrediction: Identifiable {
+    let id: String
+    let symbol: String
+    let companyName: String?
+    let sector: String?
+    let earningsDate: String?
+    let daysUntil: Int?
+    let prediction: String?
+    let confidence: Double?
+    let qualityScore: Double?
+    let epsEstimate: Double?
+    let chartSetup: String?
+    let lastPrice: Double?
+}
+
+struct PredictionCalibrationSummary {
+    let totalPredictions: Int
+    let resolved: Int
+    let unresolved: Int
+    let accuracy: Double?
+    let read: String?
+}
+
 struct TradingDashboard {
     let bots: [TradingBot]
     let oracle: OracleState
@@ -95,157 +186,117 @@ struct TradingDashboard {
 @Observable
 final class TradingViewModel {
 
-    var dashboard: TradingDashboard = TradingViewModel.mockDashboard
+    var dashboard: TradingDashboard = TradingDashboard.empty
     var isLoading: Bool = false
     var lastUpdated: Date? = nil
     var errorMessage: String? = nil
+    var isSnapshot: Bool = true
+    var earningsQuality: EarningsQualitySurface? = nil
+    var earningsQualityError: String? = nil
+    var marketPredictionBrief: MarketPredictionBrief? = nil
+    var marketPredictionError: String? = nil
 
     // MARK: - Load
 
     func loadData() async {
         isLoading = true
         errorMessage = nil
+        earningsQualityError = nil
+        marketPredictionError = nil
 
         do {
-            let fetched = try await fetchFromChief()
+            let landing: FundLanding = try await APIClient.shared.get(path: "/api/v1/fund/landing")
+            guard landing.isAvailable else {
+                throw APIError(code: 503, message: landing.degradedReason ?? "Fund landing degraded")
+            }
+            let fetched = TradingDashboard.fundLanding(landing)
             dashboard = fetched
+            isSnapshot = false
             lastUpdated = Date()
         } catch {
-            // Fall back to mock data; surface the note but don't block the UI
-            errorMessage = "Live data unavailable — showing cached snapshot"
-            dashboard = TradingViewModel.mockDashboard
+            errorMessage = "ORCA Fund landing unavailable. Pod is not showing direct Chief data or snapshot financials."
+            dashboard = TradingDashboard.empty
+            isSnapshot = true
             lastUpdated = Date()
         }
 
+        await loadEarningsQuality()
+        await loadMarketPredictionBrief()
         isLoading = false
     }
 
-    // MARK: - Network
-
-    private func fetchFromChief() async throws -> TradingDashboard {
-        guard let url = URL(string: "http://100.80.44.41/api/trading") else {
-            throw URLError(.badURL)
+    private func loadEarningsQuality() async {
+        do {
+            let dto: EarningsQualitySurfaceDTO = try await APIClient.shared.get(path: "/api/v1/research/earnings-quality/latest")
+            earningsQuality = dto.toDomain()
+            earningsQualityError = nil
+        } catch let apiError as APIError where apiError.code == 404 {
+            earningsQuality = nil
+            earningsQualityError = "Waiting for ORCA /api/v1/research/earnings-quality/latest."
+        } catch {
+            earningsQuality = nil
+            earningsQualityError = "Earnings quality research is unavailable from ORCA."
         }
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 8
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw URLError(.badServerResponse)
-        }
-
-        let raw = try JSONDecoder().decode(TradingDashboardDTO.self, from: data)
-        return raw.toDomain()
     }
 
-    // MARK: - Mock Data (real numbers from Chief's Mac state)
-
-    static var mockDashboard: TradingDashboard {
-        let calendar = Calendar.current
-        let now = Date()
-
-        func date(daysFromNow n: Int) -> Date {
-            calendar.date(byAdding: .day, value: n, to: now) ?? now
+    private func loadMarketPredictionBrief() async {
+        do {
+            let dto: MarketPredictionBriefDTO = try await APIClient.shared.get(path: "/api/v1/research/predictions/market-brief/latest")
+            marketPredictionBrief = dto.toDomain()
+            marketPredictionError = nil
+        } catch let apiError as APIError where apiError.code == 404 {
+            marketPredictionBrief = nil
+            marketPredictionError = "Waiting for ORCA /api/v1/research/predictions/market-brief/latest."
+        } catch {
+            marketPredictionBrief = nil
+            marketPredictionError = "Market prediction brief is unavailable from ORCA."
         }
+    }
+}
 
-        let bots: [TradingBot] = [
-            TradingBot(
-                id: "octopus",
-                name: "Octopus",
-                version: "",
-                balance: 66_055.00,
-                pnl: 65_855.00,
-                winRate: 0.0229,
-                openPositions: 765,
-                status: .running,
-                regime: nil,
-                tradesTotal: 14_237
-            ),
-            TradingBot(
-                id: "stitch",
-                name: "Stitch",
-                version: "v6.4",
-                balance: 200.31,
-                pnl: 0.31,
-                winRate: 0.33,
-                openPositions: 0,
-                status: .running,
-                regime: .caution,
-                tradesTotal: nil
-            ),
-            TradingBot(
-                id: "lilo",
-                name: "Lilo",
-                version: "v2.0",
-                balance: 213.06,
-                pnl: 13.06,
-                winRate: 0,
-                openPositions: 1,
-                status: .running,
-                regime: nil,
-                tradesTotal: nil
-            )
-        ]
+extension TradingDashboard {
+    static var empty: TradingDashboard {
+        TradingDashboard(
+            bots: [],
+            oracle: OracleState(score: 0, modelVersion: "ORCA Fund", predictionCount: 0, statusNote: "No ORCA Fund landing available.", predictions: []),
+            research: ResearchSummary(activeArms: 0, experimentsToday: 0, bestScore: 0, bestExperiment: 0, arms: [], queueNote: "Fund research details are not exposed through ORCA yet."),
+            earnings: [],
+            macro: []
+        )
+    }
+
+    static func fundLanding(_ landing: FundLanding) -> TradingDashboard {
+        let bot = TradingBot(
+            id: "chief-fund",
+            name: "Chief Fund",
+            version: landing.schemaVersion,
+            balance: landing.accountUsd ?? 0,
+            pnl: landing.netPnlUsd ?? 0,
+            winRate: landing.sharpe ?? 0,
+            openPositions: 0,
+            status: landing.gateReady == true ? .running : .paused,
+            regime: landing.gateReady == true ? .bull : .caution,
+            tradesTotal: landing.closedTrades
+        )
 
         let oracle = OracleState(
-            score: -0.4829,
-            modelVersion: "v0.1",
-            predictionCount: 100,
-            statusNote: "Market selection under review",
-            predictions: [
-                OraclePrediction(
-                    id: "PM_1",
-                    question: "Will BTC reach $150k in 2026?",
-                    direction: "NO",
-                    confidence: 0.719,
-                    volume: 103_512_441
-                ),
-                OraclePrediction(
-                    id: "PM_2",
-                    question: "Will ETH outperform BTC in Q2 2026?",
-                    direction: "NO",
-                    confidence: 0.614,
-                    volume: 24_890_000
-                ),
-                OraclePrediction(
-                    id: "PM_3",
-                    question: "Will the Fed cut rates before June 2026?",
-                    direction: "YES",
-                    confidence: 0.581,
-                    volume: 67_200_000
-                )
-            ]
+            score: landing.gateReady == true ? 1 : -1,
+            modelVersion: landing.schemaVersion,
+            predictionCount: 0,
+            statusNote: landing.headline ?? landing.readiness ?? "Fund landing available from ORCA.",
+            predictions: []
         )
 
         let research = ResearchSummary(
-            activeArms: 10,
-            experimentsToday: 2_250,
-            bestScore: 70.37,
-            bestExperiment: 66,
-            arms: [
-                ResearchArm(id: "sol", symbol: "SOL", takeProfit: 5.0, stopLoss: 2.0, pnlPercent: 61.0),
-                ResearchArm(id: "btc", symbol: "BTC", takeProfit: 4.0, stopLoss: 0.5, pnlPercent: 31.5),
-                ResearchArm(id: "eth", symbol: "ETH", takeProfit: 2.0, stopLoss: 0.5, pnlPercent: 8.5)
-            ],
-            queueNote: "EMA cloud: live · Exp 70-75 in queue"
+            activeArms: 1,
+            experimentsToday: landing.closedTrades ?? 0,
+            bestScore: landing.sharpe ?? 0,
+            bestExperiment: 0,
+            arms: [],
+            queueNote: landing.blockers.isEmpty ? "No blockers reported by Fund landing." : landing.blockers.joined(separator: " · ")
         )
 
-        let earnings: [EarningsEvent] = [
-            EarningsEvent(id: "tsla", ticker: "TSLA", date: date(daysFromNow: 10), direction: .short,   confidence: 0.52),
-            EarningsEvent(id: "nvda", ticker: "NVDA", date: date(daysFromNow: 11), direction: .long,    confidence: 0.68),
-            EarningsEvent(id: "meta", ticker: "META", date: date(daysFromNow: 11), direction: .long,    confidence: 0.65),
-            EarningsEvent(id: "msft", ticker: "MSFT", date: date(daysFromNow: 18), direction: .long,    confidence: 0.71),
-            EarningsEvent(id: "aapl", ticker: "AAPL", date: date(daysFromNow: 19), direction: .neutral, confidence: 0.48)
-        ]
-
-        let macro: [MacroPrediction] = [
-            MacroPrediction(id: "qqq-w", instrument: "QQQ", timeframe: "Weekly",  regime: .bull,    conviction: 0.64),
-            MacroPrediction(id: "qqq-m", instrument: "QQQ", timeframe: "Monthly", regime: .caution, conviction: 0.51),
-            MacroPrediction(id: "spy-w", instrument: "SPY", timeframe: "Weekly",  regime: .caution, conviction: 0.58),
-            MacroPrediction(id: "spy-m", instrument: "SPY", timeframe: "Monthly", regime: .bull,    conviction: 0.62)
-        ]
-
-        return TradingDashboard(bots: bots, oracle: oracle, research: research, earnings: earnings, macro: macro)
+        return TradingDashboard(bots: [bot], oracle: oracle, research: research, earnings: [], macro: [])
     }
 }
 
@@ -395,5 +446,313 @@ private struct MacroPredictionDTO: Decodable {
         guard let r = MarketRegime(rawValue: regime) else { return nil }
         return MacroPrediction(id: id, instrument: instrument,
                                timeframe: timeframe, regime: r, conviction: conviction)
+    }
+}
+
+private struct EarningsQualitySurfaceDTO: Decodable {
+    let generatedAt: String?
+    let policy: String?
+    let topTen: [EarningsQualityCandidateDTO]
+    let chartSetups: [ChartSetupLevelDTO]
+    let sectorTrends: [SectorETFTrendDTO]
+    let gates: [EvidenceGateDTO]
+    let evidenceRefs: [String]
+
+    private enum CodingKeys: String, CodingKey {
+        case generatedAt = "generated_at"
+        case policy = "pod_policy"
+        case topTen = "top_10"
+        case candidates
+        case chartSetups = "chart_setup_levels"
+        case chartSetupLevels = "chart_setups"
+        case sectorTrends = "sector_etf_trend_tape"
+        case sectorETFTrendTape = "sector_trends"
+        case gates
+        case evidenceGates = "evidence_gates"
+        case evidenceAndGates = "evidence_and_gates"
+        case evidenceRefs = "evidence_refs"
+        case sourceRefs = "source_refs"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        generatedAt = try container.decodeIfPresent(String.self, forKey: .generatedAt)
+        policy = try container.decodeIfPresent(String.self, forKey: .policy)
+        topTen = try container.decodeIfPresent([EarningsQualityCandidateDTO].self, forKey: .topTen)
+            ?? container.decodeIfPresent([EarningsQualityCandidateDTO].self, forKey: .candidates)
+            ?? []
+        chartSetups = try container.decodeIfPresent([ChartSetupLevelDTO].self, forKey: .chartSetups)
+            ?? container.decodeIfPresent([ChartSetupLevelDTO].self, forKey: .chartSetupLevels)
+            ?? []
+        sectorTrends = try container.decodeIfPresent([SectorETFTrendDTO].self, forKey: .sectorTrends)
+            ?? container.decodeIfPresent([SectorETFTrendDTO].self, forKey: .sectorETFTrendTape)
+            ?? []
+        gates = try container.decodeIfPresent([EvidenceGateDTO].self, forKey: .gates)
+            ?? container.decodeIfPresent([EvidenceGateDTO].self, forKey: .evidenceGates)
+            ?? container.decodeIfPresent([EvidenceGateDTO].self, forKey: .evidenceAndGates)
+            ?? []
+        evidenceRefs = try container.decodeIfPresent([String].self, forKey: .evidenceRefs)
+            ?? container.decodeIfPresent([String].self, forKey: .sourceRefs)
+            ?? []
+    }
+
+    func toDomain() -> EarningsQualitySurface {
+        EarningsQualitySurface(
+            generatedAt: generatedAt,
+            policy: policy ?? "Research only · not a trade signal",
+            topTen: topTen.prefix(10).map { $0.toDomain() },
+            chartSetups: chartSetups.map { $0.toDomain() },
+            sectorTrends: sectorTrends.map { $0.toDomain() },
+            gates: gates.map { $0.toDomain() },
+            evidenceRefs: evidenceRefs
+        )
+    }
+}
+
+private struct EarningsQualityCandidateDTO: Decodable {
+    let id: String?
+    let ticker: String?
+    let symbol: String?
+    let score: Double?
+    let qualityScore: Double?
+    let headline: String?
+    let title: String?
+    let qualityNote: String?
+    let note: String?
+    let thesis: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, ticker, symbol, score, headline, title, note, thesis
+        case qualityScore = "quality_score"
+        case qualityNote = "quality_note"
+    }
+
+    func toDomain() -> EarningsQualityCandidate {
+        let tickerValue = ticker ?? symbol ?? "?"
+        return EarningsQualityCandidate(
+            id: id ?? tickerValue,
+            ticker: tickerValue,
+            score: qualityScore ?? score,
+            headline: headline ?? title,
+            qualityNote: qualityNote ?? note ?? thesis
+        )
+    }
+}
+
+private struct ChartSetupLevelDTO: Decodable {
+    let id: String?
+    let ticker: String?
+    let symbol: String?
+    let setup: String?
+    let support: Double?
+    let resistance: Double?
+    let stop: Double?
+    let target: Double?
+
+    func toDomain() -> ChartSetupLevel {
+        let tickerValue = ticker ?? symbol ?? "?"
+        return ChartSetupLevel(
+            id: id ?? tickerValue,
+            ticker: tickerValue,
+            setup: setup,
+            support: support,
+            resistance: resistance,
+            stop: stop,
+            target: target
+        )
+    }
+}
+
+private struct SectorETFTrendDTO: Decodable {
+    let id: String?
+    let symbol: String?
+    let ticker: String?
+    let trend: String?
+    let signal: String?
+    let score: Double?
+    let note: String?
+
+    func toDomain() -> SectorETFTrend {
+        let symbolValue = symbol ?? ticker ?? "?"
+        return SectorETFTrend(
+            id: id ?? symbolValue,
+            symbol: symbolValue,
+            trend: trend ?? signal ?? "unknown",
+            score: score,
+            note: note
+        )
+    }
+}
+
+private struct EvidenceGateDTO: Decodable {
+    let id: String?
+    let name: String?
+    let gate: String?
+    let status: String?
+    let state: String?
+    let note: String?
+    let reason: String?
+
+    func toDomain() -> EvidenceGate {
+        let nameValue = name ?? gate ?? "Gate"
+        return EvidenceGate(
+            id: id ?? nameValue,
+            name: nameValue,
+            status: status ?? state ?? "unknown",
+            note: note ?? reason
+        )
+    }
+}
+
+private struct MarketPredictionBriefDTO: Decodable {
+    let generatedAt: String?
+    let asOfDate: String?
+    let podSurface: PredictionPodSurfaceDTO?
+    let calibration: PredictionCalibrationDTO?
+
+    private enum CodingKeys: String, CodingKey {
+        case generatedAt = "generated_at"
+        case asOfDate = "as_of_date"
+        case podSurface = "pod_surface"
+        case calibration
+    }
+
+    func toDomain() -> MarketPredictionBrief {
+        MarketPredictionBrief(
+            generatedAt: generatedAt,
+            asOfDate: asOfDate,
+            marketRows: podSurface?.marketRows ?? [],
+            earningsRows: podSurface?.earningsRows ?? [],
+            calibration: calibration?.toDomain()
+        )
+    }
+}
+
+private struct PredictionPodSurfaceDTO: Decodable {
+    let marketRows: [MarketTrendPrediction]
+    let earningsRows: [WeekAheadEarningsPrediction]
+
+    private struct Card: Decodable {
+        let id: String?
+        let rows: [PredictionRowValue]?
+        let summary: PredictionCalibrationDTO?
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case cards
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let cards = try container.decodeIfPresent([Card].self, forKey: .cards) ?? []
+        marketRows = cards.first(where: { $0.id == "market_30_60_90" })?.rows?.compactMap { $0.marketRow } ?? []
+        earningsRows = cards.first(where: { $0.id == "week_ahead_earnings" })?.rows?.compactMap { $0.earningsRow } ?? []
+    }
+}
+
+private struct PredictionRowValue: Decodable {
+    let symbol: String?
+    let name: String?
+    let assetClass: String?
+    let lastPrice: Double?
+    let return30d: Double?
+    let return60d: Double?
+    let return90d: Double?
+    let prediction30d: String?
+    let prediction60d: String?
+    let prediction90d: String?
+    let confidence30d: Double?
+    let confidence60d: Double?
+    let confidence90d: Double?
+    let companyName: String?
+    let sector: String?
+    let earningsDate: String?
+    let daysUntil: Int?
+    let prediction: String?
+    let confidence: Double?
+    let qualityScore: Double?
+    let epsEstimate: Double?
+    let chartSetup: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case symbol, name, sector, prediction, confidence
+        case assetClass = "asset_class"
+        case lastPrice = "last_price"
+        case return30d = "return_30d"
+        case return60d = "return_60d"
+        case return90d = "return_90d"
+        case prediction30d = "prediction_30d"
+        case prediction60d = "prediction_60d"
+        case prediction90d = "prediction_90d"
+        case confidence30d = "confidence_30d"
+        case confidence60d = "confidence_60d"
+        case confidence90d = "confidence_90d"
+        case companyName = "company_name"
+        case earningsDate = "earnings_date"
+        case daysUntil = "days_until"
+        case qualityScore = "quality_score"
+        case epsEstimate = "eps_estimate"
+        case chartSetup = "chart_setup"
+    }
+
+    var marketRow: MarketTrendPrediction? {
+        guard let symbol else { return nil }
+        return MarketTrendPrediction(
+            id: symbol,
+            symbol: symbol,
+            name: name,
+            assetClass: assetClass,
+            lastPrice: lastPrice,
+            return30d: return30d,
+            return60d: return60d,
+            return90d: return90d,
+            prediction30d: prediction30d,
+            prediction60d: prediction60d,
+            prediction90d: prediction90d,
+            confidence30d: confidence30d,
+            confidence60d: confidence60d,
+            confidence90d: confidence90d
+        )
+    }
+
+    var earningsRow: WeekAheadEarningsPrediction? {
+        guard let symbol else { return nil }
+        return WeekAheadEarningsPrediction(
+            id: "\(symbol)-\(earningsDate ?? "pending")",
+            symbol: symbol,
+            companyName: companyName,
+            sector: sector,
+            earningsDate: earningsDate,
+            daysUntil: daysUntil,
+            prediction: prediction,
+            confidence: confidence,
+            qualityScore: qualityScore,
+            epsEstimate: epsEstimate,
+            chartSetup: chartSetup,
+            lastPrice: lastPrice
+        )
+    }
+}
+
+private struct PredictionCalibrationDTO: Decodable {
+    let totalPredictions: Int?
+    let resolved: Int?
+    let unresolved: Int?
+    let accuracy: Double?
+    let read: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case totalPredictions = "total_predictions"
+        case resolved, unresolved, accuracy, read
+    }
+
+    func toDomain() -> PredictionCalibrationSummary {
+        PredictionCalibrationSummary(
+            totalPredictions: totalPredictions ?? 0,
+            resolved: resolved ?? 0,
+            unresolved: unresolved ?? 0,
+            accuracy: accuracy,
+            read: read
+        )
     }
 }

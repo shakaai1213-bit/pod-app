@@ -5,7 +5,6 @@ import SwiftUI
 final class ArmsViewModel {
     var arms: [ArmTag] = ArmTag.placeholderArms
     var chiefArms: [ArmTag] = ArmTag.placeholderChiefArms
-    var agents: [AgentSummary] = []
     var directiveDrafts: [String: String] = [:]
     var expandedShipArms: Set<String> = []
     var shipHistoryByArm: [String: [ArmShip]] = [:]
@@ -26,9 +25,7 @@ final class ArmsViewModel {
         errorMessage = nil
         defer { isLoading = false }
 
-        async let armsTask: Void = loadArms()
-        async let agentsTask: Void = loadAgents()
-        _ = await (armsTask, agentsTask)
+        await loadArms()
     }
 
     @MainActor
@@ -42,21 +39,28 @@ final class ArmsViewModel {
     private func loadMauiArms() async {
         do {
             let response: ArmTagsResponse = try await apiClient.get(path: "/api/v1/jarvis/arm-tags")
-            let routingResponse: ArmRoutingResponse? = try? await apiClient.get(path: "/api/v1/jarvis/arm-routing")
-            let routingByName = Dictionary(uniqueKeysWithValues: (routingResponse?.routing ?? []).map { ($0.arm.lowercased(), $0) })
+            let rosterResponse: ArmRosterResponse? = try? await apiClient.get(path: "/api/v1/jarvis/arm-roster")
+            let rosterByName = Dictionary(uniqueKeysWithValues: (rosterResponse?.arms ?? []).map { ($0.name.lowercased(), $0) })
+            let routingByName = Dictionary(uniqueKeysWithValues: (rosterResponse?.arms ?? []).map { ($0.name.lowercased(), $0.toRouting()) })
             let directivesResponse: ArmDirectivesResponse? = try? await apiClient.get(path: "/api/v1/jarvis/arm-directives")
             let directivesByName = Dictionary(uniqueKeysWithValues: (directivesResponse?.directives ?? []).map { ($0.name.lowercased(), $0.toDomain()) })
             var shipsByName: [String: [ArmShip]] = [:]
-            for arm in ArmTag.mauiNames {
+            let names = Self.rosterNames(
+                response: response,
+                roster: rosterResponse?.arms,
+                family: .maui,
+                fallback: ArmTag.mauiNames
+            )
+            for arm in names {
                 shipsByName[arm] = (try? await loadShips(forKey: arm, limit: 5)) ?? []
             }
             shipHistoryByArm.merge(shipsByName) { _, new in new }
             let liveByName = Dictionary(uniqueKeysWithValues: response.arms.map {
                 let key = $0.name.lowercased()
-                let arm = $0.toDomain(routing: routingByName[key], directive: directivesByName[key], fallbackLastShip: shipsByName[key]?.first)
+                let arm = $0.toDomain(roster: rosterByName[key], routing: routingByName[key], directive: directivesByName[key], fallbackLastShip: shipsByName[key]?.first)
                 return (arm.name.lowercased(), arm)
             })
-            arms = ArmTag.mauiNames.map { liveByName[$0] ?? ArmTag.placeholder(named: $0, family: .maui) }
+            arms = names.map { liveByName[$0] ?? ArmTag.placeholder(named: $0, family: .maui, roster: rosterByName[$0], routing: routingByName[$0]) }
         } catch {
             errorMessage = "Arms tags unavailable."
             arms = ArmTag.placeholderArms
@@ -75,42 +79,67 @@ final class ArmsViewModel {
                 guard item.tagId.hasPrefix("chief_arm."), item.tagId.hasSuffix(".directive") else { return nil }
                 return (item.armName(suffix: ".directive"), item.toDirective())
             })
+            let rosterResponse: ArmRosterResponse? = try? await apiClient.get(path: "/api/v1/jarvis/arm-roster")
+            let rosterByName = Dictionary(uniqueKeysWithValues: (rosterResponse?.arms ?? []).map { ($0.name.lowercased(), $0) })
+            let routingByName = Dictionary(uniqueKeysWithValues: (rosterResponse?.arms ?? []).map { ($0.name.lowercased(), $0.toRouting()) })
+            let names = Self.rosterNames(
+                statusNames: Array(statusByName.keys),
+                roster: rosterResponse?.arms,
+                family: .chief,
+                fallback: ArmTag.chiefNames
+            )
             var shipsByName: [String: [ArmShip]] = [:]
-            for arm in ArmTag.chiefNames {
+            for arm in names {
                 shipsByName[arm] = (try? await loadShips(forKey: arm, limit: 5)) ?? []
             }
             shipHistoryByArm.merge(shipsByName) { _, new in new }
-            chiefArms = ArmTag.chiefNames.map { name in
+            chiefArms = names.map { name in
                 statusByName[name]?.toArmTag(
                     name: name,
+                    roster: rosterByName[name],
                     directive: directivesByName[name],
                     fallbackLastShip: shipsByName[name]?.first
-                ) ?? ArmTag.placeholder(named: name, family: .chief)
+                ) ?? ArmTag.placeholder(named: name, family: .chief, roster: rosterByName[name], routing: routingByName[name])
             }
         } catch {
             chiefArms = ArmTag.placeholderChiefArms
         }
     }
 
-    @MainActor
-    func loadAgents() async {
-        do {
-            let response: PaginatedResponse<AgentSummaryDTO> = try await apiClient.get(path: "/api/v1/agents?status=active,support&limit=50")
-            let mapped = response.items
-                .map { $0.toDomain() }
-                .filter { AgentRosterPolicy.isActiveOrSupport($0.agent) }
-            agents = mapped.sorted { lhs, rhs in
-                if lhs.macSortRank != rhs.macSortRank { return lhs.macSortRank < rhs.macSortRank }
-                let lhsKey = AgentRosterPolicy.sortKey(for: lhs.name)
-                let rhsKey = AgentRosterPolicy.sortKey(for: rhs.name)
-                if lhsKey != rhsKey { return lhsKey < rhsKey }
-                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+    private static func rosterNames(
+        response: ArmTagsResponse,
+        roster: [ArmRosterEntryDTO]?,
+        family: ArmFamily,
+        fallback: [String]
+    ) -> [String] {
+        let statusNames = response.arms
+            .map(\.name)
+            .map { $0.lowercased() }
+        return rosterNames(statusNames: statusNames, roster: roster, family: family, fallback: fallback)
+    }
+
+    private static func rosterNames(
+        statusNames: [String],
+        roster: [ArmRosterEntryDTO]?,
+        family: ArmFamily,
+        fallback: [String]
+    ) -> [String] {
+        var seen: Set<String> = []
+        let rosterNames = (roster ?? [])
+            .filter { $0.family == family && $0.status.lowercased() != "retired" }
+            .map { $0.name.lowercased() }
+        let liveNames = statusNames.filter { family == .chief ? $0.hasPrefix("chief-") : !$0.hasPrefix("chief-") }
+        let candidates = rosterNames + liveNames
+        let source = candidates.isEmpty ? fallback : candidates
+        let preferred = family == .chief ? ArmTag.chiefNames : ArmTag.mauiNames
+        return source
+            .filter { seen.insert($0).inserted }
+            .sorted { lhs, rhs in
+                let lhsIndex = preferred.firstIndex(of: lhs) ?? Int.max
+                let rhsIndex = preferred.firstIndex(of: rhs) ?? Int.max
+                if lhsIndex != rhsIndex { return lhsIndex < rhsIndex }
+                return lhs < rhs
             }
-        } catch {
-            if errorMessage == nil {
-                errorMessage = "Team unavailable."
-            }
-        }
     }
 
     @MainActor
@@ -245,54 +274,14 @@ struct ArmsToast: Equatable {
     let isError: Bool
 }
 
-struct AgentSummary: Identifiable, Hashable {
-    let id: UUID
-    let name: String
-    let glyph: String
-    let status: AgentState
-    let macLabel: String
-    let currentFocus: String?
-    let natsLaneOk: Bool
-    let avatarColor: String
-    let role: String
-    let skills: [String]
-    let rosterLane: AgentRosterLane
-
-    var agent: Agent {
-        Agent(
-            id: id,
-            name: name,
-            role: role,
-            status: status,
-            currentTask: currentFocus,
-            lastActivity: nil,
-            skills: skills,
-            avatarColor: avatarColor,
-            rosterLane: rosterLane,
-            isDefaultRoutingEnabled: true
-        )
-    }
-
-    var macSortRank: Int {
-        macLabel.lowercased().contains("chief") ? 1 : 0
-    }
-
-    var statusColor: Color {
-        switch status {
-        case .online, .busy, .idle: return AppColors.accentSuccess
-        case .provisioning: return AppColors.accentWarning
-        case .offline, .error: return AppColors.textTertiary
-        }
-    }
-}
-
 struct ArmTag: Identifiable, Hashable {
-    static let mauiNames = ["architecture", "pod", "orca", "compute", "memory", "schoolhouse", "jarvis", "nats", "fish", "fund"]
-    static let chiefNames = ["chief-trading", "chief-fund", "chief-mac-infra", "chief-data", "chief-research"]
+    static let mauiNames = ["architecture", "pod", "orca", "compute", "memory", "schoolhouse", "jarvis", "nats", "fish", "fund", "surfaces"]
+    static let chiefNames = ["chief-research", "chief-data", "chief-predictions", "chief-ml", "chief-trading", "chief-algos", "chief-fund"]
 
     let id: String
     let name: String
     let family: ArmFamily
+    let displayNameOverride: String?
     let state: String
     let currentWork: String
     let ticketRef: String?
@@ -324,6 +313,9 @@ struct ArmTag: Identifiable, Hashable {
     let lastShip: ArmShip?
 
     var displayName: String {
+        if let displayNameOverride, !displayNameOverride.isEmpty {
+            return displayNameOverride
+        }
         switch name.lowercased() {
         case "architecture": return "Architecture Arm"
         case "pod": return "Pod Arm"
@@ -335,8 +327,10 @@ struct ArmTag: Identifiable, Hashable {
         case "fund": return "Fund Arm"
         case "nats": return "NATS Arm"
         case "fish": return "Fish Arm"
+        case "surfaces": return "Surfaces Arm"
         case "chief-trading": return "Chief Trading Arm"
         case "chief-fund": return "Chief Fund Arm"
+        case "chief-predictions": return "Chief Predictions Arm"
         case "chief-mac-infra": return "Chief Mac Infra Arm"
         case "chief-data": return "Chief Data Arm"
         case "chief-research": return "Chief Research Arm"
@@ -460,30 +454,36 @@ struct ArmTag: Identifiable, Hashable {
         chiefNames.map { placeholder(named: $0, family: .chief) }
     }
 
-    static func placeholder(named name: String, family: ArmFamily = .maui) -> ArmTag {
+    fileprivate static func placeholder(
+        named name: String,
+        family: ArmFamily = .maui,
+        roster: ArmRosterEntryDTO? = nil,
+        routing: ArmRoutingEntryDTO? = nil
+    ) -> ArmTag {
         let isProtectedFund = name.lowercased() == "fund" || name.lowercased() == "chief-fund"
         return ArmTag(
             id: "\(family.rawValue)-\(name)",
             name: name,
             family: family,
+            displayNameOverride: roster?.displayName,
             state: "idle",
             currentWork: "Waiting for Jarvis tag data.",
             ticketRef: nil,
             evidenceRef: nil,
             blockedOn: nil,
             directive: nil,
-            owner: family == .chief ? "chief" : "maui",
+            owner: roster?.owner ?? (family == .chief ? "chief" : "maui"),
             quality: "yellow",
             updatedAt: nil,
             ttlSeconds: nil,
             source: nil,
             sourceDetail: nil,
             lastFetched: nil,
-            agentSubject: nil,
-            workspace: nil,
-            canWake: !isProtectedFund,
-            protected: isProtectedFund,
-            protectionReason: isProtectedFund ? "Tier-4 protected lane" : nil,
+            agentSubject: roster?.agentSubject ?? routing?.agentSubject,
+            workspace: roster?.workspace ?? routing?.workspace,
+            canWake: roster?.canWake ?? routing?.canWake ?? !isProtectedFund,
+            protected: roster?.protected ?? routing?.protected ?? isProtectedFund,
+            protectionReason: roster?.protectionReason ?? routing?.protectionReason ?? (isProtectedFund ? "Tier-4 protected lane" : nil),
             lastWakeDeliveryStatus: nil,
             lastWakeEnvelopeId: nil,
             directiveStatus: nil,
@@ -692,6 +692,53 @@ private struct ArmDirectivesResponse: Decodable {
     let directives: [ArmDirectiveDTO]
 }
 
+private struct ArmRosterResponse: Decodable {
+    let arms: [ArmRosterEntryDTO]
+}
+
+private struct ArmRosterEntryDTO: Decodable {
+    let name: String
+    let familyRaw: String
+    let namespace: String?
+    let tag: String?
+    let displayName: String?
+    let owner: String?
+    let agentSubject: String?
+    let workspace: String?
+    let canWake: Bool
+    let protected: Bool
+    let protectionReason: String?
+    let status: String
+    let sortOrder: Int?
+    let area: String?
+    let board: String?
+
+    enum CodingKeys: String, CodingKey {
+        case name, namespace, tag, owner, workspace, protected, status, area, board
+        case familyRaw = "family"
+        case displayName = "display_name"
+        case agentSubject = "agent_subject"
+        case canWake = "can_wake"
+        case protectionReason = "protection_reason"
+        case sortOrder = "sort_order"
+    }
+
+    var family: ArmFamily {
+        familyRaw == "chief" ? .chief : .maui
+    }
+
+    func toRouting() -> ArmRoutingEntryDTO {
+        ArmRoutingEntryDTO(
+            arm: name,
+            agentSubject: agentSubject,
+            workspace: workspace,
+            canWake: canWake,
+            protected: protected,
+            protectionReason: protectionReason
+        )
+    }
+}
+
 private struct ArmStateRegistryResponse: Decodable {
     let items: [StateRegistryTagDTO]
 }
@@ -734,30 +781,31 @@ private struct StateRegistryTagDTO: Decodable {
         )
     }
 
-    func toArmTag(name: String, directive: ArmDirective?, fallbackLastShip: ArmShip?) -> ArmTag {
-        let protected = name == "chief-fund"
+    func toArmTag(name: String, roster: ArmRosterEntryDTO?, directive: ArmDirective?, fallbackLastShip: ArmShip?) -> ArmTag {
+        let isChiefFund = name == "chief-fund"
         return ArmTag(
             id: "chief-\(name)",
             name: name,
             family: .chief,
+            displayNameOverride: roster?.displayName,
             state: string("state") ?? "idle",
             currentWork: string("current_work") ?? "No current work set.",
             ticketRef: string("ticket_ref"),
             evidenceRef: string("evidence_ref"),
             blockedOn: string("blocked_on"),
             directive: directive?.directive ?? string("directive"),
-            owner: string("owner") ?? "chief",
+            owner: roster?.owner ?? string("owner") ?? "chief",
             quality: string("quality") ?? quality ?? "yellow",
             updatedAt: date("updated_at") ?? updatedAt,
             ttlSeconds: int("ttl_s") ?? ttlSeconds,
             source: string("source"),
             sourceDetail: string("source_detail"),
             lastFetched: date("last_fetched"),
-            agentSubject: "agents.chief.inbox",
-            workspace: nil,
-            canWake: !protected,
-            protected: protected,
-            protectionReason: protected ? "Tier-4: Chief/Rooster/Tony approval required" : nil,
+            agentSubject: roster?.agentSubject ?? "agents.chief.inbox",
+            workspace: roster?.workspace,
+            canWake: false,
+            protected: roster?.protected ?? isChiefFund,
+            protectionReason: isChiefFund ? "Tier-4: Chief/Rooster/Tony approval required" : "Chief-controlled lane; Maui view only",
             lastWakeDeliveryStatus: string("last_wake_delivery_status"),
             lastWakeEnvelopeId: string("last_wake_envelope_id"),
             directiveStatus: directive?.status ?? string("directive_status"),
@@ -880,104 +928,27 @@ private struct ArmRoutingEntryDTO: Decodable {
     let protected: Bool
     let protectionReason: String?
 
+    init(
+        arm: String,
+        agentSubject: String?,
+        workspace: String?,
+        canWake: Bool,
+        protected: Bool,
+        protectionReason: String?
+    ) {
+        self.arm = arm
+        self.agentSubject = agentSubject
+        self.workspace = workspace
+        self.canWake = canWake
+        self.protected = protected
+        self.protectionReason = protectionReason
+    }
+
     enum CodingKeys: String, CodingKey {
         case arm, workspace, protected
         case agentSubject = "agent_subject"
         case canWake = "can_wake"
         case protectionReason = "protection_reason"
-    }
-}
-
-private struct AgentSummaryDTO: Codable {
-    let id: String
-    let name: String
-    let glyph: String?
-    let status: String?
-    let macLabel: String?
-    let currentFocus: String?
-    let currentTask: String?
-    let natsLaneOk: Bool?
-    let avatarColor: String?
-    let role: String?
-    let rosterLane: String?
-    let skills: [String]?
-
-    enum CodingKeys: String, CodingKey {
-        case id, name, glyph, status, role, skills
-        case macLabel = "mac_label"
-        case currentFocus = "current_focus"
-        case currentTask
-        case natsLaneOk = "nats_lane_ok"
-        case avatarColor
-        case rosterLane = "roster_lane"
-    }
-
-    func toDomain() -> AgentSummary {
-        let normalized = AgentRosterPolicy.normalizedName(name)
-        let resolvedStatus = AgentState(rawValue: status ?? "") ?? .offline
-        let lane = rosterLane.flatMap(AgentRosterLane.init(rawValue:)) ?? AgentRosterPolicy.defaultLane(for: normalized)
-        let fallback = AgentSummaryFallbacks.profile(for: normalized)
-        return AgentSummary(
-            id: UUID(uuidString: id) ?? UUID(),
-            name: name.capitalized,
-            glyph: AgentSummaryFallbacks.glyph(for: normalized),
-            status: resolvedStatus,
-            macLabel: macLabel ?? AgentSummaryFallbacks.macLabel(for: normalized),
-            currentFocus: currentFocus ?? currentTask ?? fallback.focus,
-            natsLaneOk: natsLaneOk ?? !(resolvedStatus == .offline || resolvedStatus == .error),
-            avatarColor: avatarColor ?? fallback.color,
-            role: role ?? fallback.role,
-            skills: skills ?? fallback.skills,
-            rosterLane: lane
-        )
-    }
-}
-
-private enum AgentSummaryFallbacks {
-    static func glyph(for name: String) -> String {
-        switch name {
-        case "maui": return "🪝"
-        case "aloha": return "🌸"
-        case "coral": return "🪸"
-        case "aurora": return "🌅"
-        case "chief": return "🦅"
-        case "rooster": return "🐓"
-        case "reef": return "🐡"
-        case "luna": return "🌙"
-        default: return "•"
-        }
-    }
-
-    static func macLabel(for name: String) -> String {
-        switch name {
-        case "chief", "rooster", "reef", "luna":
-            return "Chief-mac"
-        default:
-            return "Shaka-mac"
-        }
-    }
-
-    static func profile(for name: String) -> (role: String, skills: [String], color: String, focus: String?) {
-        switch name {
-        case "maui":
-            return ("Head of Engineering", ["SwiftUI", "Architecture", "Pod"], "#22C55E", "Engineering coordination")
-        case "aloha":
-            return ("Communications", ["Specs", "Coordination", "Doctrine"], "#A855F7", "Coordination and specs")
-        case "coral":
-            return ("Support Runtime", ["Runtime Health", "Watchdogs"], "#06B6D4", "Runtime support")
-        case "chief":
-            return ("Protected Fund Lead", ["Research", "Finance"], "#22C55E", "Protected fund review")
-        case "rooster":
-            return ("Security", ["Security", "Guardrails"], "#EF4444", "Security guardrails")
-        case "reef":
-            return ("Chief Mac Support", ["Mirrors", "Chief Mac"], "#14B8A6", "Chief Mac support")
-        case "aurora":
-            return ("Dormant Advisor", ["Memory", "Coordination"], "#F59E0B", "Dormant advisor")
-        case "luna":
-            return ("Dormant Fund Analyst", ["Fund Analysis"], "#6366F1", "Dormant analyst")
-        default:
-            return ("Agent", [], "#3B82F6", nil)
-        }
     }
 }
 
@@ -990,7 +961,7 @@ private struct ArmTagDTO: Decodable {
         case tagData = "tag_data"
     }
 
-    func toDomain(routing: ArmRoutingEntryDTO?, directive: ArmDirective?, fallbackLastShip: ArmShip?) -> ArmTag {
+    func toDomain(roster: ArmRosterEntryDTO?, routing: ArmRoutingEntryDTO?, directive: ArmDirective?, fallbackLastShip: ArmShip?) -> ArmTag {
         let data = tagData?.value
         let key = name.lowercased()
         let normalizedName = key == "arch" ? "architecture" : key
@@ -998,24 +969,25 @@ private struct ArmTagDTO: Decodable {
             id: "maui-\(normalizedName)",
             name: normalizedName,
             family: .maui,
+            displayNameOverride: roster?.displayName,
             state: data?.state ?? "idle",
             currentWork: data?.currentWork ?? "No current work set.",
             ticketRef: data?.ticketRef,
             evidenceRef: data?.evidenceRef,
             blockedOn: data?.blockedOn,
             directive: directive?.directive ?? data?.directive,
-            owner: data?.owner,
+            owner: roster?.owner ?? data?.owner,
             quality: data?.quality ?? tagData?.quality ?? "yellow",
             updatedAt: data?.updatedAt ?? tagData?.updatedAt,
             ttlSeconds: data?.ttlSeconds ?? tagData?.ttlSeconds,
             source: data?.source,
             sourceDetail: data?.sourceDetail,
             lastFetched: data?.lastFetched,
-            agentSubject: routing?.agentSubject,
-            workspace: routing?.workspace,
-            canWake: routing?.canWake ?? (normalizedName != "fund"),
-            protected: routing?.protected ?? (normalizedName == "fund"),
-            protectionReason: routing?.protectionReason,
+            agentSubject: roster?.agentSubject ?? routing?.agentSubject,
+            workspace: roster?.workspace ?? routing?.workspace,
+            canWake: roster?.canWake ?? routing?.canWake ?? (normalizedName != "fund"),
+            protected: roster?.protected ?? routing?.protected ?? (normalizedName == "fund"),
+            protectionReason: roster?.protectionReason ?? routing?.protectionReason,
             lastWakeDeliveryStatus: data?.lastWakeDeliveryStatus,
             lastWakeEnvelopeId: data?.lastWakeEnvelopeId,
             directiveStatus: directive?.status,

@@ -14,6 +14,8 @@ final class WallDisplayViewModel {
     var isDimmed: Bool = false
     var brightness: Double = 1.0
     var currentTime: Date = Date()
+    var dataSourceLabel: String = "ORCA"
+    var dataSourceMessage: String = "Wall Display is backed by ORCA agents and tickets."
 
     // MARK: - Private
 
@@ -87,17 +89,46 @@ final class WallDisplayViewModel {
 
     @MainActor
     private func fetchAgents() async {
-        agents = Self.mockAgents
+        do {
+            let response: WallListResponse<AgentDTO> = try await APIClient.shared.get(path: "/api/v1/agents?status=active,support&limit=50")
+            agents = response.items.map(Self.agent(from:))
+            dataSourceLabel = "ORCA"
+            dataSourceMessage = "Wall Display is backed by ORCA agents and tickets."
+        } catch {
+            agents = []
+            dataSourceLabel = "ORCA ERROR"
+            dataSourceMessage = "ORCA agents are unavailable. Wall Display is not showing snapshot agents."
+        }
     }
 
     @MainActor
     private func fetchActivities() async {
-        activities = Self.mockActivities
+        do {
+            let response: WallListResponse<WallTicketDTO> = try await APIClient.shared.get(path: "/api/v1/tickets?status=open&limit=12")
+            activities = response.items
+                .sorted { Self.priorityRank($0.priority) < Self.priorityRank($1.priority) }
+                .map(Self.activity(from:))
+            dataSourceLabel = "ORCA"
+            dataSourceMessage = "Wall Display is backed by ORCA agents and tickets."
+        } catch {
+            activities = []
+            dataSourceLabel = "ORCA ERROR"
+            dataSourceMessage = "ORCA tickets are unavailable. Wall Display is not showing snapshot activity."
+        }
     }
 
     @MainActor
     private func fetchAttentionCount() async {
-        attentionCount = 2
+        do {
+            let response: WallListResponse<WallTicketDTO> = try await APIClient.shared.get(path: "/api/v1/tickets?status=open&limit=200")
+            attentionCount = response.items.filter { ticket in
+                let priority = ticket.priority.lowercased()
+                let status = ticket.status.lowercased()
+                return priority == "urgent" || priority == "high" || status == "blocked" || status == "waiting_human"
+            }.count
+        } catch {
+            attentionCount = 0
+        }
     }
 
     // MARK: - Private: Clock
@@ -129,114 +160,98 @@ final class WallDisplayViewModel {
         UIScreen.main.brightness = originalBrightness
     }
 
-    // MARK: - Mock Data
+    // MARK: - ORCA Mapping
 
-    private static var mockAgents: [Agent] {
-        [
-            Agent(
-                id: UUID(),
-                name: "Maui",
-                role: "Head of Engineering",
-                status: .online,
-                currentTask: "Reviewing PR #42",
-                lastActivity: Date(),
-                skills: ["Architecture", "iOS"],
-                avatarColor: "#3B82F6"
-            ),
-            Agent(
-                id: UUID(),
-                name: "Researcher",
-                role: "Research Agent",
-                status: .busy,
-                currentTask: "Analyzing market trends",
-                lastActivity: Date().addingTimeInterval(-120),
-                skills: ["Research", "Analysis"],
-                avatarColor: "#A855F7"
-            ),
-            Agent(
-                id: UUID(),
-                name: "Builder",
-                role: "Build Agent",
-                status: .online,
-                currentTask: "Deploying v2.1.0",
-                lastActivity: Date().addingTimeInterval(-60),
-                skills: ["CI/CD", "Infrastructure"],
-                avatarColor: "#22C55E"
-            ),
-            Agent(
-                id: UUID(),
-                name: "Analyst",
-                role: "Data Analyst",
-                status: .idle,
-                currentTask: nil,
-                lastActivity: Date().addingTimeInterval(-300),
-                skills: ["Data", "Analytics"],
-                avatarColor: "#F59E0B"
-            ),
-            Agent(
-                id: UUID(),
-                name: "Sentinel",
-                role: "Security Monitor",
-                status: .online,
-                currentTask: "Monitoring threats",
-                lastActivity: Date().addingTimeInterval(-30),
-                skills: ["Security", "Monitoring"],
-                avatarColor: "#EF4444"
-            ),
-        ]
+    private static func agent(from dto: AgentDTO) -> Agent {
+        Agent(
+            id: UUID(uuidString: dto.id) ?? UUID(),
+            name: dto.name,
+            role: dto.role,
+            status: agentState(from: dto.status),
+            currentTask: dto.currentTask,
+            lastActivity: dto.lastSeenAt,
+            skills: dto.skills,
+            avatarColor: dto.avatarColor ?? "#3B82F6",
+            rosterLane: dto.domainRosterLane,
+            isDefaultRoutingEnabled: dto.isDefaultRoutingEnabled,
+            quarantineState: dto.quarantineState,
+            rosterNote: dto.rosterNote
+        )
     }
 
-    private static var mockActivities: [ActivityItem] {
-        let now = Date()
-        return [
-            ActivityItem(
-                id: UUID(),
-                type: .taskCompleted,
-                description: "PR #42 approved and merged to main",
-                timestamp: now.addingTimeInterval(-45),
-                actor: "Builder",
-                isAgent: true
-            ),
-            ActivityItem(
-                id: UUID(),
-                type: .messageSent,
-                description: "New message in #projects channel",
-                timestamp: now.addingTimeInterval(-180),
-                actor: "Maui",
-                isAgent: false
-            ),
-            ActivityItem(
-                id: UUID(),
-                type: .agentMilestone,
-                description: "Sentinel ran 1,000 security checks",
-                timestamp: now.addingTimeInterval(-600),
-                actor: "Sentinel",
-                isAgent: true
-            ),
-            ActivityItem(
-                id: UUID(),
-                type: .taskCreated,
-                description: "Task created: Implement wall display mode",
-                timestamp: now.addingTimeInterval(-1800),
-                actor: "Maui",
-                isAgent: false
-            ),
-            ActivityItem(
-                id: UUID(),
-                type: .taskCompleted,
-                description: "API rate limiting completed",
-                timestamp: now.addingTimeInterval(-3600),
-                actor: "Researcher",
-                isAgent: true
-            ),
-            ActivityItem(
-                id: UUID(),
-                type: .fileUploaded,
-                description: "Architecture diagram updated",
-                timestamp: now.addingTimeInterval(-7200),
-                actor: "Maui",
-                isAgent: false
-            ),
-        ]
+    private static func agentState(from status: AgentStatus) -> AgentState {
+        switch status {
+        case .online: return .online
+        case .busy: return .busy
+        case .idle: return .idle
+        case .offline: return .offline
+        case .error: return .error
+        case .provisioning: return .provisioning
+        }
+    }
+
+    private static func activity(from ticket: WallTicketDTO) -> ActivityItem {
+        let owner = ticket.assigneeAgentId?.isEmpty == false ? "agent \(ticket.assigneeAgentId!.prefix(6))" : "ORCA"
+        let type: ActivityType = ticket.status.lowercased() == "done" ? .taskCompleted : .taskCreated
+        return ActivityItem(
+            type: type,
+            description: "\(ticket.priority.uppercased()) ticket: \(ticket.title)",
+            timestamp: ticket.updatedAt ?? ticket.createdAt ?? Date(),
+            actor: owner,
+            isAgent: ticket.assigneeAgentId != nil
+        )
+    }
+
+    private static func priorityRank(_ priority: String) -> Int {
+        switch priority.lowercased() {
+        case "urgent": return 0
+        case "high": return 1
+        case "medium": return 2
+        case "low": return 3
+        default: return 9
+        }
+    }
+}
+
+private struct WallListResponse<Item: Decodable>: Decodable {
+    let items: [Item]
+
+    init(from decoder: Decoder) throws {
+        if let container = try? decoder.singleValueContainer(),
+           let values = try? container.decode([Item].self) {
+            items = values
+            return
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        items = (try? container.decode([Item].self, forKey: .items))
+            ?? (try? container.decode([Item].self, forKey: .results))
+            ?? (try? container.decode([Item].self, forKey: .data))
+            ?? []
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case items
+        case results
+        case data
+    }
+}
+
+private struct WallTicketDTO: Decodable {
+    let id: String
+    let title: String
+    let status: String
+    let priority: String
+    let assigneeAgentId: String?
+    let createdAt: Date?
+    let updatedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case status
+        case priority
+        case assigneeAgentId = "assignee_agent_id"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
     }
 }

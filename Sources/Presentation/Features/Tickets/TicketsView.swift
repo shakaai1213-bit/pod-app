@@ -1518,9 +1518,9 @@ struct TicketsView: View {
         do {
             let response: PaginatedResponse<AgentDTO> = try await APIClient.shared.get(path: "/api/v1/agents")
             agents = response.items
-                .filter { AgentRosterPolicy.isActiveOrSupport($0.name) }
+                .filter { $0.domainRosterLane == .activeMain || $0.domainRosterLane == .supportRuntime }
                 .sorted {
-                    AgentRosterPolicy.sortKey(for: $0.name) < AgentRosterPolicy.sortKey(for: $1.name)
+                    $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
                 }
         } catch {}
     }
@@ -1659,6 +1659,15 @@ struct TicketRowView: View {
 
             if summary.runCount > 0 {
                 miniMetric(icon: "bolt.badge.clock", value: "\(summary.runCount)", color: summary.failedRunCount > 0 ? AppColors.accentDanger : AppColors.accentAgent)
+            }
+            if summary.runningRunCount > 0 {
+                miniMetric(icon: "play.circle", value: "\(summary.runningRunCount)", color: AppColors.accentSuccess)
+            }
+            if summary.waitingRunCount > 0 {
+                miniMetric(icon: "person.crop.circle.badge.exclamationmark", value: "\(summary.waitingRunCount)", color: Color.orange)
+            }
+            if summary.queuedRunCount + summary.retryingRunCount > 0 {
+                miniMetric(icon: "tray.full", value: "\(summary.queuedRunCount + summary.retryingRunCount)", color: AppColors.accentAgent)
             }
             if summary.commentCount > 0 {
                 miniMetric(icon: "quote.bubble", value: "\(summary.commentCount)", color: AppColors.accentElectric)
@@ -2009,6 +2018,47 @@ struct CreateTicketSheet: View {
                     .pickerStyle(.segmented)
                 }
 
+                Section("Board") {
+                    Picker("Board", selection: $viewModel.newBoardId) {
+                        if viewModel.newBoardOptions.isEmpty {
+                            Text("Select after ORCA loads").tag("")
+                        }
+                        ForEach(viewModel.newBoardOptions) { board in
+                            Label {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(board.displayName)
+                                    if !board.detail.isEmpty {
+                                        Text(board.detail)
+                                            .font(.caption)
+                                            .foregroundColor(AppColors.textSecondary)
+                                    }
+                                }
+                            } icon: {
+                                Image(systemName: board.icon)
+                            }
+                            .tag(board.id)
+                        }
+                    }
+                    .disabled(viewModel.isLoadingBoardOptions || viewModel.newBoardOptions.isEmpty)
+
+                    if viewModel.isLoadingBoardOptions {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                            Text("Loading live ORCA boards")
+                                .font(.caption)
+                                .foregroundColor(AppColors.textSecondary)
+                        }
+                    } else if let message = viewModel.boardOptionsMessage {
+                        Text(message)
+                            .font(.caption)
+                            .foregroundColor(AppColors.textSecondary)
+                    } else {
+                        Text("Board comes from ORCA and is required on create.")
+                            .font(.caption)
+                            .foregroundColor(AppColors.textSecondary)
+                    }
+                }
+
                 Section("Assign to Agent") {
                     Picker("Agent", selection: $viewModel.newAssigneeAgentId) {
                         Text("Unassigned").tag("")
@@ -2076,13 +2126,16 @@ struct CreateTicketSheet: View {
                         Task { await viewModel.createTicket() }
                     }
                     .fontWeight(.semibold)
-                    .foregroundColor(viewModel.newTitle.isEmpty ? AppColors.textTertiary : AppColors.accentElectric)
-                    .disabled(viewModel.newTitle.isEmpty || viewModel.isCreating)
+                    .foregroundColor((viewModel.newTitle.isEmpty || viewModel.newBoardId.isEmpty) ? AppColors.textTertiary : AppColors.accentElectric)
+                    .disabled(viewModel.newTitle.isEmpty || viewModel.newBoardId.isEmpty || viewModel.isCreating)
                 }
             }
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .task {
+            await viewModel.loadBoardOptions()
+        }
     }
 }
 
@@ -3034,6 +3087,15 @@ struct TicketDetailSheet: View {
         if summary.latestRunStatus == .failed || summary.latestRunStatus == .blocked {
             return "Review failed run evidence and retry or leave a blocker note."
         }
+        if summary.waitingRunCount > 0 {
+            return "Review waiting worker run and approve, revise, or leave owner guidance."
+        }
+        if summary.runningRunCount > 0 {
+            return "Worker run is active; watch evidence and review completion."
+        }
+        if summary.queuedRunCount + summary.retryingRunCount > 0 {
+            return "Worker run is queued; Mermaid pickup is pending."
+        }
         if summary.finalVerification == "Pending" {
             return "Attach evidence or resolution notes before closure."
         }
@@ -3798,10 +3860,24 @@ struct TicketDetailSheet: View {
 
             metadataRow(label: "Owner", value: context.owner)
             metadataRow(label: "Worker lane", value: workerLane)
-        metadataRow(label: "Tool policy", value: toolPolicy)
-        metadataRow(label: "Compute tag", value: computeTag)
-        metadataRow(label: "Approval authority", value: approvalAuthority(workerLane: workerLane, toolPolicy: toolPolicy, computeTag: computeTag))
-        metadataRow(label: "Worker health", value: workerHealth.isUnknown ? "No live \(workerLane) tag" : "\(workerHealth.label) (\(workerHealth.total) tag\(workerHealth.total == 1 ? "" : "s"))")
+            metadataRow(label: "Tool policy", value: toolPolicy)
+            metadataRow(label: "Compute tag", value: computeTag)
+            if let backendPreview {
+                if let runtime = backendPreview.recommendedRuntime?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !runtime.isEmpty {
+                    metadataRow(label: "Runtime", value: runtime)
+                }
+                if let surface = backendPreview.recommendedSurface?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !surface.isEmpty {
+                    metadataRow(label: "Surface", value: surface)
+                }
+                if let handoff = backendPreview.handoffSubject?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !handoff.isEmpty {
+                    metadataRow(label: "Handoff", value: handoff)
+                }
+            }
+            metadataRow(label: "Approval authority", value: approvalAuthority(workerLane: workerLane, toolPolicy: toolPolicy, computeTag: computeTag))
+            metadataRow(label: "Worker health", value: workerHealth.isUnknown ? "No live \(workerLane) tag" : "\(workerHealth.label) (\(workerHealth.total) tag\(workerHealth.total == 1 ? "" : "s"))")
             metadataRow(label: "Queue", value: queue.isEmpty ? "No queued \(workerLane) runs" : "\(queue.count) queued \(workerLane) run\(queue.count == 1 ? "" : "s")")
             if let backendPreview {
                 metadataRow(label: "Next state", value: backendPreview.nextState.replacingOccurrences(of: "_", with: " "))
@@ -4360,6 +4436,11 @@ struct TicketDetailSheet: View {
                 state: .succeeded
             )
             traceChainStep(
+                title: "Runtime handoff",
+                value: runtimeHandoffLabel,
+                state: ticket.recommendedRuntime?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? .succeeded : .queued
+            )
+            traceChainStep(
                 title: "Dispatch run",
                 value: dispatch.map { "\($0.status.label) · \($0.workerLane ?? "no worker")" } ?? "No dispatch run yet",
                 state: dispatch?.status ?? .queued
@@ -4378,6 +4459,8 @@ struct TicketDetailSheet: View {
             runMetaPillCloud([
                 primaryTrace.map { "trace \($0)" },
                 triageId.map { "triage \($0)" },
+                ticket.recommendedRuntime.map { "runtime \($0)" },
+                ticket.recommendedSurface.map { "surface \($0)" },
                 ticket.chatThreadId.map { "chat \($0.prefix(8))" }
             ])
         }
@@ -4405,6 +4488,18 @@ struct TicketDetailSheet: View {
 
             Spacer()
         }
+    }
+
+    private var runtimeHandoffLabel: String {
+        let runtime = ticket.recommendedRuntime?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let surface = ticket.recommendedSurface?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let subject = ticket.handoffSubject?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let runtime, !runtime.isEmpty {
+            let surfaceText = (surface?.isEmpty == false) ? " via \(surface!)" : ""
+            let subjectText = (subject?.isEmpty == false) ? " · \(subject!)" : ""
+            return "\(runtime)\(surfaceText)\(subjectText)"
+        }
+        return "No runtime handoff recorded yet"
     }
 
     private func evidenceState(dispatch: AgentRun?, execution: AgentRun?) -> AgentRunStatus {
@@ -4674,6 +4769,13 @@ struct TicketDetailSheet: View {
 
             if let traceId = run.traceId, !traceId.isEmpty {
                 traceReferenceButton(label: "Trace", traceId: traceId)
+            }
+
+            if let runtimeHandoff = run.runtimeHandoffLabel {
+                Label(runtimeHandoff, systemImage: "arrow.triangle.branch")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundColor(AppColors.accentElectric)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             if let outcome = run.outcome, !outcome.isEmpty {
@@ -5074,7 +5176,7 @@ struct TicketDetailSheet: View {
     }
 
     private var lifecycleAgents: [AgentDTO] {
-        let filtered = agents.filter { AgentRosterPolicy.isActiveOrSupport($0.name) }
+        let filtered = agents.filter { $0.domainRosterLane == .activeMain || $0.domainRosterLane == .supportRuntime }
         return filtered.isEmpty ? agents : filtered
     }
 

@@ -16,6 +16,8 @@ struct WorkView: View {
     @State private var boardsModel = WorkBoardsModel()
     @State private var selectedBoard: WorkBoardSummary?
     @State private var showingBoardsArchitecture = false
+    @State private var showingBoardDrift = false
+    @State private var showingCascadeDetails = false
 
     var body: some View {
         NavigationStack {
@@ -83,6 +85,15 @@ struct WorkView: View {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                             selectedBoard = board
                         }
+                    }
+                )
+            }
+            .fullScreenCover(isPresented: $showingBoardDrift) {
+                WorkBoardDriftDetailView(
+                    drift: boardsModel.drift,
+                    error: boardsModel.driftError,
+                    onRefresh: {
+                        Task { await boardsModel.load(force: true) }
                     }
                 )
             }
@@ -327,6 +338,11 @@ struct WorkView: View {
                     value: "\(digest.activation?.attentionCount ?? 0)",
                     color: (digest.activation?.attentionCount ?? 0) > 0 ? AppColors.accentWarning : AppColors.accentSuccess
                 )
+                digestMetric(
+                    title: "Cascade",
+                    value: "\(digest.cascade?.triage.reviewBacklogCount ?? 0)",
+                    color: (digest.cascade?.triage.reviewBacklogCount ?? 0) > 0 ? AppColors.accentWarning : AppColors.accentSuccess
+                )
                 Spacer(minLength: 0)
             }
 
@@ -345,6 +361,44 @@ struct WorkView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 7))
                 }
                 .buttonStyle(.plain)
+            }
+
+            if let cascade = digest.cascade, cascade.needsAttention {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        showingCascadeDetails.toggle()
+                    }
+                } label: {
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: "arrow.triangle.branch")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(AppColors.accentWarning)
+                            .frame(width: 14, height: 14)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Cascade · \(cascade.doctrine.canaryStatusLabel)")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(AppColors.textPrimary)
+                                .lineLimit(1)
+                            Text(cascade.statusLine)
+                                .font(.system(size: 10))
+                                .foregroundColor(AppColors.textSecondary)
+                                .lineLimit(2)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: showingCascadeDetails ? "chevron.up.circle" : "chevron.down.circle")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(AppColors.textTertiary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(AppColors.accentWarning.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+
+                if showingCascadeDetails {
+                    cascadeDetails(cascade)
+                }
             }
 
             if let activation = digest.activation, !activation.items.isEmpty {
@@ -404,6 +458,46 @@ struct WorkView: View {
         .frame(minWidth: 66, alignment: .leading)
     }
 
+    private func cascadeDetails(_ cascade: SchoolhouseDigestCascade) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 8) {
+                digestMetric(
+                    title: "Canary",
+                    value: cascade.doctrine.canaryStatusLabel,
+                    color: cascade.doctrine.canaryStatus == "current" ? AppColors.accentSuccess : AppColors.accentWarning
+                )
+                digestMetric(
+                    title: "Loaded",
+                    value: "\(cascade.doctrine.loadedCount ?? 0)/\(cascade.doctrine.totalAgents ?? 0)",
+                    color: (cascade.doctrine.loadedCount ?? 0) > 0 ? AppColors.accentSuccess : AppColors.accentWarning
+                )
+                digestMetric(
+                    title: "Quality",
+                    value: cascade.triage.qualityStateLabel,
+                    color: cascade.triage.qualityState == "live_healthy" ? AppColors.accentSuccess : AppColors.accentWarning
+                )
+                Spacer(minLength: 0)
+            }
+
+            if cascade.triage.reviewBacklogCount > 0 {
+                Label("\(cascade.triage.reviewBacklogCount) unreviewed routing decisions", systemImage: "checklist")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(AppColors.accentWarning)
+            }
+
+            if let falseNegativeRate = cascade.triage.falseNegativeRate {
+                Text("FN \(Int(falseNegativeRate * 100))% · FP \(Int((cascade.triage.falsePositiveRate ?? 0) * 100))% · agreement \(Int((cascade.triage.agreementRate ?? 0) * 100))%")
+                    .font(.system(size: 10))
+                    .foregroundColor(AppColors.textSecondary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+    }
+
     private func suggestionReviewItem(_ suggestion: SchoolhouseSuggestion) -> PodReviewItem {
         var provenance = [
             suggestion.kind.replacingOccurrences(of: "_", with: " "),
@@ -456,7 +550,7 @@ struct WorkView: View {
         actions.append(contentsOf: [
             PodReviewAction(
                 id: "accept",
-                title: "Accept",
+                title: "Approve",
                 systemImage: "checkmark.seal",
                 style: .success,
                 isDisabled: isTerminal
@@ -522,13 +616,17 @@ struct WorkView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(boardsModel.boards) { board in
-                        Button {
-                            selectedBoard = board
-                        } label: {
-                            workBoardTile(board)
+                    if boardsModel.boards.isEmpty && !boardsModel.isLoading {
+                        boardsUnavailableTile
+                    } else {
+                        ForEach(boardsModel.boards) { board in
+                            Button {
+                                selectedBoard = board
+                            } label: {
+                                workBoardTile(board)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
 
                     if boardsModel.isLoading {
@@ -540,6 +638,8 @@ struct WorkView: View {
                 .padding(.horizontal, 10)
                 .padding(.bottom, boardsModel.error == nil ? 10 : 6)
             }
+
+            boardNeedsHomeStrip
 
             if let error = boardsModel.error {
                 Text(error)
@@ -556,6 +656,86 @@ struct WorkView: View {
             RoundedRectangle(cornerRadius: Theme.radiusMedium)
                 .strokeBorder(AppColors.border, lineWidth: 0.5)
         )
+    }
+
+    @ViewBuilder
+    private var boardNeedsHomeStrip: some View {
+        if let drift = boardsModel.drift, drift.needsHomeCount > 0 {
+            Button {
+                showingBoardDrift = true
+            } label: {
+                HStack(spacing: 10) {
+                    Label("NEEDS HOME", systemImage: "tray.and.arrow.down")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(AppColors.accentWarning)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+
+                    Spacer(minLength: 4)
+
+                    driftMetric("Projects", drift.unboardedProjectCount)
+                    driftMetric("Tickets", drift.unboardedTicketCount)
+                    driftMetric("Canon", drift.canonicalDriftCount)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(AppColors.textTertiary)
+                }
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(AppColors.accentWarning.opacity(0.08))
+            .overlay(
+                Rectangle()
+                    .fill(AppColors.accentWarning.opacity(0.16))
+                    .frame(height: 0.5),
+                alignment: .top
+            )
+        } else if let driftError = boardsModel.driftError {
+            Text(driftError)
+                .font(.system(size: 10))
+                .foregroundColor(AppColors.textTertiary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 8)
+        }
+    }
+
+    private var boardsUnavailableTile: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "externaldrive.badge.exclamationmark")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(AppColors.accentWarning)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Boards waiting on ORCA")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(AppColors.textPrimary)
+                Text("No local fallback shown")
+                    .font(.system(size: 9))
+                    .foregroundColor(AppColors.textTertiary)
+            }
+        }
+        .frame(width: 180, height: 52, alignment: .leading)
+        .padding(8)
+        .background(AppColors.backgroundPrimary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(AppColors.accentWarning.opacity(0.35), lineWidth: 0.5)
+        )
+    }
+
+    private func driftMetric(_ label: String, _ value: Int) -> some View {
+        HStack(spacing: 3) {
+            Text(label)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(AppColors.textSecondary)
+            Text("\(value)")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundColor(value > 0 ? AppColors.accentWarning : AppColors.textTertiary)
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
     }
 
     private func workBoardTile(_ board: WorkBoardSummary) -> some View {
@@ -1639,7 +1819,8 @@ final class WorkViewModel {
         // Rebuild with updated priority (ProjectDTO is a let-struct)
         let old = projects[idx]
         projects[idx] = ProjectDTO(
-            id: old.id, name: old.name, goal: old.goal, description: old.description,
+            id: old.id, boardId: old.boardId, boardIds: old.boardIds,
+            name: old.name, goal: old.goal, description: old.description,
             status: old.status, priority: priority, projectedCost: old.projectedCost,
             actualCost: old.actualCost, createdBy: old.createdBy, assignedTo: old.assignedTo,
             createdAt: old.createdAt, updatedAt: old.updatedAt,
@@ -1659,7 +1840,8 @@ final class WorkViewModel {
             if let restoreIdx = projects.firstIndex(where: { $0.id == projectId }) {
                 let cur = projects[restoreIdx]
                 projects[restoreIdx] = ProjectDTO(
-                    id: cur.id, name: cur.name, goal: cur.goal, description: cur.description,
+                    id: cur.id, boardId: cur.boardId, boardIds: cur.boardIds,
+                    name: cur.name, goal: cur.goal, description: cur.description,
                     status: cur.status, priority: original, projectedCost: cur.projectedCost,
                     actualCost: cur.actualCost, createdBy: cur.createdBy, assignedTo: cur.assignedTo,
                     createdAt: cur.createdAt, updatedAt: cur.updatedAt,
@@ -1856,6 +2038,10 @@ private struct WorkTicketFlowItemDTO: Decodable {
     let ownerAgent: String?
     let supportLane: String?
     let workerLane: String?
+    let recommendedRuntime: String?
+    let recommendedSurface: String?
+    let runtimeReason: String?
+    let handoffSubject: String?
     let approvalState: String?
     let approvalGate: String?
     let autonomyLevel: String?
@@ -1874,6 +2060,10 @@ private struct WorkTicketFlowItemDTO: Decodable {
         case ownerAgent = "owner_agent"
         case supportLane = "support_lane"
         case workerLane = "worker_lane"
+        case recommendedRuntime = "recommended_runtime"
+        case recommendedSurface = "recommended_surface"
+        case runtimeReason = "runtime_reason"
+        case handoffSubject = "handoff_subject"
         case approvalState = "approval_state"
         case approvalGate = "approval_gate"
         case autonomyLevel = "autonomy_level"
@@ -1892,6 +2082,10 @@ private struct WorkTicketFlowItemDTO: Decodable {
             ownerAgent: ownerAgent ?? "unassigned",
             supportLane: supportLane,
             workerLane: workerLane,
+            recommendedRuntime: recommendedRuntime,
+            recommendedSurface: recommendedSurface,
+            runtimeReason: runtimeReason,
+            handoffSubject: handoffSubject,
             approvalState: approvalState ?? "not_required",
             approvalGate: approvalGate,
             autonomyLevel: autonomyLevel ?? "owner-review",
@@ -1917,9 +2111,10 @@ struct SchoolhouseDigest: Decodable, Hashable {
     let sessions: [SchoolhouseDigestSession]
     let worker: SchoolhouseDigestWorker
     let activation: SchoolhouseDigestActivation?
+    let cascade: SchoolhouseDigestCascade?
 
     enum CodingKeys: String, CodingKey {
-        case suggestions, sessions, worker, activation
+        case suggestions, sessions, worker, activation, cascade
         case generatedAt = "generated_at"
         case suggestionCount = "suggestion_count"
         case countsByStatus = "counts_by_status"
@@ -2005,6 +2200,70 @@ struct SchoolhouseDigestActivationItem: Decodable, Identifiable, Hashable {
         case agentName = "agent_name"
         case recommendedAction = "recommended_action"
         case minutesSinceHeartbeat = "minutes_since_heartbeat"
+    }
+}
+
+struct SchoolhouseDigestCascade: Decodable, Hashable {
+    let doctrine: SchoolhouseDigestCascadeDoctrine
+    let triage: SchoolhouseDigestCascadeTriage
+    let recommendations: [String]
+
+    var needsAttention: Bool {
+        doctrine.canaryStatus != "current" || triage.reviewBacklogCount > 0
+    }
+
+    var statusLine: String {
+        if let first = recommendations.first, !first.isEmpty {
+            return first
+        }
+        if triage.reviewBacklogCount > 0 {
+            return "\(triage.reviewBacklogCount) routing decisions need review"
+        }
+        return "Doctrine and triage cascade are visible"
+    }
+}
+
+struct SchoolhouseDigestCascadeDoctrine: Decodable, Hashable {
+    let status: String?
+    let canaryStatus: String?
+    let loadedCount: Int?
+    let totalAgents: Int?
+
+    var canaryStatusLabel: String {
+        (canaryStatus ?? "unknown").replacingOccurrences(of: "_", with: " ")
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case canaryStatus = "canary_status"
+        case loadedCount = "loaded_count"
+        case totalAgents = "total_agents"
+    }
+}
+
+struct SchoolhouseDigestCascadeTriage: Decodable, Hashable {
+    let status: String?
+    let sampleSize: Int?
+    let reviewBacklogCount: Int
+    let qualityGate: String?
+    let qualityState: String?
+    let agreementRate: Double?
+    let falseNegativeRate: Double?
+    let falsePositiveRate: Double?
+
+    var qualityStateLabel: String {
+        (qualityState ?? qualityGate ?? "unknown").replacingOccurrences(of: "_", with: " ")
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case sampleSize = "sample_size"
+        case reviewBacklogCount = "review_backlog_count"
+        case qualityGate = "quality_gate"
+        case qualityState = "quality_state"
+        case agreementRate = "agreement_rate"
+        case falseNegativeRate = "false_negative_rate"
+        case falsePositiveRate = "false_positive_rate"
     }
 }
 
@@ -2179,43 +2438,37 @@ private struct WorkBoardSummary: Identifiable, Hashable {
     }
 
     static let orderedSlugs = [
-        "north-star", "pod", "chat", "orca", "memory", "compute", "nerve", "observability", "governance"
+        "north-star", "pod", "surfaces", "orca", "memory", "compute", "nerve",
+        "governance", "jarvis", "schoolhouse", "fund", "products", "tools"
     ]
 
     static let iconMap: [String: String] = [
-        "north-star": "⭐", "pod": "📱", "chat": "💬", "orca": "🐋", "memory": "🧠",
-        "compute": "🧮", "nerve": "⚡", "observability": "🌸", "governance": "⚖️"
+        "north-star": "⭐", "pod": "📱", "surfaces": "💬", "orca": "🐋", "memory": "🧠",
+        "compute": "🧮", "nerve": "⚡", "governance": "⚖️", "jarvis": "🧭",
+        "schoolhouse": "🏫", "fund": "🔒", "products": "🧩", "tools": "🛠️"
     ]
 
     static let displayNameMap: [String: String] = [
-        "north-star": "north-star", "pod": "pod", "chat": "chat", "orca": "orca", "memory": "memory",
-        "compute": "compute", "nerve": "nerve", "observability": "observability", "governance": "governance"
+        "north-star": "north-star", "pod": "pod", "surfaces": "surfaces", "orca": "orca", "memory": "memory",
+        "compute": "compute", "nerve": "nerve", "governance": "governance",
+        "jarvis": "Jarvis", "schoolhouse": "Schoolhouse", "fund": "Fund",
+        "products": "Products", "tools": "Tools"
     ]
 }
 
 @MainActor
 @Observable
 private final class WorkBoardsModel {
-    private(set) var boards: [WorkBoardSummary] = WorkBoardSummary.orderedSlugs.map {
-        WorkBoardSummary(
-            id: $0,
-            slug: $0,
-            name: $0,
-            layer: nil,
-            component: nil,
-            boardDescription: nil,
-            projectCount: 0,
-            activeCount: 0,
-            ticketCount: 0
-        )
-    }
+    private(set) var boards: [WorkBoardSummary] = []
     private(set) var isLoading = false
     private(set) var error: String?
-    private(set) var sourceLabel = "SNAPSHOT"
+    private(set) var sourceLabel = "ORCA"
+    private(set) var drift: WorkBoardDriftResponse?
+    private(set) var driftError: String?
 
     func load(force: Bool = false) async {
         if isLoading { return }
-        if !force && sourceLabel == "ORCA" { return }
+        if !force && sourceLabel == "ORCA" && !boards.isEmpty { return }
 
         isLoading = true
         error = nil
@@ -2226,28 +2479,93 @@ private final class WorkBoardsModel {
             boards = Self.ordered(response.items.map(\.summary))
             sourceLabel = "ORCA"
         } catch {
-            boards = Self.ordered(boards)
-            sourceLabel = "SNAPSHOT"
-            self.error = "Boards unavailable; showing canonical board map."
+            sourceLabel = "ORCA"
+            self.error = boards.isEmpty
+                ? "ORCA boards unavailable."
+                : "ORCA boards refresh unavailable; showing last loaded boards."
+        }
+        await loadDrift()
+    }
+
+    private func loadDrift() async {
+        do {
+            drift = try await APIClient.shared.get(path: "/api/v1/boards/drift?limit=5")
+            driftError = nil
+        } catch {
+            drift = nil
+            driftError = "Needs Home unavailable."
         }
     }
 
     private static func ordered(_ boards: [WorkBoardSummary]) -> [WorkBoardSummary] {
-        var bySlug = Dictionary(uniqueKeysWithValues: boards.map { ($0.slug, $0) })
-        let canonical = WorkBoardSummary.orderedSlugs.map { slug in
-            bySlug.removeValue(forKey: slug) ?? WorkBoardSummary(
-                id: slug,
-                slug: slug,
-                name: slug,
-                layer: nil,
-                component: nil,
-                boardDescription: nil,
-                projectCount: 0,
-                activeCount: 0,
-                ticketCount: 0
-            )
+        boards.sorted { lhs, rhs in
+            let lhsIndex = WorkBoardSummary.orderedSlugs.firstIndex(of: lhs.slug) ?? Int.max
+            let rhsIndex = WorkBoardSummary.orderedSlugs.firstIndex(of: rhs.slug) ?? Int.max
+            if lhsIndex != rhsIndex { return lhsIndex < rhsIndex }
+            return lhs.displayName < rhs.displayName
         }
-        return canonical + bySlug.values.sorted { $0.slug < $1.slug }
+    }
+}
+
+private struct WorkBoardDriftResponse: Decodable, Hashable {
+    let status: String
+    let missingCanonicalSlugs: [String]
+    let extraSlugs: [String]
+    let projectBoardFieldPresent: Bool
+    let activeProjectCount: Int
+    let unboardedProjectCount: Int
+    let activeTicketCount: Int
+    let unboardedTicketCount: Int
+    let recommendedAction: String?
+    let samples: [String: [WorkBoardDriftItem]]
+
+    var canonicalDriftCount: Int {
+        missingCanonicalSlugs.count + extraSlugs.count
+    }
+
+    var needsHomeCount: Int {
+        canonicalDriftCount
+            + unboardedProjectCount
+            + unboardedTicketCount
+            + (projectBoardFieldPresent ? 0 : 1)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case status, samples
+        case missingCanonicalSlugs = "missing_canonical_slugs"
+        case extraSlugs = "extra_slugs"
+        case projectBoardFieldPresent = "project_board_field_present"
+        case activeProjectCount = "active_project_count"
+        case unboardedProjectCount = "unboarded_project_count"
+        case activeTicketCount = "active_ticket_count"
+        case unboardedTicketCount = "unboarded_ticket_count"
+        case recommendedAction = "recommended_action"
+    }
+}
+
+private struct WorkBoardDriftItem: Decodable, Hashable, Identifiable {
+    let id: String
+    let title: String
+    let status: String?
+    let priority: String?
+    let source: String?
+    let suggestedBoard: String?
+    let reason: String
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeWorkFlexibleString(forKey: .id)
+        title = try container.decodeWorkFlexibleStringIfPresent(forKey: .title) ?? "Untitled"
+        status = try container.decodeWorkFlexibleStringIfPresent(forKey: .status)
+        priority = try container.decodeWorkFlexibleStringIfPresent(forKey: .priority)
+        source = try container.decodeWorkFlexibleStringIfPresent(forKey: .source)
+        suggestedBoard = try container.decodeWorkFlexibleStringIfPresent(forKey: .suggestedBoard)
+        reason = try container.decodeWorkFlexibleStringIfPresent(forKey: .reason) ?? "Needs board assignment."
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, title, status, priority, source, reason
+        case suggestedBoard = "suggested_board"
     }
 }
 
@@ -2473,6 +2791,214 @@ private struct WorkBoardBreakdownItem: Identifiable, Hashable {
     var id: String { label }
     let label: String
     let count: Int
+}
+
+private struct WorkBoardDriftDetailView: View {
+    let drift: WorkBoardDriftResponse?
+    let error: String?
+    let onRefresh: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    private var sortedSamples: [(key: String, items: [WorkBoardDriftItem])] {
+        guard let drift else { return [] }
+        let preferred = ["unboarded_projects", "unboarded_tickets", "missing_canonical_slugs", "extra_slugs"]
+        return drift.samples
+            .map { (key: $0.key, items: $0.value) }
+            .sorted { lhs, rhs in
+                let left = preferred.firstIndex(of: lhs.key) ?? Int.max
+                let right = preferred.firstIndex(of: rhs.key) ?? Int.max
+                if left != right { return left < right }
+                return lhs.key < rhs.key
+            }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    header
+                    if let drift {
+                        countsGrid(drift)
+                        canonicalSection("Missing canonical slugs", values: drift.missingCanonicalSlugs)
+                        canonicalSection("Extra slugs", values: drift.extraSlugs)
+                        projectSchemaSection(drift)
+                        sampleSections
+                    } else {
+                        Text(error ?? "Board drift is unavailable.")
+                            .font(.system(size: 13))
+                            .foregroundColor(AppColors.textSecondary)
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(AppColors.backgroundSecondary)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+                .padding(16)
+                .padding(.bottom, 40)
+            }
+            .background(AppColors.backgroundPrimary.ignoresSafeArea())
+            .navigationTitle("Needs Home")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { dismiss() } label: { Label("Close", systemImage: "xmark") }
+                        .foregroundColor(AppColors.accentElectric)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: onRefresh) {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
+                    .foregroundColor(AppColors.accentElectric)
+                }
+            }
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("BOARD DRIFT")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(AppColors.textTertiary)
+                .kerning(0.5)
+            Text("Read-only ORCA drift samples. Pod shows what needs a home, but does not backfill or silently assign boards.")
+                .font(.system(size: 13))
+                .foregroundColor(AppColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppColors.border, lineWidth: 0.5))
+    }
+
+    private func countsGrid(_ drift: WorkBoardDriftResponse) -> some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+            driftCount("Projects", drift.unboardedProjectCount)
+            driftCount("Tickets", drift.unboardedTicketCount)
+            driftCount("Missing canon", drift.missingCanonicalSlugs.count)
+            driftCount("Extra slugs", drift.extraSlugs.count)
+        }
+    }
+
+    private func driftCount(_ title: String, _ value: Int) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(AppColors.textTertiary)
+            Text("\(value)")
+                .font(.system(size: 22, weight: .bold, design: .monospaced))
+                .foregroundColor(value > 0 ? AppColors.accentWarning : AppColors.accentSuccess)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    @ViewBuilder
+    private func canonicalSection(_ title: String, values: [String]) -> some View {
+        if !values.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title.uppercased())
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(AppColors.textTertiary)
+                ForEach(values, id: \.self) { value in
+                    Text(value)
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .foregroundColor(AppColors.textPrimary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(AppColors.backgroundSecondary)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+            }
+        }
+    }
+
+    private func projectSchemaSection(_ drift: WorkBoardDriftResponse) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: drift.projectBoardFieldPresent ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                .foregroundColor(drift.projectBoardFieldPresent ? AppColors.accentSuccess : AppColors.accentWarning)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Project board field")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(AppColors.textPrimary)
+                Text(drift.projectBoardFieldPresent ? "ORCA projects can store board assignments." : "ORCA projects cannot store board assignments yet.")
+                    .font(.system(size: 12))
+                    .foregroundColor(AppColors.textSecondary)
+            }
+            Spacer()
+        }
+        .padding(12)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    @ViewBuilder
+    private var sampleSections: some View {
+        if sortedSamples.isEmpty {
+            Text("No drift samples returned by ORCA.")
+                .font(.system(size: 12))
+                .foregroundColor(AppColors.textTertiary)
+        } else {
+            ForEach(sortedSamples, id: \.key) { group in
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(group.key.replacingOccurrences(of: "_", with: " ").uppercased())
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(AppColors.textTertiary)
+                    ForEach(group.items) { item in
+                        driftSampleRow(item)
+                    }
+                }
+            }
+        }
+    }
+
+    private func driftSampleRow(_ item: WorkBoardDriftItem) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text(item.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(AppColors.textPrimary)
+                    .lineLimit(2)
+                Spacer()
+                Text(item.id)
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundColor(AppColors.textTertiary)
+                    .lineLimit(1)
+            }
+            HStack(spacing: 6) {
+                if let status = item.status, !status.isEmpty {
+                    driftPill(status)
+                }
+                if let priority = item.priority, !priority.isEmpty {
+                    driftPill(priority)
+                }
+                if let suggested = item.suggestedBoard, !suggested.isEmpty {
+                    driftPill("suggested \(suggested)")
+                }
+            }
+            Text(item.reason)
+                .font(.system(size: 12))
+                .foregroundColor(AppColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppColors.border, lineWidth: 0.5))
+    }
+
+    private func driftPill(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundColor(AppColors.textSecondary)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(AppColors.backgroundTertiary)
+            .clipShape(Capsule())
+    }
 }
 
 private struct WorkBoardsArchitectureView: View {

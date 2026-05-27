@@ -12,6 +12,8 @@ struct TradingView: View {
                 VStack(spacing: Theme.lg) {
                     pnlSection
                     researchSection
+                    earningsQualitySection
+                    predictionsSection
                     oracleSection
                     earningsSection
                     macroSection
@@ -45,15 +47,15 @@ struct TradingView: View {
     private var refreshedBadge: some View {
         HStack(spacing: 5) {
             Circle()
-                .fill(AppColors.accentSuccess)
+                .fill(viewModel.isSnapshot ? AppColors.accentWarning : AppColors.accentSuccess)
                 .frame(width: 7, height: 7)
-            Text("LIVE")
+            Text(viewModel.isSnapshot ? "ORCA OFFLINE" : "ORCA FUND")
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(AppColors.accentSuccess)
+                .foregroundStyle(viewModel.isSnapshot ? AppColors.accentWarning : AppColors.accentSuccess)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
-        .background(AppColors.accentSuccess.opacity(0.12))
+        .background((viewModel.isSnapshot ? AppColors.accentWarning : AppColors.accentSuccess).opacity(0.12))
         .clipShape(Capsule())
     }
 
@@ -65,15 +67,36 @@ struct TradingView: View {
 
             if let note = viewModel.errorMessage {
                 offlineBanner(note)
+            } else {
+                protectedBanner
             }
 
             VStack(spacing: Theme.sm) {
-                ForEach(viewModel.dashboard.bots) { bot in
-                    BotCard(bot: bot)
+                if viewModel.dashboard.bots.isEmpty {
+                    emptyState("No ORCA Fund landing metrics are available.")
+                } else {
+                    ForEach(viewModel.dashboard.bots) { bot in
+                        BotCard(bot: bot)
+                    }
                 }
             }
         }
         .padding(.top, Theme.md)
+    }
+
+    private var protectedBanner: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "lock.shield.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(AppColors.accentWarning)
+            Text("Chief/Fund surface is read-only in Pod. No orders, positions, or protected mutations are available here.")
+                .podTextStyle(.caption, color: AppColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .background(AppColors.accentWarning.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
     // MARK: - Section 2: Research
@@ -116,10 +139,14 @@ struct TradingView: View {
 
                 // Top arms
                 VStack(spacing: 0) {
-                    ForEach(r.arms) { arm in
-                        ArmRow(arm: arm)
-                        if arm.id != r.arms.last?.id {
-                            Divider().background(AppColors.border)
+                    if r.arms.isEmpty {
+                        emptyState("Research arm detail is not exposed through ORCA Fund landing yet.")
+                    } else {
+                        ForEach(r.arms) { arm in
+                            ArmRow(arm: arm)
+                            if arm.id != r.arms.last?.id {
+                                Divider().background(AppColors.border)
+                            }
                         }
                     }
                 }
@@ -142,7 +169,365 @@ struct TradingView: View {
         }
     }
 
-    // MARK: - Section 3: Oracle
+    // MARK: - Section 3: Earnings Quality
+
+    private var earningsQualitySection: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            tradingSectionHeader("Earnings Quality", icon: "doc.text.magnifyingglass", color: AppColors.accentCaptain)
+            researchOnlyBanner
+
+            if let surface = viewModel.earningsQuality {
+                VStack(spacing: Theme.sm) {
+                    earningsQualityTopTenCard(surface.topTen)
+                    chartSetupLevelsCard(surface.chartSetups)
+                    sectorTrendTapeCard(surface.sectorTrends)
+                    evidenceGatesCard(surface)
+                }
+            } else {
+                emptyState(viewModel.earningsQualityError ?? "Waiting for ORCA earnings quality research route.")
+            }
+        }
+    }
+
+    private var researchOnlyBanner: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.shield.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(AppColors.accentWarning)
+            Text("Research only · not a trade signal. Pod shows ORCA research packets only; no orders, sizing, strategy promotion, live capital, or runtime controls.")
+                .podTextStyle(.caption, color: AppColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .background(AppColors.accentWarning.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func earningsQualityTopTenCard(_ candidates: [EarningsQualityCandidate]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            cardTitle("Earnings Quality Top 10", icon: "list.number")
+            Divider().background(AppColors.border)
+            if candidates.isEmpty {
+                emptyState("Top 10 research candidates are not available from ORCA yet.")
+            } else {
+                ForEach(candidates) { candidate in
+                    HStack(alignment: .top, spacing: Theme.sm) {
+                        Text(candidate.ticker)
+                            .font(.system(size: 13, weight: .bold, design: .monospaced))
+                            .foregroundStyle(AppColors.textPrimary)
+                            .frame(width: 48, alignment: .leading)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(candidate.headline ?? candidate.qualityNote ?? "Research candidate")
+                                .podTextStyle(.body, color: AppColors.textPrimary)
+                                .lineLimit(2)
+                            if let note = candidate.qualityNote, note != candidate.headline {
+                                Text(note)
+                                    .podTextStyle(.caption, color: AppColors.textTertiary)
+                                    .lineLimit(2)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                        if let score = candidate.score {
+                            Text(String(format: "%.2f", score))
+                                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(AppColors.accentSuccess)
+                        }
+                    }
+                    .padding(.horizontal, Theme.md)
+                    .padding(.vertical, Theme.sm)
+                    if candidate.id != candidates.last?.id {
+                        Divider().background(AppColors.border)
+                    }
+                }
+            }
+        }
+        .podCard(padding: 0)
+    }
+
+    private func chartSetupLevelsCard(_ setups: [ChartSetupLevel]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            cardTitle("Chart Setup Levels", icon: "chart.xyaxis.line")
+            Divider().background(AppColors.border)
+            if setups.isEmpty {
+                emptyState("Chart setup levels are not available from ORCA yet.")
+            } else {
+                ForEach(setups) { setup in
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(setup.ticker)
+                                .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                .foregroundStyle(AppColors.textPrimary)
+                            Text(setup.setup ?? "Setup")
+                                .podTextStyle(.caption, color: AppColors.textSecondary)
+                                .lineLimit(1)
+                            Spacer()
+                        }
+                        HStack(spacing: Theme.xs) {
+                            levelPill("Support", setup.support, AppColors.accentSuccess)
+                            levelPill("Resist", setup.resistance, AppColors.accentWarning)
+                            levelPill("Stop", setup.stop, AppColors.accentDanger)
+                            levelPill("Target", setup.target, AppColors.accentElectric)
+                        }
+                    }
+                    .padding(.horizontal, Theme.md)
+                    .padding(.vertical, Theme.sm)
+                    if setup.id != setups.last?.id {
+                        Divider().background(AppColors.border)
+                    }
+                }
+            }
+        }
+        .podCard(padding: 0)
+    }
+
+    private func sectorTrendTapeCard(_ trends: [SectorETFTrend]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            cardTitle("Sector ETF Trend Tape", icon: "waveform.path.ecg")
+            Divider().background(AppColors.border)
+            if trends.isEmpty {
+                emptyState("Sector ETF trend tape is not available from ORCA yet.")
+            } else {
+                ForEach(trends) { trend in
+                    HStack(spacing: Theme.sm) {
+                        Text(trend.symbol)
+                            .font(.system(size: 13, weight: .bold, design: .monospaced))
+                            .foregroundStyle(AppColors.textPrimary)
+                            .frame(width: 50, alignment: .leading)
+                        Text(trend.trend.replacingOccurrences(of: "_", with: " ").capitalized)
+                            .podTextStyle(.body, color: trendColor(trend.trend))
+                            .lineLimit(1)
+                        Spacer()
+                        if let score = trend.score {
+                            Text(String(format: "%.2f", score))
+                                .podTextStyle(.caption, color: AppColors.textSecondary)
+                        }
+                    }
+                    .padding(.horizontal, Theme.md)
+                    .padding(.vertical, Theme.sm)
+                    if trend.id != trends.last?.id {
+                        Divider().background(AppColors.border)
+                    }
+                }
+            }
+        }
+        .podCard(padding: 0)
+    }
+
+    private func evidenceGatesCard(_ surface: EarningsQualitySurface) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            cardTitle("Evidence + Gates", icon: "checklist.checked")
+            Divider().background(AppColors.border)
+
+            if surface.gates.isEmpty && surface.evidenceRefs.isEmpty {
+                emptyState("Evidence and gate records are not available from ORCA yet.")
+            } else {
+                ForEach(surface.gates) { gate in
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack {
+                            Text(gate.name)
+                                .podTextStyle(.body, color: AppColors.textPrimary)
+                                .lineLimit(1)
+                            Spacer()
+                            Text(gate.status.replacingOccurrences(of: "_", with: " ").uppercased())
+                                .podTextStyle(.label, color: gateColor(gate.status))
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(gateColor(gate.status).opacity(0.12))
+                                .clipShape(Capsule())
+                        }
+                        if let note = gate.note {
+                            Text(note)
+                                .podTextStyle(.caption, color: AppColors.textTertiary)
+                                .lineLimit(2)
+                        }
+                    }
+                    .padding(.horizontal, Theme.md)
+                    .padding(.vertical, Theme.sm)
+                    Divider().background(AppColors.border)
+                }
+
+                if !surface.evidenceRefs.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Evidence")
+                            .podTextStyle(.label, color: AppColors.textTertiary)
+                        ForEach(surface.evidenceRefs.prefix(4), id: \.self) { ref in
+                            Text(ref)
+                                .podTextStyle(.caption, color: AppColors.textSecondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    .padding(Theme.md)
+                }
+            }
+
+            Divider().background(AppColors.border)
+            Text("\(surface.policy) · \(surface.generatedAt ?? "freshness pending")")
+                .podTextStyle(.caption, color: AppColors.textTertiary)
+                .padding(Theme.md)
+        }
+        .podCard(padding: 0)
+    }
+
+    // MARK: - Section 4: Predictions
+
+    private var predictionsSection: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            tradingSectionHeader("Chief Predictions", icon: "chart.line.text.clipboard", color: AppColors.accentElectric)
+            researchOnlyBanner
+
+            if let brief = viewModel.marketPredictionBrief {
+                VStack(spacing: Theme.sm) {
+                    marketPredictionCard(brief)
+                    weekAheadEarningsPredictionCard(brief.earningsRows)
+                    predictionCalibrationCard(brief.calibration, generatedAt: brief.generatedAt, asOfDate: brief.asOfDate)
+                }
+            } else {
+                emptyState(viewModel.marketPredictionError ?? "Waiting for ORCA market prediction brief route.")
+            }
+        }
+    }
+
+    private func marketPredictionCard(_ brief: MarketPredictionBrief) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            cardTitle("Market 30/60/90", icon: "calendar")
+            Divider().background(AppColors.border)
+
+            if brief.marketRows.isEmpty {
+                emptyState("30/60/90 market trend rows are not available from ORCA yet.")
+            } else {
+                ForEach(brief.marketRows) { row in
+                    VStack(alignment: .leading, spacing: 7) {
+                        HStack(spacing: Theme.sm) {
+                            Text(row.symbol)
+                                .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                .foregroundStyle(AppColors.textPrimary)
+                                .frame(width: 46, alignment: .leading)
+                            Text(row.name ?? row.assetClass ?? "Market")
+                                .podTextStyle(.body, color: AppColors.textSecondary)
+                                .lineLimit(1)
+                            Spacer()
+                            if let lastPrice = row.lastPrice {
+                                Text(formatPrice(lastPrice))
+                                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(AppColors.textTertiary)
+                            }
+                        }
+
+                        HStack(spacing: Theme.xs) {
+                            horizonPill("30D", prediction: row.prediction30d, confidence: row.confidence30d, returnValue: row.return30d)
+                            horizonPill("60D", prediction: row.prediction60d, confidence: row.confidence60d, returnValue: row.return60d)
+                            horizonPill("90D", prediction: row.prediction90d, confidence: row.confidence90d, returnValue: row.return90d)
+                        }
+                    }
+                    .padding(.horizontal, Theme.md)
+                    .padding(.vertical, Theme.sm)
+                    if row.id != brief.marketRows.last?.id {
+                        Divider().background(AppColors.border)
+                    }
+                }
+            }
+        }
+        .podCard(padding: 0)
+    }
+
+    private func weekAheadEarningsPredictionCard(_ rows: [WeekAheadEarningsPrediction]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            cardTitle("Week-Ahead Earnings", icon: "calendar.badge.clock")
+            Divider().background(AppColors.border)
+
+            if rows.isEmpty {
+                emptyState("Week-ahead earnings predictions are not available from ORCA yet.")
+            } else {
+                ForEach(rows) { row in
+                    HStack(alignment: .top, spacing: Theme.sm) {
+                        Text(row.symbol)
+                            .font(.system(size: 13, weight: .bold, design: .monospaced))
+                            .foregroundStyle(AppColors.textPrimary)
+                            .frame(width: 50, alignment: .leading)
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(predictionLabel(row.prediction))
+                                .podTextStyle(.body, color: predictionColor(row.prediction))
+                                .lineLimit(1)
+                            Text(earningsDetail(row))
+                                .podTextStyle(.caption, color: AppColors.textTertiary)
+                                .lineLimit(2)
+                        }
+
+                        Spacer(minLength: 0)
+
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(formatConfidence(row.confidence))
+                                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(predictionColor(row.prediction))
+                            Text(row.earningsDate ?? "date pending")
+                                .podTextStyle(.label, color: AppColors.textTertiary)
+                        }
+                    }
+                    .padding(.horizontal, Theme.md)
+                    .padding(.vertical, Theme.sm)
+                    if row.id != rows.last?.id {
+                        Divider().background(AppColors.border)
+                    }
+                }
+            }
+        }
+        .podCard(padding: 0)
+    }
+
+    private func predictionCalibrationCard(_ calibration: PredictionCalibrationSummary?, generatedAt: String?, asOfDate: String?) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            cardTitle("Prediction Calibration", icon: "target")
+            Divider().background(AppColors.border)
+
+            HStack(spacing: 0) {
+                researchStat(label: "Total", value: "\(calibration?.totalPredictions ?? 0)", color: AppColors.accentElectric)
+                statDivider
+                researchStat(label: "Resolved", value: "\(calibration?.resolved ?? 0)", color: AppColors.accentSuccess)
+                statDivider
+                researchStat(label: "Unresolved", value: "\(calibration?.unresolved ?? 0)", color: AppColors.accentWarning)
+            }
+            .padding(.vertical, Theme.md)
+
+            Divider().background(AppColors.border)
+
+            Text(calibration?.read ?? "Calibration starts after predictions resolve against market outcomes.")
+                .podTextStyle(.caption, color: AppColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(Theme.md)
+
+            Divider().background(AppColors.border)
+
+            Text("As of \(asOfDate ?? "pending") / generated \(generatedAt ?? "pending")")
+                .podTextStyle(.caption, color: AppColors.textTertiary)
+                .padding(Theme.md)
+        }
+        .podCard(padding: 0)
+    }
+
+    private func horizonPill(_ label: String, prediction: String?, confidence: Double?, returnValue: Double?) -> some View {
+        let color = predictionColor(prediction)
+        return VStack(spacing: 2) {
+            Text(label)
+                .podTextStyle(.label, color: AppColors.textTertiary)
+            Text(predictionLabel(prediction))
+                .podTextStyle(.label, color: color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            Text("\(formatPercent(returnValue)) / \(formatConfidence(confidence))")
+                .podTextStyle(.label, color: AppColors.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 6)
+        .padding(.horizontal, 4)
+        .background(color.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+    }
+
+    // MARK: - Section 5: Oracle
 
     private var oracleSection: some View {
         let oracle = viewModel.dashboard.oracle
@@ -171,9 +556,35 @@ struct TradingView: View {
 
                 // Predictions
                 VStack(spacing: 0) {
-                    ForEach(oracle.predictions) { prediction in
-                        OraclePredictionRow(prediction: prediction)
-                        if prediction.id != oracle.predictions.last?.id {
+                    if oracle.predictions.isEmpty {
+                        emptyState("Oracle predictions are not exposed through ORCA Fund landing yet.")
+                    } else {
+                        ForEach(oracle.predictions) { prediction in
+                            OraclePredictionRow(prediction: prediction)
+                            if prediction.id != oracle.predictions.last?.id {
+                                Divider().background(AppColors.border)
+                            }
+                        }
+                    }
+                }
+            }
+            .podCard(padding: 0)
+        }
+    }
+
+    // MARK: - Section 6: Earnings
+
+    private var earningsSection: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            tradingSectionHeader("Earnings Predictions", icon: "calendar.badge.clock", color: AppColors.accentCaptain)
+
+            VStack(spacing: 0) {
+                if viewModel.dashboard.earnings.isEmpty {
+                    emptyState("Earnings predictions are not exposed through ORCA Fund landing yet.")
+                } else {
+                    ForEach(viewModel.dashboard.earnings) { event in
+                        EarningsRow(event: event)
+                        if event.id != viewModel.dashboard.earnings.last?.id {
                             Divider().background(AppColors.border)
                         }
                     }
@@ -183,25 +594,7 @@ struct TradingView: View {
         }
     }
 
-    // MARK: - Section 4: Earnings
-
-    private var earningsSection: some View {
-        VStack(alignment: .leading, spacing: Theme.sm) {
-            tradingSectionHeader("Earnings Predictions", icon: "calendar.badge.clock", color: AppColors.accentCaptain)
-
-            VStack(spacing: 0) {
-                ForEach(viewModel.dashboard.earnings) { event in
-                    EarningsRow(event: event)
-                    if event.id != viewModel.dashboard.earnings.last?.id {
-                        Divider().background(AppColors.border)
-                    }
-                }
-            }
-            .podCard(padding: 0)
-        }
-    }
-
-    // MARK: - Section 5: Macro
+    // MARK: - Section 7: Macro
 
     private var macroSection: some View {
         VStack(alignment: .leading, spacing: Theme.sm) {
@@ -211,8 +604,13 @@ struct TradingView: View {
                 columns: [GridItem(.flexible()), GridItem(.flexible())],
                 spacing: Theme.sm
             ) {
-                ForEach(viewModel.dashboard.macro) { pred in
-                    MacroCard(prediction: pred)
+                if viewModel.dashboard.macro.isEmpty {
+                    emptyState("Macro predictions are not exposed through ORCA Fund landing yet.")
+                        .gridCellColumns(2)
+                } else {
+                    ForEach(viewModel.dashboard.macro) { pred in
+                        MacroCard(prediction: pred)
+                    }
                 }
             }
         }
@@ -241,6 +639,120 @@ struct TradingView: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private func emptyState(_ text: String) -> some View {
+        Text(text)
+            .podTextStyle(.caption, color: AppColors.textTertiary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Theme.md)
+            .background(AppColors.backgroundSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func cardTitle(_ title: String, icon: String) -> some View {
+        HStack(spacing: Theme.xs) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(AppColors.accentCaptain)
+            Text(title)
+                .podTextStyle(.headline, color: AppColors.textPrimary)
+            Spacer()
+        }
+        .padding(Theme.md)
+    }
+
+    private func levelPill(_ label: String, _ value: Double?, _ color: Color) -> some View {
+        VStack(spacing: 2) {
+            Text(value.map { String(format: "%.2f", $0) } ?? "-")
+                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                .foregroundStyle(color)
+            Text(label)
+                .podTextStyle(.label, color: AppColors.textTertiary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 6)
+        .background(color.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+    }
+
+    private func trendColor(_ trend: String) -> Color {
+        let normalized = trend.lowercased()
+        if normalized.contains("up") || normalized.contains("bull") || normalized.contains("strong") {
+            return AppColors.accentSuccess
+        }
+        if normalized.contains("down") || normalized.contains("bear") || normalized.contains("weak") {
+            return AppColors.accentDanger
+        }
+        return AppColors.accentWarning
+    }
+
+    private func gateColor(_ status: String) -> Color {
+        let normalized = status.lowercased()
+        if normalized.contains("pass") || normalized.contains("ok") || normalized.contains("clear") {
+            return AppColors.accentSuccess
+        }
+        if normalized.contains("fail") || normalized.contains("block") || normalized.contains("breach") {
+            return AppColors.accentDanger
+        }
+        return AppColors.accentWarning
+    }
+
+    private func predictionColor(_ prediction: String?) -> Color {
+        let normalized = (prediction ?? "").lowercased()
+        if normalized.contains("up") || normalized.contains("positive") || normalized.contains("long") {
+            return AppColors.accentSuccess
+        }
+        if normalized.contains("down") || normalized.contains("fade") || normalized.contains("short") {
+            return AppColors.accentDanger
+        }
+        return AppColors.accentWarning
+    }
+
+    private func predictionLabel(_ prediction: String?) -> String {
+        guard let prediction, !prediction.isEmpty else {
+            return "Pending"
+        }
+        return prediction.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+
+    private func earningsDetail(_ row: WeekAheadEarningsPrediction) -> String {
+        var parts: [String] = []
+        if let days = row.daysUntil {
+            parts.append(days == 0 ? "today" : "\(days)d out")
+        }
+        if let qualityScore = row.qualityScore {
+            parts.append("quality \(String(format: "%.2f", qualityScore))")
+        }
+        if let eps = row.epsEstimate {
+            parts.append("EPS \(String(format: "%.2f", eps))")
+        }
+        if let setup = row.chartSetup {
+            parts.append(setup.replacingOccurrences(of: "_", with: " "))
+        }
+        return parts.isEmpty ? (row.companyName ?? row.sector ?? "details pending") : parts.joined(separator: " / ")
+    }
+
+    private func formatConfidence(_ value: Double?) -> String {
+        guard let value else {
+            return "--"
+        }
+        return String(format: "%.0f%%", value * 100)
+    }
+
+    private func formatPercent(_ value: Double?) -> String {
+        guard let value else {
+            return "--"
+        }
+        let sign = value >= 0 ? "+" : ""
+        return "\(sign)\(String(format: "%.1f%%", value * 100))"
+    }
+
+    private func formatPrice(_ value: Double) -> String {
+        if value >= 1_000 {
+            return "$\(String(format: "%.1fk", value / 1_000))"
+        }
+        return "$\(String(format: "%.2f", value))"
     }
 
     private var statDivider: some View {

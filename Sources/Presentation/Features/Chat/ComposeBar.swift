@@ -441,9 +441,9 @@ struct ComposeBarView: View {
         do {
             let response: PaginatedResponse<AgentDTO> = try await APIClient.shared.get(path: "/api/v1/agents")
             let candidates = response.items
-                .filter { AgentRosterPolicy.isActiveOrSupport($0.name) }
+                .filter { $0.domainRosterLane == .activeMain || $0.domainRosterLane == .supportRuntime }
                 .sorted {
-                    AgentRosterPolicy.sortKey(for: $0.name) < AgentRosterPolicy.sortKey(for: $1.name)
+                    $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
                 }
                 .map { dto in
                 MentionCandidate(

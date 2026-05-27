@@ -297,6 +297,7 @@ private struct RuntimeView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.md) {
                     header
+                    fundSurfaceSection
                     summaryStrip
                     startupTruthSection
                     computeSummarySection
@@ -351,6 +352,46 @@ private struct RuntimeView: View {
             runtimeMetric("Stale", value: model.staleCount, color: model.staleCount > 0 ? AppColors.accentWarning : AppColors.accentSuccess)
             runtimeMetric("Errors", value: model.errorCount, color: model.errorCount > 0 ? AppColors.accentDanger : AppColors.accentSuccess)
         }
+    }
+
+    private var fundSurfaceSection: some View {
+        NavigationLink {
+            TradingView()
+        } label: {
+            HStack(alignment: .top, spacing: Theme.sm) {
+                Image(systemName: "lock.shield.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(AppColors.accentWarning)
+                    .frame(width: 32, height: 32)
+                    .background(AppColors.accentWarning.opacity(0.10))
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Fund Surface")
+                        .podTextStyle(.headline, color: AppColors.textPrimary)
+                    Text("Read-only Fund landing, earnings quality research, gates, and evidence from ORCA.")
+                        .podTextStyle(.caption, color: AppColors.textSecondary)
+                        .lineLimit(2)
+                    Text("Research only · not a trade signal")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(AppColors.accentWarning)
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppColors.textTertiary)
+            }
+            .padding(Theme.sm)
+            .background(AppColors.backgroundTertiary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                    .strokeBorder(AppColors.accentWarning.opacity(0.25), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private var runtimeFleetSection: some View {

@@ -183,10 +183,17 @@ actor AgentChatService {
                     let parsedState = DMDeliveryState.parse(response.metadata.responseState)
                     let parsedMode = DMDeliveryMode.parse(response.metadata.deliveryMode) ?? mode
                     let parsedProvenance = DMResponseProvenance.parse(response.metadata.provenance)
+                    let effectiveState = Self.effectiveResponseState(
+                        content: content,
+                        deliveryMode: parsedMode,
+                        provenance: parsedProvenance,
+                        responseState: parsedState
+                    )
                     let isAsyncAck = parsedMode == .liveInbox
                         || parsedProvenance == .liveInbox
-                        || parsedState == .computeRunning
-                        || parsedState == .waitingForLiveAgent
+                        || parsedProvenance == .coordinationReview
+                        || effectiveState == .computeRunning
+                        || effectiveState == .waitingForLiveAgent
                     if content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !isAsyncAck {
                         continuation.finish(throwing: AgentChatError.noResponse)
                         return
@@ -205,7 +212,7 @@ actor AgentChatService {
                         deliveryMode: response.metadata.deliveryMode ?? mode.rawValue,
                         provenance: parsedProvenance?.rawValue
                             ?? Self.provenance(for: response.metadata.deliveryMode, source: response.metadata.source, lane: response.metadata.lane),
-                        responseState: parsedState?.rawValue ?? response.metadata.responseState,
+                        responseState: effectiveState?.rawValue ?? response.metadata.responseState,
                         triageId: response.metadata.triageId
                     )
                     continuation.yield(ResponseChunk(content: content, metadata: metadata))
@@ -416,6 +423,22 @@ actor AgentChatService {
 
     private static func provenance(for deliveryMode: String?, source: String?, lane: String?) -> String {
         DMResponseProvenance(deliveryMode: deliveryMode, source: source, lane: lane).rawValue
+    }
+
+    private static func effectiveResponseState(
+        content: String,
+        deliveryMode: DMDeliveryMode,
+        provenance: DMResponseProvenance?,
+        responseState: DMDeliveryState?
+    ) -> DMDeliveryState? {
+        let normalized = content.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalized == "recorded in orca and queued for compute response. the result will appear here shortly." {
+            return deliveryMode == .liveInbox || provenance == .liveInbox ? .waitingForLiveAgent : .computeRunning
+        }
+        if normalized.hasPrefix("sent to ") && normalized.contains(" live nerve inbox") {
+            return .waitingForLiveAgent
+        }
+        return responseState
     }
 
     private static func errorSummary(from data: Data) -> String? {

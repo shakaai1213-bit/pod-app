@@ -235,6 +235,8 @@ final class DirectChatViewModel {
         currentService = AgentChatService(agent: agent)
         liveRefreshTask?.cancel()
         stopLiveResponseStream()
+        isStreaming = false
+        streamingContent = ""
         composedMessage = ""
         error = nil
         ticketActionMessage = nil
@@ -274,6 +276,8 @@ final class DirectChatViewModel {
         stopLiveResponseStream()
         stopAttachedTicketLifecycleStream()
         stopAgentRunFollowupRefresh()
+        isStreaming = false
+        streamingContent = ""
         currentMessages = []
         composedMessage = ""
         error = nil
@@ -539,6 +543,7 @@ final class DirectChatViewModel {
                     let isLiveInboxAck = deliveryMode == .liveInbox
                         || responseMode == .liveInbox
                         || responseProvenance == .liveInbox
+                        || responseProvenance == .coordinationReview
                     let isAsyncComputeAck = responseState == .computeRunning
 
                     if isLiveInboxAck {
@@ -546,7 +551,7 @@ final class DirectChatViewModel {
                         assistantMsg.source = "orca.chat.ack"
                         assistantMsg.lane = "direct_agent_inbox"
                         assistantMsg.deliveryMode = DMDeliveryMode.liveInbox.rawValue
-                        assistantMsg.provenance = DMResponseProvenance.liveInbox.rawValue
+                        assistantMsg.provenance = responseProvenance?.rawValue ?? DMResponseProvenance.liveInbox.rawValue
                         assistantMsg.deliveryState = DMDeliveryState.waitingForLiveAgent.rawValue
                         routeProgressSteps = Self.routeProgressSteps(for: deliveryMode, stage: .waitingLive)
                     } else if isAsyncComputeAck {
@@ -606,7 +611,7 @@ final class DirectChatViewModel {
                     )
                 } else if assistantMsg.deliveryState == DMDeliveryState.computeRunning.rawValue,
                           let channelId = conversation.orcaChannelId {
-                    liveChatStatus = "ORCA accepted the \(agent.name) compute persona route. Waiting for the compute answer."
+                    liveChatStatus = "ORCA accepted the \(agent.name) compute helper route. Waiting for the answer."
                     routeProgressSteps = Self.routeProgressSteps(for: deliveryMode, stage: .computeRunning)
                     startLiveResponseRefresh(
                         agent: agent,
@@ -800,7 +805,7 @@ final class DirectChatViewModel {
             thirdTitle = "Route"
             thirdIcon = "arrow.triangle.branch"
         case .compute:
-            thirdTitle = "Compute persona"
+            thirdTitle = "Compute helper"
             thirdIcon = "cpu"
         case .agentRun:
             thirdTitle = "Agent Run"
@@ -1017,7 +1022,14 @@ final class DirectChatViewModel {
         message.lane = payload.lane ?? Self.defaultLane(senderAgentId: payload.senderAgentId, messageType: payload.messageType, source: payload.source, responseState: payload.responseState)
         message.deliveryMode = payload.deliveryMode ?? Self.defaultDeliveryMode(senderAgentId: payload.senderAgentId, messageType: payload.messageType, source: payload.source, responseState: payload.responseState)
         message.provenance = payload.provenance ?? DMResponseProvenance(deliveryMode: payload.deliveryMode, source: payload.source, lane: payload.lane).rawValue
-        message.deliveryState = Self.normalizedDeliveryState(payload.responseState) ?? DMDeliveryState.responseReceived.rawValue
+        message.deliveryState = Self.effectiveDeliveryState(
+            content: payload.content,
+            deliveryMode: payload.deliveryMode,
+            provenance: payload.provenance,
+            source: payload.source,
+            lane: payload.lane,
+            responseState: payload.responseState
+        ) ?? DMDeliveryState.responseReceived.rawValue
         message.traceId = payload.traceId
         message.remoteMessageId = payload.id
         message.triageId = payload.triageId
@@ -1081,7 +1093,14 @@ final class DirectChatViewModel {
                 message.lane = reply.lane ?? Self.defaultLane(senderAgentId: reply.senderAgentId, messageType: reply.messageType, source: reply.source, responseState: reply.responseState)
                 message.deliveryMode = reply.deliveryMode ?? Self.defaultDeliveryMode(senderAgentId: reply.senderAgentId, messageType: reply.messageType, source: reply.source, responseState: reply.responseState)
                 message.provenance = reply.provenance ?? DMResponseProvenance(deliveryMode: reply.deliveryMode, source: reply.source, lane: reply.lane).rawValue
-                message.deliveryState = Self.normalizedDeliveryState(reply.responseState) ?? DMDeliveryState.responseReceived.rawValue
+                message.deliveryState = Self.effectiveDeliveryState(
+                    content: reply.content,
+                    deliveryMode: reply.deliveryMode,
+                    provenance: reply.provenance,
+                    source: reply.source,
+                    lane: reply.lane,
+                    responseState: reply.responseState
+                ) ?? DMDeliveryState.responseReceived.rawValue
                 message.traceId = reply.traceId
                 message.remoteMessageId = reply.id
                 message.triageId = reply.triageId
@@ -1143,7 +1162,14 @@ final class DirectChatViewModel {
                     existing.lane = remote.lane ?? existing.lane
                     existing.deliveryMode = remote.deliveryMode ?? existing.deliveryMode
                     existing.provenance = remote.provenance ?? existing.provenance
-                    existing.deliveryState = Self.normalizedDeliveryState(remote.responseState) ?? existing.deliveryState
+                    existing.deliveryState = Self.effectiveDeliveryState(
+                        content: remote.content,
+                        deliveryMode: remote.deliveryMode,
+                        provenance: remote.provenance,
+                        source: remote.source,
+                        lane: remote.lane,
+                        responseState: remote.responseState
+                    ) ?? existing.deliveryState
                     existing.traceId = remote.traceId ?? existing.traceId
                     existing.triageId = remote.triageId ?? existing.triageId
                     existing.triageTraceId = remote.triageTraceId ?? existing.triageTraceId
@@ -1171,7 +1197,14 @@ final class DirectChatViewModel {
                     localMatch.lane = localMatch.lane ?? remote.lane
                     localMatch.deliveryMode = localMatch.deliveryMode ?? remote.deliveryMode
                     localMatch.provenance = localMatch.provenance ?? remote.provenance
-                    localMatch.deliveryState = localMatch.deliveryState ?? Self.normalizedDeliveryState(remote.responseState)
+                    localMatch.deliveryState = localMatch.deliveryState ?? Self.effectiveDeliveryState(
+                        content: remote.content,
+                        deliveryMode: remote.deliveryMode,
+                        provenance: remote.provenance,
+                        source: remote.source,
+                        lane: remote.lane,
+                        responseState: remote.responseState
+                    )
                     localMatch.traceId = localMatch.traceId ?? remote.traceId
                     localMatch.triageId = localMatch.triageId ?? remote.triageId
                     localMatch.triageTraceId = localMatch.triageTraceId ?? remote.triageTraceId
@@ -1190,7 +1223,14 @@ final class DirectChatViewModel {
                 message.lane = remote.lane ?? Self.defaultLane(senderAgentId: remote.senderAgentId, messageType: remote.messageType, source: remote.source, responseState: remote.responseState)
                 message.deliveryMode = remote.deliveryMode ?? Self.defaultDeliveryMode(senderAgentId: remote.senderAgentId, messageType: remote.messageType, source: remote.source, responseState: remote.responseState)
                 message.provenance = remote.provenance ?? DMResponseProvenance(deliveryMode: remote.deliveryMode, source: remote.source, lane: remote.lane).rawValue
-                message.deliveryState = Self.normalizedDeliveryState(remote.responseState) ?? DMDeliveryState.responseReceived.rawValue
+                message.deliveryState = Self.effectiveDeliveryState(
+                    content: remote.content,
+                    deliveryMode: remote.deliveryMode,
+                    provenance: remote.provenance,
+                    source: remote.source,
+                    lane: remote.lane,
+                    responseState: remote.responseState
+                ) ?? DMDeliveryState.responseReceived.rawValue
                 message.traceId = remote.traceId
                 message.remoteMessageId = remote.id
                 message.triageId = remote.triageId
@@ -1281,6 +1321,42 @@ final class DirectChatViewModel {
 
     private static func normalizedDeliveryState(_ raw: String?) -> String? {
         DMDeliveryState.parse(raw)?.rawValue
+    }
+
+    private static func effectiveDeliveryState(
+        content: String,
+        deliveryMode: String?,
+        provenance: String?,
+        source: String?,
+        lane: String?,
+        responseState: String?
+    ) -> String? {
+        let normalized = content.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let parsedMode = DMDeliveryMode.parse(deliveryMode)
+        let parsedProvenance = DMResponseProvenance.parse(provenance)
+        let parsedState = DMDeliveryState.parse(responseState)
+        let normalizedSource = source?.lowercased() ?? ""
+        let normalizedLane = lane?.lowercased() ?? ""
+
+        if normalized == "recorded in orca and queued for compute response. the result will appear here shortly." {
+            if parsedMode == .liveInbox
+                || parsedProvenance == .liveInbox
+                || normalizedLane.contains("direct_agent_inbox")
+                || normalizedSource.contains("pod-bridge") {
+                return DMDeliveryState.waitingForLiveAgent.rawValue
+            }
+            return DMDeliveryState.computeRunning.rawValue
+        }
+
+        if normalized.hasPrefix("sent to ") && normalized.contains(" live nerve inbox") {
+            return DMDeliveryState.waitingForLiveAgent.rawValue
+        }
+
+        if normalized.contains(" claimed this live inbox request") {
+            return DMDeliveryState.claimedByAgent.rawValue
+        }
+
+        return parsedState?.rawValue
     }
 
     private static func isPendingAsyncDeliveryState(_ raw: String?) -> Bool {
@@ -1439,6 +1515,11 @@ final class DirectChatViewModel {
                     agentName: agent.name,
                     triageId: triage?.triageId,
                     triageTraceId: triage?.traceId,
+                    recommendedRuntime: triage?.recommendedRuntime,
+                    recommendedSurface: triage?.recommendedSurface,
+                    runtimeReason: triage?.runtimeReason,
+                    handoffSubject: triage?.handoffSubject,
+                    handoffPacket: Self.handoffPacket(for: triage, agent: agent),
                     triageSummary: Self.triageSummaryMarkdown(triage),
                     shouldAppendSubmittedDraft: shouldAppendSubmittedDraft
                 )
@@ -1476,7 +1557,12 @@ final class DirectChatViewModel {
                     acceptanceCriteria: draft.acceptanceCriteria,
                     desiredOutcome: draft.desiredOutcome,
                     triageId: draft.triageId,
-                    triageTraceId: draft.triageTraceId
+                    triageTraceId: draft.triageTraceId,
+                    recommendedRuntime: draft.recommendedRuntime,
+                    recommendedSurface: draft.recommendedSurface,
+                    runtimeReason: draft.runtimeReason,
+                    handoffSubject: draft.handoffSubject,
+                    handoffPacket: draft.handoffPacket
                 )
                 let ticket: DirectChatTicketDTO = try await api.post(path: "/api/v1/tickets", body: body)
                 let traceId = draft.triageTraceId ?? Self.makeTraceId(prefix: "pod-chat-ticket")
@@ -2284,7 +2370,7 @@ final class DirectChatViewModel {
     }
 
     private static func localFallback(for agent: AgentInfo, userMessage: String, error: Error) -> String {
-        let prefix = "Pod local guardrail fallback. This is not a live \(agent.name) reply and not a compute persona answer. Schoolhouse compute did not return a usable reply."
+        let prefix = "Pod local guardrail fallback. This is not a live \(agent.name) reply and not a compute helper answer. Schoolhouse compute did not return a usable reply."
         switch agent.id {
         case "aloha":
             return "\(prefix)\n\nAloha path: I can help triage this chat, but I do not have live inbox, memory, NATS, file, or ORCA mutation tools inside this reply. Use the ticket button to create an ORCA control record, or attach follow-up to the active ticket. Standards, memory promotion, archive decisions, and team routing need review. Last compute error: \(error.localizedDescription)"
@@ -2322,7 +2408,7 @@ final class DirectChatViewModel {
         case .auto:
             return """
             Recorded in Pod.
-            Asking ORCA to choose compute persona, live inbox, ticket, or protected review for \(agent.name).
+            Asking ORCA to choose compute helper, live inbox, ticket, or protected review for \(agent.name).
             """
         case .fallback:
             return "Using Pod local guardrail fallback only. This is not a live agent response."
@@ -2338,7 +2424,7 @@ final class DirectChatViewModel {
         case .liveInbox:
             return "Recorded in ORCA. Waiting for \(agent.name)'s live inbox reply."
         case .compute:
-            return "Recorded. Running the \(agent.name) compute persona route."
+            return "Recorded. Running the \(agent.name) compute helper route."
         case .agentRun:
             return "Recorded. Dispatching the attached ticket to Schoolhouse Agent Runs."
         case .auto:
@@ -2404,7 +2490,7 @@ final class DirectChatViewModel {
         let trimmedAck = ack.trimmingCharacters(in: .whitespacesAndNewlines)
         let suffix = trimmedAck.isEmpty ? "" : "\n\nORCA ack: \(trimmedAck)"
         return """
-        ORCA accepted the \(agent.name) compute persona route.
+        ORCA accepted the \(agent.name) compute helper route.
         This is a compute acknowledgement, not the final answer. I’ll append the compute result when it lands.\(suffix)
         """
     }
@@ -2474,6 +2560,9 @@ final class DirectChatViewModel {
         - Merman trace: \(triage?.traceId ?? "none")
         - Merman suggested worker: \(triage?.suggestedWorker ?? "none")
         - Merman recommended lane: \(metadata.recommendedLane)
+        - Merman recommended runtime: \(triage?.recommendedRuntime ?? "unknown")
+        - Merman recommended surface: \(triage?.recommendedSurface ?? "unknown")
+        - Merman handoff subject: \(triage?.handoffSubject ?? "none")
         - Worker lane: \(metadata.workerLane)
         - Tool policy: \(metadata.toolPolicy)
         - Autonomy level: \(metadata.autonomyLevel)
@@ -2594,6 +2683,12 @@ final class DirectChatViewModel {
         if let triage {
             values.append("intent:\(triage.intentType)")
             values.append("risk:\(triage.riskLevel)")
+            if let runtime = triage.recommendedRuntime {
+                values.append("runtime:\(runtime)")
+            }
+            if let surface = triage.recommendedSurface {
+                values.append("surface:\(surface)")
+            }
         }
         var seen = Set<String>()
         return values
@@ -2621,11 +2716,35 @@ final class DirectChatViewModel {
         - Autonomy: \(triage.autonomyLevel)
         - Approval state: \(triage.approvalState ?? (triage.needsApproval ? "approval-required" : "owner-review"))
         - Worker lane: \(triage.workerLane ?? triage.suggestedWorker ?? "unspecified")
+        - Recommended runtime: \(triage.recommendedRuntime ?? "unknown")
+        - Recommended surface: \(triage.recommendedSurface ?? "unknown")
+        - Runtime reason: \(triage.runtimeReason ?? "not provided")
+        - Handoff subject: \(triage.handoffSubject ?? "none")
         - Delivery mode: \(triage.deliveryMode)
         - Compute route: \(triage.suggestedComputeRoute)
         - Next action: \(triage.nextAction)
         - Reason: \(triage.reason)
         """
+    }
+
+    private static func handoffPacket(for triage: DirectChatMermanTriageDTO?, agent: AgentInfo) -> [String: String] {
+        [
+            "surface": "pod_chat",
+            "owner_agent": triage?.suggestedOwner ?? agent.id,
+            "target_agent": agent.id,
+            "triage_id": triage?.triageId ?? "",
+            "triage_trace_id": triage?.traceId ?? "",
+            "intent_type": triage?.intentType ?? "unknown",
+            "recommended_lane": triage?.recommendedLane ?? agent.id,
+            "worker_lane": triage?.workerLane ?? triage?.suggestedWorker ?? "",
+            "recommended_runtime": triage?.recommendedRuntime ?? "unknown",
+            "recommended_surface": triage?.recommendedSurface ?? "pod_chat",
+            "runtime_reason": triage?.runtimeReason ?? "",
+            "handoff_subject": triage?.handoffSubject ?? "",
+            "delivery_mode": triage?.deliveryMode ?? "auto",
+            "compute_route": triage?.suggestedComputeRoute ?? "auto",
+            "next_action": triage?.nextAction ?? "answer_or_clarify",
+        ].filter { !$0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 
     private static func createdTicketMessage(ticket: DirectChatTicketDTO, triage: DirectChatMermanTriageDTO?) -> String {
@@ -2634,6 +2753,7 @@ final class DirectChatViewModel {
             Created ORCA ticket \(ticket.id): \(ticket.title)
 
             Merman routed this as \(triage.intentType) to \(triage.suggestedOwner), worker \(triage.suggestedWorker ?? "none"), autonomy \(triage.autonomyLevel).
+            Runtime path: \(triage.recommendedRuntime ?? "unknown") via \(triage.recommendedSurface ?? "unknown").
             ORCA is the control record from here.
             """
         }
@@ -2716,7 +2836,7 @@ final class DirectChatViewModel {
         let guardrailNotes = guardrailNotes(for: intake, agent: agent, triage: triage, approvalState: approvalState)
         let acceptanceCriteria = acceptanceCriteria(for: intake, agent: agent, triage: triage, metadataOwner: ownerSlug)
         let doneMeans = doneMeans(for: triage, approvalState: approvalState)
-        let autonomyLevel = normalizedMetadataValue(triage?.autonomyLevel) ?? "owner-review"
+        let autonomyLevel = normalizedMetadataValue(triage?.autonomyLevel) ?? "inspect_only"
         let ticketType = ticketType(for: triage?.intentType, intake: intake)
         let recommendedLane = triage?.recommendedLane ?? agent.id
         let routingNote = triage?.reason ?? routingNote(for: intake, agent: agent)
@@ -2946,6 +3066,11 @@ struct DirectChatTicketDraft: Identifiable, Sendable, Hashable {
     let agentName: String
     let triageId: String?
     let triageTraceId: String?
+    let recommendedRuntime: String?
+    let recommendedSurface: String?
+    let runtimeReason: String?
+    let handoffSubject: String?
+    let handoffPacket: [String: String]
     let triageSummary: String
     let shouldAppendSubmittedDraft: Bool
 
@@ -2984,6 +3109,11 @@ struct DirectChatTicketDraft: Identifiable, Sendable, Hashable {
             agentName: agentName,
             triageId: triageId,
             triageTraceId: triageTraceId,
+            recommendedRuntime: recommendedRuntime,
+            recommendedSurface: recommendedSurface,
+            runtimeReason: runtimeReason,
+            handoffSubject: handoffSubject,
+            handoffPacket: handoffPacket,
             triageSummary: triageSummary,
             shouldAppendSubmittedDraft: shouldAppendSubmittedDraft
         )
@@ -3026,6 +3156,11 @@ private struct DirectChatCreateTicketBody: Encodable {
     let desiredOutcome: String
     let triageId: String?
     let triageTraceId: String?
+    let recommendedRuntime: String?
+    let recommendedSurface: String?
+    let runtimeReason: String?
+    let handoffSubject: String?
+    let handoffPacket: [String: String]
 
     enum CodingKeys: String, CodingKey {
         case title, description, priority, status, source, tags
@@ -3042,6 +3177,11 @@ private struct DirectChatCreateTicketBody: Encodable {
         case desiredOutcome = "desired_outcome"
         case triageId = "triage_id"
         case triageTraceId = "triage_trace_id"
+        case recommendedRuntime = "recommended_runtime"
+        case recommendedSurface = "recommended_surface"
+        case runtimeReason = "runtime_reason"
+        case handoffSubject = "handoff_subject"
+        case handoffPacket = "handoff_packet"
     }
 }
 
@@ -3525,6 +3665,10 @@ private struct DirectChatMermanTriageDTO: Decodable {
     let nextAction: String
     let reason: String
     let approvalGate: String?
+    let recommendedRuntime: String?
+    let recommendedSurface: String?
+    let runtimeReason: String?
+    let handoffSubject: String?
     let approvalState: String?
     let guardrailNotes: [String]?
     let acceptanceCriteria: [String]?
@@ -3553,6 +3697,10 @@ private struct DirectChatMermanTriageDTO: Decodable {
         case nextAction = "next_action"
         case reason
         case approvalGate = "approval_gate"
+        case recommendedRuntime = "recommended_runtime"
+        case recommendedSurface = "recommended_surface"
+        case runtimeReason = "runtime_reason"
+        case handoffSubject = "handoff_subject"
         case approvalState = "approval_state"
         case guardrailNotes = "guardrail_notes"
         case acceptanceCriteria = "acceptance_criteria"
@@ -3582,6 +3730,10 @@ private struct DirectChatMermanTriageDTO: Decodable {
         nextAction: String,
         reason: String,
         approvalGate: String?,
+        recommendedRuntime: String?,
+        recommendedSurface: String?,
+        runtimeReason: String?,
+        handoffSubject: String?,
         approvalState: String?,
         guardrailNotes: [String]?,
         acceptanceCriteria: [String]?,
@@ -3609,6 +3761,10 @@ private struct DirectChatMermanTriageDTO: Decodable {
         self.nextAction = nextAction
         self.reason = reason
         self.approvalGate = approvalGate
+        self.recommendedRuntime = recommendedRuntime
+        self.recommendedSurface = recommendedSurface
+        self.runtimeReason = runtimeReason
+        self.handoffSubject = handoffSubject
         self.approvalState = approvalState
         self.guardrailNotes = guardrailNotes
         self.acceptanceCriteria = acceptanceCriteria
@@ -3639,6 +3795,10 @@ private struct DirectChatMermanTriageDTO: Decodable {
         nextAction = try c.decodeIfPresent(String.self, forKey: .nextAction) ?? "answer_or_clarify"
         reason = try c.decodeIfPresent(String.self, forKey: .reason) ?? "Merman returned a partial triage response."
         approvalGate = try c.decodeIfPresent(String.self, forKey: .approvalGate)
+        recommendedRuntime = try c.decodeIfPresent(String.self, forKey: .recommendedRuntime)
+        recommendedSurface = try c.decodeIfPresent(String.self, forKey: .recommendedSurface)
+        runtimeReason = try c.decodeIfPresent(String.self, forKey: .runtimeReason)
+        handoffSubject = try c.decodeIfPresent(String.self, forKey: .handoffSubject)
         approvalState = try c.decodeIfPresent(String.self, forKey: .approvalState)
         guardrailNotes = try c.decodeIfPresent([String].self, forKey: .guardrailNotes)
         acceptanceCriteria = try c.decodeIfPresent([String].self, forKey: .acceptanceCriteria)
@@ -3671,6 +3831,12 @@ private struct DirectChatMermanTriageDTO: Decodable {
             nextAction: nextAction,
             reason: reason,
             approvalGate: approvalGate,
+            approvalState: approvalState,
+            workerLane: workerLane,
+            recommendedRuntime: recommendedRuntime,
+            recommendedSurface: recommendedSurface,
+            runtimeReason: runtimeReason,
+            handoffSubject: handoffSubject,
             confidence: confidence,
             tags: tags
         )
@@ -3693,11 +3859,15 @@ private struct DirectChatMermanTriageDTO: Decodable {
             nextAction: preview.nextAction,
             reason: preview.reason,
             approvalGate: preview.approvalGate,
-            approvalState: nil,
+            recommendedRuntime: preview.recommendedRuntime,
+            recommendedSurface: preview.recommendedSurface,
+            runtimeReason: preview.runtimeReason,
+            handoffSubject: preview.handoffSubject,
+            approvalState: preview.approvalState,
             guardrailNotes: nil,
             acceptanceCriteria: nil,
             doneMeans: nil,
-            workerLane: nil,
+            workerLane: preview.workerLane,
             visibleTags: nil,
             confidence: preview.confidence,
             quality: "pod_preview_reuse",

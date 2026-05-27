@@ -27,6 +27,9 @@ struct WallDisplayView: View {
     }
 
     private var systemStatusText: String {
+        if viewModel.dataSourceLabel == "SNAPSHOT" {
+            return viewModel.dataSourceMessage
+        }
         if viewModel.attentionCount > 0 {
             return "\(viewModel.attentionCount) attention\(viewModel.attentionCount == 1 ? "" : "s") needed"
         }
@@ -107,9 +110,18 @@ struct WallDisplayView: View {
             Spacer()
 
             // Date
-            Text(dateFormatter.string(from: viewModel.currentTime))
-                .podTextStyle(.subheadline, color: AppColors.textSecondary)
-                .frame(minWidth: 180, alignment: .trailing)
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(dateFormatter.string(from: viewModel.currentTime))
+                    .podTextStyle(.subheadline, color: AppColors.textSecondary)
+                Text(viewModel.dataSourceLabel)
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(viewModel.dataSourceLabel == "SNAPSHOT" ? AppColors.accentWarning : AppColors.accentSuccess)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background((viewModel.dataSourceLabel == "SNAPSHOT" ? AppColors.accentWarning : AppColors.accentSuccess).opacity(0.12))
+                    .clipShape(Capsule())
+            }
+            .frame(minWidth: 180, alignment: .trailing)
         }
         .padding(.horizontal, Theme.lg)
         .frame(height: 80)
@@ -170,6 +182,7 @@ struct WallDisplayView: View {
 
                 Text(systemStatusText)
                     .podTextStyle(.caption, color: AppColors.textSecondary)
+                    .lineLimit(2)
             }
 
             Spacer()

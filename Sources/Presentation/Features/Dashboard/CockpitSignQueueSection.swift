@@ -74,7 +74,7 @@ struct CockpitSignQueueSection: View {
             Image(systemName: "checkmark.seal.fill")
                 .font(.system(size: 13))
                 .foregroundColor(AppColors.accentElectric)
-            Text("NEEDS YOUR SIGN")
+            Text("NEEDS YOUR REVIEW")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundColor(AppColors.textTertiary)
                 .kerning(0.5)

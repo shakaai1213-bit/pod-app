@@ -33,7 +33,11 @@ final class AgentRepository {
                     currentTask: dto.currentTask,
                     lastActivity: dto.lastSeenAt ?? Date(),
                     skills: dto.skills,
-                    avatarColor: dto.avatarColor ?? "#3B82F6"
+                    avatarColor: dto.avatarColor ?? "#3B82F6",
+                    rosterLane: dto.domainRosterLane,
+                    isDefaultRoutingEnabled: dto.isDefaultRoutingEnabled,
+                    quarantineState: dto.quarantineState,
+                    rosterNote: dto.rosterNote
                 )
             }
             agents = AgentRosterPolicy.filterActive(remote)
@@ -60,15 +64,19 @@ final class AgentRepository {
             currentTask: dto.currentTask,
             lastActivity: dto.lastSeenAt ?? Date(),
             skills: dto.skills,
-            avatarColor: dto.avatarColor ?? "#3B82F6"
+            avatarColor: dto.avatarColor ?? "#3B82F6",
+            rosterLane: dto.domainRosterLane,
+            isDefaultRoutingEnabled: dto.isDefaultRoutingEnabled,
+            quarantineState: dto.quarantineState,
+            rosterNote: dto.rosterNote
         )
 
         if let index = agents.firstIndex(where: { $0.id == id }) {
             agents[index] = agent
-        } else if AgentRosterPolicy.isActiveOrSupport(agent.name) {
+        } else if AgentRosterPolicy.isActiveOrSupport(agent) {
             agents.append(agent)
         }
-        if AgentRosterPolicy.isActiveOrSupport(agent.name) {
+        if AgentRosterPolicy.isActiveOrSupport(agent) {
             await cache.syncAgents([agent])
         }
     }

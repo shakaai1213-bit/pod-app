@@ -173,7 +173,7 @@ enum DMDeliveryMode: String, Codable, Sendable {
         switch self {
         case .auto: return "Auto route"
         case .liveInbox: return "Live inbox handoff"
-        case .compute: return "Compute persona"
+        case .compute: return "Compute helper"
         case .agentRun: return "Agent Run"
         case .fallback: return "Local guardrail fallback"
         case .system: return "Pod system"
@@ -184,6 +184,7 @@ enum DMDeliveryMode: String, Codable, Sendable {
 
 enum DMResponseProvenance: String, Codable, Sendable {
     case liveInbox = "live_inbox"
+    case coordinationReview = "coordination_review"
     case compute
     case agentRun = "agent_run"
     case fallback
@@ -195,6 +196,8 @@ enum DMResponseProvenance: String, Codable, Sendable {
         guard let raw else { return nil }
         let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         switch normalized {
+        case "coordination", "coordination_review", "review_coordination":
+            return .coordinationReview
         case "agent_inbox", "direct_agent_inbox":
             return .liveInbox
         case "local_guardrail", "local_fallback":
@@ -218,6 +221,8 @@ enum DMResponseProvenance: String, Codable, Sendable {
             let raw = [source, lane].compactMap { $0?.lowercased() }.joined(separator: " ")
             if raw.contains("protected") {
                 self = .protected
+            } else if raw.contains("coordination_review") || raw.contains("coordination") {
+                self = .coordinationReview
             } else if raw.contains("fallback") || raw.contains("local_guardrail") {
                 self = .fallback
             } else if raw.contains("ticket") {
@@ -236,8 +241,9 @@ enum DMResponseProvenance: String, Codable, Sendable {
 
     var displayLabel: String {
         switch self {
+        case .coordinationReview: return "Coordination review handoff"
         case .liveInbox: return "ORCA live inbox handoff"
-        case .compute: return "Compute persona, not live runtime"
+        case .compute: return "Compute helper, not live runtime"
         case .agentRun: return "ORCA Agent Run"
         case .fallback: return "Local guardrail fallback"
         case .system: return "Pod system notice"
@@ -411,6 +417,12 @@ struct DirectChatTriagePreview: Identifiable, Hashable, Sendable {
     let nextAction: String
     let reason: String
     let approvalGate: String?
+    let approvalState: String?
+    let workerLane: String?
+    let recommendedRuntime: String?
+    let recommendedSurface: String?
+    let runtimeReason: String?
+    let handoffSubject: String?
     let confidence: Double?
     let tags: [String]
 
