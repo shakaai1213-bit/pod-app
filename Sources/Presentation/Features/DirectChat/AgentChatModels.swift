@@ -486,6 +486,7 @@ final class DMMessage {
     var provenance: String?
     var deliveryState: String?
     var remoteMessageId: String?
+    var computeRunId: String?
     var triageId: String?
     var triageTraceId: String?
 
@@ -509,6 +510,7 @@ final class DMMessage {
         self.provenance = nil
         self.deliveryState = nil
         self.remoteMessageId = nil
+        self.computeRunId = nil
         self.triageId = nil
         self.triageTraceId = nil
     }

@@ -576,6 +576,7 @@ final class DirectChatViewModel {
                     assistantMsg.modelUsed = chunk.metadata?.displayName
                     assistantMsg.tokenCount = chunk.metadata?.tokenCount
                     assistantMsg.traceId = chunk.metadata?.traceId
+                    assistantMsg.computeRunId = chunk.metadata?.computeRunId
                     assistantMsg.triageId = chunk.metadata?.triageId ?? assistantMsg.triageId
                     assistantMsg.triageTraceId = chunk.metadata?.traceId ?? assistantMsg.triageTraceId
                     if let userMessageId = chunk.metadata?.userMessageId, !userMessageId.isEmpty {

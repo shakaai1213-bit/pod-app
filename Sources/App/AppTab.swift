@@ -25,7 +25,7 @@ enum AppTab: String, CaseIterable, Hashable {
     var title: String {
         switch self {
         case .dashboard:   return "Dashboard"
-        case .chat:        return "Chat"
+        case .chat:        return "Sonar"
         case .work:        return "Work"
         case .crew:        return "Crew"
         case .knowledge:   return "Knowledge"
@@ -41,7 +41,7 @@ enum AppTab: String, CaseIterable, Hashable {
     var icon: String {
         switch self {
         case .dashboard:   return "house.fill"
-        case .chat:        return "bubble.left.and.bubble.right.fill"
+        case .chat:        return "dot.radiowaves.left.and.right"
         case .work:        return "square.stack.3d.up.fill"
         case .crew:        return "person.3.sequence.fill"
         case .knowledge:   return "books.vertical.fill"

@@ -47,6 +47,7 @@ actor AgentChatService {
         let provenance: String
         let responseState: String?
         let triageId: String?
+        let computeRunId: String?
 
         var displayName: String? {
             let route = tier ?? backend
@@ -117,6 +118,7 @@ actor AgentChatService {
             let provenance: String?
             let responseState: String?
             let triageId: String?
+            let computeRunId: String?
 
             enum CodingKeys: String, CodingKey {
                 case model, backend, tier, source, lane, provenance
@@ -125,6 +127,7 @@ actor AgentChatService {
                 case deliveryMode = "delivery_mode"
                 case responseState = "response_state"
                 case triageId = "triage_id"
+                case computeRunId = "compute_run_id"
             }
         }
     }
@@ -213,7 +216,8 @@ actor AgentChatService {
                         provenance: parsedProvenance?.rawValue
                             ?? Self.provenance(for: response.metadata.deliveryMode, source: response.metadata.source, lane: response.metadata.lane),
                         responseState: effectiveState?.rawValue ?? response.metadata.responseState,
-                        triageId: response.metadata.triageId
+                        triageId: response.metadata.triageId,
+                        computeRunId: response.metadata.computeRunId
                     )
                     continuation.yield(ResponseChunk(content: content, metadata: metadata))
                     continuation.finish()
@@ -416,7 +420,8 @@ actor AgentChatService {
             deliveryMode: DMDeliveryMode.compute.rawValue,
             provenance: DMResponseProvenance.compute.rawValue,
             responseState: DMDeliveryState.responseReceived.rawValue,
-            triageId: nil
+            triageId: nil,
+            computeRunId: nil
         )
         return ResponseChunk(content: content, metadata: metadata)
     }

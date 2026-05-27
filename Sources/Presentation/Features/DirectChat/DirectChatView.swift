@@ -26,31 +26,40 @@ struct DirectChatView: View {
     // MARK: - Agent List Sidebar
 
     private var agentListSidebar: some View {
-        List(viewModel.directChatAgents) { agent in
-            // Pod chat shows active and support-runtime lanes. Dormant/advisor
-            // agents stay preserved in the model, but do not present as working
-            // chat targets.
-            if viewModel.canStartChat(with: agent) {
-                NavigationLink(value: agent) {
-                    AgentRowView(agent: agent, viewModel: viewModel)
+        List {
+            Section {
+                SonarSurfaceHeader()
+            }
+            .listRowBackground(Color.clear)
+
+            Section("AGENT CHANNELS") {
+                ForEach(viewModel.directChatAgents) { agent in
+                    // Pod chat shows active and support-runtime lanes. Dormant/advisor
+                    // agents stay preserved in the model, but do not present as working
+                    // chat targets.
+                    if viewModel.canStartChat(with: agent) {
+                        NavigationLink(value: agent) {
+                            AgentRowView(agent: agent, viewModel: viewModel)
+                        }
+                        .listRowBackground(
+                            viewModel.selectedAgent?.id == agent.id
+                            ? AppColors.accentElectric.opacity(0.15)
+                            : Color.clear
+                        )
+                    } else {
+                        AgentRowView(agent: agent, viewModel: viewModel)
+                            .opacity(0.45)
+                            .listRowBackground(Color.clear)
+                            .accessibilityLabel("\(agent.name) - \(viewModel.rosterBadgeText(for: agent))")
+                            .accessibilityHint("Create or route an ORCA ticket before assigning this lane.")
+                    }
                 }
-                .listRowBackground(
-                    viewModel.selectedAgent?.id == agent.id
-                    ? AppColors.accentElectric.opacity(0.15)
-                    : Color.clear
-                )
-            } else {
-                AgentRowView(agent: agent, viewModel: viewModel)
-                    .opacity(0.45)
-                    .listRowBackground(Color.clear)
-                    .accessibilityLabel("\(agent.name) - \(viewModel.rosterBadgeText(for: agent))")
-                    .accessibilityHint("Create or route an ORCA ticket before assigning this lane.")
             }
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(AppColors.backgroundPrimary)
-        .navigationTitle("Messages")
+        .navigationTitle("Sonar")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(AppColors.backgroundSecondary, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
@@ -73,6 +82,67 @@ struct DirectChatView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AppColors.backgroundPrimary)
+    }
+}
+
+private struct SonarSurfaceHeader: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: "dot.radiowaves.left.and.right")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(AppColors.accentElectric)
+                    .frame(width: 34, height: 34)
+                    .background(AppColors.accentElectric.opacity(0.12))
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Sonar")
+                        .font(.headline)
+                        .foregroundStyle(AppColors.textPrimary)
+                    Text("ORCA-backed agent comms")
+                        .font(.caption)
+                        .foregroundStyle(AppColors.textTertiary)
+                }
+
+                Spacer()
+            }
+
+            HStack(spacing: 8) {
+                SonarHeaderChip(title: "No fake replies", icon: "checkmark.shield", tint: AppColors.accentSuccess)
+                SonarHeaderChip(title: "Evidence on tap", icon: "point.topleft.down.curvedto.point.bottomright.up", tint: AppColors.accentElectric)
+            }
+
+            Text("Use chat for triage and continuity. Use ORCA tickets, Agent Runs, and approvals for work that needs tools, files, memory, or mutation.")
+                .font(.caption)
+                .foregroundStyle(AppColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(AppColors.border, lineWidth: 1)
+        )
+        .padding(.vertical, 6)
+    }
+}
+
+private struct SonarHeaderChip: View {
+    let title: String
+    let icon: String
+    let tint: Color
+
+    var body: some View {
+        Label(title, systemImage: icon)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(tint.opacity(0.10))
+            .clipShape(Capsule())
     }
 }
 
@@ -498,6 +568,7 @@ struct ConversationView: View {
     @State private var showingAttachTicketSheet = false
     @State private var showingTriageSheet = false
     @State private var isContextExpanded = false
+    @State private var selectedEvidenceMessage: DMMessage?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -511,8 +582,14 @@ struct ConversationView: View {
                 ScrollView {
                     LazyVStack(spacing: 12) {
                         ForEach(viewModel.currentMessages, id: \.id) { message in
-                            DMBubble(message: message, agent: agent)
-                                .id(message.id)
+                            Button {
+                                selectedEvidenceMessage = message
+                            } label: {
+                                DMBubble(message: message, agent: agent)
+                            }
+                            .buttonStyle(.plain)
+                            .id(message.id)
+                            .accessibilityHint("Open Sonar evidence for this message.")
                         }
                     }
                     .padding(.horizontal, 16)
@@ -626,6 +703,21 @@ struct ConversationView: View {
         .sheet(isPresented: $showingTriageSheet) {
             if let preview = viewModel.latestTriagePreview {
                 TriagePreviewSheet(preview: preview)
+            }
+        }
+        .sheet(
+            isPresented: Binding(
+                get: { selectedEvidenceMessage != nil },
+                set: { if !$0 { selectedEvidenceMessage = nil } }
+            )
+        ) {
+            if let message = selectedEvidenceMessage {
+                SonarEvidenceDrawer(
+                    message: message,
+                    agent: agent,
+                    channelId: viewModel.currentChannelId(for: agent),
+                    activeTicketId: viewModel.activeTicketId
+                )
             }
         }
         .toolbar {
@@ -1903,6 +1995,340 @@ private struct RouteProgressStrip: View {
         case .failed:
             return AppColors.accentWarning
         }
+    }
+}
+
+private struct SonarEvidenceDrawer: View {
+    let message: DMMessage
+    let agent: AgentInfo
+    let channelId: String?
+    let activeTicketId: String?
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+    @State private var surfaceEvents: [SonarSurfaceEventDTO] = []
+    @State private var computeRuns: [SonarComputeRunDTO] = []
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    summaryCard
+                    eventSection
+                    computeSection
+                }
+                .padding(16)
+            }
+            .background(AppColors.backgroundPrimary)
+            .navigationTitle("Sonar Evidence")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+            .task(id: message.id) {
+                await loadEvidence()
+            }
+            .refreshable {
+                await loadEvidence()
+            }
+        }
+    }
+
+    private var summaryCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: "point.topleft.down.curvedto.point.bottomright.up")
+                    .foregroundStyle(AppColors.accentElectric)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(agent.name) message proof")
+                        .font(.headline)
+                        .foregroundStyle(AppColors.textPrimary)
+                    Text(message.timestamp.formatted(date: .abbreviated, time: .shortened))
+                        .font(.caption)
+                        .foregroundStyle(AppColors.textTertiary)
+                }
+                Spacer()
+            }
+
+            evidenceRow("Delivery", DMDeliveryState.parse(message.deliveryState)?.displayLabel ?? "Unknown")
+            evidenceRow("Provenance", provenanceLabel)
+            evidenceRow("Trace", short(message.traceId))
+            evidenceRow("Message", short(message.remoteMessageId))
+            evidenceRow("Compute run", short(message.computeRunId))
+            evidenceRow("Channel", short(channelId))
+            evidenceRow("Ticket", short(activeTicketId))
+            evidenceRow("Model", message.modelUsed?.isEmpty == false ? message.modelUsed : nil)
+        }
+        .padding(14)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(AppColors.border, lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private var eventSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("ORCA surface events", systemImage: "rectangle.stack.badge.person.crop")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppColors.textPrimary)
+
+            if isLoading {
+                ProgressView("Loading ORCA evidence...")
+                    .font(.caption)
+                    .foregroundStyle(AppColors.textSecondary)
+            } else if let errorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(AppColors.accentWarning)
+            } else if surfaceEvents.isEmpty {
+                Text("No matching surface events found yet.")
+                    .font(.caption)
+                    .foregroundStyle(AppColors.textTertiary)
+            } else {
+                ForEach(surfaceEvents, id: \.id) { event in
+                    SonarSurfaceEventRow(event: event)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var computeSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Compute records", systemImage: "cpu")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppColors.textPrimary)
+
+            if isLoading {
+                EmptyView()
+            } else if computeRuns.isEmpty {
+                Text("No compute run matched this trace.")
+                    .font(.caption)
+                    .foregroundStyle(AppColors.textTertiary)
+            } else {
+                ForEach(computeRuns, id: \.id) { run in
+                    SonarComputeRunRow(run: run)
+                }
+            }
+        }
+    }
+
+    private var provenanceLabel: String {
+        (DMResponseProvenance.parse(message.provenance)
+            ?? DMResponseProvenance(deliveryMode: message.deliveryMode, source: message.source, lane: message.lane))
+            .displayLabel
+    }
+
+    private func evidenceRow(_ label: String, _ value: String?) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(label)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppColors.textTertiary)
+                .frame(width: 86, alignment: .leading)
+            Text(value?.isEmpty == false ? value! : "Not recorded")
+                .font(.caption)
+                .foregroundStyle(value?.isEmpty == false ? AppColors.textPrimary : AppColors.textTertiary)
+                .textSelection(.enabled)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func loadEvidence() async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        var events: [SonarSurfaceEventDTO] = []
+        var runs: [SonarComputeRunDTO] = []
+
+        do {
+            if let remoteMessageId = clean(message.remoteMessageId) {
+                events = try await APIClient.shared.get(
+                    path: "/api/v1/surfaces/events?source_event_id=\(urlQuery(remoteMessageId))&limit=20"
+                )
+            }
+            if events.isEmpty, let traceId = clean(message.traceId) {
+                events = try await APIClient.shared.get(
+                    path: "/api/v1/surfaces/events?trace_id=\(urlQuery(traceId))&limit=20"
+                )
+            }
+            if let traceId = clean(message.traceId) {
+                runs = try await APIClient.shared.get(
+                    path: "/api/v1/compute/runs?trace_id=\(urlQuery(traceId))&limit=10"
+                )
+            }
+            surfaceEvents = events
+            computeRuns = runs
+        } catch let apiError as APIError {
+            errorMessage = apiError.message
+            surfaceEvents = events
+            computeRuns = runs
+        } catch {
+            errorMessage = "Evidence is unavailable right now."
+            surfaceEvents = events
+            computeRuns = runs
+        }
+    }
+
+    private func clean(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func short(_ value: String?) -> String? {
+        guard let value = clean(value) else { return nil }
+        guard value.count > 18 else { return value }
+        return "\(value.prefix(10))...\(value.suffix(6))"
+    }
+
+    private func urlQuery(_ value: String) -> String {
+        value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? value
+    }
+}
+
+private struct SonarSurfaceEventRow: View {
+    let event: SonarSurfaceEventDTO
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 8) {
+                Label(event.status, systemImage: icon)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(tint)
+                Spacer()
+                Text(event.createdAt.formatted(date: .omitted, time: .shortened))
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.textTertiary)
+            }
+            Text(event.summary ?? event.textPreview ?? "Surface event recorded.")
+                .font(.caption)
+                .foregroundStyle(AppColors.textSecondary)
+                .lineLimit(3)
+            Text([event.direction, event.actorKind, event.actorId, event.model].compactMap { $0 }.joined(separator: " · "))
+                .font(.caption2)
+                .foregroundStyle(AppColors.textTertiary)
+                .lineLimit(1)
+        }
+        .padding(12)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var icon: String {
+        event.status.lowercased().contains("fail") ? "exclamationmark.triangle" : "checkmark.circle"
+    }
+
+    private var tint: Color {
+        event.status.lowercased().contains("fail") ? AppColors.accentWarning : AppColors.accentSuccess
+    }
+}
+
+private struct SonarComputeRunRow: View {
+    let run: SonarComputeRunDTO
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 8) {
+                Label(run.status, systemImage: run.fallbackUsed ? "exclamationmark.triangle" : "cpu")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(run.fallbackUsed ? AppColors.accentWarning : AppColors.accentElectric)
+                Spacer()
+                Text(run.createdAt.formatted(date: .omitted, time: .shortened))
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.textTertiary)
+            }
+            Text([run.taskHint, run.route, run.actualBackend ?? run.backend, run.model].compactMap { $0 }.joined(separator: " · "))
+                .font(.caption)
+                .foregroundStyle(AppColors.textSecondary)
+                .lineLimit(2)
+            if let latency = run.latencyMs {
+                Text("\(latency)ms")
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.textTertiary)
+            }
+            if let error = run.error, !error.isEmpty {
+                Text(error)
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.accentWarning)
+                    .lineLimit(2)
+            }
+        }
+        .padding(12)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+private struct SonarSurfaceEventDTO: Decodable {
+    let id: String
+    let direction: String
+    let eventType: String
+    let actorKind: String
+    let actorId: String?
+    let traceId: String?
+    let threadId: String?
+    let chatChannelId: String?
+    let chatMessageId: String?
+    let ticketId: String?
+    let computeRunId: String?
+    let provider: String?
+    let model: String?
+    let status: String
+    let summary: String?
+    let textPreview: String?
+    let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, direction, status, summary, model, provider
+        case eventType = "event_type"
+        case actorKind = "actor_kind"
+        case actorId = "actor_id"
+        case traceId = "trace_id"
+        case threadId = "thread_id"
+        case chatChannelId = "chat_channel_id"
+        case chatMessageId = "chat_message_id"
+        case ticketId = "ticket_id"
+        case computeRunId = "compute_run_id"
+        case textPreview = "text_preview"
+        case createdAt = "created_at"
+    }
+}
+
+private struct SonarComputeRunDTO: Decodable {
+    let id: String
+    let traceId: String?
+    let surface: String
+    let taskHint: String
+    let route: String
+    let requestedRoute: String?
+    let requestedComputeTag: String?
+    let actualTier: String?
+    let actualBackend: String?
+    let model: String?
+    let backend: String?
+    let status: String
+    let fallbackUsed: Bool
+    let latencyMs: Int?
+    let error: String?
+    let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, surface, route, model, backend, status, error
+        case traceId = "trace_id"
+        case taskHint = "task_hint"
+        case requestedRoute = "requested_route"
+        case requestedComputeTag = "requested_compute_tag"
+        case actualTier = "actual_tier"
+        case actualBackend = "actual_backend"
+        case fallbackUsed = "fallback_used"
+        case latencyMs = "latency_ms"
+        case createdAt = "created_at"
     }
 }
 
