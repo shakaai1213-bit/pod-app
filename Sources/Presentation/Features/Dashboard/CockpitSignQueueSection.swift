@@ -400,16 +400,40 @@ final class CockpitSignQueueModel {
                     let title: String
                     let description: String?
                     let priority: String?
+                    let approvalState: String?
                     let approvalGate: String?
+                    let reasons: [String]?
+                    let latestRun: LatestRun?
+
+                    struct LatestRun: Decodable {
+                        let status: String?
+
+                        enum CodingKeys: String, CodingKey {
+                            case status
+                        }
+                    }
+
                     enum CodingKeys: String, CodingKey {
                         case id, title, description, priority
+                        case approvalState = "approval_state"
                         case approvalGate = "approval_gate"
+                        case reasons
+                        case latestRun = "latest_run"
+                    }
+
+                    var stillNeedsReview: Bool {
+                        let state = approvalState?.lowercased()
+                        let latestRunState = latestRun?.status?.lowercased()
+                        if latestRunState == "waiting_for_human" { return true }
+                        if state == "approved" { return false }
+                        return !(reasons ?? []).isEmpty || approvalGate != nil
                     }
                 }
             }
             let resp: ApprovalAttentionResp = try await APIClient.shared.get(path: "/api/v1/tickets/approval-attention")
             anySucceeded = true
             for t in resp.items {
+                guard t.stillNeedsReview else { continue }
                 combined.append(CockpitSignItem(
                     id: "ticket:\(t.id)",
                     kind: .ticket,
