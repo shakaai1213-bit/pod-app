@@ -60,6 +60,14 @@ final class DirectChatViewModel {
     var isRequestingWorkspaceTool: Bool = false
     var workspaceToolMessage: String?
     var executingWorkspaceToolRunIds: Set<String> = []
+    var sonarRooms: [SonarRoom] = []
+    var selectedRoom: SonarRoom?
+    var roomMessages: [SonarRoomMessage] = []
+    var composedRoomMessage: String = ""
+    var isLoadingRooms: Bool = false
+    var isLoadingRoomMessages: Bool = false
+    var isSendingRoomMessage: Bool = false
+    var roomError: String?
 
     // Conversation data from SwiftData
     var conversations: [DMConversation] = []
@@ -205,9 +213,13 @@ final class DirectChatViewModel {
     }
 
     func loadORCAChannelSummaries() async {
+        isLoadingRooms = true
+        defer { isLoadingRooms = false }
+
         do {
             let channels: [DirectChatChannelDTO] = try await api.get(path: "/api/v1/chat/channels")
             let directChannels = channels.filter { $0.type == "direct" }
+            var roomItems: [SonarRoom] = []
             var idMap: [String: String] = [:]
             var statusMap: [String: String] = [:]
 
@@ -221,10 +233,78 @@ final class DirectChatViewModel {
                 }
             }
 
+            for channel in channels where channel.type != "direct" {
+                let summary: DirectChatChannelSummaryDTO? = try? await api.get(path: "/api/v1/chat/channels/\(channel.id)/summary")
+                roomItems.append(SonarRoom(channel: channel, summary: summary))
+            }
+
             orcaChannelIdByAgent = idMap
             orcaChannelStatusByAgent = statusMap
+            sonarRooms = roomItems.sorted { lhs, rhs in
+                if lhs.lastActivity != rhs.lastActivity {
+                    return lhs.lastActivity > rhs.lastActivity
+                }
+                return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+            }
         } catch {
+            roomError = "ORCA room discovery unavailable."
             // Static local chat remains usable when ORCA channel discovery is unavailable.
+        }
+    }
+
+    func selectRoom(_ room: SonarRoom) {
+        selectedRoom = room
+        roomError = nil
+        composedRoomMessage = ""
+        Task { await loadRoomMessages(room) }
+    }
+
+    func refreshSelectedRoom() {
+        guard let selectedRoom else { return }
+        Task {
+            await loadRoomMessages(selectedRoom)
+            await loadORCAChannelSummaries()
+        }
+    }
+
+    func loadRoomMessages(_ room: SonarRoom) async {
+        isLoadingRoomMessages = true
+        roomError = nil
+        defer { isLoadingRoomMessages = false }
+
+        do {
+            let messages: [DirectChatORCAMessageDTO] = try await api.get(path: "/api/v1/chat/channels/\(room.id)/messages?limit=150")
+            roomMessages = messages.map { SonarRoomMessage(dto: $0) }
+        } catch let apiError as APIError {
+            roomError = apiError.message
+        } catch {
+            roomError = "Room messages are unavailable."
+        }
+    }
+
+    func sendRoomMessage() {
+        guard let room = selectedRoom,
+              !isSendingRoomMessage,
+              !composedRoomMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let content = composedRoomMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        composedRoomMessage = ""
+        isSendingRoomMessage = true
+        roomError = nil
+
+        Task {
+            defer { isSendingRoomMessage = false }
+            do {
+                let body = SonarRoomMessageCreateBody(content: content, messageType: "text")
+                let dto: DirectChatORCAMessageDTO = try await api.post(path: "/api/v1/chat/channels/\(room.id)/messages", body: body)
+                roomMessages.append(SonarRoomMessage(dto: dto))
+                await loadORCAChannelSummaries()
+            } catch let apiError as APIError {
+                roomError = apiError.message
+                composedRoomMessage = content
+            } catch {
+                roomError = "Could not send the room message."
+                composedRoomMessage = content
+            }
         }
     }
 
@@ -3589,10 +3669,13 @@ private struct DirectChatTicketCommentDTO: Decodable {
     let id: String
 }
 
-private struct DirectChatORCAMessageDTO: Decodable {
+struct DirectChatORCAMessageDTO: Decodable {
     let id: String
     let senderUserId: String?
     let senderAgentId: String?
+    let senderName: String?
+    let senderType: String?
+    let senderEmoji: String?
     let content: String
     let messageType: String
     let traceId: String?
@@ -3609,6 +3692,9 @@ private struct DirectChatORCAMessageDTO: Decodable {
         case id, content, source, lane, provenance
         case senderUserId = "sender_user_id"
         case senderAgentId = "sender_agent_id"
+        case senderName = "sender_name"
+        case senderType = "sender_type"
+        case senderEmoji = "sender_emoji"
         case messageType = "message_type"
         case traceId = "trace_id"
         case deliveryMode = "delivery_mode"
@@ -3619,19 +3705,148 @@ private struct DirectChatORCAMessageDTO: Decodable {
     }
 }
 
-private struct DirectChatChannelDTO: Decodable {
+struct SonarRoom: Identifiable, Hashable {
     let id: String
     let name: String
     let type: String
+    let description: String?
+    let messageCount: Int
+    let pendingCount: Int
+    let activeSSEClients: Int
+    let latestResponseState: String?
+    let latestProvenance: String?
+    let lastUserMessageAt: Date?
+    let lastAgentMessageAt: Date?
+    let updatedAt: Date
+
+    init(channel: DirectChatChannelDTO, summary: DirectChatChannelSummaryDTO?) {
+        self.id = channel.id
+        self.name = channel.name
+        self.type = channel.type
+        self.description = channel.description
+        self.messageCount = summary?.messageCount ?? 0
+        self.pendingCount = summary?.pendingCount ?? 0
+        self.activeSSEClients = summary?.activeSSEClients ?? 0
+        self.latestResponseState = summary?.latestResponseState
+        self.latestProvenance = summary?.latestProvenance
+        self.lastUserMessageAt = summary?.lastUserMessageAt
+        self.lastAgentMessageAt = summary?.lastAgentMessageAt
+        self.updatedAt = summary?.updatedAt ?? channel.updatedAt
+    }
+
+    var displayName: String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("ticket:") {
+            return "Ticket \(trimmed.dropFirst(7))"
+        }
+        if trimmed.hasPrefix("board:") {
+            return "Board \(trimmed.dropFirst(6))"
+        }
+        return trimmed
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: "_", with: " ")
+            .capitalized
+    }
+
+    var roomKindLabel: String {
+        let lower = name.lowercased()
+        if lower.hasPrefix("ticket:") { return "Ticket room" }
+        if lower.hasPrefix("board:") { return "Board room" }
+        if lower.contains("project") { return "Project room" }
+        return "ORCA room"
+    }
+
+    var lastActivity: Date {
+        [lastAgentMessageAt, lastUserMessageAt, updatedAt].compactMap { $0 }.max() ?? updatedAt
+    }
 }
 
-private struct DirectChatChannelSummaryDTO: Decodable {
+struct SonarRoomMessage: Identifiable, Hashable {
+    let id: String
+    let senderName: String
+    let senderType: String
+    let senderEmoji: String?
+    let content: String
+    let messageType: String
+    let traceId: String?
+    let source: String?
+    let lane: String?
+    let deliveryMode: String?
+    let provenance: String?
+    let responseState: String?
+    let createdAt: Date
+
+    init(dto: DirectChatORCAMessageDTO) {
+        self.id = dto.id
+        self.senderName = dto.senderName ?? (dto.senderAgentId == nil ? "Tony" : "Agent")
+        self.senderType = dto.senderType ?? (dto.senderAgentId == nil ? "user" : "agent")
+        self.senderEmoji = dto.senderEmoji
+        self.content = dto.content
+        self.messageType = dto.messageType
+        self.traceId = dto.traceId
+        self.source = dto.source
+        self.lane = dto.lane
+        self.deliveryMode = dto.deliveryMode
+        self.provenance = dto.provenance
+        self.responseState = dto.responseState
+        self.createdAt = dto.createdAt
+    }
+
+    var isUser: Bool {
+        senderType == "user" || senderName.lowercased() == "tony"
+    }
+
+    var displayName: String {
+        if let senderEmoji, !senderEmoji.isEmpty {
+            return "\(senderEmoji) \(senderName)"
+        }
+        return senderName
+    }
+
+    var statusLabel: String? {
+        if let state = DMDeliveryState.parse(responseState) {
+            return state.displayLabel
+        }
+        if let provenance = DMResponseProvenance.parse(provenance) {
+            return provenance.displayLabel
+        }
+        return nil
+    }
+}
+
+private struct SonarRoomMessageCreateBody: Encodable {
+    let content: String
+    let messageType: String
+
+    enum CodingKeys: String, CodingKey {
+        case content
+        case messageType = "message_type"
+    }
+}
+
+struct DirectChatChannelDTO: Decodable {
+    let id: String
+    let name: String
+    let type: String
+    let description: String?
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, type, description
+        case updatedAt = "updated_at"
+    }
+}
+
+struct DirectChatChannelSummaryDTO: Decodable {
     let channelId: String
     let messageCount: Int
     let latestProvenance: String?
     let latestResponseState: String?
     let pendingCount: Int
     let activeSSEClients: Int
+    let lastUserMessageAt: Date?
+    let lastAgentMessageAt: Date?
+    let updatedAt: Date
 
     enum CodingKeys: String, CodingKey {
         case channelId = "channel_id"
@@ -3640,6 +3855,9 @@ private struct DirectChatChannelSummaryDTO: Decodable {
         case latestResponseState = "latest_response_state"
         case pendingCount = "pending_count"
         case activeSSEClients = "active_sse_clients"
+        case lastUserMessageAt = "last_user_message_at"
+        case lastAgentMessageAt = "last_agent_message_at"
+        case updatedAt = "updated_at"
     }
 }
 

@@ -55,6 +55,31 @@ struct DirectChatView: View {
                     }
                 }
             }
+
+            Section("ROOMS") {
+                if viewModel.isLoadingRooms && viewModel.sonarRooms.isEmpty {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                            .scaleEffect(0.75)
+                        Text("Loading ORCA rooms")
+                            .font(.caption)
+                            .foregroundStyle(AppColors.textTertiary)
+                    }
+                    .listRowBackground(Color.clear)
+                } else if viewModel.sonarRooms.isEmpty {
+                    Text(viewModel.roomError ?? "No ORCA rooms yet.")
+                        .font(.caption)
+                        .foregroundStyle(AppColors.textTertiary)
+                        .listRowBackground(Color.clear)
+                } else {
+                    ForEach(viewModel.sonarRooms) { room in
+                        NavigationLink(value: room) {
+                            SonarRoomRow(room: room)
+                        }
+                        .listRowBackground(Color.clear)
+                    }
+                }
+            }
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
@@ -66,6 +91,10 @@ struct DirectChatView: View {
         .navigationDestination(for: AgentInfo.self) { agent in
             ConversationView(viewModel: viewModel, agent: agent)
                 .onAppear { viewModel.selectAgent(agent) }
+        }
+        .navigationDestination(for: SonarRoom.self) { room in
+            SonarRoomConversationView(viewModel: viewModel, room: room)
+                .onAppear { viewModel.selectRoom(room) }
         }
     }
 
@@ -550,6 +579,285 @@ struct AgentRowView: View {
             .filter { !$0.isEmpty }
             .prefix(2)
         return Array(chips.prefix(4))
+    }
+}
+
+private struct SonarRoomRow: View {
+    let room: SonarRoom
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(tint.opacity(0.14))
+                    .frame(width: 44, height: 44)
+                Image(systemName: icon)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(tint)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Text(room.displayName)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(AppColors.textPrimary)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    Text(room.lastActivity, style: .relative)
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.textTertiary)
+                }
+
+                HStack(spacing: 6) {
+                    Text(room.roomKindLabel)
+                        .font(.caption)
+                        .foregroundStyle(AppColors.textTertiary)
+                    if room.pendingCount > 0 {
+                        Text("\(room.pendingCount) waiting")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(AppColors.accentWarning)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(AppColors.accentWarning.opacity(0.10))
+                            .clipShape(Capsule())
+                    }
+                    if room.activeSSEClients > 0 {
+                        Text("live")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(AppColors.accentSuccess)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(AppColors.accentSuccess.opacity(0.10))
+                            .clipShape(Capsule())
+                    }
+                    Spacer(minLength: 0)
+                }
+
+                Text(room.description?.isEmpty == false ? room.description! : "\(room.messageCount) messages")
+                    .font(.caption)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.vertical, 6)
+        .contentShape(Rectangle())
+    }
+
+    private var icon: String {
+        let lower = room.name.lowercased()
+        if lower.hasPrefix("ticket:") { return "text.badge.checkmark" }
+        if lower.hasPrefix("board:") { return "square.stack.3d.up" }
+        if lower.contains("project") { return "folder" }
+        return "number"
+    }
+
+    private var tint: Color {
+        let lower = room.name.lowercased()
+        if lower.hasPrefix("ticket:") { return AppColors.accentAgent }
+        if lower.hasPrefix("board:") { return AppColors.accentElectric }
+        return AppColors.textSecondary
+    }
+}
+
+private struct SonarRoomConversationView: View {
+    let viewModel: DirectChatViewModel
+    let room: SonarRoom
+
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            roomHeader
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 10) {
+                        ForEach(viewModel.roomMessages) { message in
+                            SonarRoomMessageRow(message: message)
+                                .id(message.id)
+                        }
+                    }
+                    .padding(16)
+                }
+                .onChange(of: viewModel.roomMessages.count) { _, _ in
+                    if let last = viewModel.roomMessages.last {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            proxy.scrollTo(last.id, anchor: .bottom)
+                        }
+                    }
+                }
+            }
+            .background(AppColors.backgroundPrimary)
+
+            if let roomError = viewModel.roomError {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundStyle(AppColors.accentWarning)
+                    Text(roomError)
+                        .font(.caption)
+                        .foregroundStyle(AppColors.accentWarning)
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(AppColors.accentWarning.opacity(0.10))
+            }
+
+            roomComposeBar
+        }
+        .background(AppColors.backgroundPrimary)
+        .navigationTitle(room.displayName)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    viewModel.refreshSelectedRoom()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .disabled(viewModel.isLoadingRoomMessages)
+                .accessibilityLabel("Refresh ORCA room")
+            }
+        }
+    }
+
+    private var roomHeader: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "number")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(AppColors.accentElectric)
+                .frame(width: 24, height: 24)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(room.roomKindLabel)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.textPrimary)
+                    .lineLimit(1)
+                Text(headerDetail)
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.textTertiary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+
+            if viewModel.isLoadingRoomMessages {
+                ProgressView()
+                    .scaleEffect(0.75)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
+        .background(AppColors.backgroundSecondary)
+        .overlay(
+            Rectangle()
+                .fill(AppColors.border)
+                .frame(height: 0.5),
+            alignment: .bottom
+        )
+    }
+
+    private var headerDetail: String {
+        var parts = ["ORCA channel \(String(room.id.prefix(8)))", "\(room.messageCount) messages"]
+        if room.pendingCount > 0 {
+            parts.append("\(room.pendingCount) waiting")
+        }
+        if room.activeSSEClients > 0 {
+            parts.append("\(room.activeSSEClients) live listeners")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private var roomComposeBar: some View {
+        HStack(spacing: 10) {
+            TextField("Message room...", text: Binding(
+                get: { viewModel.composedRoomMessage },
+                set: { viewModel.composedRoomMessage = $0 }
+            ), axis: .vertical)
+                .focused($isFocused)
+                .textFieldStyle(.plain)
+                .foregroundStyle(AppColors.textPrimary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(AppColors.backgroundTertiary)
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .lineLimit(1...5)
+
+            Button {
+                viewModel.sendRoomMessage()
+            } label: {
+                Image(systemName: viewModel.isSendingRoomMessage ? "hourglass.circle.fill" : "arrow.up.circle.fill")
+                    .font(.system(size: 30))
+                    .foregroundStyle(canSend ? AppColors.accentElectric : AppColors.textTertiary)
+            }
+            .disabled(!canSend)
+            .accessibilityLabel("Send room message")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(AppColors.backgroundSecondary)
+    }
+
+    private var canSend: Bool {
+        !viewModel.isSendingRoomMessage
+            && !viewModel.composedRoomMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
+private struct SonarRoomMessageRow: View {
+    let message: SonarRoomMessage
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            if message.isUser { Spacer(minLength: 50) }
+
+            if !message.isUser {
+                avatar
+            }
+
+            VStack(alignment: message.isUser ? .trailing : .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    Text(message.displayName)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(message.isUser ? .white.opacity(0.85) : AppColors.textSecondary)
+                    Text(message.createdAt.formatted(date: .omitted, time: .shortened))
+                        .font(.caption2)
+                        .foregroundStyle(message.isUser ? .white.opacity(0.65) : AppColors.textTertiary)
+                }
+
+                Text(message.content.isEmpty ? "Empty message" : message.content)
+                    .font(.body)
+                    .foregroundStyle(message.isUser ? .white : AppColors.textPrimary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(message.isUser ? AppColors.accentElectric : AppColors.backgroundTertiary)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .strokeBorder(message.isUser ? Color.clear : AppColors.border, lineWidth: 1)
+                    )
+
+                if let status = message.statusLabel {
+                    Text(status)
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.textTertiary)
+                        .lineLimit(1)
+                }
+            }
+
+            if !message.isUser { Spacer(minLength: 50) }
+        }
+    }
+
+    private var avatar: some View {
+        ZStack {
+            Circle()
+                .fill(AppColors.accentElectric.opacity(0.12))
+                .frame(width: 30, height: 30)
+            Text(message.senderEmoji ?? "A")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(AppColors.accentElectric)
+        }
     }
 }
 
