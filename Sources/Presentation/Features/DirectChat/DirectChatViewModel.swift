@@ -69,6 +69,7 @@ final class DirectChatViewModel {
     var isLoadingRoomMessages: Bool = false
     var isSendingRoomMessage: Bool = false
     var roomError: String?
+    var roomActionMessage: String?
     var sonarSearchText: String = ""
     var sonarHealth: SonarHealth?
     var isLoadingSonarHealth: Bool = false
@@ -351,6 +352,7 @@ final class DirectChatViewModel {
     func selectRoom(_ room: SonarRoom) {
         selectedRoom = room
         roomError = nil
+        roomActionMessage = nil
         composedRoomMessage = ""
         Task { await loadRoomMessages(room) }
         startRoomAutoRefresh(room: room)
@@ -410,6 +412,7 @@ final class DirectChatViewModel {
         composedRoomMessage = ""
         isSendingRoomMessage = true
         roomError = nil
+        roomActionMessage = nil
 
         Task {
             defer { isSendingRoomMessage = false }
@@ -427,6 +430,13 @@ final class DirectChatViewModel {
                 )
                 let dto: DirectChatORCAMessageDTO = try await api.post(path: "/api/v1/chat/channels/\(room.id)/messages", body: body)
                 roomMessages.append(SonarRoomMessage(dto: dto))
+                await materializeSonarRoomCardIfNeeded(
+                    room: room,
+                    content: content,
+                    messageType: selectedRoomMessageType,
+                    traceId: traceId,
+                    messageId: dto.id
+                )
                 await loadORCAChannelSummaries()
             } catch let apiError as APIError {
                 roomError = apiError.message
@@ -435,6 +445,155 @@ final class DirectChatViewModel {
                 roomError = "Could not send the room message."
                 composedRoomMessage = content
             }
+        }
+    }
+
+    private func materializeSonarRoomCardIfNeeded(
+        room: SonarRoom,
+        content: String,
+        messageType: SonarRoomMessageType,
+        traceId: String,
+        messageId: String
+    ) async {
+        guard messageType != .text else { return }
+        guard let ticketId = room.linkedTicketId, !ticketId.isEmpty else {
+            roomActionMessage = "\(messageType.title) recorded in chat only. Link this room to a ticket before ORCA can create a workflow object."
+            return
+        }
+
+        switch messageType {
+        case .approvalRequest:
+            await createSonarApprovalRequest(ticketId: ticketId, content: content, traceId: traceId, messageId: messageId)
+        case .toolRequest:
+            await createSonarToolRequest(ticketId: ticketId, content: content)
+        case .fileRequest:
+            await createSonarWorkspaceArtifact(ticketId: ticketId, content: content, traceId: traceId, room: room)
+        case .memoryCandidate:
+            await createSonarMemoryCandidate(ticketId: ticketId, content: content, traceId: traceId, messageId: messageId, room: room)
+        case .agentRunRequest:
+            await createSonarAgentRunComment(ticketId: ticketId, content: content, traceId: traceId, messageId: messageId)
+        case .text:
+            break
+        }
+    }
+
+    private func createSonarApprovalRequest(ticketId: String, content: String, traceId: String, messageId: String) async {
+        let body = DirectChatApprovalRequestBody(
+            reason: content,
+            traceId: traceId,
+            source: "pod.sonar.approval_request",
+            lane: "human_approval_request"
+        )
+        do {
+            let dto: DirectChatApprovalDTO = try await api.post(path: "/api/v1/tickets/\(ticketId)/approval-requests", body: body)
+            roomActionMessage = "Approval \(dto.approvalId) created for ticket \(String(ticketId.prefix(8)))."
+        } catch let apiError as APIError {
+            roomActionMessage = "Approval card recorded, but approval object was not created: \(apiError.message)"
+            await createSonarAgentRunComment(ticketId: ticketId, content: "Approval request from Sonar message \(messageId):\n\n\(content)", traceId: traceId, messageId: messageId)
+        } catch {
+            roomActionMessage = "Approval card recorded, but approval object was not created."
+        }
+    }
+
+    private func createSonarToolRequest(ticketId: String, content: String) async {
+        let body = DirectChatWorkspaceToolRequestBody(
+            toolName: "agent_workspace_task",
+            instruction: content,
+            reason: "Requested from Sonar room for ticket \(ticketId).",
+            source: "pod.sonar.tool_request"
+        )
+        do {
+            let dto: DirectChatWorkspaceToolRequestCreateDTO = try await api.post(path: "/api/v1/workspaces/tickets/\(ticketId)/tool-requests", body: body)
+            roomActionMessage = "Tool request \(String(dto.runId.prefix(8))) created for owner review."
+        } catch let apiError as APIError {
+            roomActionMessage = "Tool card recorded, but tool request was not created: \(apiError.message)"
+        } catch {
+            roomActionMessage = "Tool card recorded, but tool request was not created."
+        }
+    }
+
+    private func createSonarWorkspaceArtifact(ticketId: String, content: String, traceId: String, room: SonarRoom) async {
+        let body = DirectChatWorkspaceFileWriteRequest(
+            filename: "sonar-file-request-\(Self.timestampForFilename()).md",
+            content: """
+            # Sonar File Context Request
+
+            Room: \(room.displayName)
+            Ticket: \(ticketId)
+            Trace: \(traceId)
+
+            ## Request
+            \(content)
+            """,
+            description: "Sonar file/context request for ticket \(ticketId)",
+            runId: nil,
+            source: "pod.sonar.file_request"
+        )
+        do {
+            let dto: DirectChatWorkspaceFileWriteDTO = try await api.post(path: "/api/v1/workspaces/tickets/\(ticketId)/files", body: body)
+            roomActionMessage = "Workspace artifact saved: \(dto.file.path.split(separator: "/").last.map(String.init) ?? dto.file.path)."
+        } catch let apiError as APIError {
+            roomActionMessage = "File card recorded, but workspace artifact was not saved: \(apiError.message)"
+        } catch {
+            roomActionMessage = "File card recorded, but workspace artifact was not saved."
+        }
+    }
+
+    private func createSonarMemoryCandidate(ticketId: String, content: String, traceId: String, messageId: String, room: SonarRoom) async {
+        let body = SonarMemoryCandidateCreateBody(
+            candidateId: "sonar-\(UUID().uuidString.lowercased())",
+            sourceType: "pod_sonar",
+            sourceRef: "orca://chat/messages/\(messageId)",
+            sourceAgent: nil,
+            textOriginal: content,
+            textProposed: content,
+            sensitivityClass: "normal",
+            reviewersRequired: ["aloha", "maui"],
+            target: [
+                "type": "ticket",
+                "ticket_id": ticketId,
+                "room_id": room.id
+            ],
+            provenance: [
+                "trace_id": traceId,
+                "source": "pod.sonar.memory_candidate",
+                "room": room.name
+            ],
+            createdBy: "pod-sonar"
+        )
+        do {
+            let dto: SonarMemoryCandidateDTO = try await api.post(path: "/api/v1/memory/candidate-records", body: body)
+            roomActionMessage = "Memory candidate \(String(dto.candidateId.prefix(12))) queued for review."
+        } catch let apiError as APIError {
+            roomActionMessage = "Memory card recorded, but candidate was not created: \(apiError.message)"
+        } catch {
+            roomActionMessage = "Memory card recorded, but candidate was not created."
+        }
+    }
+
+    private func createSonarAgentRunComment(ticketId: String, content: String, traceId: String, messageId: String) async {
+        let body = DirectChatTicketCommentBody(
+            message: """
+            ## Sonar Agent Run Request
+
+            \(content)
+
+            Trace: \(traceId)
+            Source message: \(messageId)
+
+            Recorded only. Dispatch must still go through ORCA owner/preview controls.
+            """,
+            traceId: traceId,
+            source: "pod.sonar.agent_run_request",
+            lane: "agent_run_request"
+        )
+        do {
+            let _: DirectChatTicketCommentDTO = try await api.post(path: "/api/v1/tickets/\(ticketId)/comments", body: body)
+            roomActionMessage = "Agent Run request added to ticket \(String(ticketId.prefix(8))) for owner dispatch."
+        } catch let apiError as APIError {
+            roomActionMessage = "Agent Run card recorded, but ticket comment was not saved: \(apiError.message)"
+        } catch {
+            roomActionMessage = "Agent Run card recorded, but ticket comment was not saved."
         }
     }
 
@@ -505,6 +664,7 @@ final class DirectChatViewModel {
         selectedRoom = nil
         roomMessages = []
         composedRoomMessage = ""
+        roomActionMessage = nil
         stopRoomAutoRefresh()
     }
 
@@ -3662,6 +3822,45 @@ private struct DirectChatWorkspaceToolExecuteDTO: Decodable {
     enum CodingKeys: String, CodingKey {
         case ok, status, file, message
         case runId = "run_id"
+    }
+}
+
+private struct SonarMemoryCandidateCreateBody: Encodable {
+    let candidateId: String
+    let sourceType: String
+    let sourceRef: String
+    let sourceAgent: String?
+    let textOriginal: String
+    let textProposed: String?
+    let sensitivityClass: String
+    let reviewersRequired: [String]
+    let target: [String: String]
+    let provenance: [String: String]
+    let createdBy: String
+
+    enum CodingKeys: String, CodingKey {
+        case candidateId = "candidate_id"
+        case sourceType = "source_type"
+        case sourceRef = "source_ref"
+        case sourceAgent = "source_agent"
+        case textOriginal = "text_original"
+        case textProposed = "text_proposed"
+        case sensitivityClass = "sensitivity_class"
+        case reviewersRequired = "reviewers_required"
+        case target
+        case provenance
+        case createdBy = "created_by"
+    }
+}
+
+private struct SonarMemoryCandidateDTO: Decodable {
+    let id: String
+    let candidateId: String
+    let lifecycle: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, lifecycle
+        case candidateId = "candidate_id"
     }
 }
 

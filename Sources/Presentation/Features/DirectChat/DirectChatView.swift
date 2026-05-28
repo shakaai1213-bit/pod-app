@@ -920,6 +920,21 @@ private struct SonarRoomConversationView: View {
                 .background(AppColors.accentWarning.opacity(0.10))
             }
 
+            if let roomActionMessage = viewModel.roomActionMessage {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.seal")
+                        .foregroundStyle(AppColors.accentElectric)
+                    Text(roomActionMessage)
+                        .font(.caption)
+                        .foregroundStyle(AppColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(AppColors.accentElectric.opacity(0.08))
+            }
+
             roomComposeBar
         }
         .background(AppColors.backgroundPrimary)
