@@ -69,6 +69,8 @@ final class DirectChatViewModel {
     var isSendingRoomMessage: Bool = false
     var roomError: String?
     var sonarSearchText: String = ""
+    var sonarHealth: SonarHealth?
+    var isLoadingSonarHealth: Bool = false
 
     // Conversation data from SwiftData
     var conversations: [DMConversation] = []
@@ -251,6 +253,30 @@ final class DirectChatViewModel {
         } catch {
             roomError = "ORCA room discovery unavailable."
             // Static local chat remains usable when ORCA channel discovery is unavailable.
+        }
+    }
+
+    func loadSonarHealth() async {
+        isLoadingSonarHealth = true
+        defer { isLoadingSonarHealth = false }
+
+        do {
+            let dto: SonarHealthDTO = try await api.get(path: "/api/v1/sonar/health")
+            sonarHealth = dto.toDomain()
+        } catch {
+            sonarHealth = SonarHealth(
+                status: "degraded",
+                generatedAt: Date(),
+                checks: [
+                    SonarHealthCheck(
+                        key: "sonar_health",
+                        label: "Sonar health",
+                        status: "degraded",
+                        detail: "Health endpoint unavailable.",
+                        count: nil
+                    )
+                ]
+            )
         }
     }
 
@@ -3821,6 +3847,75 @@ struct SonarRoom: Identifiable, Hashable {
 
     var lastActivity: Date {
         [lastAgentMessageAt, lastUserMessageAt, updatedAt].compactMap { $0 }.max() ?? updatedAt
+    }
+}
+
+struct SonarHealth: Hashable {
+    let status: String
+    let generatedAt: Date
+    let checks: [SonarHealthCheck]
+
+    var displayStatus: String {
+        switch status.lowercased() {
+        case "good": return "Healthy"
+        case "down": return "Down"
+        default: return "Degraded"
+        }
+    }
+}
+
+struct SonarHealthCheck: Identifiable, Hashable {
+    var id: String { key }
+    let key: String
+    let label: String
+    let status: String
+    let detail: String?
+    let count: Int?
+
+    var displayStatus: String {
+        switch status.lowercased() {
+        case "good": return "Good"
+        case "down": return "Down"
+        default: return "Degraded"
+        }
+    }
+}
+
+private struct SonarHealthDTO: Decodable {
+    let status: String
+    let generatedAt: Date
+    let checks: [SonarHealthCheckDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case generatedAt = "generated_at"
+        case checks
+    }
+
+    func toDomain() -> SonarHealth {
+        SonarHealth(
+            status: status,
+            generatedAt: generatedAt,
+            checks: checks.map { $0.toDomain() }
+        )
+    }
+}
+
+private struct SonarHealthCheckDTO: Decodable {
+    let key: String
+    let label: String
+    let status: String
+    let detail: String?
+    let count: Int?
+
+    func toDomain() -> SonarHealthCheck {
+        SonarHealthCheck(
+            key: key,
+            label: label,
+            status: status,
+            detail: detail,
+            count: count
+        )
     }
 }
 

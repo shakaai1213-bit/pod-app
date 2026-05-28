@@ -15,6 +15,7 @@ struct DirectChatView: View {
         }
         .task {
             await viewModel.loadAgentRegistry()
+            await viewModel.loadSonarHealth()
             await viewModel.loadORCAChannelSummaries()
         }
         .onChange(of: viewModel.navigationPath.count) { _, count in
@@ -29,7 +30,7 @@ struct DirectChatView: View {
     private var agentListSidebar: some View {
         List {
             Section {
-                SonarSurfaceHeader()
+                SonarSurfaceHeader(health: viewModel.sonarHealth, isLoading: viewModel.isLoadingSonarHealth)
             }
             .listRowBackground(Color.clear)
 
@@ -129,6 +130,9 @@ struct DirectChatView: View {
 }
 
 private struct SonarSurfaceHeader: View {
+    let health: SonarHealth?
+    let isLoading: Bool
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
@@ -152,8 +156,41 @@ private struct SonarSurfaceHeader: View {
             }
 
             HStack(spacing: 8) {
-                SonarHeaderChip(title: "No fake replies", icon: "checkmark.shield", tint: AppColors.accentSuccess)
+                SonarHeaderChip(title: healthTitle, icon: healthIcon, tint: healthTint)
                 SonarHeaderChip(title: "Evidence on tap", icon: "point.topleft.down.curvedto.point.bottomright.up", tint: AppColors.accentElectric)
+            }
+
+            if let health {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(health.checks.prefix(4)) { check in
+                        HStack(spacing: 7) {
+                            Circle()
+                                .fill(tint(for: check.status))
+                                .frame(width: 6, height: 6)
+                            Text(check.label)
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(AppColors.textSecondary)
+                            Text(check.displayStatus)
+                                .font(.caption2)
+                                .foregroundStyle(tint(for: check.status))
+                            if let detail = check.detail {
+                                Text(detail)
+                                    .font(.caption2)
+                                    .foregroundStyle(AppColors.textTertiary)
+                                    .lineLimit(1)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
+            } else if isLoading {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .scaleEffect(0.70)
+                    Text("Checking Sonar health")
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.textTertiary)
+                }
             }
 
             Text("Use chat for triage and continuity. Use ORCA tickets, Agent Runs, and approvals for work that needs tools, files, memory, or mutation.")
@@ -169,6 +206,34 @@ private struct SonarSurfaceHeader: View {
                 .strokeBorder(AppColors.border, lineWidth: 1)
         )
         .padding(.vertical, 6)
+    }
+
+    private var healthTitle: String {
+        guard let health else {
+            return isLoading ? "Checking health" : "Health unknown"
+        }
+        return "Sonar \(health.displayStatus)"
+    }
+
+    private var healthIcon: String {
+        switch health?.status.lowercased() {
+        case "good": return "checkmark.shield"
+        case "down": return "exclamationmark.octagon"
+        case "degraded": return "exclamationmark.triangle"
+        default: return "waveform.path.ecg"
+        }
+    }
+
+    private var healthTint: Color {
+        tint(for: health?.status ?? (isLoading ? "degraded" : "down"))
+    }
+
+    private func tint(for status: String) -> Color {
+        switch status.lowercased() {
+        case "good": return AppColors.accentSuccess
+        case "down": return AppColors.accentDanger
+        default: return AppColors.accentWarning
+        }
     }
 }
 
