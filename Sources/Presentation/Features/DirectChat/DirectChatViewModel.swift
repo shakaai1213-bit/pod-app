@@ -414,7 +414,17 @@ final class DirectChatViewModel {
         Task {
             defer { isSendingRoomMessage = false }
             do {
-                let body = SonarRoomMessageCreateBody(content: content, messageType: selectedRoomMessageType.rawValue)
+                let traceId = Self.makeTraceId(prefix: "pod-sonar-room")
+                let body = SonarRoomMessageCreateBody(
+                    content: content,
+                    messageType: selectedRoomMessageType.rawValue,
+                    traceId: traceId,
+                    source: "pod.sonar.room",
+                    lane: selectedRoomMessageType.lane,
+                    deliveryMode: "auto",
+                    provenance: "system",
+                    responseState: "recorded"
+                )
                 let dto: DirectChatORCAMessageDTO = try await api.post(path: "/api/v1/chat/channels/\(room.id)/messages", body: body)
                 roomMessages.append(SonarRoomMessage(dto: dto))
                 await loadORCAChannelSummaries()
@@ -3991,6 +4001,17 @@ enum SonarRoomMessageType: String, CaseIterable, Identifiable, Hashable {
         case .memoryCandidate: return "brain.head.profile"
         }
     }
+
+    var lane: String {
+        switch self {
+        case .text: return "room_note"
+        case .toolRequest: return "tool_request"
+        case .fileRequest: return "file_request"
+        case .approvalRequest: return "approval_request"
+        case .agentRunRequest: return "agent_run_request"
+        case .memoryCandidate: return "memory_candidate"
+        }
+    }
 }
 
 private struct SonarHealthDTO: Decodable {
@@ -4204,10 +4225,22 @@ struct SonarRoomMessage: Identifiable, Hashable {
 private struct SonarRoomMessageCreateBody: Encodable {
     let content: String
     let messageType: String
+    let traceId: String
+    let source: String
+    let lane: String
+    let deliveryMode: String
+    let provenance: String
+    let responseState: String
 
     enum CodingKeys: String, CodingKey {
         case content
         case messageType = "message_type"
+        case traceId = "trace_id"
+        case source
+        case lane
+        case deliveryMode = "delivery_mode"
+        case provenance
+        case responseState = "response_state"
     }
 }
 
