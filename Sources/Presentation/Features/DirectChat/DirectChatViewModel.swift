@@ -84,6 +84,7 @@ final class DirectChatViewModel {
     private var ticketLiveRefreshTask: Task<Void, Never>?
     private var ticketLiveTicketId: String?
     private var agentRunRefreshTask: Task<Void, Never>?
+    private var roomAutoRefreshTask: Task<Void, Never>?
     private var pendingTicketContinuation: (ticketId: String, ticketTitle: String, agentId: String, channelId: String?)?
 
     // MARK: - Setup
@@ -257,6 +258,7 @@ final class DirectChatViewModel {
         roomError = nil
         composedRoomMessage = ""
         Task { await loadRoomMessages(room) }
+        startRoomAutoRefresh(room: room)
     }
 
     func refreshSelectedRoom() {
@@ -265,6 +267,29 @@ final class DirectChatViewModel {
             await loadRoomMessages(selectedRoom)
             await loadORCAChannelSummaries()
         }
+    }
+
+    func startRoomAutoRefresh(room: SonarRoom) {
+        roomAutoRefreshTask?.cancel()
+        roomAutoRefreshTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(20))
+                await MainActor.run {
+                    guard let self,
+                          self.selectedRoom?.id == room.id,
+                          !self.isSendingRoomMessage else { return }
+                    Task {
+                        await self.loadRoomMessages(room)
+                        await self.loadORCAChannelSummaries()
+                    }
+                }
+            }
+        }
+    }
+
+    func stopRoomAutoRefresh() {
+        roomAutoRefreshTask?.cancel()
+        roomAutoRefreshTask = nil
     }
 
     func loadRoomMessages(_ room: SonarRoom) async {
@@ -312,6 +337,8 @@ final class DirectChatViewModel {
 
     func selectAgent(_ agent: AgentInfo) {
         selectedAgent = agent
+        selectedRoom = nil
+        stopRoomAutoRefresh()
         currentService = AgentChatService(agent: agent)
         liveRefreshTask?.cancel()
         stopLiveResponseStream()
@@ -370,6 +397,10 @@ final class DirectChatViewModel {
         activeTicketId = nil
         activeTicketTitle = nil
         selectedDeliveryMode = .compute
+        selectedRoom = nil
+        roomMessages = []
+        composedRoomMessage = ""
+        stopRoomAutoRefresh()
     }
 
     func refreshCurrentChannel() {

@@ -664,6 +664,7 @@ private struct SonarRoomConversationView: View {
     let room: SonarRoom
 
     @FocusState private var isFocused: Bool
+    @State private var selectedEvidenceMessage: SonarRoomMessage?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -673,8 +674,14 @@ private struct SonarRoomConversationView: View {
                 ScrollView {
                     LazyVStack(spacing: 10) {
                         ForEach(viewModel.roomMessages) { message in
-                            SonarRoomMessageRow(message: message)
-                                .id(message.id)
+                            Button {
+                                selectedEvidenceMessage = message
+                            } label: {
+                                SonarRoomMessageRow(message: message)
+                            }
+                            .buttonStyle(.plain)
+                            .id(message.id)
+                            .accessibilityHint("Open Sonar evidence for this room message.")
                         }
                     }
                     .padding(16)
@@ -717,6 +724,16 @@ private struct SonarRoomConversationView: View {
                 }
                 .disabled(viewModel.isLoadingRoomMessages)
                 .accessibilityLabel("Refresh ORCA room")
+            }
+        }
+        .sheet(
+            isPresented: Binding(
+                get: { selectedEvidenceMessage != nil },
+                set: { if !$0 { selectedEvidenceMessage = nil } }
+            )
+        ) {
+            if let selectedEvidenceMessage {
+                SonarRoomMessageEvidenceDrawer(message: selectedEvidenceMessage, room: room)
             }
         }
     }
@@ -801,6 +818,166 @@ private struct SonarRoomConversationView: View {
     private var canSend: Bool {
         !viewModel.isSendingRoomMessage
             && !viewModel.composedRoomMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
+private struct SonarRoomMessageEvidenceDrawer: View {
+    let message: SonarRoomMessage
+    let room: SonarRoom
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+    @State private var surfaceEvents: [SonarSurfaceEventDTO] = []
+    @State private var computeRuns: [SonarComputeRunDTO] = []
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    summaryCard
+                    eventSection
+                    computeSection
+                }
+                .padding(16)
+            }
+            .background(AppColors.backgroundPrimary)
+            .navigationTitle("Room Evidence")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+            .task(id: message.id) {
+                await loadEvidence()
+            }
+            .refreshable {
+                await loadEvidence()
+            }
+        }
+    }
+
+    private var summaryCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(room.displayName, systemImage: "number")
+                .font(.headline)
+                .foregroundStyle(AppColors.textPrimary)
+            evidenceRow("Sender", message.displayName)
+            evidenceRow("Delivery", message.statusLabel)
+            evidenceRow("Trace", short(message.traceId))
+            evidenceRow("Message", short(message.id))
+            evidenceRow("Channel", short(room.id))
+            evidenceRow("Source", message.source)
+            evidenceRow("Lane", message.lane)
+        }
+        .padding(14)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(AppColors.border, lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private var eventSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("ORCA surface events", systemImage: "rectangle.stack.badge.person.crop")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppColors.textPrimary)
+            if isLoading {
+                ProgressView("Loading evidence...")
+                    .font(.caption)
+            } else if let errorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(AppColors.accentWarning)
+            } else if surfaceEvents.isEmpty {
+                Text("No matching surface events found yet.")
+                    .font(.caption)
+                    .foregroundStyle(AppColors.textTertiary)
+            } else {
+                ForEach(surfaceEvents, id: \.id) { event in
+                    SonarSurfaceEventRow(event: event)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var computeSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Compute records", systemImage: "cpu")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppColors.textPrimary)
+            if !isLoading, computeRuns.isEmpty {
+                Text("No compute record matched this message trace.")
+                    .font(.caption)
+                    .foregroundStyle(AppColors.textTertiary)
+            } else {
+                ForEach(computeRuns, id: \.id) { run in
+                    SonarComputeRunRow(run: run)
+                }
+            }
+        }
+    }
+
+    private func loadEvidence() async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+        do {
+            var events: [SonarSurfaceEventDTO] = try await APIClient.shared.get(
+                path: "/api/v1/surfaces/events?source_event_id=\(urlQuery(message.id))&limit=20"
+            )
+            if events.isEmpty, let traceId = clean(message.traceId) {
+                events = try await APIClient.shared.get(
+                    path: "/api/v1/surfaces/events?trace_id=\(urlQuery(traceId))&limit=20"
+                )
+            }
+            surfaceEvents = events
+            if let traceId = clean(message.traceId) {
+                computeRuns = try await APIClient.shared.get(
+                    path: "/api/v1/compute/runs?trace_id=\(urlQuery(traceId))&limit=10"
+                )
+            } else {
+                computeRuns = []
+            }
+        } catch let apiError as APIError {
+            errorMessage = apiError.message
+        } catch {
+            errorMessage = "Evidence is unavailable right now."
+        }
+    }
+
+    private func evidenceRow(_ label: String, _ value: String?) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(label)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppColors.textTertiary)
+                .frame(width: 72, alignment: .leading)
+            Text(value?.isEmpty == false ? value! : "Not recorded")
+                .font(.caption)
+                .foregroundStyle(value?.isEmpty == false ? AppColors.textPrimary : AppColors.textTertiary)
+                .textSelection(.enabled)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func clean(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func short(_ value: String?) -> String? {
+        guard let value = clean(value) else { return nil }
+        guard value.count > 18 else { return value }
+        return "\(value.prefix(10))...\(value.suffix(6))"
+    }
+
+    private func urlQuery(_ value: String) -> String {
+        value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? value
     }
 }
 
