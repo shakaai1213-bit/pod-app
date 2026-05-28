@@ -253,6 +253,10 @@ private struct SonarDiagnosticsSheet: View {
                     diagnosticRow("Contacts", value: viewModel.sonarContactsGeneratedAt?.formatted(date: .abbreviated, time: .standard) ?? "Fallback channel mode")
                     diagnosticRow("Rooms", value: "\(viewModel.sonarRooms.count)")
                     diagnosticRow("Direct lanes", value: "\(viewModel.orcaChannelIdByAgent.count)")
+                    diagnosticRow("Unread rooms", value: "\(viewModel.sonarRooms.filter { $0.unreadCount > 0 }.count)")
+                    diagnosticRow("Mention rooms", value: "\(viewModel.sonarRooms.filter { $0.mentionCount > 0 }.count)")
+                    diagnosticRow("Protected rooms", value: "\(viewModel.sonarRooms.filter { $0.protectedLane }.count)")
+                    diagnosticRow("Live rooms", value: "\(viewModel.sonarRooms.filter { $0.presence == "live" }.count)")
                 }
 
                 if let health = viewModel.sonarHealth {
@@ -925,10 +929,13 @@ private struct SonarRoomRow: View {
                     if room.activeSSEClients > 0 {
                         pill("Live", tint: AppColors.accentSuccess)
                     }
+                    if room.protectedLane {
+                        pill("Protected", tint: AppColors.accentWarning)
+                    }
                     Spacer(minLength: 0)
                 }
 
-                Text(room.description?.isEmpty == false ? room.description! : "\(room.messageCount) messages")
+                Text(roomRowDetail)
                     .font(.caption)
                     .foregroundStyle(AppColors.textSecondary)
                     .lineLimit(1)
@@ -939,6 +946,7 @@ private struct SonarRoomRow: View {
     }
 
     private var icon: String {
+        if room.protectedLane { return "lock.shield" }
         if room.linkedTicketId != nil || room.channelPurpose == "service_request" {
             return "text.badge.checkmark"
         }
@@ -953,6 +961,7 @@ private struct SonarRoomRow: View {
     }
 
     private var tint: Color {
+        if room.protectedLane { return AppColors.accentWarning }
         if room.linkedTicketId != nil || room.channelPurpose == "service_request" {
             return AppColors.accentAgent
         }
@@ -963,6 +972,14 @@ private struct SonarRoomRow: View {
         if lower.hasPrefix("ticket:") { return AppColors.accentAgent }
         if lower.hasPrefix("board:") { return AppColors.accentElectric }
         return AppColors.textSecondary
+    }
+
+    private var roomRowDetail: String {
+        let fallback = room.description?.isEmpty == false ? room.description! : "\(room.messageCount) messages"
+        if let presence = room.presenceDetail, !presence.isEmpty {
+            return "\(fallback) · \(presence)"
+        }
+        return "\(fallback) · \(room.presence.capitalized)"
     }
 
     private func pill(_ title: String, tint: Color) -> some View {
@@ -1123,6 +1140,15 @@ private struct SonarRoomConversationView: View {
         if room.activeSSEClients > 0 {
             parts.append("\(room.activeSSEClients) live listeners")
         }
+        if room.unreadCount > 0 {
+            parts.append("\(room.unreadCount) unread")
+        }
+        if room.mentionCount > 0 {
+            parts.append("\(room.mentionCount) mentions")
+        }
+        if room.protectedLane {
+            parts.append("protected")
+        }
         return parts.joined(separator: " · ")
     }
 
@@ -1131,24 +1157,34 @@ private struct SonarRoomConversationView: View {
             HStack(spacing: 8) {
                 ForEach(SonarRoomMessageType.allCases) { type in
                     Button {
-                        viewModel.selectedRoomMessageType = type
+                        if canUseMessageType(type) {
+                            viewModel.selectedRoomMessageType = type
+                        }
                     } label: {
                         Image(systemName: type.icon)
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(viewModel.selectedRoomMessageType == type ? .white : AppColors.textSecondary)
+                            .foregroundStyle(buttonForeground(for: type))
                             .frame(width: 28, height: 28)
-                            .background(viewModel.selectedRoomMessageType == type ? AppColors.accentElectric : AppColors.backgroundTertiary)
+                            .background(buttonBackground(for: type))
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
+                    .disabled(!canUseMessageType(type))
                     .accessibilityLabel(type.title)
                     .help(type.detail)
                 }
                 Spacer(minLength: 0)
                 Text(viewModel.selectedRoomMessageType.detail)
                     .font(.caption2)
-                    .foregroundStyle(AppColors.textTertiary)
+                    .foregroundStyle(canUseMessageType(viewModel.selectedRoomMessageType) ? AppColors.textTertiary : AppColors.accentWarning)
                     .lineLimit(1)
+            }
+
+            if room.protectedLane, let reason = room.protectionReason {
+                Label(reason, systemImage: "lock.shield")
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.accentWarning)
+                    .lineLimit(2)
             }
 
             HStack(spacing: 10) {
@@ -1181,6 +1217,20 @@ private struct SonarRoomConversationView: View {
         .background(AppColors.backgroundSecondary)
     }
 
+    private func canUseMessageType(_ type: SonarRoomMessageType) -> Bool {
+        type == .text || room.canRequestWorkflow
+    }
+
+    private func buttonForeground(for type: SonarRoomMessageType) -> Color {
+        if viewModel.selectedRoomMessageType == type { return .white }
+        return canUseMessageType(type) ? AppColors.textSecondary : AppColors.textTertiary
+    }
+
+    private func buttonBackground(for type: SonarRoomMessageType) -> Color {
+        if viewModel.selectedRoomMessageType == type { return AppColors.accentElectric }
+        return canUseMessageType(type) ? AppColors.backgroundTertiary : AppColors.backgroundTertiary.opacity(0.45)
+    }
+
     private var roomPrompt: String {
         switch viewModel.selectedRoomMessageType {
         case .text:
@@ -1200,6 +1250,8 @@ private struct SonarRoomConversationView: View {
 
     private var canSend: Bool {
         !viewModel.isSendingRoomMessage
+            && room.canPost
+            && canUseMessageType(viewModel.selectedRoomMessageType)
             && !viewModel.composedRoomMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }

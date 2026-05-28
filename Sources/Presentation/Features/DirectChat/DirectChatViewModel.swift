@@ -469,6 +469,11 @@ final class DirectChatViewModel {
         messageId: String
     ) async {
         guard messageType != .text else { return }
+        guard room.canRequestWorkflow else {
+            roomActionMessage = room.protectionReason
+                ?? "\(messageType.title) recorded in chat only. Protected lanes require an approved ORCA ticket before workflow creation."
+            return
+        }
         guard let ticketId = room.linkedTicketId, !ticketId.isEmpty else {
             roomActionMessage = "\(messageType.title) recorded in chat only. Link this room to a ticket before ORCA can create a workflow object."
             return
@@ -4081,6 +4086,13 @@ struct SonarRoom: Identifiable, Hashable {
     let needsAttention: Bool
     let latestResponseState: String?
     let latestProvenance: String?
+    let presence: String
+    let presenceDetail: String?
+    let protectedLane: Bool
+    let canPost: Bool
+    let canRequestWorkflow: Bool
+    let protectionReason: String?
+    let notificationLevel: String
     let lastUserMessageAt: Date?
     let lastAgentMessageAt: Date?
     let lastReadAt: Date?
@@ -4103,6 +4115,13 @@ struct SonarRoom: Identifiable, Hashable {
         self.needsAttention = summary?.pendingCount ?? 0 > 0
         self.latestResponseState = summary?.latestResponseState
         self.latestProvenance = summary?.latestProvenance
+        self.presence = summary?.activeSSEClients ?? 0 > 0 ? "live" : "quiet"
+        self.presenceDetail = summary?.activeSSEClients ?? 0 > 0 ? "\(summary?.activeSSEClients ?? 0) live stream" : nil
+        self.protectedLane = false
+        self.canPost = true
+        self.canRequestWorkflow = true
+        self.protectionReason = nil
+        self.notificationLevel = summary?.pendingCount ?? 0 > 0 ? "attention" : "normal"
         self.lastUserMessageAt = summary?.lastUserMessageAt
         self.lastAgentMessageAt = summary?.lastAgentMessageAt
         self.lastReadAt = nil
@@ -4126,6 +4145,13 @@ struct SonarRoom: Identifiable, Hashable {
         self.needsAttention = contact.needsAttention ?? (contact.pendingCount > 0 || (contact.mentionCount ?? 0) > 0)
         self.latestResponseState = contact.latestResponseState
         self.latestProvenance = contact.latestProvenance
+        self.presence = contact.presence ?? (contact.activeSSEClients > 0 ? "live" : "quiet")
+        self.presenceDetail = contact.presenceDetail
+        self.protectedLane = contact.protectedLane ?? false
+        self.canPost = contact.canPost ?? true
+        self.canRequestWorkflow = contact.canRequestWorkflow ?? true
+        self.protectionReason = contact.protectionReason
+        self.notificationLevel = contact.notificationLevel ?? "normal"
         self.lastUserMessageAt = contact.lastUserMessageAt
         self.lastAgentMessageAt = contact.lastAgentMessageAt
         self.lastReadAt = contact.lastReadAt
@@ -4339,6 +4365,13 @@ private struct SonarContactDTO: Decodable {
     let latestTraceId: String?
     let latestResponseState: String?
     let latestProvenance: String?
+    let presence: String?
+    let presenceDetail: String?
+    let protectedLane: Bool?
+    let canPost: Bool?
+    let canRequestWorkflow: Bool?
+    let protectionReason: String?
+    let notificationLevel: String?
     let latestPreview: String?
     let lastUserMessageAt: Date?
     let lastAgentMessageAt: Date?
@@ -4350,6 +4383,8 @@ private struct SonarContactDTO: Decodable {
         case channelId = "channel_id"
         case displayName = "display_name"
         case statusDetail = "status_detail"
+        case presence
+        case presenceDetail = "presence_detail"
         case linkedTicketId = "linked_ticket_id"
         case linkedBoardId = "linked_board_id"
         case channelPurpose = "channel_purpose"
@@ -4360,6 +4395,11 @@ private struct SonarContactDTO: Decodable {
         case mentionCount = "mention_count"
         case activeSSEClients = "active_sse_clients"
         case needsAttention = "needs_attention"
+        case protectedLane = "protected_lane"
+        case canPost = "can_post"
+        case canRequestWorkflow = "can_request_workflow"
+        case protectionReason = "protection_reason"
+        case notificationLevel = "notification_level"
         case latestMessageId = "latest_message_id"
         case latestTraceId = "latest_trace_id"
         case latestResponseState = "latest_response_state"
