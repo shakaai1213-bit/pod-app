@@ -71,8 +71,13 @@ struct DirectChatView: View {
                         .font(.caption)
                         .foregroundStyle(AppColors.textTertiary)
                         .listRowBackground(Color.clear)
+                } else if viewModel.filteredSonarRooms.isEmpty {
+                    Text("No matching ORCA rooms.")
+                        .font(.caption)
+                        .foregroundStyle(AppColors.textTertiary)
+                        .listRowBackground(Color.clear)
                 } else {
-                    ForEach(viewModel.sonarRooms) { room in
+                    ForEach(viewModel.filteredSonarRooms) { room in
                         NavigationLink(value: room) {
                             SonarRoomRow(room: room)
                         }
@@ -86,6 +91,14 @@ struct DirectChatView: View {
         .background(AppColors.backgroundPrimary)
         .navigationTitle("Sonar")
         .navigationBarTitleDisplayMode(.inline)
+        .searchable(
+            text: Binding(
+                get: { viewModel.sonarSearchText },
+                set: { viewModel.sonarSearchText = $0 }
+            ),
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: "Search rooms, tickets, boards"
+        )
         .toolbarBackground(AppColors.backgroundSecondary, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .navigationDestination(for: AgentInfo.self) { agent in
@@ -612,23 +625,20 @@ private struct SonarRoomRow: View {
                     Text(room.roomKindLabel)
                         .font(.caption)
                         .foregroundStyle(AppColors.textTertiary)
+                    if let ticketRef = short(room.linkedTicketId, prefix: "Ticket") {
+                        pill(ticketRef, tint: AppColors.accentAgent)
+                    }
+                    if let boardRef = short(room.linkedBoardId, prefix: "Board") {
+                        pill(boardRef, tint: AppColors.accentElectric)
+                    }
+                    if room.isSystemChannel {
+                        pill("System", tint: AppColors.textSecondary)
+                    }
                     if room.pendingCount > 0 {
-                        Text("\(room.pendingCount) waiting")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(AppColors.accentWarning)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(AppColors.accentWarning.opacity(0.10))
-                            .clipShape(Capsule())
+                        pill("\(room.pendingCount) waiting", tint: AppColors.accentWarning)
                     }
                     if room.activeSSEClients > 0 {
-                        Text("live")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(AppColors.accentSuccess)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(AppColors.accentSuccess.opacity(0.10))
-                            .clipShape(Capsule())
+                        pill("Live", tint: AppColors.accentSuccess)
                     }
                     Spacer(minLength: 0)
                 }
@@ -644,6 +654,12 @@ private struct SonarRoomRow: View {
     }
 
     private var icon: String {
+        if room.linkedTicketId != nil || room.channelPurpose == "service_request" {
+            return "text.badge.checkmark"
+        }
+        if room.linkedBoardId != nil || room.channelPurpose == "board" {
+            return "square.stack.3d.up"
+        }
         let lower = room.name.lowercased()
         if lower.hasPrefix("ticket:") { return "text.badge.checkmark" }
         if lower.hasPrefix("board:") { return "square.stack.3d.up" }
@@ -652,10 +668,35 @@ private struct SonarRoomRow: View {
     }
 
     private var tint: Color {
+        if room.linkedTicketId != nil || room.channelPurpose == "service_request" {
+            return AppColors.accentAgent
+        }
+        if room.linkedBoardId != nil || room.channelPurpose == "board" {
+            return AppColors.accentElectric
+        }
         let lower = room.name.lowercased()
         if lower.hasPrefix("ticket:") { return AppColors.accentAgent }
         if lower.hasPrefix("board:") { return AppColors.accentElectric }
         return AppColors.textSecondary
+    }
+
+    private func pill(_ title: String, tint: Color) -> some View {
+        Text(title)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(tint.opacity(0.10))
+            .clipShape(Capsule())
+    }
+
+    private func short(_ value: String?, prefix: String) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+            return nil
+        }
+        let ref = value.count > 10 ? String(value.prefix(8)) : value
+        return "\(prefix) \(ref)"
     }
 }
 
@@ -984,45 +1025,50 @@ private struct SonarRoomMessageEvidenceDrawer: View {
 private struct SonarRoomMessageRow: View {
     let message: SonarRoomMessage
 
+    @ViewBuilder
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            if message.isUser { Spacer(minLength: 50) }
+        if message.isRequestCard {
+            SonarRoomRequestCard(message: message)
+        } else {
+            HStack(alignment: .top, spacing: 10) {
+                if message.isUser { Spacer(minLength: 50) }
 
-            if !message.isUser {
-                avatar
-            }
-
-            VStack(alignment: message.isUser ? .trailing : .leading, spacing: 5) {
-                HStack(spacing: 6) {
-                    Text(message.displayName)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(message.isUser ? .white.opacity(0.85) : AppColors.textSecondary)
-                    Text(message.createdAt.formatted(date: .omitted, time: .shortened))
-                        .font(.caption2)
-                        .foregroundStyle(message.isUser ? .white.opacity(0.65) : AppColors.textTertiary)
+                if !message.isUser {
+                    avatar
                 }
 
-                Text(message.content.isEmpty ? "Empty message" : message.content)
-                    .font(.body)
-                    .foregroundStyle(message.isUser ? .white : AppColors.textPrimary)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(message.isUser ? AppColors.accentElectric : AppColors.backgroundTertiary)
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .strokeBorder(message.isUser ? Color.clear : AppColors.border, lineWidth: 1)
-                    )
+                VStack(alignment: message.isUser ? .trailing : .leading, spacing: 5) {
+                    HStack(spacing: 6) {
+                        Text(message.displayName)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(message.isUser ? .white.opacity(0.85) : AppColors.textSecondary)
+                        Text(message.createdAt.formatted(date: .omitted, time: .shortened))
+                            .font(.caption2)
+                            .foregroundStyle(message.isUser ? .white.opacity(0.65) : AppColors.textTertiary)
+                    }
 
-                if let status = message.statusLabel {
-                    Text(status)
-                        .font(.caption2)
-                        .foregroundStyle(AppColors.textTertiary)
-                        .lineLimit(1)
+                    Text(message.content.isEmpty ? "Empty message" : message.content)
+                        .font(.body)
+                        .foregroundStyle(message.isUser ? .white : AppColors.textPrimary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(message.isUser ? AppColors.accentElectric : AppColors.backgroundTertiary)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .strokeBorder(message.isUser ? Color.clear : AppColors.border, lineWidth: 1)
+                        )
+
+                    if let status = message.statusLabel {
+                        Text(status)
+                            .font(.caption2)
+                            .foregroundStyle(AppColors.textTertiary)
+                            .lineLimit(1)
+                    }
                 }
-            }
 
-            if !message.isUser { Spacer(minLength: 50) }
+                if !message.isUser { Spacer(minLength: 50) }
+            }
         }
     }
 
@@ -1035,6 +1081,100 @@ private struct SonarRoomMessageRow: View {
                 .font(.caption.weight(.bold))
                 .foregroundStyle(AppColors.accentElectric)
         }
+    }
+}
+
+private struct SonarRoomRequestCard: View {
+    let message: SonarRoomMessage
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            if message.isUser { Spacer(minLength: 34) }
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 10) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(cardTint.opacity(0.14))
+                            .frame(width: 34, height: 34)
+                        Image(systemName: message.cardIcon)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(cardTint)
+                    }
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(message.cardTitle)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(AppColors.textPrimary)
+                        Text("\(message.displayName) · \(message.createdAt.formatted(date: .omitted, time: .shortened))")
+                            .font(.caption2)
+                            .foregroundStyle(AppColors.textTertiary)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+
+                Text(message.content.isEmpty ? "No detail recorded." : message.content)
+                    .font(.subheadline)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 8) {
+                    if let status = message.statusLabel {
+                        pill(status, tint: statusTint)
+                    }
+                    pill("ORCA routed", tint: AppColors.textSecondary)
+                    Spacer(minLength: 0)
+                    Text("Tap for evidence")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(AppColors.textTertiary)
+                }
+            }
+            .padding(12)
+            .background(AppColors.backgroundSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(cardTint.opacity(0.30), lineWidth: 1)
+            )
+            .frame(maxWidth: 520, alignment: message.isUser ? .trailing : .leading)
+
+            if !message.isUser { Spacer(minLength: 34) }
+        }
+    }
+
+    private var cardTint: Color {
+        switch message.messageType {
+        case "approval_request": return AppColors.accentWarning
+        case "agent_run_request", "tool_request": return AppColors.accentAgent
+        case "memory_candidate": return AppColors.accentElectric
+        case "system": return AppColors.textSecondary
+        default: return AppColors.accentSuccess
+        }
+    }
+
+    private var statusTint: Color {
+        guard let responseState = message.responseState?.lowercased() else {
+            return AppColors.textSecondary
+        }
+        if responseState.contains("failed") || responseState.contains("degraded") {
+            return AppColors.accentDanger
+        }
+        if responseState.contains("waiting") || responseState.contains("pending") {
+            return AppColors.accentWarning
+        }
+        return AppColors.accentSuccess
+    }
+
+    private func pill(_ title: String, tint: Color) -> some View {
+        Text(title)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(tint.opacity(0.10))
+            .clipShape(Capsule())
     }
 }
 

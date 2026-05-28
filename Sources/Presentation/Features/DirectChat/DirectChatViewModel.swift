@@ -68,6 +68,7 @@ final class DirectChatViewModel {
     var isLoadingRoomMessages: Bool = false
     var isSendingRoomMessage: Bool = false
     var roomError: String?
+    var sonarSearchText: String = ""
 
     // Conversation data from SwiftData
     var conversations: [DMConversation] = []
@@ -250,6 +251,25 @@ final class DirectChatViewModel {
         } catch {
             roomError = "ORCA room discovery unavailable."
             // Static local chat remains usable when ORCA channel discovery is unavailable.
+        }
+    }
+
+    var filteredSonarRooms: [SonarRoom] {
+        let query = sonarSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return sonarRooms }
+        return sonarRooms.filter { room in
+            [
+                room.displayName,
+                room.name,
+                room.description ?? "",
+                room.roomKindLabel,
+                room.channelPurpose,
+                room.linkedTicketId ?? "",
+                room.linkedBoardId ?? ""
+            ]
+            .joined(separator: " ")
+            .lowercased()
+            .contains(query)
         }
     }
 
@@ -3741,6 +3761,10 @@ struct SonarRoom: Identifiable, Hashable {
     let name: String
     let type: String
     let description: String?
+    let linkedTicketId: String?
+    let linkedBoardId: String?
+    let channelPurpose: String
+    let isSystemChannel: Bool
     let messageCount: Int
     let pendingCount: Int
     let activeSSEClients: Int
@@ -3755,6 +3779,10 @@ struct SonarRoom: Identifiable, Hashable {
         self.name = channel.name
         self.type = channel.type
         self.description = channel.description
+        self.linkedTicketId = channel.linkedTicketId ?? summary?.linkedTicketId
+        self.linkedBoardId = channel.linkedBoardId ?? summary?.linkedBoardId
+        self.channelPurpose = channel.channelPurpose ?? summary?.channelPurpose ?? "general"
+        self.isSystemChannel = channel.isSystemChannel ?? summary?.isSystemChannel ?? false
         self.messageCount = summary?.messageCount ?? 0
         self.pendingCount = summary?.pendingCount ?? 0
         self.activeSSEClients = summary?.activeSSEClients ?? 0
@@ -3780,6 +3808,10 @@ struct SonarRoom: Identifiable, Hashable {
     }
 
     var roomKindLabel: String {
+        if channelPurpose == "service_request" { return "Ticket room" }
+        if channelPurpose == "board" { return "Board room" }
+        if linkedTicketId != nil { return "Ticket room" }
+        if linkedBoardId != nil { return "Board room" }
         let lower = name.lowercased()
         if lower.hasPrefix("ticket:") { return "Ticket room" }
         if lower.hasPrefix("board:") { return "Board room" }
@@ -3843,6 +3875,49 @@ struct SonarRoomMessage: Identifiable, Hashable {
         }
         return nil
     }
+
+    var isRequestCard: Bool {
+        Self.requestCardTypes.contains(messageType)
+    }
+
+    var cardTitle: String {
+        switch messageType {
+        case "tool_request": return "Tool Request"
+        case "file_request": return "File Request"
+        case "memory_candidate": return "Memory Candidate"
+        case "approval_request": return "Approval Request"
+        case "agent_run_request": return "Agent Run Request"
+        case "ticket_action": return "Ticket Action"
+        case "task_action": return "Task Action"
+        case "system": return "System"
+        default: return "Message"
+        }
+    }
+
+    var cardIcon: String {
+        switch messageType {
+        case "tool_request": return "wrench.and.screwdriver"
+        case "file_request": return "doc.badge.gearshape"
+        case "memory_candidate": return "brain.head.profile"
+        case "approval_request": return "person.badge.key"
+        case "agent_run_request": return "bolt.badge.clock"
+        case "ticket_action": return "text.badge.checkmark"
+        case "task_action": return "checklist"
+        case "system": return "gearshape"
+        default: return "bubble.left"
+        }
+    }
+
+    private static let requestCardTypes: Set<String> = [
+        "tool_request",
+        "file_request",
+        "memory_candidate",
+        "approval_request",
+        "agent_run_request",
+        "ticket_action",
+        "task_action",
+        "system"
+    ]
 }
 
 private struct SonarRoomMessageCreateBody: Encodable {
@@ -3860,10 +3935,18 @@ struct DirectChatChannelDTO: Decodable {
     let name: String
     let type: String
     let description: String?
+    let linkedTicketId: String?
+    let linkedBoardId: String?
+    let channelPurpose: String?
+    let isSystemChannel: Bool?
     let updatedAt: Date
 
     enum CodingKeys: String, CodingKey {
         case id, name, type, description
+        case linkedTicketId = "linked_ticket_id"
+        case linkedBoardId = "linked_board_id"
+        case channelPurpose = "channel_purpose"
+        case isSystemChannel = "is_system_channel"
         case updatedAt = "updated_at"
     }
 }
@@ -3871,6 +3954,10 @@ struct DirectChatChannelDTO: Decodable {
 struct DirectChatChannelSummaryDTO: Decodable {
     let channelId: String
     let messageCount: Int
+    let linkedTicketId: String?
+    let linkedBoardId: String?
+    let channelPurpose: String?
+    let isSystemChannel: Bool?
     let latestProvenance: String?
     let latestResponseState: String?
     let pendingCount: Int
@@ -3882,6 +3969,10 @@ struct DirectChatChannelSummaryDTO: Decodable {
     enum CodingKeys: String, CodingKey {
         case channelId = "channel_id"
         case messageCount = "message_count"
+        case linkedTicketId = "linked_ticket_id"
+        case linkedBoardId = "linked_board_id"
+        case channelPurpose = "channel_purpose"
+        case isSystemChannel = "is_system_channel"
         case latestProvenance = "latest_provenance"
         case latestResponseState = "latest_response_state"
         case pendingCount = "pending_count"
