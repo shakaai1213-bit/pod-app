@@ -38,59 +38,14 @@ struct DirectChatView: View {
             }
             .listRowBackground(Color.clear)
 
-            Section("AGENT CHANNELS") {
-                ForEach(viewModel.directChatAgents) { agent in
-                    // Pod chat shows active and support-runtime lanes. Dormant/advisor
-                    // agents stay preserved in the model, but do not present as working
-                    // chat targets.
-                    if viewModel.canStartChat(with: agent) {
-                        NavigationLink(value: agent) {
-                            AgentRowView(agent: agent, viewModel: viewModel)
-                        }
-                        .listRowBackground(
-                            viewModel.selectedAgent?.id == agent.id
-                            ? AppColors.accentElectric.opacity(0.15)
-                            : Color.clear
-                        )
-                    } else {
-                        AgentRowView(agent: agent, viewModel: viewModel)
-                            .opacity(0.45)
-                            .listRowBackground(Color.clear)
-                            .accessibilityLabel("\(agent.name) - \(viewModel.rosterBadgeText(for: agent))")
-                            .accessibilityHint("Create or route an ORCA ticket before assigning this lane.")
-                    }
-                }
-            }
+            agentSection("PRIMARY AGENTS", agents: primaryAgents)
+            agentSection("PROTECTED LANES", agents: protectedAgents)
+            agentSection("SUPPORT RUNTIME", agents: supportAgents)
 
-            Section("ROOMS") {
-                if viewModel.isLoadingRooms && viewModel.sonarRooms.isEmpty {
-                    HStack(spacing: 10) {
-                        ProgressView()
-                            .scaleEffect(0.75)
-                        Text("Loading ORCA rooms")
-                            .font(.caption)
-                            .foregroundStyle(AppColors.textTertiary)
-                    }
-                    .listRowBackground(Color.clear)
-                } else if viewModel.sonarRooms.isEmpty {
-                    Text(viewModel.roomError ?? "No ORCA rooms yet.")
-                        .font(.caption)
-                        .foregroundStyle(AppColors.textTertiary)
-                        .listRowBackground(Color.clear)
-                } else if viewModel.filteredSonarRooms.isEmpty {
-                    Text("No matching ORCA rooms.")
-                        .font(.caption)
-                        .foregroundStyle(AppColors.textTertiary)
-                        .listRowBackground(Color.clear)
-                } else {
-                    ForEach(viewModel.filteredSonarRooms) { room in
-                        NavigationLink(value: room) {
-                            SonarRoomRow(room: room)
-                        }
-                        .listRowBackground(Color.clear)
-                    }
-                }
-            }
+            roomSection("TICKET ROOMS", rooms: ticketRooms)
+            roomSection("BOARD + PROJECT ROOMS", rooms: boardRooms)
+            roomSection("SYSTEM + ALERTS", rooms: systemRooms)
+            roomSection("GENERAL ROOMS", rooms: generalRooms)
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
@@ -133,6 +88,112 @@ struct DirectChatView: View {
             SonarRoomConversationView(viewModel: viewModel, room: room)
                 .onAppear { viewModel.selectRoom(room) }
         }
+    }
+
+    @ViewBuilder
+    private func agentSection(_ title: String, agents: [AgentInfo]) -> some View {
+        if !agents.isEmpty {
+            Section(title) {
+                ForEach(agents) { agent in
+                    agentRow(agent)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func agentRow(_ agent: AgentInfo) -> some View {
+        if viewModel.canStartChat(with: agent) {
+            NavigationLink(value: agent) {
+                AgentRowView(agent: agent, viewModel: viewModel)
+            }
+            .listRowBackground(
+                viewModel.selectedAgent?.id == agent.id
+                ? AppColors.accentElectric.opacity(0.15)
+                : Color.clear
+            )
+        } else {
+            AgentRowView(agent: agent, viewModel: viewModel)
+                .opacity(0.45)
+                .listRowBackground(Color.clear)
+                .accessibilityLabel("\(agent.name) - \(viewModel.rosterBadgeText(for: agent))")
+                .accessibilityHint("Create or route an ORCA ticket before assigning this lane.")
+        }
+    }
+
+    @ViewBuilder
+    private func roomSection(_ title: String, rooms: [SonarRoom]) -> some View {
+        if viewModel.isLoadingRooms && viewModel.sonarRooms.isEmpty && title == "TICKET ROOMS" {
+            Section("WORK ROOMS") {
+                HStack(spacing: 10) {
+                    ProgressView()
+                        .scaleEffect(0.75)
+                    Text("Loading ORCA rooms")
+                        .font(.caption)
+                        .foregroundStyle(AppColors.textTertiary)
+                }
+                .listRowBackground(Color.clear)
+            }
+        } else if viewModel.sonarRooms.isEmpty && title == "TICKET ROOMS" {
+            Section("WORK ROOMS") {
+                Text(viewModel.roomError ?? "No ORCA rooms yet.")
+                    .font(.caption)
+                    .foregroundStyle(AppColors.textTertiary)
+                    .listRowBackground(Color.clear)
+            }
+        } else if viewModel.filteredSonarRooms.isEmpty && title == "TICKET ROOMS" {
+            Section("WORK ROOMS") {
+                Text("No matching ORCA rooms.")
+                    .font(.caption)
+                    .foregroundStyle(AppColors.textTertiary)
+                    .listRowBackground(Color.clear)
+            }
+        } else if !rooms.isEmpty {
+            Section(title) {
+                ForEach(rooms) { room in
+                    NavigationLink(value: room) {
+                        SonarRoomRow(room: room)
+                    }
+                    .listRowBackground(Color.clear)
+                }
+            }
+        }
+    }
+
+    private var visibleAgents: [AgentInfo] {
+        viewModel.directChatAgents
+    }
+
+    private var primaryAgents: [AgentInfo] {
+        visibleAgents.filter { $0.lane == .main && !isProtectedAgent($0) }
+    }
+
+    private var protectedAgents: [AgentInfo] {
+        visibleAgents.filter { isProtectedAgent($0) }
+    }
+
+    private var supportAgents: [AgentInfo] {
+        visibleAgents.filter { $0.lane == .supportRuntime && !isProtectedAgent($0) }
+    }
+
+    private var ticketRooms: [SonarRoom] {
+        viewModel.filteredSonarRooms.filter { $0.roomGroup == .ticket }
+    }
+
+    private var boardRooms: [SonarRoom] {
+        viewModel.filteredSonarRooms.filter { $0.roomGroup == .boardOrProject }
+    }
+
+    private var systemRooms: [SonarRoom] {
+        viewModel.filteredSonarRooms.filter { $0.roomGroup == .system }
+    }
+
+    private var generalRooms: [SonarRoom] {
+        viewModel.filteredSonarRooms.filter { $0.roomGroup == .general }
+    }
+
+    private func isProtectedAgent(_ agent: AgentInfo) -> Bool {
+        ["chief", "rooster", "reef"].contains(agent.id)
     }
 
     // MARK: - Empty State

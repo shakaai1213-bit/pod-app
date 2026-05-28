@@ -4041,6 +4041,13 @@ struct DirectChatORCAMessageDTO: Decodable {
 }
 
 struct SonarRoom: Identifiable, Hashable {
+    enum RoomGroup: Hashable {
+        case ticket
+        case boardOrProject
+        case system
+        case general
+    }
+
     let id: String
     let name: String
     let type: String
@@ -4124,6 +4131,25 @@ struct SonarRoom: Identifiable, Hashable {
 
     var lastActivity: Date {
         [lastAgentMessageAt, lastUserMessageAt, updatedAt].compactMap { $0 }.max() ?? updatedAt
+    }
+
+    var roomGroup: RoomGroup {
+        if channelPurpose == "service_request" || linkedTicketId != nil || name.lowercased().hasPrefix("ticket:") {
+            return .ticket
+        }
+        if channelPurpose == "board" || linkedBoardId != nil || name.lowercased().hasPrefix("board:") {
+            return .boardOrProject
+        }
+        if name.lowercased().contains("project") {
+            return .boardOrProject
+        }
+        if isSystemChannel || ["alert", "system"].contains(channelPurpose.lowercased()) {
+            return .system
+        }
+        if name.lowercased().contains("alert") {
+            return .system
+        }
+        return .general
     }
 }
 

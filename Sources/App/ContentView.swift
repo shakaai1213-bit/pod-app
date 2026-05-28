@@ -121,7 +121,7 @@ struct ContentView: View {
         if selectedTab == .dashboard {
             DashboardView()
         } else if selectedTab == .chat {
-            TriageChatView(directViewModel: directChatViewModel)
+            SonarView(viewModel: directChatViewModel)
         } else if selectedTab == .work {
             WorkView()
         } else if selectedTab == .crew {
@@ -277,15 +277,6 @@ struct ContentView: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .presentationDetents([.medium])
-    }
-}
-
-private struct TriageChatView: View {
-    @Bindable var directViewModel: DirectChatViewModel
-
-    var body: some View {
-        DirectChatView(viewModel: directViewModel)
-        .background(AppColors.backgroundPrimary)
     }
 }
 
