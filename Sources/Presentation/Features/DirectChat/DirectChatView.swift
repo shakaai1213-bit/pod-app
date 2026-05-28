@@ -893,33 +893,75 @@ private struct SonarRoomConversationView: View {
     }
 
     private var roomComposeBar: some View {
-        HStack(spacing: 10) {
-            TextField("Message room...", text: Binding(
-                get: { viewModel.composedRoomMessage },
-                set: { viewModel.composedRoomMessage = $0 }
-            ), axis: .vertical)
-                .focused($isFocused)
-                .textFieldStyle(.plain)
-                .foregroundStyle(AppColors.textPrimary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(AppColors.backgroundTertiary)
-                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .lineLimit(1...5)
-
-            Button {
-                viewModel.sendRoomMessage()
-            } label: {
-                Image(systemName: viewModel.isSendingRoomMessage ? "hourglass.circle.fill" : "arrow.up.circle.fill")
-                    .font(.system(size: 30))
-                    .foregroundStyle(canSend ? AppColors.accentElectric : AppColors.textTertiary)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                ForEach(SonarRoomMessageType.allCases) { type in
+                    Button {
+                        viewModel.selectedRoomMessageType = type
+                    } label: {
+                        Image(systemName: type.icon)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(viewModel.selectedRoomMessageType == type ? .white : AppColors.textSecondary)
+                            .frame(width: 28, height: 28)
+                            .background(viewModel.selectedRoomMessageType == type ? AppColors.accentElectric : AppColors.backgroundTertiary)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(type.title)
+                    .help(type.detail)
+                }
+                Spacer(minLength: 0)
+                Text(viewModel.selectedRoomMessageType.detail)
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.textTertiary)
+                    .lineLimit(1)
             }
-            .disabled(!canSend)
-            .accessibilityLabel("Send room message")
+
+            HStack(spacing: 10) {
+                TextField(roomPrompt, text: Binding(
+                    get: { viewModel.composedRoomMessage },
+                    set: { viewModel.composedRoomMessage = $0 }
+                ), axis: .vertical)
+                    .focused($isFocused)
+                    .textFieldStyle(.plain)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(AppColors.backgroundTertiary)
+                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .lineLimit(1...5)
+
+                Button {
+                    viewModel.sendRoomMessage()
+                } label: {
+                    Image(systemName: viewModel.isSendingRoomMessage ? "hourglass.circle.fill" : "arrow.up.circle.fill")
+                        .font(.system(size: 30))
+                        .foregroundStyle(canSend ? AppColors.accentElectric : AppColors.textTertiary)
+                }
+                .disabled(!canSend)
+                .accessibilityLabel("Send room message")
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(AppColors.backgroundSecondary)
+    }
+
+    private var roomPrompt: String {
+        switch viewModel.selectedRoomMessageType {
+        case .text:
+            return "Message room..."
+        case .toolRequest:
+            return "Describe the tool request..."
+        case .fileRequest:
+            return "Describe the file context needed..."
+        case .approvalRequest:
+            return "Describe what needs sign/pass..."
+        case .agentRunRequest:
+            return "Describe the agent run request..."
+        case .memoryCandidate:
+            return "Describe the memory candidate..."
+        }
     }
 
     private var canSend: Bool {

@@ -64,6 +64,7 @@ final class DirectChatViewModel {
     var selectedRoom: SonarRoom?
     var roomMessages: [SonarRoomMessage] = []
     var composedRoomMessage: String = ""
+    var selectedRoomMessageType: SonarRoomMessageType = .text
     var isLoadingRooms: Bool = false
     var isLoadingRoomMessages: Bool = false
     var isSendingRoomMessage: Bool = false
@@ -365,7 +366,7 @@ final class DirectChatViewModel {
         Task {
             defer { isSendingRoomMessage = false }
             do {
-                let body = SonarRoomMessageCreateBody(content: content, messageType: "text")
+                let body = SonarRoomMessageCreateBody(content: content, messageType: selectedRoomMessageType.rawValue)
                 let dto: DirectChatORCAMessageDTO = try await api.post(path: "/api/v1/chat/channels/\(room.id)/messages", body: body)
                 roomMessages.append(SonarRoomMessage(dto: dto))
                 await loadORCAChannelSummaries()
@@ -3877,6 +3878,50 @@ struct SonarHealthCheck: Identifiable, Hashable {
         case "good": return "Good"
         case "down": return "Down"
         default: return "Degraded"
+        }
+    }
+}
+
+enum SonarRoomMessageType: String, CaseIterable, Identifiable, Hashable {
+    case text
+    case toolRequest = "tool_request"
+    case fileRequest = "file_request"
+    case approvalRequest = "approval_request"
+    case agentRunRequest = "agent_run_request"
+    case memoryCandidate = "memory_candidate"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .text: return "Message"
+        case .toolRequest: return "Tool"
+        case .fileRequest: return "File"
+        case .approvalRequest: return "Approval"
+        case .agentRunRequest: return "Agent Run"
+        case .memoryCandidate: return "Memory"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .text: return "Plain room note"
+        case .toolRequest: return "Request scoped work"
+        case .fileRequest: return "Request file context"
+        case .approvalRequest: return "Ask for sign/pass"
+        case .agentRunRequest: return "Queue agent work"
+        case .memoryCandidate: return "Propose memory"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .text: return "text.bubble"
+        case .toolRequest: return "wrench.and.screwdriver"
+        case .fileRequest: return "doc.badge.gearshape"
+        case .approvalRequest: return "person.badge.key"
+        case .agentRunRequest: return "bolt.badge.clock"
+        case .memoryCandidate: return "brain.head.profile"
         }
     }
 }
