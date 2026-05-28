@@ -421,6 +421,14 @@ final class DirectChatViewModel {
         guard let room = selectedRoom,
               !isSendingRoomMessage,
               !composedRoomMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard room.canPost else {
+            roomError = room.protectionReason ?? "ORCA has this room in read-only mode."
+            return
+        }
+        guard selectedRoomMessageType == .text || room.canRequestWorkflow else {
+            roomError = room.protectionReason ?? "\(selectedRoomMessageType.title) is not allowed by this room policy."
+            return
+        }
         let content = composedRoomMessage.trimmingCharacters(in: .whitespacesAndNewlines)
         composedRoomMessage = ""
         isSendingRoomMessage = true
@@ -4037,6 +4045,7 @@ struct DirectChatORCAMessageDTO: Decodable {
     let deliveryMode: String?
     let provenance: String?
     let responseState: String?
+    let deliveryState: String?
     let triageId: String?
     let triageTraceId: String?
     let replyToId: String?
@@ -4054,6 +4063,7 @@ struct DirectChatORCAMessageDTO: Decodable {
         case traceId = "trace_id"
         case deliveryMode = "delivery_mode"
         case responseState = "response_state"
+        case deliveryState = "delivery_state"
         case triageId = "triage_id"
         case triageTraceId = "triage_trace_id"
         case replyToId = "reply_to_id"
@@ -4089,6 +4099,10 @@ struct SonarRoom: Identifiable, Hashable {
     let presence: String
     let presenceDetail: String?
     let protectedLane: Bool
+    let policyLaneType: String
+    let policyProtectedLevel: String
+    let policyOwner: String?
+    let allowedActions: [String]
     let canPost: Bool
     let canRequestWorkflow: Bool
     let protectionReason: String?
@@ -4118,6 +4132,13 @@ struct SonarRoom: Identifiable, Hashable {
         self.presence = summary?.activeSSEClients ?? 0 > 0 ? "live" : "quiet"
         self.presenceDetail = summary?.activeSSEClients ?? 0 > 0 ? "\(summary?.activeSSEClients ?? 0) live stream" : nil
         self.protectedLane = false
+        self.policyLaneType = summary?.policyLaneType ?? "standard"
+        self.policyProtectedLevel = summary?.policyProtectedLevel ?? "none"
+        self.policyOwner = summary?.policyOwner
+        self.allowedActions = (summary?.policyAllowedActions ?? "post,workflow,ticket,approval,agent_run,file,memory")
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
         self.canPost = true
         self.canRequestWorkflow = true
         self.protectionReason = nil
@@ -4148,6 +4169,10 @@ struct SonarRoom: Identifiable, Hashable {
         self.presence = contact.presence ?? (contact.activeSSEClients > 0 ? "live" : "quiet")
         self.presenceDetail = contact.presenceDetail
         self.protectedLane = contact.protectedLane ?? false
+        self.policyLaneType = contact.policyLaneType ?? "standard"
+        self.policyProtectedLevel = contact.policyProtectedLevel ?? "none"
+        self.policyOwner = contact.policyOwner
+        self.allowedActions = contact.allowedActions ?? []
         self.canPost = contact.canPost ?? true
         self.canRequestWorkflow = contact.canRequestWorkflow ?? true
         self.protectionReason = contact.protectionReason
@@ -4372,6 +4397,10 @@ private struct SonarContactDTO: Decodable {
     let canRequestWorkflow: Bool?
     let protectionReason: String?
     let notificationLevel: String?
+    let policyLaneType: String?
+    let policyProtectedLevel: String?
+    let policyOwner: String?
+    let allowedActions: [String]?
     let latestPreview: String?
     let lastUserMessageAt: Date?
     let lastAgentMessageAt: Date?
@@ -4400,6 +4429,10 @@ private struct SonarContactDTO: Decodable {
         case canRequestWorkflow = "can_request_workflow"
         case protectionReason = "protection_reason"
         case notificationLevel = "notification_level"
+        case policyLaneType = "policy_lane_type"
+        case policyProtectedLevel = "policy_protected_level"
+        case policyOwner = "policy_owner"
+        case allowedActions = "allowed_actions"
         case latestMessageId = "latest_message_id"
         case latestTraceId = "latest_trace_id"
         case latestResponseState = "latest_response_state"
@@ -4441,6 +4474,7 @@ struct SonarRoomMessage: Identifiable, Hashable {
     let deliveryMode: String?
     let provenance: String?
     let responseState: String?
+    let deliveryState: String
     let replyToId: String?
     let isThreadReply: Bool
     let createdAt: Date
@@ -4458,6 +4492,7 @@ struct SonarRoomMessage: Identifiable, Hashable {
         self.deliveryMode = dto.deliveryMode
         self.provenance = dto.provenance
         self.responseState = dto.responseState
+        self.deliveryState = dto.deliveryState ?? "delivered"
         self.replyToId = dto.replyToId
         self.isThreadReply = dto.isThreadReply
         self.createdAt = dto.createdAt
@@ -4477,6 +4512,9 @@ struct SonarRoomMessage: Identifiable, Hashable {
     var statusLabel: String? {
         if let state = DMDeliveryState.parse(responseState) {
             return state.displayLabel
+        }
+        if deliveryState != "delivered" {
+            return deliveryState.replacingOccurrences(of: "_", with: " ").capitalized
         }
         if let provenance = DMResponseProvenance.parse(provenance) {
             return provenance.displayLabel
@@ -4606,6 +4644,11 @@ struct DirectChatChannelSummaryDTO: Decodable {
     let latestResponseState: String?
     let pendingCount: Int
     let activeSSEClients: Int
+    let policyLaneType: String?
+    let policyProtectedLevel: String?
+    let policyOwner: String?
+    let policyAllowedActions: String?
+    let policyReason: String?
     let lastUserMessageAt: Date?
     let lastAgentMessageAt: Date?
     let updatedAt: Date
@@ -4621,6 +4664,11 @@ struct DirectChatChannelSummaryDTO: Decodable {
         case latestResponseState = "latest_response_state"
         case pendingCount = "pending_count"
         case activeSSEClients = "active_sse_clients"
+        case policyLaneType = "policy_lane_type"
+        case policyProtectedLevel = "policy_protected_level"
+        case policyOwner = "policy_owner"
+        case policyAllowedActions = "policy_allowed_actions"
+        case policyReason = "policy_reason"
         case lastUserMessageAt = "last_user_message_at"
         case lastAgentMessageAt = "last_agent_message_at"
         case updatedAt = "updated_at"

@@ -932,6 +932,11 @@ private struct SonarRoomRow: View {
                     if room.protectedLane {
                         pill("Protected", tint: AppColors.accentWarning)
                     }
+                    if room.notificationLevel == "urgent" {
+                        pill("Urgent", tint: AppColors.accentDanger)
+                    } else if room.notificationLevel == "attention" {
+                        pill("Attention", tint: AppColors.accentWarning)
+                    }
                     Spacer(minLength: 0)
                 }
 
@@ -1149,6 +1154,9 @@ private struct SonarRoomConversationView: View {
         if room.protectedLane {
             parts.append("protected")
         }
+        if room.policyLaneType != "standard" {
+            parts.append(room.policyLaneType.replacingOccurrences(of: "_", with: " "))
+        }
         return parts.joined(separator: " · ")
     }
 
@@ -1185,6 +1193,13 @@ private struct SonarRoomConversationView: View {
                     .font(.caption2)
                     .foregroundStyle(AppColors.accentWarning)
                     .lineLimit(2)
+            }
+
+            if !room.allowedActions.isEmpty {
+                Text("ORCA policy: \(room.allowedActions.joined(separator: ", "))")
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.textTertiary)
+                    .lineLimit(1)
             }
 
             HStack(spacing: 10) {
