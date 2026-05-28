@@ -172,6 +172,27 @@ struct PredictionCalibrationSummary {
     let read: String?
 }
 
+struct PredictionRadar {
+    let generatedAt: String?
+    let status: String
+    let marketStaleCount: Int
+    let marketPredictionCounts: [String: Int]
+    let earningsDueCount: Int
+    let feedbackRequestCount: Int
+    let feedbackByOwner: [String: Int]
+    let highPriority: [PredictionRadarRequest]
+    let computeRunId: String?
+    let computeStatus: String?
+    let computeBackend: String?
+}
+
+struct PredictionRadarRequest: Identifiable {
+    let id: String
+    let owner: String?
+    let priority: String?
+    let title: String?
+}
+
 struct TradingDashboard {
     let bots: [TradingBot]
     let oracle: OracleState
@@ -195,6 +216,8 @@ final class TradingViewModel {
     var earningsQualityError: String? = nil
     var marketPredictionBrief: MarketPredictionBrief? = nil
     var marketPredictionError: String? = nil
+    var predictionRadar: PredictionRadar? = nil
+    var predictionRadarError: String? = nil
 
     // MARK: - Load
 
@@ -203,6 +226,7 @@ final class TradingViewModel {
         errorMessage = nil
         earningsQualityError = nil
         marketPredictionError = nil
+        predictionRadarError = nil
 
         do {
             let landing: FundLanding = try await APIClient.shared.get(path: "/api/v1/fund/landing")
@@ -222,6 +246,7 @@ final class TradingViewModel {
 
         await loadEarningsQuality()
         await loadMarketPredictionBrief()
+        await loadPredictionRadar()
         isLoading = false
     }
 
@@ -250,6 +275,20 @@ final class TradingViewModel {
         } catch {
             marketPredictionBrief = nil
             marketPredictionError = "Market prediction brief is unavailable from ORCA."
+        }
+    }
+
+    private func loadPredictionRadar() async {
+        do {
+            let dto: PredictionRadarDTO = try await APIClient.shared.get(path: "/api/v1/research/predictions/radar/latest")
+            predictionRadar = dto.toDomain()
+            predictionRadarError = nil
+        } catch let apiError as APIError where apiError.code == 404 {
+            predictionRadar = nil
+            predictionRadarError = "Waiting for ORCA /api/v1/research/predictions/radar/latest."
+        } catch {
+            predictionRadar = nil
+            predictionRadarError = "Prediction radar is unavailable from ORCA."
         }
     }
 }
@@ -753,6 +792,94 @@ private struct PredictionCalibrationDTO: Decodable {
             unresolved: unresolved ?? 0,
             accuracy: accuracy,
             read: read
+        )
+    }
+}
+
+private struct PredictionRadarDTO: Decodable {
+    let generatedAt: String?
+    let status: String?
+    let market: Market?
+    let earnings: Earnings?
+    let feedback: Feedback?
+    let compute: Compute?
+
+    private enum CodingKeys: String, CodingKey {
+        case generatedAt = "generated_at"
+        case status, market, earnings, feedback, compute
+    }
+
+    struct Market: Decodable {
+        let staleCount: Int?
+        let predictionCounts: [String: Int]?
+
+        private enum CodingKeys: String, CodingKey {
+            case staleCount = "stale_count"
+            case predictionCounts = "prediction_counts"
+        }
+    }
+
+    struct Earnings: Decodable {
+        let dueOrLiveCount: Int?
+
+        private enum CodingKeys: String, CodingKey {
+            case dueOrLiveCount = "due_or_live_count"
+        }
+    }
+
+    struct Feedback: Decodable {
+        let requestCount: Int?
+        let requestsByOwner: [String: Int]?
+        let highPriority: [Request]?
+
+        private enum CodingKeys: String, CodingKey {
+            case requestCount = "request_count"
+            case requestsByOwner = "requests_by_owner"
+            case highPriority = "high_priority"
+        }
+    }
+
+    struct Request: Decodable {
+        let id: String?
+        let owner: String?
+        let priority: String?
+        let title: String?
+
+        func toDomain() -> PredictionRadarRequest {
+            PredictionRadarRequest(
+                id: id ?? title ?? UUID().uuidString,
+                owner: owner,
+                priority: priority,
+                title: title
+            )
+        }
+    }
+
+    struct Compute: Decodable {
+        let computeRunId: String?
+        let status: String?
+        let actualBackend: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case computeRunId = "compute_run_id"
+            case status
+            case actualBackend = "actual_backend"
+        }
+    }
+
+    func toDomain() -> PredictionRadar {
+        PredictionRadar(
+            generatedAt: generatedAt,
+            status: status ?? "unknown",
+            marketStaleCount: market?.staleCount ?? 0,
+            marketPredictionCounts: market?.predictionCounts ?? [:],
+            earningsDueCount: earnings?.dueOrLiveCount ?? 0,
+            feedbackRequestCount: feedback?.requestCount ?? 0,
+            feedbackByOwner: feedback?.requestsByOwner ?? [:],
+            highPriority: feedback?.highPriority?.map { $0.toDomain() } ?? [],
+            computeRunId: compute?.computeRunId,
+            computeStatus: compute?.status,
+            computeBackend: compute?.actualBackend
         )
     }
 }

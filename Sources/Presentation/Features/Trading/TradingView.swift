@@ -378,6 +378,11 @@ struct TradingView: View {
 
             if let brief = viewModel.marketPredictionBrief {
                 VStack(spacing: Theme.sm) {
+                    if let radar = viewModel.predictionRadar {
+                        predictionRadarCard(radar)
+                    } else if let radarError = viewModel.predictionRadarError {
+                        emptyState(radarError)
+                    }
                     marketPredictionCard(brief)
                     weekAheadEarningsPredictionCard(brief.earningsRows)
                     predictionCalibrationCard(brief.calibration, generatedAt: brief.generatedAt, asOfDate: brief.asOfDate)
@@ -386,6 +391,65 @@ struct TradingView: View {
                 emptyState(viewModel.marketPredictionError ?? "Waiting for ORCA market prediction brief route.")
             }
         }
+    }
+
+    private func predictionRadarCard(_ radar: PredictionRadar) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            cardTitle("Prediction Radar", icon: "dot.radiowaves.left.and.right")
+            Divider().background(AppColors.border)
+
+            HStack(spacing: 0) {
+                researchStat(label: "Status", value: radar.status.replacingOccurrences(of: "_", with: " "), color: radar.marketStaleCount > 0 ? AppColors.accentWarning : AppColors.accentSuccess)
+                statDivider
+                researchStat(label: "Data", value: "\(radar.marketStaleCount) stale", color: radar.marketStaleCount > 0 ? AppColors.accentWarning : AppColors.accentSuccess)
+                statDivider
+                researchStat(label: "Feedback", value: "\(radar.feedbackRequestCount)", color: AppColors.accentElectric)
+            }
+            .padding(.vertical, Theme.md)
+
+            Divider().background(AppColors.border)
+
+            HStack(spacing: 0) {
+                researchStat(label: "Up", value: "\(radar.marketPredictionCounts["uptrend_watch"] ?? 0)", color: AppColors.accentSuccess)
+                statDivider
+                researchStat(label: "Chop", value: "\(radar.marketPredictionCounts["neutral_or_chop"] ?? 0)", color: AppColors.accentWarning)
+                statDivider
+                researchStat(label: "Down", value: "\(radar.marketPredictionCounts["downtrend_watch"] ?? 0)", color: AppColors.accentDanger)
+            }
+            .padding(.vertical, Theme.md)
+
+            Divider().background(AppColors.border)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Compute \(radar.computeStatus ?? "pending") / \(radar.computeBackend ?? "backend pending")")
+                    .podTextStyle(.caption, color: AppColors.textSecondary)
+                    .lineLimit(1)
+                Text("Earnings due/live \(radar.earningsDueCount) · generated \(radar.generatedAt ?? "pending")")
+                    .podTextStyle(.caption, color: AppColors.textTertiary)
+                    .lineLimit(2)
+            }
+            .padding(Theme.md)
+
+            if !radar.highPriority.isEmpty {
+                Divider().background(AppColors.border)
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(radar.highPriority.prefix(3)) { request in
+                        HStack(alignment: .top, spacing: Theme.sm) {
+                            Text((request.owner ?? "owner").uppercased())
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .foregroundStyle(AppColors.accentElectric)
+                                .frame(width: 86, alignment: .leading)
+                            Text(request.title ?? request.id)
+                                .podTextStyle(.caption, color: AppColors.textSecondary)
+                                .lineLimit(2)
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
+                .padding(Theme.md)
+            }
+        }
+        .podCard(padding: 0)
     }
 
     private func marketPredictionCard(_ brief: MarketPredictionBrief) -> some View {
