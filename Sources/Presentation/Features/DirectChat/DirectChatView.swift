@@ -34,7 +34,13 @@ struct DirectChatView: View {
     private var agentListSidebar: some View {
         List {
             Section {
-                SonarSurfaceHeader(health: viewModel.sonarHealth, isLoading: viewModel.isLoadingSonarHealth)
+                SonarSurfaceHeader(
+                    health: viewModel.sonarHealth,
+                    isLoading: viewModel.isLoadingSonarHealth,
+                    roomCount: viewModel.sonarRooms.count,
+                    pendingCount: totalPendingRooms,
+                    liveCount: totalLiveRooms
+                )
             }
             .listRowBackground(Color.clear)
 
@@ -149,7 +155,7 @@ struct DirectChatView: View {
                     .listRowBackground(Color.clear)
             }
         } else if !rooms.isEmpty {
-            Section(title) {
+            Section(sectionTitle(title, count: rooms.count)) {
                 ForEach(rooms) { room in
                     NavigationLink(value: room) {
                         SonarRoomRow(room: room)
@@ -192,8 +198,20 @@ struct DirectChatView: View {
         viewModel.filteredSonarRooms.filter { $0.roomGroup == .general }
     }
 
+    private var totalPendingRooms: Int {
+        viewModel.sonarRooms.filter { $0.pendingCount > 0 }.count
+    }
+
+    private var totalLiveRooms: Int {
+        viewModel.sonarRooms.filter { $0.activeSSEClients > 0 }.count
+    }
+
     private func isProtectedAgent(_ agent: AgentInfo) -> Bool {
         ["chief", "rooster", "reef"].contains(agent.id)
+    }
+
+    private func sectionTitle(_ title: String, count: Int) -> String {
+        "\(title) · \(count)"
     }
 
     // MARK: - Empty State
@@ -296,6 +314,9 @@ private struct SonarDiagnosticsSheet: View {
 private struct SonarSurfaceHeader: View {
     let health: SonarHealth?
     let isLoading: Bool
+    let roomCount: Int
+    let pendingCount: Int
+    let liveCount: Int
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -319,10 +340,20 @@ private struct SonarSurfaceHeader: View {
                 Spacer()
             }
 
-            HStack(spacing: 8) {
-                SonarHeaderChip(title: healthTitle, icon: healthIcon, tint: healthTint)
-                SonarHeaderChip(title: "Evidence on tap", icon: "point.topleft.down.curvedto.point.bottomright.up", tint: AppColors.accentElectric)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    SonarHeaderChip(title: healthTitle, icon: healthIcon, tint: healthTint)
+                    SonarHeaderChip(title: "\(roomCount) rooms", icon: "number", tint: AppColors.textSecondary)
+                    if pendingCount > 0 {
+                        SonarHeaderChip(title: "\(pendingCount) waiting", icon: "person.badge.clock", tint: AppColors.accentWarning)
+                    }
+                    if liveCount > 0 {
+                        SonarHeaderChip(title: "\(liveCount) live", icon: "bolt.horizontal.circle", tint: AppColors.accentSuccess)
+                    }
+                    SonarHeaderChip(title: "Evidence on tap", icon: "point.topleft.down.curvedto.point.bottomright.up", tint: AppColors.accentElectric)
+                }
             }
+            .lineLimit(1)
 
             if let health {
                 VStack(alignment: .leading, spacing: 6) {
