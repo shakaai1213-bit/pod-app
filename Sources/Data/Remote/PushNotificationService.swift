@@ -68,9 +68,13 @@ final class PushNotificationService {
         request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
         request.setValue(authToken, forHTTPHeaderField: "X-Api-Key")
 
+        let deviceName = await MainActor.run { UIDevice.current.name }
         let payload: [String: String] = [
             "device_token": token,
-            "platform": "apns"
+            "platform": "apns",
+            "device_name": deviceName,
+            "app_bundle_id": Bundle.main.bundleIdentifier ?? "com.orcamc.pod",
+            "app_version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
         ]
 
         do {

@@ -75,6 +75,7 @@ final class AppState: ObservableObject {
             currentUser = TeamMember(id: user.id, name: user.name, avatarColor: "#6B46C1")
             isAuthenticated = true
             await fetchCurrentUser()
+            await prepareNotifications()
             print("[AppState] Auto-login successful")
         } else {
             print("[AppState] Auto-login skipped or failed")
@@ -172,6 +173,7 @@ final class AppState: ObservableObject {
                     print("[AppState] Keychain store failed (non-fatal): \(error)")
                 }
                 await fetchCurrentUser()
+                await prepareNotifications()
             }
             appendDiagnostic("Auth flow completed")
             print("[AppState] performAuth: DONE — isAuthenticated=\(isAuthenticated)")
@@ -264,6 +266,21 @@ final class AppState: ObservableObject {
             appendDiagnostic("Token verification error: \(error.localizedDescription)")
             return false
         }
+    }
+
+    private func prepareNotifications() async {
+        let service = PushNotificationService.shared
+        let granted: Bool
+        if service.isAuthorized {
+            granted = true
+        } else {
+            granted = await service.requestAuthorization()
+        }
+        guard granted else {
+            print("[AppState] Notifications not authorized")
+            return
+        }
+        service.registerForRemoteNotifications()
     }
 
     private func appendDiagnostic(_ message: String) {

@@ -1,8 +1,46 @@
 import SwiftUI
 import SwiftData
+import UIKit
+import UserNotifications
+
+final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        UNUserNotificationCenter.current().delegate = self
+        PushNotificationService.shared.registerNotificationCategories()
+        return true
+    }
+
+    func application(
+        _ application: UIApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+    ) {
+        PushNotificationService.shared.didRegisterForRemoteNotifications(deviceToken: deviceToken)
+    }
+
+    func application(
+        _ application: UIApplication,
+        didFailToRegisterForRemoteNotificationsWithError error: Error
+    ) {
+        PushNotificationService.shared.didFailToRegisterForRemoteNotifications(error: error)
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        _ = await PushNotificationService.shared.handleNotificationForForeground(
+            userInfo: notification.request.content.userInfo
+        )
+        return [.banner, .badge, .sound]
+    }
+}
 
 @main
 struct podApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var appState = AppState()
 
     var body: some Scene {
