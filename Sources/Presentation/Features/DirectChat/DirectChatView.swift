@@ -5,6 +5,7 @@ import UIKit
 struct DirectChatView: View {
     @Bindable var viewModel: DirectChatViewModel
     @Environment(\.modelContext) private var modelContext
+    @State private var isShowingSonarDiagnostics = false
 
     var body: some View {
         NavigationStack(path: $viewModel.navigationPath) {
@@ -22,6 +23,9 @@ struct DirectChatView: View {
             if count == 0 {
                 viewModel.clearSelection()
             }
+        }
+        .sheet(isPresented: $isShowingSonarDiagnostics) {
+            SonarDiagnosticsSheet(viewModel: viewModel)
         }
     }
 
@@ -103,6 +107,24 @@ struct DirectChatView: View {
         )
         .toolbarBackground(AppColors.backgroundSecondary, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
+        .toolbar {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button {
+                    isShowingSonarDiagnostics = true
+                } label: {
+                    Image(systemName: "waveform.path.ecg")
+                }
+                .accessibilityLabel("Open Sonar diagnostics")
+
+                Button {
+                    viewModel.refreshSonarSurface()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .disabled(viewModel.isLoadingRooms || viewModel.isLoadingSonarHealth)
+                .accessibilityLabel("Refresh Sonar")
+            }
+        }
         .navigationDestination(for: AgentInfo.self) { agent in
             ConversationView(viewModel: viewModel, agent: agent)
                 .onAppear { viewModel.selectAgent(agent) }
@@ -126,6 +148,87 @@ struct DirectChatView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AppColors.backgroundPrimary)
+    }
+}
+
+private struct SonarDiagnosticsSheet: View {
+    @Bindable var viewModel: DirectChatViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("STATUS") {
+                    diagnosticRow("Health", value: viewModel.sonarHealth?.displayStatus ?? "Unknown")
+                    diagnosticRow("Generated", value: viewModel.sonarHealth?.generatedAt.formatted(date: .abbreviated, time: .standard) ?? "Not recorded")
+                    diagnosticRow("Contacts", value: viewModel.sonarContactsGeneratedAt?.formatted(date: .abbreviated, time: .standard) ?? "Fallback channel mode")
+                    diagnosticRow("Rooms", value: "\(viewModel.sonarRooms.count)")
+                    diagnosticRow("Direct lanes", value: "\(viewModel.orcaChannelIdByAgent.count)")
+                }
+
+                if let health = viewModel.sonarHealth {
+                    Section("CHECKS") {
+                        ForEach(health.checks) { check in
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Circle()
+                                        .fill(tint(for: check.status))
+                                        .frame(width: 7, height: 7)
+                                    Text(check.label)
+                                        .font(.subheadline.weight(.semibold))
+                                    Spacer()
+                                    Text(check.displayStatus)
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(tint(for: check.status))
+                                }
+                                if let detail = check.detail {
+                                    Text(detail)
+                                        .font(.caption)
+                                        .foregroundStyle(AppColors.textTertiary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                            .padding(.vertical, 3)
+                        }
+                    }
+                }
+
+                Section("ACTIONS") {
+                    Button {
+                        viewModel.refreshSonarSurface()
+                    } label: {
+                        Label("Refresh Sonar surface", systemImage: "arrow.clockwise")
+                    }
+                }
+            }
+            .navigationTitle("Sonar Diagnostics")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func diagnosticRow(_ label: String, value: String) -> some View {
+        HStack {
+            Text(label)
+                .foregroundStyle(AppColors.textSecondary)
+            Spacer()
+            Text(value)
+                .foregroundStyle(AppColors.textPrimary)
+                .multilineTextAlignment(.trailing)
+        }
+        .font(.subheadline)
+    }
+
+    private func tint(for status: String) -> Color {
+        switch status.lowercased() {
+        case "good": return AppColors.accentSuccess
+        case "down": return AppColors.accentDanger
+        default: return AppColors.accentWarning
+        }
     }
 }
 
@@ -1106,22 +1209,11 @@ private struct SonarRoomMessageEvidenceDrawer: View {
         errorMessage = nil
         defer { isLoading = false }
         do {
-            var events: [SonarSurfaceEventDTO] = try await APIClient.shared.get(
-                path: "/api/v1/surfaces/events?source_event_id=\(urlQuery(message.id))&limit=20"
+            let packet: SonarEvidencePacketDTO = try await APIClient.shared.get(
+                path: "/api/v1/sonar/evidence?message_id=\(urlQuery(message.id))&limit=20"
             )
-            if events.isEmpty, let traceId = clean(message.traceId) {
-                events = try await APIClient.shared.get(
-                    path: "/api/v1/surfaces/events?trace_id=\(urlQuery(traceId))&limit=20"
-                )
-            }
-            surfaceEvents = events
-            if let traceId = clean(message.traceId) {
-                computeRuns = try await APIClient.shared.get(
-                    path: "/api/v1/compute/runs?trace_id=\(urlQuery(traceId))&limit=10"
-                )
-            } else {
-                computeRuns = []
-            }
+            surfaceEvents = packet.surfaceEvents
+            computeRuns = packet.computeRuns
         } catch let apiError as APIError {
             errorMessage = apiError.message
         } catch {
@@ -2960,36 +3052,27 @@ private struct SonarEvidenceDrawer: View {
         errorMessage = nil
         defer { isLoading = false }
 
-        var events: [SonarSurfaceEventDTO] = []
-        var runs: [SonarComputeRunDTO] = []
-
         do {
-            if let remoteMessageId = clean(message.remoteMessageId) {
-                events = try await APIClient.shared.get(
-                    path: "/api/v1/surfaces/events?source_event_id=\(urlQuery(remoteMessageId))&limit=20"
-                )
-            }
-            if events.isEmpty, let traceId = clean(message.traceId) {
-                events = try await APIClient.shared.get(
-                    path: "/api/v1/surfaces/events?trace_id=\(urlQuery(traceId))&limit=20"
-                )
-            }
-            if let traceId = clean(message.traceId) {
-                runs = try await APIClient.shared.get(
-                    path: "/api/v1/compute/runs?trace_id=\(urlQuery(traceId))&limit=10"
-                )
-            }
-            surfaceEvents = events
-            computeRuns = runs
+            let packet: SonarEvidencePacketDTO = try await APIClient.shared.get(
+                path: evidencePath
+            )
+            surfaceEvents = packet.surfaceEvents
+            computeRuns = packet.computeRuns
         } catch let apiError as APIError {
             errorMessage = apiError.message
-            surfaceEvents = events
-            computeRuns = runs
         } catch {
             errorMessage = "Evidence is unavailable right now."
-            surfaceEvents = events
-            computeRuns = runs
         }
+    }
+
+    private var evidencePath: String {
+        if let remoteMessageId = clean(message.remoteMessageId) {
+            return "/api/v1/sonar/evidence?message_id=\(urlQuery(remoteMessageId))&limit=20"
+        }
+        if let traceId = clean(message.traceId) {
+            return "/api/v1/sonar/evidence?trace_id=\(urlQuery(traceId))&limit=20"
+        }
+        return "/api/v1/sonar/evidence?source_event_id=\(urlQuery(message.id.uuidString))&limit=20"
     }
 
     private func copyEvidencePacket() {
@@ -3103,6 +3186,18 @@ private struct SonarComputeRunRow: View {
         .padding(12)
         .background(AppColors.backgroundSecondary)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+private struct SonarEvidencePacketDTO: Decodable {
+    let generatedAt: Date
+    let surfaceEvents: [SonarSurfaceEventDTO]
+    let computeRuns: [SonarComputeRunDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case generatedAt = "generated_at"
+        case surfaceEvents = "surface_events"
+        case computeRuns = "compute_runs"
     }
 }
 

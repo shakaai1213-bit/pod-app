@@ -72,6 +72,7 @@ final class DirectChatViewModel {
     var sonarSearchText: String = ""
     var sonarHealth: SonarHealth?
     var isLoadingSonarHealth: Bool = false
+    var sonarContactsGeneratedAt: Date?
 
     // Conversation data from SwiftData
     var conversations: [DMConversation] = []
@@ -222,6 +223,37 @@ final class DirectChatViewModel {
         defer { isLoadingRooms = false }
 
         do {
+            let response: SonarContactsResponseDTO = try await api.get(path: "/api/v1/sonar/contacts")
+            sonarContactsGeneratedAt = response.generatedAt
+            let directContacts = response.contacts.filter { $0.kind == "agent" || $0.name.hasPrefix("direct:") }
+            var idMap: [String: String] = [:]
+            var statusMap: [String: String] = [:]
+
+            for contact in directContacts {
+                let agentId = contact.name.replacingOccurrences(of: "direct:", with: "")
+                idMap[agentId] = contact.channelId
+                statusMap[agentId] = contact.statusLine
+            }
+
+            orcaChannelIdByAgent = idMap
+            orcaChannelStatusByAgent = statusMap
+            sonarRooms = response.contacts
+                .filter { !($0.kind == "agent" || $0.name.hasPrefix("direct:")) }
+                .map { SonarRoom(contact: $0) }
+                .sorted { lhs, rhs in
+                    if lhs.lastActivity != rhs.lastActivity {
+                        return lhs.lastActivity > rhs.lastActivity
+                    }
+                    return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+                }
+            roomError = nil
+            return
+        } catch {
+            // Older ORCA builds only expose /chat/channels. Keep Sonar usable
+            // during backend rollouts, but prefer the /sonar facade when present.
+        }
+
+        do {
             let channels: [DirectChatChannelDTO] = try await api.get(path: "/api/v1/chat/channels")
             let directChannels = channels.filter { $0.type == "direct" }
             var roomItems: [SonarRoom] = []
@@ -254,6 +286,22 @@ final class DirectChatViewModel {
         } catch {
             roomError = "ORCA room discovery unavailable."
             // Static local chat remains usable when ORCA channel discovery is unavailable.
+        }
+    }
+
+    func refreshSonarSurface() {
+        Task {
+            await loadSonarHealth()
+            await loadORCAChannelSummaries()
+            if let selectedRoom {
+                await loadRoomMessages(selectedRoom)
+            }
+            if let selectedAgent,
+               let channelId = currentChannelId(for: selectedAgent),
+               !channelId.isEmpty {
+                await importORCAChannelHistory(agent: selectedAgent, channelId: channelId)
+                await refreshChannelSummary(agent: selectedAgent, channelId: channelId)
+            }
         }
     }
 
@@ -3820,6 +3868,25 @@ struct SonarRoom: Identifiable, Hashable {
         self.updatedAt = summary?.updatedAt ?? channel.updatedAt
     }
 
+    fileprivate init(contact: SonarContactDTO) {
+        self.id = contact.channelId
+        self.name = contact.name
+        self.type = contact.kind == "agent" ? "direct" : "group"
+        self.description = contact.subtitle
+        self.linkedTicketId = contact.linkedTicketId
+        self.linkedBoardId = contact.linkedBoardId
+        self.channelPurpose = contact.channelPurpose
+        self.isSystemChannel = contact.isSystemChannel
+        self.messageCount = contact.messageCount
+        self.pendingCount = contact.pendingCount
+        self.activeSSEClients = contact.activeSSEClients
+        self.latestResponseState = contact.latestResponseState
+        self.latestProvenance = contact.latestProvenance
+        self.lastUserMessageAt = contact.lastUserMessageAt
+        self.lastAgentMessageAt = contact.lastAgentMessageAt
+        self.updatedAt = contact.lastActivityAt
+    }
+
     var displayName: String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.hasPrefix("ticket:") {
@@ -3961,6 +4028,80 @@ private struct SonarHealthCheckDTO: Decodable {
             detail: detail,
             count: count
         )
+    }
+}
+
+private struct SonarContactsResponseDTO: Decodable {
+    let generatedAt: Date
+    let contacts: [SonarContactDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case generatedAt = "generated_at"
+        case contacts
+    }
+}
+
+private struct SonarContactDTO: Decodable {
+    let id: String
+    let kind: String
+    let channelId: String
+    let name: String
+    let displayName: String
+    let subtitle: String?
+    let status: String
+    let statusDetail: String?
+    let linkedTicketId: String?
+    let linkedBoardId: String?
+    let channelPurpose: String
+    let isSystemChannel: Bool
+    let messageCount: Int
+    let pendingCount: Int
+    let activeSSEClients: Int
+    let latestMessageId: String?
+    let latestTraceId: String?
+    let latestResponseState: String?
+    let latestProvenance: String?
+    let latestPreview: String?
+    let lastUserMessageAt: Date?
+    let lastAgentMessageAt: Date?
+    let lastActivityAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, kind, name, subtitle, status
+        case channelId = "channel_id"
+        case displayName = "display_name"
+        case statusDetail = "status_detail"
+        case linkedTicketId = "linked_ticket_id"
+        case linkedBoardId = "linked_board_id"
+        case channelPurpose = "channel_purpose"
+        case isSystemChannel = "is_system_channel"
+        case messageCount = "message_count"
+        case pendingCount = "pending_count"
+        case activeSSEClients = "active_sse_clients"
+        case latestMessageId = "latest_message_id"
+        case latestTraceId = "latest_trace_id"
+        case latestResponseState = "latest_response_state"
+        case latestProvenance = "latest_provenance"
+        case latestPreview = "latest_preview"
+        case lastUserMessageAt = "last_user_message_at"
+        case lastAgentMessageAt = "last_agent_message_at"
+        case lastActivityAt = "last_activity_at"
+    }
+
+    var statusLine: String {
+        var parts: [String] = []
+        if let statusDetail, !statusDetail.isEmpty {
+            parts.append(statusDetail)
+        } else {
+            parts.append(status.capitalized)
+        }
+        if messageCount > 0 {
+            parts.append("\(messageCount) messages")
+        }
+        if let latestResponseState, !latestResponseState.isEmpty {
+            parts.append(latestResponseState.replacingOccurrences(of: "_", with: " "))
+        }
+        return parts.joined(separator: " · ")
     }
 }
 
