@@ -229,6 +229,11 @@ final class PushNotificationService {
         await updateBadgeCount(unreadCount)
     }
 
+    func syncSonarBadge(unreadRooms: Int, mentionRooms: Int, attentionRooms: Int) async {
+        let count = max(0, unreadRooms + mentionRooms + attentionRooms)
+        await updateBadgeCount(count)
+    }
+
     // MARK: - Notification Categories (Rich Actions)
 
     func registerNotificationCategories() {

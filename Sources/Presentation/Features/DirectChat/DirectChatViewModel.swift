@@ -247,6 +247,7 @@ final class DirectChatViewModel {
                     }
                     return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
                 }
+            await syncSonarNotificationBadge()
             roomError = nil
             return
         } catch {
@@ -284,6 +285,7 @@ final class DirectChatViewModel {
                 }
                 return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
             }
+            await syncSonarNotificationBadge()
         } catch {
             roomError = "ORCA room discovery unavailable."
             // Static local chat remains usable when ORCA channel discovery is unavailable.
@@ -412,9 +414,21 @@ final class DirectChatViewModel {
                 path: "/api/v1/sonar/channels/\(room.id)/read-state",
                 body: body
             )
+            await loadORCAChannelSummaries()
         } catch {
             // Read state is a convenience signal; message loading should remain usable.
         }
+    }
+
+    private func syncSonarNotificationBadge() async {
+        let unreadRooms = sonarRooms.filter { $0.unreadCount > 0 }.count
+        let mentionRooms = sonarRooms.filter { $0.mentionCount > 0 }.count
+        let attentionRooms = sonarRooms.filter { $0.notificationLevel == "urgent" || $0.notificationLevel == "attention" }.count
+        await PushNotificationService.shared.syncSonarBadge(
+            unreadRooms: unreadRooms,
+            mentionRooms: mentionRooms,
+            attentionRooms: attentionRooms
+        )
     }
 
     func sendRoomMessage() {
