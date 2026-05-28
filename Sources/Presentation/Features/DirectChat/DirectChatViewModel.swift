@@ -397,10 +397,23 @@ final class DirectChatViewModel {
         do {
             let messages: [DirectChatORCAMessageDTO] = try await api.get(path: "/api/v1/chat/channels/\(room.id)/messages?limit=150")
             roomMessages = messages.map { SonarRoomMessage(dto: $0) }
+            await markRoomRead(room, readThroughMessageId: messages.last?.id)
         } catch let apiError as APIError {
             roomError = apiError.message
         } catch {
             roomError = "Room messages are unavailable."
+        }
+    }
+
+    private func markRoomRead(_ room: SonarRoom, readThroughMessageId: String?) async {
+        do {
+            let body = SonarReadStateBody(readThroughMessageId: readThroughMessageId)
+            let _: SonarReadStateDTO = try await api.post(
+                path: "/api/v1/sonar/channels/\(room.id)/read-state",
+                body: body
+            )
+        } catch {
+            // Read state is a convenience signal; message loading should remain usable.
         }
     }
 
@@ -4021,6 +4034,8 @@ struct DirectChatORCAMessageDTO: Decodable {
     let responseState: String?
     let triageId: String?
     let triageTraceId: String?
+    let replyToId: String?
+    let isThreadReply: Bool
     let createdAt: Date
 
     enum CodingKeys: String, CodingKey {
@@ -4036,6 +4051,8 @@ struct DirectChatORCAMessageDTO: Decodable {
         case responseState = "response_state"
         case triageId = "triage_id"
         case triageTraceId = "triage_trace_id"
+        case replyToId = "reply_to_id"
+        case isThreadReply = "is_thread_reply"
         case createdAt = "created_at"
     }
 }
@@ -4058,11 +4075,15 @@ struct SonarRoom: Identifiable, Hashable {
     let isSystemChannel: Bool
     let messageCount: Int
     let pendingCount: Int
+    let unreadCount: Int
+    let mentionCount: Int
     let activeSSEClients: Int
+    let needsAttention: Bool
     let latestResponseState: String?
     let latestProvenance: String?
     let lastUserMessageAt: Date?
     let lastAgentMessageAt: Date?
+    let lastReadAt: Date?
     let updatedAt: Date
 
     init(channel: DirectChatChannelDTO, summary: DirectChatChannelSummaryDTO?) {
@@ -4076,11 +4097,15 @@ struct SonarRoom: Identifiable, Hashable {
         self.isSystemChannel = channel.isSystemChannel ?? summary?.isSystemChannel ?? false
         self.messageCount = summary?.messageCount ?? 0
         self.pendingCount = summary?.pendingCount ?? 0
+        self.unreadCount = 0
+        self.mentionCount = 0
         self.activeSSEClients = summary?.activeSSEClients ?? 0
+        self.needsAttention = summary?.pendingCount ?? 0 > 0
         self.latestResponseState = summary?.latestResponseState
         self.latestProvenance = summary?.latestProvenance
         self.lastUserMessageAt = summary?.lastUserMessageAt
         self.lastAgentMessageAt = summary?.lastAgentMessageAt
+        self.lastReadAt = nil
         self.updatedAt = summary?.updatedAt ?? channel.updatedAt
     }
 
@@ -4095,11 +4120,15 @@ struct SonarRoom: Identifiable, Hashable {
         self.isSystemChannel = contact.isSystemChannel
         self.messageCount = contact.messageCount
         self.pendingCount = contact.pendingCount
+        self.unreadCount = contact.unreadCount ?? 0
+        self.mentionCount = contact.mentionCount ?? 0
         self.activeSSEClients = contact.activeSSEClients
+        self.needsAttention = contact.needsAttention ?? (contact.pendingCount > 0 || (contact.mentionCount ?? 0) > 0)
         self.latestResponseState = contact.latestResponseState
         self.latestProvenance = contact.latestProvenance
         self.lastUserMessageAt = contact.lastUserMessageAt
         self.lastAgentMessageAt = contact.lastAgentMessageAt
+        self.lastReadAt = contact.lastReadAt
         self.updatedAt = contact.lastActivityAt
     }
 
@@ -4302,7 +4331,10 @@ private struct SonarContactDTO: Decodable {
     let isSystemChannel: Bool
     let messageCount: Int
     let pendingCount: Int
+    let unreadCount: Int?
+    let mentionCount: Int?
     let activeSSEClients: Int
+    let needsAttention: Bool?
     let latestMessageId: String?
     let latestTraceId: String?
     let latestResponseState: String?
@@ -4310,6 +4342,7 @@ private struct SonarContactDTO: Decodable {
     let latestPreview: String?
     let lastUserMessageAt: Date?
     let lastAgentMessageAt: Date?
+    let lastReadAt: Date?
     let lastActivityAt: Date
 
     enum CodingKeys: String, CodingKey {
@@ -4323,7 +4356,10 @@ private struct SonarContactDTO: Decodable {
         case isSystemChannel = "is_system_channel"
         case messageCount = "message_count"
         case pendingCount = "pending_count"
+        case unreadCount = "unread_count"
+        case mentionCount = "mention_count"
         case activeSSEClients = "active_sse_clients"
+        case needsAttention = "needs_attention"
         case latestMessageId = "latest_message_id"
         case latestTraceId = "latest_trace_id"
         case latestResponseState = "latest_response_state"
@@ -4331,6 +4367,7 @@ private struct SonarContactDTO: Decodable {
         case latestPreview = "latest_preview"
         case lastUserMessageAt = "last_user_message_at"
         case lastAgentMessageAt = "last_agent_message_at"
+        case lastReadAt = "last_read_at"
         case lastActivityAt = "last_activity_at"
     }
 
@@ -4364,6 +4401,8 @@ struct SonarRoomMessage: Identifiable, Hashable {
     let deliveryMode: String?
     let provenance: String?
     let responseState: String?
+    let replyToId: String?
+    let isThreadReply: Bool
     let createdAt: Date
 
     init(dto: DirectChatORCAMessageDTO) {
@@ -4379,6 +4418,8 @@ struct SonarRoomMessage: Identifiable, Hashable {
         self.deliveryMode = dto.deliveryMode
         self.provenance = dto.provenance
         self.responseState = dto.responseState
+        self.replyToId = dto.replyToId
+        self.isThreadReply = dto.isThreadReply
         self.createdAt = dto.createdAt
     }
 
@@ -4466,6 +4507,30 @@ private struct SonarRoomMessageCreateBody: Encodable {
         case deliveryMode = "delivery_mode"
         case provenance
         case responseState = "response_state"
+    }
+}
+
+private struct SonarReadStateBody: Encodable {
+    let readThroughMessageId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case readThroughMessageId = "read_through_message_id"
+    }
+}
+
+private struct SonarReadStateDTO: Decodable {
+    let channelId: String
+    let userId: String?
+    let lastReadAt: Date
+    let unreadCount: Int
+    let mentionCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case channelId = "channel_id"
+        case userId = "user_id"
+        case lastReadAt = "last_read_at"
+        case unreadCount = "unread_count"
+        case mentionCount = "mention_count"
     }
 }
 

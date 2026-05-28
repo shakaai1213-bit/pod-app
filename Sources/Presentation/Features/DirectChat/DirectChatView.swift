@@ -39,6 +39,8 @@ struct DirectChatView: View {
                     isLoading: viewModel.isLoadingSonarHealth,
                     roomCount: viewModel.sonarRooms.count,
                     pendingCount: totalPendingRooms,
+                    unreadCount: totalUnreadRooms,
+                    mentionCount: totalMentionRooms,
                     liveCount: totalLiveRooms
                 )
             }
@@ -202,6 +204,14 @@ struct DirectChatView: View {
         viewModel.sonarRooms.filter { $0.pendingCount > 0 }.count
     }
 
+    private var totalUnreadRooms: Int {
+        viewModel.sonarRooms.filter { $0.unreadCount > 0 }.count
+    }
+
+    private var totalMentionRooms: Int {
+        viewModel.sonarRooms.filter { $0.mentionCount > 0 }.count
+    }
+
     private var totalLiveRooms: Int {
         viewModel.sonarRooms.filter { $0.activeSSEClients > 0 }.count
     }
@@ -316,6 +326,8 @@ private struct SonarSurfaceHeader: View {
     let isLoading: Bool
     let roomCount: Int
     let pendingCount: Int
+    let unreadCount: Int
+    let mentionCount: Int
     let liveCount: Int
 
     var body: some View {
@@ -344,6 +356,12 @@ private struct SonarSurfaceHeader: View {
                 HStack(spacing: 8) {
                     SonarHeaderChip(title: healthTitle, icon: healthIcon, tint: healthTint)
                     SonarHeaderChip(title: "\(roomCount) rooms", icon: "number", tint: AppColors.textSecondary)
+                    if unreadCount > 0 {
+                        SonarHeaderChip(title: "\(unreadCount) unread", icon: "circle.fill", tint: AppColors.accentAgent)
+                    }
+                    if mentionCount > 0 {
+                        SonarHeaderChip(title: "\(mentionCount) mentions", icon: "at", tint: AppColors.accentDanger)
+                    }
                     if pendingCount > 0 {
                         SonarHeaderChip(title: "\(pendingCount) waiting", icon: "person.badge.clock", tint: AppColors.accentWarning)
                     }
@@ -898,6 +916,12 @@ private struct SonarRoomRow: View {
                     if room.pendingCount > 0 {
                         pill("\(room.pendingCount) waiting", tint: AppColors.accentWarning)
                     }
+                    if room.unreadCount > 0 {
+                        pill("\(room.unreadCount) unread", tint: AppColors.accentAgent)
+                    }
+                    if room.mentionCount > 0 {
+                        pill("@\(room.mentionCount)", tint: AppColors.accentDanger)
+                    }
                     if room.activeSSEClients > 0 {
                         pill("Live", tint: AppColors.accentSuccess)
                     }
@@ -1189,6 +1213,8 @@ private struct SonarRoomMessageEvidenceDrawer: View {
     @State private var errorMessage: String?
     @State private var surfaceEvents: [SonarSurfaceEventDTO] = []
     @State private var computeRuns: [SonarComputeRunDTO] = []
+    @State private var threadRoot: SonarThreadMessageDTO?
+    @State private var threadReplies: [SonarThreadMessageDTO] = []
     @State private var didCopyEvidence = false
 
     var body: some View {
@@ -1197,6 +1223,7 @@ private struct SonarRoomMessageEvidenceDrawer: View {
                 VStack(alignment: .leading, spacing: 16) {
                     summaryCard
                     copyButton
+                    threadSection
                     eventSection
                     computeSection
                 }
@@ -1258,6 +1285,11 @@ private struct SonarRoomMessageEvidenceDrawer: View {
             evidenceRow("Channel", short(room.id))
             evidenceRow("Source", message.source)
             evidenceRow("Lane", message.lane)
+            if message.isThreadReply {
+                evidenceRow("Thread", "Reply")
+            } else if !threadReplies.isEmpty {
+                evidenceRow("Thread", "\(threadReplies.count) replies")
+            }
         }
         .padding(14)
         .background(AppColors.backgroundSecondary)
@@ -1266,6 +1298,29 @@ private struct SonarRoomMessageEvidenceDrawer: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .strokeBorder(AppColors.border, lineWidth: 1)
         )
+    }
+
+    @ViewBuilder
+    private var threadSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Thread", systemImage: "text.bubble")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppColors.textPrimary)
+            if isLoading {
+                EmptyView()
+            } else if threadRoot == nil && threadReplies.isEmpty {
+                Text("No replies yet.")
+                    .font(.caption)
+                    .foregroundStyle(AppColors.textTertiary)
+            } else {
+                if let threadRoot {
+                    SonarThreadMessageRow(message: threadRoot, label: "Root")
+                }
+                ForEach(threadReplies, id: \.id) { reply in
+                    SonarThreadMessageRow(message: reply, label: "Reply")
+                }
+            }
+        }
     }
 
     @ViewBuilder
@@ -1321,10 +1376,24 @@ private struct SonarRoomMessageEvidenceDrawer: View {
             )
             surfaceEvents = packet.surfaceEvents
             computeRuns = packet.computeRuns
+            await loadThread()
         } catch let apiError as APIError {
             errorMessage = apiError.message
         } catch {
             errorMessage = "Evidence is unavailable right now."
+        }
+    }
+
+    private func loadThread() async {
+        do {
+            let packet: SonarThreadPacketDTO = try await APIClient.shared.get(
+                path: "/api/v1/sonar/messages/\(urlQuery(message.id))/thread?limit=50"
+            )
+            threadRoot = packet.root
+            threadReplies = packet.replies
+        } catch {
+            threadRoot = nil
+            threadReplies = []
         }
     }
 
@@ -1361,6 +1430,7 @@ private struct SonarRoomMessageEvidenceDrawer: View {
         Lane: \(message.lane ?? "not recorded")
         Surface events: \(surfaceEvents.map(\.id).joined(separator: ", "))
         Compute runs: \(computeRuns.map(\.id).joined(separator: ", "))
+        Thread replies: \(threadReplies.count)
 
         Content:
         \(message.content)
@@ -1421,7 +1491,17 @@ private struct SonarRoomMessageRow: View {
                         )
 
                     if let status = message.statusLabel {
-                        Text(status)
+                        HStack(spacing: 6) {
+                            Text(status)
+                            if message.isThreadReply {
+                                Text("Thread reply")
+                            }
+                        }
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.textTertiary)
+                        .lineLimit(1)
+                    } else if message.isThreadReply {
+                        Text("Thread reply")
                             .font(.caption2)
                             .foregroundStyle(AppColors.textTertiary)
                             .lineLimit(1)
@@ -3296,6 +3376,35 @@ private struct SonarComputeRunRow: View {
     }
 }
 
+private struct SonarThreadMessageRow: View {
+    let message: SonarThreadMessageDTO
+    let label: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 8) {
+                Label(label, systemImage: message.isThreadReply ? "arrow.turn.down.right" : "bubble.left")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(message.isThreadReply ? AppColors.accentElectric : AppColors.textSecondary)
+                Spacer()
+                Text(message.createdAt.formatted(date: .omitted, time: .shortened))
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.textTertiary)
+            }
+            Text(message.senderName ?? "Unknown")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(AppColors.textTertiary)
+            Text(message.content)
+                .font(.caption)
+                .foregroundStyle(AppColors.textSecondary)
+                .lineLimit(4)
+        }
+        .padding(12)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
 private struct SonarEvidencePacketDTO: Decodable {
     let generatedAt: Date
     let surfaceEvents: [SonarSurfaceEventDTO]
@@ -3305,6 +3414,55 @@ private struct SonarEvidencePacketDTO: Decodable {
         case generatedAt = "generated_at"
         case surfaceEvents = "surface_events"
         case computeRuns = "compute_runs"
+    }
+}
+
+private struct SonarThreadPacketDTO: Decodable {
+    let generatedAt: Date
+    let root: SonarThreadMessageDTO?
+    let replies: [SonarThreadMessageDTO]
+    let replyCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case generatedAt = "generated_at"
+        case root, replies
+        case replyCount = "reply_count"
+    }
+}
+
+private struct SonarThreadMessageDTO: Decodable {
+    let id: String
+    let channelId: String
+    let senderName: String?
+    let senderType: String?
+    let senderEmoji: String?
+    let content: String
+    let messageType: String
+    let replyToId: String?
+    let isThreadReply: Bool
+    let traceId: String?
+    let source: String?
+    let lane: String?
+    let deliveryMode: String?
+    let provenance: String?
+    let responseState: String?
+    let createdAt: Date
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, content, source, lane, provenance
+        case channelId = "channel_id"
+        case senderName = "sender_name"
+        case senderType = "sender_type"
+        case senderEmoji = "sender_emoji"
+        case messageType = "message_type"
+        case replyToId = "reply_to_id"
+        case isThreadReply = "is_thread_reply"
+        case traceId = "trace_id"
+        case deliveryMode = "delivery_mode"
+        case responseState = "response_state"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
     }
 }
 
