@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct DirectChatView: View {
     @Bindable var viewModel: DirectChatViewModel
@@ -871,12 +872,14 @@ private struct SonarRoomMessageEvidenceDrawer: View {
     @State private var errorMessage: String?
     @State private var surfaceEvents: [SonarSurfaceEventDTO] = []
     @State private var computeRuns: [SonarComputeRunDTO] = []
+    @State private var didCopyEvidence = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     summaryCard
+                    copyButton
                     eventSection
                     computeSection
                 }
@@ -886,6 +889,14 @@ private struct SonarRoomMessageEvidenceDrawer: View {
             .navigationTitle("Room Evidence")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        copyEvidencePacket()
+                    } label: {
+                        Label(didCopyEvidence ? "Copied" : "Copy", systemImage: didCopyEvidence ? "checkmark" : "doc.on.doc")
+                    }
+                    .disabled(isLoading)
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
                 }
@@ -897,6 +908,25 @@ private struct SonarRoomMessageEvidenceDrawer: View {
                 await loadEvidence()
             }
         }
+    }
+
+    private var copyButton: some View {
+        Button {
+            copyEvidencePacket()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: didCopyEvidence ? "checkmark.circle.fill" : "doc.on.doc")
+                Text(didCopyEvidence ? "Evidence packet copied" : "Copy evidence packet")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+            }
+            .foregroundStyle(didCopyEvidence ? AppColors.accentSuccess : AppColors.accentElectric)
+            .padding(12)
+            .background((didCopyEvidence ? AppColors.accentSuccess : AppColors.accentElectric).opacity(0.10))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(isLoading)
     }
 
     private var summaryCard: some View {
@@ -1004,6 +1034,31 @@ private struct SonarRoomMessageEvidenceDrawer: View {
                 .textSelection(.enabled)
             Spacer(minLength: 0)
         }
+    }
+
+    private func copyEvidencePacket() {
+        UIPasteboard.general.string = evidencePacket
+        didCopyEvidence = true
+    }
+
+    private var evidencePacket: String {
+        """
+        # Sonar Room Evidence
+        Room: \(room.displayName)
+        Room ID: \(room.id)
+        Message ID: \(message.id)
+        Sender: \(message.displayName)
+        Message type: \(message.messageType)
+        Delivery: \(message.statusLabel ?? "not recorded")
+        Trace: \(message.traceId ?? "not recorded")
+        Source: \(message.source ?? "not recorded")
+        Lane: \(message.lane ?? "not recorded")
+        Surface events: \(surfaceEvents.map(\.id).joined(separator: ", "))
+        Compute runs: \(computeRuns.map(\.id).joined(separator: ", "))
+
+        Content:
+        \(message.content)
+        """
     }
 
     private func clean(_ value: String?) -> String? {
@@ -2634,12 +2689,14 @@ private struct SonarEvidenceDrawer: View {
     @State private var errorMessage: String?
     @State private var surfaceEvents: [SonarSurfaceEventDTO] = []
     @State private var computeRuns: [SonarComputeRunDTO] = []
+    @State private var didCopyEvidence = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     summaryCard
+                    copyButton
                     eventSection
                     computeSection
                 }
@@ -2649,6 +2706,14 @@ private struct SonarEvidenceDrawer: View {
             .navigationTitle("Sonar Evidence")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        copyEvidencePacket()
+                    } label: {
+                        Label(didCopyEvidence ? "Copied" : "Copy", systemImage: didCopyEvidence ? "checkmark" : "doc.on.doc")
+                    }
+                    .disabled(isLoading)
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
                 }
@@ -2660,6 +2725,25 @@ private struct SonarEvidenceDrawer: View {
                 await loadEvidence()
             }
         }
+    }
+
+    private var copyButton: some View {
+        Button {
+            copyEvidencePacket()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: didCopyEvidence ? "checkmark.circle.fill" : "doc.on.doc")
+                Text(didCopyEvidence ? "Evidence packet copied" : "Copy evidence packet")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+            }
+            .foregroundStyle(didCopyEvidence ? AppColors.accentSuccess : AppColors.accentElectric)
+            .padding(12)
+            .background((didCopyEvidence ? AppColors.accentSuccess : AppColors.accentElectric).opacity(0.10))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(isLoading)
     }
 
     private var summaryCard: some View {
@@ -2799,6 +2883,31 @@ private struct SonarEvidenceDrawer: View {
             surfaceEvents = events
             computeRuns = runs
         }
+    }
+
+    private func copyEvidencePacket() {
+        UIPasteboard.general.string = evidencePacket
+        didCopyEvidence = true
+    }
+
+    private var evidencePacket: String {
+        """
+        # Sonar Evidence
+        Agent: \(agent.name)
+        Message ID: \(message.remoteMessageId ?? message.id.uuidString)
+        Channel ID: \(channelId ?? "not recorded")
+        Ticket ID: \(activeTicketId ?? "not recorded")
+        Delivery: \(DMDeliveryState.parse(message.deliveryState)?.displayLabel ?? "unknown")
+        Provenance: \(provenanceLabel)
+        Trace: \(message.traceId ?? "not recorded")
+        Compute run: \(message.computeRunId ?? "not recorded")
+        Model: \(message.modelUsed ?? "not recorded")
+        Surface events: \(surfaceEvents.map(\.id).joined(separator: ", "))
+        Compute runs: \(computeRuns.map(\.id).joined(separator: ", "))
+
+        Content:
+        \(message.content)
+        """
     }
 
     private func clean(_ value: String?) -> String? {
