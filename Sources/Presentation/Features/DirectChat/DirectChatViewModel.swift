@@ -2,6 +2,10 @@ import Foundation
 import SwiftData
 import SwiftUI
 
+extension Notification.Name {
+    static let orcaAuthTokenInvalidated = Notification.Name("orcaAuthTokenInvalidated")
+}
+
 @Observable
 @MainActor
 final class DirectChatViewModel {
@@ -13,6 +17,7 @@ final class DirectChatViewModel {
     var isStreaming: Bool = false
     var streamingContent: String = ""
     var error: String?
+    var errorIsDestructive: Bool = false
     var ticketActionMessage: String?
     var isCreatingTicket: Bool = false
     var pendingTicketDraft: DirectChatTicketDraft?
@@ -65,12 +70,14 @@ final class DirectChatViewModel {
     var roomMessages: [SonarRoomMessage] = []
     var composedRoomMessage: String = ""
     var selectedRoomMessageType: SonarRoomMessageType = .text
+    var replyingToRoomMessage: SonarRoomMessage?
     var isLoadingRooms: Bool = false
     var isLoadingRoomMessages: Bool = false
     var isSendingRoomMessage: Bool = false
     var roomError: String?
     var roomActionMessage: String?
     var sonarSearchText: String = ""
+    var selectedSonarRoomFilter: SonarRoomFilter = .all
     var sonarHealth: SonarHealth?
     var isLoadingSonarHealth: Bool = false
     var sonarContactsGeneratedAt: Date?
@@ -334,16 +341,22 @@ final class DirectChatViewModel {
 
     var filteredSonarRooms: [SonarRoom] {
         let query = sonarSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !query.isEmpty else { return sonarRooms }
         return sonarRooms.filter { room in
-            [
+            selectedSonarRoomFilter.includes(room)
+        }
+        .filter { room in
+            guard !query.isEmpty else { return true }
+            return [
                 room.displayName,
                 room.name,
                 room.description ?? "",
                 room.roomKindLabel,
                 room.channelPurpose,
                 room.linkedTicketId ?? "",
-                room.linkedBoardId ?? ""
+                room.linkedBoardId ?? "",
+                room.presence,
+                room.notificationLevel,
+                room.allowedActions.joined(separator: " ")
             ]
             .joined(separator: " ")
             .lowercased()
@@ -356,6 +369,7 @@ final class DirectChatViewModel {
         roomError = nil
         roomActionMessage = nil
         composedRoomMessage = ""
+        replyingToRoomMessage = nil
         Task { await loadRoomMessages(room) }
         startRoomAutoRefresh(room: room)
     }
@@ -444,7 +458,9 @@ final class DirectChatViewModel {
             return
         }
         let content = composedRoomMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        let replyToId = replyingToRoomMessage?.id
         composedRoomMessage = ""
+        replyingToRoomMessage = nil
         isSendingRoomMessage = true
         roomError = nil
         roomActionMessage = nil
@@ -461,7 +477,8 @@ final class DirectChatViewModel {
                     lane: selectedRoomMessageType.lane,
                     deliveryMode: "auto",
                     provenance: "system",
-                    responseState: "recorded"
+                    responseState: "recorded",
+                    replyToId: replyToId
                 )
                 let dto: DirectChatORCAMessageDTO = try await api.post(path: "/api/v1/chat/channels/\(room.id)/messages", body: body)
                 roomMessages.append(SonarRoomMessage(dto: dto))
@@ -476,11 +493,36 @@ final class DirectChatViewModel {
             } catch let apiError as APIError {
                 roomError = apiError.message
                 composedRoomMessage = content
+                replyingToRoomMessage = roomMessages.first { $0.id == replyToId }
             } catch {
                 roomError = "Could not send the room message."
                 composedRoomMessage = content
+                replyingToRoomMessage = roomMessages.first { $0.id == replyToId }
             }
         }
+    }
+
+    func replyToRoomMessage(_ message: SonarRoomMessage) {
+        replyingToRoomMessage = message
+        selectedRoomMessageType = .text
+        roomActionMessage = "Replying in thread to \(message.displayName)."
+    }
+
+    func cancelRoomReply() {
+        replyingToRoomMessage = nil
+        if roomActionMessage?.hasPrefix("Replying in thread") == true {
+            roomActionMessage = nil
+        }
+    }
+
+    func prepareRoomWorkRequest(from message: SonarRoomMessage, type: SonarRoomMessageType) {
+        selectedRoomMessageType = type
+        replyingToRoomMessage = message
+        let quote = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        composedRoomMessage = quote.isEmpty
+            ? "\(type.title) from \(message.displayName): "
+            : "\(type.title) from \(message.displayName):\n\(quote)"
+        roomActionMessage = "\(type.title) drafted from \(message.displayName)."
     }
 
     private func materializeSonarRoomCardIfNeeded(
@@ -650,6 +692,7 @@ final class DirectChatViewModel {
         streamingContent = ""
         composedMessage = ""
         error = nil
+        errorIsDestructive = false
         ticketActionMessage = nil
         liveChatStatus = nil
         routeProgressSteps = []
@@ -737,7 +780,7 @@ final class DirectChatViewModel {
     func availableDeliveryModes(for agent: AgentInfo) -> [DMDeliveryMode] {
         let workModes: [DMDeliveryMode] = activeTicketId == nil ? [] : [.agentRun]
         if Self.liveInboxAgents.contains(agent.id) {
-            return [.compute, .liveInbox, .auto] + workModes
+            return [.liveInbox, .compute, .auto] + workModes
         }
         return [.compute, .auto] + workModes
     }
@@ -861,6 +904,7 @@ final class DirectChatViewModel {
         let conversation = getOrCreateConversation(for: agent)
         let userMsg = DMMessage(role: "user", content: text)
         userMsg.traceId = outgoingTraceId
+        userMsg.userDeliveryState = DMUserMessageDeliveryState.sending.rawValue
         userMsg.conversation = conversation
         ctx.insert(userMsg)
 
@@ -928,6 +972,7 @@ final class DirectChatViewModel {
                     assistantMsg.traceId = dispatch.run.traceId ?? outgoingTraceId
                     assistantMsg.remoteMessageId = dispatch.commentId
                     assistantMsg.latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
+                    userMsg.userDeliveryState = DMUserMessageDeliveryState.sent.rawValue
                     conversation.lastMessageText = assistantMsg.content
                     conversation.lastMessageDate = Date()
                     try? ctx.save()
@@ -953,6 +998,9 @@ final class DirectChatViewModel {
                     traceId: assistantMsg.traceId
                 )
                 for try await chunk in stream {
+                    if userMsg.userDeliveryState != DMUserMessageDeliveryState.sent.rawValue {
+                        userMsg.userDeliveryState = DMUserMessageDeliveryState.sent.rawValue
+                    }
                     let responseMode = DMDeliveryMode.parse(chunk.metadata?.deliveryMode)
                     let responseProvenance = DMResponseProvenance.parse(chunk.metadata?.provenance)
                     let responseState = DMDeliveryState.parse(chunk.metadata?.responseState)
@@ -1010,6 +1058,9 @@ final class DirectChatViewModel {
                 // Finalize
                 assistantMsg.isStreaming = false
                 assistantMsg.latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
+                if userMsg.userDeliveryState != DMUserMessageDeliveryState.sent.rawValue {
+                    userMsg.userDeliveryState = DMUserMessageDeliveryState.sent.rawValue
+                }
                 conversation.lastMessageText = assistantMsg.content
                 conversation.lastMessageDate = Date()
                 try? ctx.save()
@@ -1018,7 +1069,7 @@ final class DirectChatViewModel {
                 loadConversations()
                 if assistantMsg.deliveryState == DMDeliveryState.waitingForLiveAgent.rawValue,
                    let channelId = conversation.orcaChannelId {
-                    liveChatStatus = "ORCA recorded this in \(agent.name)'s live inbox. Waiting for a live reply."
+                    liveChatStatus = "Sent to \(agent.name)'s inbox. Waiting for a reply."
                     routeProgressSteps = Self.routeProgressSteps(for: deliveryMode, stage: .waitingLive)
                     startLiveResponseRefresh(
                         agent: agent,
@@ -1028,7 +1079,7 @@ final class DirectChatViewModel {
                     )
                 } else if assistantMsg.deliveryState == DMDeliveryState.computeRunning.rawValue,
                           let channelId = conversation.orcaChannelId {
-                    liveChatStatus = "ORCA accepted the \(agent.name) compute helper route. Waiting for the answer."
+                    liveChatStatus = "Helper draft for \(agent.name) accepted. Waiting for the answer."
                     routeProgressSteps = Self.routeProgressSteps(for: deliveryMode, stage: .computeRunning)
                     startLiveResponseRefresh(
                         agent: agent,
@@ -1038,23 +1089,62 @@ final class DirectChatViewModel {
                     )
                 }
             } catch {
-                assistantMsg.content = Self.localFallback(for: agent, userMessage: text, error: error)
+                userMsg.userDeliveryState = DMUserMessageDeliveryState.failed.rawValue
                 assistantMsg.isStreaming = false
-                assistantMsg.source = "pod.chat"
-                assistantMsg.lane = "local_guardrail"
-                assistantMsg.deliveryMode = DMDeliveryMode.fallback.rawValue
-                assistantMsg.provenance = DMResponseProvenance.fallback.rawValue
-                assistantMsg.deliveryState = DMDeliveryState.fallbackPresented.rawValue
                 assistantMsg.latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
-                conversation.lastMessageText = assistantMsg.content
-                conversation.lastMessageDate = Date()
-                try? ctx.save()
-                self.error = "Using local guardrail mode while Schoolhouse compute is slow."
                 routeProgressSteps = Self.routeProgressSteps(for: deliveryMode, stage: .failed)
+
+                if Self.isUnauthorized(error) {
+                    UserDefaults.standard.removeObject(forKey: "orca_auth_token")
+                    await APIClient.shared.setToken(nil)
+                    NotificationCenter.default.post(name: .orcaAuthTokenInvalidated, object: nil)
+                }
+
+                if Self.isNetworkOrHTTPFailure(error) {
+                    let reason = Self.sendFailureReason(error)
+                    assistantMsg.content = ""
+                    assistantMsg.source = "pod.chat"
+                    assistantMsg.lane = "send_failed"
+                    assistantMsg.deliveryMode = DMDeliveryMode.system.rawValue
+                    assistantMsg.provenance = DMResponseProvenance.system.rawValue
+                    assistantMsg.deliveryState = DMDeliveryState.failed.rawValue
+                    conversation.lastMessageText = "Message NOT sent to \(agent.name)"
+                    conversation.lastMessageDate = Date()
+                    self.error = "Message NOT sent to \(agent.name) - \(reason). Tap to retry."
+                    errorIsDestructive = true
+                } else {
+                    assistantMsg.content = Self.localFallback(for: agent, userMessage: text, error: error)
+                    assistantMsg.source = "pod.chat"
+                    assistantMsg.lane = "local_guardrail"
+                    assistantMsg.deliveryMode = DMDeliveryMode.fallback.rawValue
+                    assistantMsg.provenance = DMResponseProvenance.fallback.rawValue
+                    assistantMsg.deliveryState = DMDeliveryState.fallbackPresented.rawValue
+                    conversation.lastMessageText = assistantMsg.content
+                    conversation.lastMessageDate = Date()
+                    self.error = "Using local guardrail mode while Schoolhouse compute is slow."
+                    errorIsDestructive = false
+                }
+
+                try? ctx.save()
                 isStreaming = false
                 loadConversations()
             }
         }
+    }
+
+    func retryMessage(_ message: DMMessage) {
+        guard message.role == "user",
+              DMUserMessageDeliveryState.parse(message.userDeliveryState) == .failed,
+              !isStreaming else { return }
+        composedMessage = message.content
+        sendMessage()
+    }
+
+    func retryLastFailedMessage() {
+        guard let message = currentMessages.last(where: {
+            $0.role == "user" && DMUserMessageDeliveryState.parse($0.userDeliveryState) == .failed
+        }) else { return }
+        retryMessage(message)
     }
 
     private func dispatchAttachedTicketToAgentRun(
@@ -1391,16 +1481,21 @@ final class DirectChatViewModel {
                 since: minimumCreatedAt
             )
         }
-        if !Task.isCancelled, selectedAgent?.id == agent.id {
-            guard hasPendingAsyncReply(for: agent) else {
-                return
+            if !Task.isCancelled, selectedAgent?.id == agent.id {
+                guard hasPendingAsyncReply(for: agent) else {
+                    return
+                }
+                if liveSSEConnectedChannels.contains(channelId) {
+                    liveChatStatus = "Live \(agent.name) stream is still connected. I’ll append the reply when ORCA returns it."
+                    return
+                }
+            if hasPendingLiveInboxReply(for: agent) {
+                liveChatStatus = "Live reply window expired for \(agent.name). Requesting an honest compute fallback draft."
+                markLiveInboxWaitTimedOut(for: agent, since: minimumCreatedAt)
+                await requestLiveInboxFallback(for: agent, channelId: channelId, since: minimumCreatedAt)
+            } else {
+                liveChatStatus = "Still waiting for \(agent.name). New replies will appear here when ORCA returns them."
             }
-            if liveSSEConnectedChannels.contains(channelId) {
-                liveChatStatus = "Live \(agent.name) stream is still connected. I’ll append the reply when ORCA returns it."
-                return
-            }
-            liveChatStatus = "Still waiting for \(agent.name). New live replies will appear here when ORCA returns them."
-            markLiveInboxWaitTimedOut(for: agent, since: minimumCreatedAt)
         }
     }
 
@@ -1457,7 +1552,15 @@ final class DirectChatViewModel {
         conversation.lastMessageText = payload.content
         conversation.lastMessageDate = timestamp
         liveChatStatus = nil
-        markAsyncReplyResolved(for: agent, traceId: payload.traceId)
+        if Self.shouldResolvePendingAsync(
+            senderAgentId: payload.senderAgentId,
+            messageType: payload.messageType,
+            source: payload.source,
+            responseState: payload.responseState,
+            content: payload.content
+        ) {
+            markAsyncReplyResolved(for: agent, traceId: payload.traceId)
+        }
         try? ctx.save()
         loadConversations()
     }
@@ -1529,7 +1632,13 @@ final class DirectChatViewModel {
                 conversation.lastMessageDate = reply.createdAt
             }
             liveChatStatus = nil
-            for reply in liveReplies {
+            for reply in liveReplies where Self.shouldResolvePendingAsync(
+                senderAgentId: reply.senderAgentId,
+                messageType: reply.messageType,
+                source: reply.source,
+                responseState: reply.responseState,
+                content: reply.content
+            ) {
                 markAsyncReplyResolved(for: agent, traceId: reply.traceId)
             }
             try? ctx.save()
@@ -1578,22 +1687,31 @@ final class DirectChatViewModel {
                     existing.source = remote.source ?? existing.source
                     existing.lane = remote.lane ?? existing.lane
                     existing.deliveryMode = remote.deliveryMode ?? existing.deliveryMode
-                    existing.provenance = remote.provenance ?? existing.provenance
+                    existing.provenance = remote.normalizedProvenance ?? existing.provenance
                     existing.deliveryState = Self.effectiveDeliveryState(
                         content: remote.content,
                         deliveryMode: remote.deliveryMode,
-                        provenance: remote.provenance,
+                        provenance: remote.normalizedProvenance,
                         source: remote.source,
                         lane: remote.lane,
                         responseState: remote.responseState
                     ) ?? existing.deliveryState
+                    existing.modelUsed = remote.computeAttributionLabel ?? existing.modelUsed
                     existing.traceId = remote.traceId ?? existing.traceId
                     existing.triageId = remote.triageId ?? existing.triageId
                     existing.triageTraceId = remote.triageTraceId ?? existing.triageTraceId
                     conversation.lastMessageText = remote.content
                     conversation.lastMessageDate = remote.createdAt
                     didChange = true
-                    markAsyncReplyResolved(for: agent, traceId: remote.traceId)
+                    if Self.shouldResolvePendingAsync(
+                        senderAgentId: remote.senderAgentId,
+                        messageType: remote.messageType,
+                        source: remote.source,
+                        responseState: remote.responseState,
+                        content: remote.content
+                    ) {
+                        markAsyncReplyResolved(for: agent, traceId: remote.traceId)
+                    }
                     continue
                 }
 
@@ -1613,15 +1731,16 @@ final class DirectChatViewModel {
                     localMatch.source = localMatch.source ?? remote.source
                     localMatch.lane = localMatch.lane ?? remote.lane
                     localMatch.deliveryMode = localMatch.deliveryMode ?? remote.deliveryMode
-                    localMatch.provenance = localMatch.provenance ?? remote.provenance
+                    localMatch.provenance = localMatch.provenance ?? remote.normalizedProvenance
                     localMatch.deliveryState = localMatch.deliveryState ?? Self.effectiveDeliveryState(
                         content: remote.content,
                         deliveryMode: remote.deliveryMode,
-                        provenance: remote.provenance,
+                        provenance: remote.normalizedProvenance,
                         source: remote.source,
                         lane: remote.lane,
                         responseState: remote.responseState
                     )
+                    localMatch.modelUsed = localMatch.modelUsed ?? remote.computeAttributionLabel
                     localMatch.traceId = localMatch.traceId ?? remote.traceId
                     localMatch.triageId = localMatch.triageId ?? remote.triageId
                     localMatch.triageTraceId = localMatch.triageTraceId ?? remote.triageTraceId
@@ -1639,15 +1758,16 @@ final class DirectChatViewModel {
                 message.source = remote.source ?? "orca.chat.history"
                 message.lane = remote.lane ?? Self.defaultLane(senderAgentId: remote.senderAgentId, messageType: remote.messageType, source: remote.source, responseState: remote.responseState)
                 message.deliveryMode = remote.deliveryMode ?? Self.defaultDeliveryMode(senderAgentId: remote.senderAgentId, messageType: remote.messageType, source: remote.source, responseState: remote.responseState)
-                message.provenance = remote.provenance ?? DMResponseProvenance(deliveryMode: remote.deliveryMode, source: remote.source, lane: remote.lane).rawValue
+                message.provenance = remote.normalizedProvenance ?? DMResponseProvenance(deliveryMode: remote.deliveryMode, source: remote.source, lane: remote.lane).rawValue
                 message.deliveryState = Self.effectiveDeliveryState(
                     content: remote.content,
                     deliveryMode: remote.deliveryMode,
-                    provenance: remote.provenance,
+                    provenance: remote.normalizedProvenance,
                     source: remote.source,
                     lane: remote.lane,
                     responseState: remote.responseState
                 ) ?? DMDeliveryState.responseReceived.rawValue
+                message.modelUsed = remote.computeAttributionLabel
                 message.traceId = remote.traceId
                 message.remoteMessageId = remote.id
                 message.triageId = remote.triageId
@@ -1785,6 +1905,37 @@ final class DirectChatViewModel {
         }
     }
 
+    private static func shouldResolvePendingAsync(
+        senderAgentId: String?,
+        messageType: String?,
+        source: String?,
+        responseState: String?,
+        content: String
+    ) -> Bool {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+
+        let normalizedType = messageType?.lowercased() ?? "text"
+        let normalizedSource = source?.lowercased() ?? ""
+        let parsedState = DMDeliveryState.parse(responseState)
+
+        if normalizedSource.contains("orca.chat.ack") {
+            return false
+        }
+        if parsedState == .waitingForLiveAgent
+            || parsedState == .computeRunning
+            || parsedState == .claimedByAgent {
+            return false
+        }
+        if senderAgentId == nil {
+            return false
+        }
+        if parsedState == .responseReceived || parsedState == .failed {
+            return true
+        }
+        return normalizedType == "text"
+    }
+
     private func refreshChannelSummary(agent: AgentInfo, channelId: String) async {
         guard selectedAgent?.id == agent.id else { return }
         do {
@@ -1821,7 +1972,7 @@ final class DirectChatViewModel {
     private func markLiveInboxWaitTimedOut(for agent: AgentInfo, since minimumCreatedAt: Date?) {
         guard let ctx = modelContext else { return }
         var changed = false
-        for message in currentMessages where Self.isPendingAsyncDeliveryState(message.deliveryState) {
+        for message in currentMessages where DMDeliveryState.parse(message.deliveryState) == .waitingForLiveAgent {
             if let minimumCreatedAt, message.timestamp < minimumCreatedAt {
                 continue
             }
@@ -1832,6 +1983,126 @@ final class DirectChatViewModel {
             try? ctx.save()
             loadMessages(for: agent)
         }
+    }
+
+    private func requestLiveInboxFallback(for agent: AgentInfo, channelId: String, since minimumCreatedAt: Date?) async {
+        guard selectedAgent?.id == agent.id,
+              let pending = latestTimedOutLiveInboxMessage(since: minimumCreatedAt),
+              let userMessage = sourceUserMessage(for: pending),
+              let userRemoteId = userMessage.remoteMessageId,
+              !userRemoteId.isEmpty else {
+            liveChatStatus = "Still waiting for \(agent.name). Fallback draft is unavailable until ORCA records the source message."
+            return
+        }
+
+        let traceId = pending.traceId ?? userMessage.traceId ?? Self.makeTraceId(prefix: "pod-chat-fallback")
+        pending.deliveryState = DMDeliveryState.computeRunning.rawValue
+        pending.provenance = DMResponseProvenance.compute.rawValue
+        pending.deliveryMode = DMDeliveryMode.compute.rawValue
+        pending.content = """
+        \(agent.name) did not reply inside the live window.
+        Requesting a compute draft in \(agent.name)'s lane. This will be labeled as fallback, not a live reply.
+        """
+        try? modelContext?.save()
+
+        do {
+            let body = DirectChatFallbackRequestBody(
+                channelId: channelId,
+                userMessageId: userRemoteId,
+                content: userMessage.content,
+                history: fallbackHistory(before: userMessage),
+                traceId: traceId,
+                triageId: userMessage.triageId ?? pending.triageId,
+                triageTraceId: userMessage.triageTraceId ?? pending.triageTraceId,
+                activeTicketId: activeTicketId,
+                fallbackReason: "agent_timeout",
+                fallbackAfterSeconds: 120
+            )
+            let response: DirectChatFallbackResponseDTO = try await api.post(
+                path: "/api/v1/chat/direct/\(agent.id)/fallback",
+                body: body
+            )
+            appendFallbackResponse(response, for: agent, channelId: channelId)
+            await importORCAChannelHistory(agent: agent, channelId: channelId)
+            await refreshChannelSummary(agent: agent, channelId: channelId)
+            liveChatStatus = "Added compute fallback draft for \(agent.name)."
+        } catch let apiError as APIError {
+            pending.deliveryState = DMDeliveryState.timedOut.rawValue
+            liveChatStatus = "Still waiting for \(agent.name). Fallback draft failed: \(apiError.message)"
+            try? modelContext?.save()
+        } catch {
+            pending.deliveryState = DMDeliveryState.timedOut.rawValue
+            liveChatStatus = "Still waiting for \(agent.name). Fallback draft failed."
+            try? modelContext?.save()
+        }
+    }
+
+    private func latestTimedOutLiveInboxMessage(since minimumCreatedAt: Date?) -> DMMessage? {
+        currentMessages
+            .filter { message in
+                DMDeliveryState.parse(message.deliveryState) == .timedOut
+                    && (minimumCreatedAt.map { message.timestamp >= $0 } ?? true)
+                    && message.role == "assistant"
+            }
+            .max(by: { $0.timestamp < $1.timestamp })
+    }
+
+    private func sourceUserMessage(for pending: DMMessage) -> DMMessage? {
+        let traceMatch = currentMessages.last { message in
+            message.role == "user"
+                && message.timestamp <= pending.timestamp
+                && message.traceId == pending.traceId
+        }
+        if let traceMatch { return traceMatch }
+        return currentMessages.last { message in
+            message.role == "user" && message.timestamp <= pending.timestamp
+        }
+    }
+
+    private func fallbackHistory(before userMessage: DMMessage) -> [DirectChatHistoryMessageBody] {
+        currentMessages
+            .filter { message in
+                message.timestamp < userMessage.timestamp
+                    && !message.isStreaming
+                    && !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+            .suffix(20)
+            .map { DirectChatHistoryMessageBody(role: $0.role, content: $0.content) }
+    }
+
+    private func appendFallbackResponse(_ response: DirectChatFallbackResponseDTO, for agent: AgentInfo, channelId: String) {
+        guard selectedAgent?.id == agent.id,
+              let ctx = modelContext,
+              !hasImportedRemoteMessage(
+                id: response.assistantMessageId,
+                content: response.content,
+                timestamp: Date(),
+                role: "assistant"
+              ) else { return }
+
+        let conversation = getOrCreateConversation(for: agent)
+        conversation.orcaChannelId = channelId
+        let message = DMMessage(role: "assistant", content: response.content, isStreaming: false)
+        message.source = response.metadata.source
+        message.lane = response.metadata.lane
+        message.deliveryMode = response.metadata.deliveryMode
+        message.provenance = response.metadata.normalizedProvenance
+        message.deliveryState = response.metadata.responseState ?? DMDeliveryState.responseReceived.rawValue
+        message.modelUsed = response.metadata.displayName
+        message.tokenCount = response.metadata.tokenCount
+        message.traceId = response.metadata.traceId
+        message.remoteMessageId = response.assistantMessageId
+        message.computeRunId = response.metadata.computeRunId
+        message.triageId = response.metadata.triageId
+        message.triageTraceId = response.metadata.triageTraceId
+        message.conversation = conversation
+        ctx.insert(message)
+        currentMessages.append(message)
+        conversation.lastMessageText = response.content
+        conversation.lastMessageDate = message.timestamp
+        markAsyncReplyResolved(for: agent, traceId: response.metadata.traceId)
+        try? ctx.save()
+        loadConversations()
     }
 
     private func markAsyncReplyResolved(for agent: AgentInfo, traceId: String?) {
@@ -1862,6 +2133,12 @@ final class DirectChatViewModel {
     private func hasPendingAsyncReply(for agent: AgentInfo) -> Bool {
         currentMessages.contains { message in
             Self.isPendingAsyncDeliveryState(message.deliveryState)
+        }
+    }
+
+    private func hasPendingLiveInboxReply(for agent: AgentInfo) -> Bool {
+        currentMessages.contains { message in
+            DMDeliveryState.parse(message.deliveryState) == .waitingForLiveAgent
         }
     }
 
@@ -2786,11 +3063,41 @@ final class DirectChatViewModel {
         }
     }
 
+    private static func isUnauthorized(_ error: Error) -> Bool {
+        guard let apiError = error as? APIError else { return false }
+        return apiError.code == 401
+    }
+
+    private static func isNetworkOrHTTPFailure(_ error: Error) -> Bool {
+        if error is URLError { return true }
+        guard let apiError = error as? APIError else { return false }
+        return apiError.code == 0 || apiError.code == 401 || apiError.code >= 500
+    }
+
+    private static func sendFailureReason(_ error: Error) -> String {
+        if let apiError = error as? APIError {
+            switch apiError.code {
+            case 401:
+                return "authorization failed; sign in again"
+            case 500...599:
+                return "ORCA server returned \(apiError.code)"
+            case 0:
+                return apiError.message
+            default:
+                return "ORCA returned \(apiError.code): \(apiError.message)"
+            }
+        }
+        if let urlError = error as? URLError {
+            return urlError.localizedDescription
+        }
+        return error.localizedDescription
+    }
+
     private static func localFallback(for agent: AgentInfo, userMessage: String, error: Error) -> String {
-        let prefix = "Pod local guardrail fallback. This is not a live \(agent.name) reply and not a compute helper answer. Schoolhouse compute did not return a usable reply."
+        let prefix = "Pod local guardrail fallback. This is not a live \(agent.name) reply and not a helper draft. Schoolhouse compute did not return a usable reply."
         switch agent.id {
         case "aloha":
-            return "\(prefix)\n\nAloha path: I can help triage this chat, but I do not have live inbox, memory, NATS, file, or ORCA mutation tools inside this reply. Use the ticket button to create an ORCA control record, or attach follow-up to the active ticket. Standards, memory promotion, archive decisions, and team routing need review. Last compute error: \(error.localizedDescription)"
+            return "\(prefix)\n\nAloha path: this fallback is not Aloha and is not the live inbox. Switch the route to Live inbox handoff for the real Aloha lane, or use the ticket button to create an ORCA control record. Standards, memory promotion, archive decisions, and team routing still need ORCA evidence. Last compute error: \(error.localizedDescription)"
         case "maui":
             return "\(prefix)\n\nMaui path: create or update the ORCA ticket, keep the change small, verify it, then log meaningful system changes in the chronogram. Last compute error: \(error.localizedDescription)"
         case "chief":
@@ -2815,7 +3122,7 @@ final class DirectChatViewModel {
         case .compute:
             return """
             Recorded in Pod.
-            Running a compute-backed \(agent.name) persona. This is not the live \(agent.name) runtime.
+            Requesting a helper draft for \(agent.name). This is not the live \(agent.name) runtime.
             """
         case .agentRun:
             return """
@@ -2825,7 +3132,7 @@ final class DirectChatViewModel {
         case .auto:
             return """
             Recorded in Pod.
-            Asking ORCA to choose compute helper, live inbox, ticket, or protected review for \(agent.name).
+            Asking ORCA to choose live inbox, helper draft, ticket, or protected review for \(agent.name).
             """
         case .fallback:
             return "Using Pod local guardrail fallback only. This is not a live agent response."
@@ -2841,7 +3148,7 @@ final class DirectChatViewModel {
         case .liveInbox:
             return "Recorded in ORCA. Waiting for \(agent.name)'s live inbox reply."
         case .compute:
-            return "Recorded. Running the \(agent.name) compute helper route."
+            return "Recorded. Requesting a helper draft for \(agent.name)."
         case .agentRun:
             return "Recorded. Dispatching the attached ticket to Schoolhouse Agent Runs."
         case .auto:
@@ -2898,8 +3205,8 @@ final class DirectChatViewModel {
 
     private static func liveInboxAckText(for agent: AgentInfo) -> String {
         """
-        Sent to \(agent.name)'s live inbox through ORCA.
-        This is an acknowledgement, not a live agent answer. I’ll append the live reply here when ORCA returns it.
+        Sent to \(agent.name)'s inbox.
+        Waiting for a live reply. This is the real-reply window, not a helper draft.
         """
     }
 
@@ -2907,8 +3214,8 @@ final class DirectChatViewModel {
         let trimmedAck = ack.trimmingCharacters(in: .whitespacesAndNewlines)
         let suffix = trimmedAck.isEmpty ? "" : "\n\nORCA ack: \(trimmedAck)"
         return """
-        ORCA accepted the \(agent.name) compute helper route.
-        This is a compute acknowledgement, not the final answer. I’ll append the compute result when it lands.\(suffix)
+        ORCA accepted the helper draft route for \(agent.name).
+        This is a helper acknowledgement, not the final answer. I’ll append the result when it lands.\(suffix)
         """
     }
 
@@ -4044,6 +4351,100 @@ private struct DirectChatTicketCommentDTO: Decodable {
     let id: String
 }
 
+private struct DirectChatHistoryMessageBody: Encodable {
+    let role: String
+    let content: String
+}
+
+private struct DirectChatFallbackRequestBody: Encodable {
+    let channelId: String
+    let userMessageId: String
+    let content: String
+    let history: [DirectChatHistoryMessageBody]
+    let traceId: String
+    let triageId: String?
+    let triageTraceId: String?
+    let activeTicketId: String?
+    let fallbackReason: String
+    let fallbackAfterSeconds: Int
+
+    enum CodingKeys: String, CodingKey {
+        case content, history
+        case channelId = "channel_id"
+        case userMessageId = "user_message_id"
+        case traceId = "trace_id"
+        case triageId = "triage_id"
+        case triageTraceId = "triage_trace_id"
+        case activeTicketId = "active_ticket_id"
+        case fallbackReason = "fallback_reason"
+        case fallbackAfterSeconds = "fallback_after_seconds"
+    }
+}
+
+private struct DirectChatFallbackResponseDTO: Decodable {
+    let channelId: String
+    let userMessageId: String
+    let assistantMessageId: String
+    let content: String
+    let metadata: DirectChatFallbackMetadataDTO
+
+    enum CodingKeys: String, CodingKey {
+        case content, metadata
+        case channelId = "channel_id"
+        case userMessageId = "user_message_id"
+        case assistantMessageId = "assistant_message_id"
+    }
+}
+
+private struct DirectChatFallbackMetadataDTO: Decodable {
+    let model: String?
+    let backend: String?
+    let tier: String?
+    let tokenCount: Int?
+    let traceId: String
+    let source: String
+    let lane: String
+    let deliveryMode: String?
+    let provenance: String?
+    let responseState: String?
+    let triageId: String?
+    let triageTraceId: String?
+    let computeRunId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case model, backend, tier, source, lane, provenance
+        case tokenCount = "token_count"
+        case traceId = "trace_id"
+        case deliveryMode = "delivery_mode"
+        case responseState = "response_state"
+        case triageId = "triage_id"
+        case triageTraceId = "triage_trace_id"
+        case computeRunId = "compute_run_id"
+    }
+
+    var displayName: String? {
+        let route = tier ?? backend
+        switch (route?.isEmpty == false ? route : nil, model?.isEmpty == false ? model : nil) {
+        case let (route?, model?):
+            return "\(route) · \(model)"
+        case let (route?, nil):
+            return route
+        case let (nil, model?):
+            return model
+        default:
+            return nil
+        }
+    }
+
+    var normalizedProvenance: String {
+        if let backend,
+           ["spark", "kimi", "openclaw"].contains(backend.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) {
+            return DMResponseProvenance.compute.rawValue
+        }
+        return provenance ?? DMResponseProvenance.compute.rawValue
+    }
+}
+
 struct DirectChatORCAMessageDTO: Decodable {
     let id: String
     let senderUserId: String?
@@ -4062,12 +4463,15 @@ struct DirectChatORCAMessageDTO: Decodable {
     let deliveryState: String?
     let triageId: String?
     let triageTraceId: String?
+    let provider: String?
+    let model: String?
+    let surfaceEventProvenance: String?
     let replyToId: String?
     let isThreadReply: Bool
     let createdAt: Date
 
     enum CodingKeys: String, CodingKey {
-        case id, content, source, lane, provenance
+        case id, content, source, lane, provenance, provider, model
         case senderUserId = "sender_user_id"
         case senderAgentId = "sender_agent_id"
         case senderName = "sender_name"
@@ -4080,9 +4484,34 @@ struct DirectChatORCAMessageDTO: Decodable {
         case deliveryState = "delivery_state"
         case triageId = "triage_id"
         case triageTraceId = "triage_trace_id"
+        case surfaceEventProvenance = "surface_event_provenance"
         case replyToId = "reply_to_id"
         case isThreadReply = "is_thread_reply"
         case createdAt = "created_at"
+    }
+
+    var computeProvider: String? {
+        let normalized = provider?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        guard ["spark", "kimi", "openclaw"].contains(normalized) else { return nil }
+        return normalized
+    }
+
+    var normalizedProvenance: String? {
+        if computeProvider != nil { return DMResponseProvenance.compute.rawValue }
+        if let surfaceEventProvenance, !surfaceEventProvenance.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return surfaceEventProvenance
+        }
+        return provenance
+    }
+
+    var computeAttributionLabel: String? {
+        guard let computeProvider else { return nil }
+        let providerLabel = computeProvider.capitalized
+        let cleanModel = model?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let cleanModel, !cleanModel.isEmpty {
+            return "\(providerLabel) · \(cleanModel)"
+        }
+        return providerLabel
     }
 }
 
@@ -4333,6 +4762,56 @@ enum SonarRoomMessageType: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
+enum SonarRoomFilter: String, CaseIterable, Identifiable, Hashable {
+    case all
+    case attention
+    case unread
+    case mentions
+    case waiting
+    case live
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: return "All"
+        case .attention: return "Attention"
+        case .unread: return "Unread"
+        case .mentions: return "Mentions"
+        case .waiting: return "Waiting"
+        case .live: return "Live"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .all: return "tray.full"
+        case .attention: return "bell.badge"
+        case .unread: return "circle.fill"
+        case .mentions: return "at"
+        case .waiting: return "person.badge.clock"
+        case .live: return "bolt.horizontal.circle"
+        }
+    }
+
+    func includes(_ room: SonarRoom) -> Bool {
+        switch self {
+        case .all:
+            return true
+        case .attention:
+            return room.needsAttention || room.notificationLevel == "urgent" || room.notificationLevel == "attention"
+        case .unread:
+            return room.unreadCount > 0
+        case .mentions:
+            return room.mentionCount > 0
+        case .waiting:
+            return room.pendingCount > 0 || room.latestResponseState == DMDeliveryState.waitingForLiveAgent.rawValue
+        case .live:
+            return room.activeSSEClients > 0 || room.presence == "live"
+        }
+    }
+}
+
 private struct SonarHealthDTO: Decodable {
     let status: String
     let generatedAt: Date
@@ -4487,6 +4966,9 @@ struct SonarRoomMessage: Identifiable, Hashable {
     let lane: String?
     let deliveryMode: String?
     let provenance: String?
+    let provider: String?
+    let model: String?
+    let surfaceEventProvenance: String?
     let responseState: String?
     let deliveryState: String
     let replyToId: String?
@@ -4504,7 +4986,10 @@ struct SonarRoomMessage: Identifiable, Hashable {
         self.source = dto.source
         self.lane = dto.lane
         self.deliveryMode = dto.deliveryMode
-        self.provenance = dto.provenance
+        self.provenance = dto.normalizedProvenance ?? dto.provenance
+        self.provider = dto.provider
+        self.model = dto.model
+        self.surfaceEventProvenance = dto.surfaceEventProvenance
         self.responseState = dto.responseState
         self.deliveryState = dto.deliveryState ?? "delivered"
         self.replyToId = dto.replyToId
@@ -4524,6 +5009,15 @@ struct SonarRoomMessage: Identifiable, Hashable {
     }
 
     var statusLabel: String? {
+        if let computeDraftLabel {
+            return computeDraftLabel
+        }
+        if DMDeliveryState.parse(responseState) == .waitingForLiveAgent || DMDeliveryState.parse(deliveryState) == .waitingForLiveAgent {
+            return "Waiting for \(agentDisplayName)"
+        }
+        if DMResponseProvenance.parse(provenance) == .liveInbox, !isUser {
+            return "\(agentDisplayName) replied"
+        }
         if let state = DMDeliveryState.parse(responseState) {
             return state.displayLabel
         }
@@ -4534,6 +5028,28 @@ struct SonarRoomMessage: Identifiable, Hashable {
             return provenance.displayLabel
         }
         return nil
+    }
+
+    var computeDraftLabel: String? {
+        guard let computeProvider else { return nil }
+        let providerLabel = computeProvider.capitalized
+        if agentDisplayName.lowercased() == "aloha" {
+            return "\(providerLabel) draft in Aloha's voice — she's offline"
+        }
+        return "\(providerLabel) draft in \(agentDisplayName)'s voice — live agent offline"
+    }
+
+    private var computeProvider: String? {
+        let normalized = provider?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        guard ["spark", "kimi", "openclaw"].contains(normalized) else { return nil }
+        return normalized
+    }
+
+    private var agentDisplayName: String {
+        senderName
+            .replacingOccurrences(of: "direct:", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .capitalized
     }
 
     var isRequestCard: Bool {
@@ -4589,6 +5105,7 @@ private struct SonarRoomMessageCreateBody: Encodable {
     let deliveryMode: String
     let provenance: String
     let responseState: String
+    let replyToId: String?
 
     enum CodingKeys: String, CodingKey {
         case content
@@ -4599,6 +5116,7 @@ private struct SonarRoomMessageCreateBody: Encodable {
         case deliveryMode = "delivery_mode"
         case provenance
         case responseState = "response_state"
+        case replyToId = "reply_to_id"
     }
 }
 

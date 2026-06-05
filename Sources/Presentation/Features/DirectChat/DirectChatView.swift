@@ -5,7 +5,10 @@ import UIKit
 struct DirectChatView: View {
     @Bindable var viewModel: DirectChatViewModel
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var appState: AppState
     @State private var isShowingSonarDiagnostics = false
+    @State private var isShowingVoiceRoom = false
+    @State private var voiceViewModel = VoiceCompanionViewModel()
 
     var body: some View {
         NavigationStack(path: $viewModel.navigationPath) {
@@ -24,8 +27,14 @@ struct DirectChatView: View {
                 viewModel.clearSelection()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .orcaAuthTokenInvalidated)) { _ in
+            appState.logout()
+        }
         .sheet(isPresented: $isShowingSonarDiagnostics) {
             SonarDiagnosticsSheet(viewModel: viewModel)
+        }
+        .sheet(isPresented: $isShowingVoiceRoom) {
+            VoiceCompanionView(viewModel: voiceViewModel)
         }
     }
 
@@ -41,14 +50,20 @@ struct DirectChatView: View {
                     pendingCount: totalPendingRooms,
                     unreadCount: totalUnreadRooms,
                     mentionCount: totalMentionRooms,
-                    liveCount: totalLiveRooms
+                    liveCount: totalLiveRooms,
+                    selectedFilter: Binding(
+                        get: { viewModel.selectedSonarRoomFilter },
+                        set: { viewModel.selectedSonarRoomFilter = $0 }
+                    ),
+                    filterCounts: filterCounts
                 )
             }
             .listRowBackground(Color.clear)
 
-            agentSection("PRIMARY AGENTS", agents: primaryAgents)
+            roomSection("ATTENTION", rooms: attentionRooms)
+            agentSection("CREW LANES", agents: primaryAgents)
             agentSection("PROTECTED LANES", agents: protectedAgents)
-            agentSection("SUPPORT RUNTIME", agents: supportAgents)
+            agentSection("SUPPORT LANES", agents: supportAgents)
 
             roomSection("TICKET ROOMS", rooms: ticketRooms)
             roomSection("BOARD + PROJECT ROOMS", rooms: boardRooms)
@@ -66,12 +81,20 @@ struct DirectChatView: View {
                 set: { viewModel.sonarSearchText = $0 }
             ),
             placement: .navigationBarDrawer(displayMode: .always),
-            prompt: "Search rooms, tickets, boards"
+            prompt: "Search team, rooms, tickets, boards"
         )
         .toolbarBackground(AppColors.backgroundSecondary, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
+                Button {
+                    isShowingVoiceRoom = true
+                } label: {
+                    Image(systemName: voiceViewModel.isRealtimeConnected ? "waveform.circle.fill" : "waveform.circle")
+                        .foregroundStyle(voiceViewModel.isRealtimeConnected ? AppColors.accentSuccess : AppColors.accentElectric)
+                }
+                .accessibilityLabel(voiceViewModel.isRealtimeConnected ? "Open live Pod voice room" : "Open Pod voice room")
+
                 Button {
                     isShowingSonarDiagnostics = true
                 } label: {
@@ -185,19 +208,29 @@ struct DirectChatView: View {
     }
 
     private var ticketRooms: [SonarRoom] {
-        viewModel.filteredSonarRooms.filter { $0.roomGroup == .ticket }
+        groupedRooms.filter { $0.roomGroup == .ticket }
     }
 
     private var boardRooms: [SonarRoom] {
-        viewModel.filteredSonarRooms.filter { $0.roomGroup == .boardOrProject }
+        groupedRooms.filter { $0.roomGroup == .boardOrProject }
     }
 
     private var systemRooms: [SonarRoom] {
-        viewModel.filteredSonarRooms.filter { $0.roomGroup == .system }
+        groupedRooms.filter { $0.roomGroup == .system }
     }
 
     private var generalRooms: [SonarRoom] {
-        viewModel.filteredSonarRooms.filter { $0.roomGroup == .general }
+        groupedRooms.filter { $0.roomGroup == .general }
+    }
+
+    private var attentionRooms: [SonarRoom] {
+        guard viewModel.selectedSonarRoomFilter == .all else { return [] }
+        return viewModel.filteredSonarRooms.filter { isAttentionRoom($0) }
+    }
+
+    private var groupedRooms: [SonarRoom] {
+        let attentionIds = Set(attentionRooms.map(\.id))
+        return viewModel.filteredSonarRooms.filter { !attentionIds.contains($0.id) }
     }
 
     private var totalPendingRooms: Int {
@@ -216,12 +249,29 @@ struct DirectChatView: View {
         viewModel.sonarRooms.filter { $0.activeSSEClients > 0 }.count
     }
 
+    private var filterCounts: [SonarRoomFilter: Int] {
+        Dictionary(
+            uniqueKeysWithValues: SonarRoomFilter.allCases.map { filter in
+                (filter, viewModel.sonarRooms.filter { filter.includes($0) }.count)
+            }
+        )
+    }
+
     private func isProtectedAgent(_ agent: AgentInfo) -> Bool {
         ["chief", "rooster", "reef"].contains(agent.id)
     }
 
     private func sectionTitle(_ title: String, count: Int) -> String {
         "\(title) · \(count)"
+    }
+
+    private func isAttentionRoom(_ room: SonarRoom) -> Bool {
+        room.needsAttention
+            || room.unreadCount > 0
+            || room.mentionCount > 0
+            || room.pendingCount > 0
+            || room.notificationLevel == "urgent"
+            || room.notificationLevel == "attention"
     }
 
     // MARK: - Empty State
@@ -231,7 +281,7 @@ struct DirectChatView: View {
             Image(systemName: "bubble.left.and.bubble.right")
                 .font(.system(size: 48))
                 .foregroundColor(AppColors.textTertiary)
-            Text("Select an agent to start chatting")
+            Text("Select a lane to start chatting")
                 .font(.title3)
                 .foregroundColor(AppColors.textSecondary)
         }
@@ -333,6 +383,8 @@ private struct SonarSurfaceHeader: View {
     let unreadCount: Int
     let mentionCount: Int
     let liveCount: Int
+    @Binding var selectedFilter: SonarRoomFilter
+    let filterCounts: [SonarRoomFilter: Int]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -348,7 +400,7 @@ private struct SonarSurfaceHeader: View {
                     Text("Sonar")
                         .font(.headline)
                         .foregroundStyle(AppColors.textPrimary)
-                    Text("ORCA-backed agent comms")
+                    Text("ORCA-backed team chat")
                         .font(.caption)
                         .foregroundStyle(AppColors.textTertiary)
                 }
@@ -376,6 +428,27 @@ private struct SonarSurfaceHeader: View {
                 }
             }
             .lineLimit(1)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(SonarRoomFilter.allCases) { filter in
+                        Button {
+                            selectedFilter = filter
+                        } label: {
+                            Label(filterButtonTitle(for: filter), systemImage: filter.icon)
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(selectedFilter == filter ? .white : AppColors.textSecondary)
+                                .lineLimit(1)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 5)
+                                .background(selectedFilter == filter ? AppColors.accentElectric : AppColors.backgroundTertiary)
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Show \(filter.title) rooms")
+                    }
+                }
+            }
 
             if let health {
                 VStack(alignment: .leading, spacing: 6) {
@@ -443,6 +516,11 @@ private struct SonarSurfaceHeader: View {
 
     private var healthTint: Color {
         tint(for: health?.status ?? (isLoading ? "degraded" : "down"))
+    }
+
+    private func filterButtonTitle(for filter: SonarRoomFilter) -> String {
+        let count = filterCounts[filter] ?? 0
+        return filter == .all ? filter.title : "\(filter.title) \(count)"
     }
 
     private func tint(for status: String) -> Color {
@@ -1022,14 +1100,77 @@ private struct SonarRoomConversationView: View {
                 ScrollView {
                     LazyVStack(spacing: 10) {
                         ForEach(viewModel.roomMessages) { message in
-                            Button {
-                                selectedEvidenceMessage = message
-                            } label: {
+                            VStack(alignment: message.isUser ? .trailing : .leading, spacing: 4) {
                                 SonarRoomMessageRow(message: message)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        selectedEvidenceMessage = message
+                                    }
+
+                                SonarRoomMessageActionBar(
+                                    message: message,
+                                    canRequestWorkflow: room.canRequestWorkflow,
+                                    onReply: {
+                                        viewModel.replyToRoomMessage(message)
+                                        isFocused = true
+                                    },
+                                    onCopy: {
+                                        UIPasteboard.general.string = message.content
+                                    },
+                                    onEvidence: {
+                                        selectedEvidenceMessage = message
+                                    },
+                                    onWorkRequest: { type in
+                                        viewModel.prepareRoomWorkRequest(from: message, type: type)
+                                        isFocused = true
+                                    }
+                                )
                             }
-                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button {
+                                    viewModel.replyToRoomMessage(message)
+                                    isFocused = true
+                                } label: {
+                                    Label("Reply in thread", systemImage: "arrowshape.turn.up.left")
+                                }
+
+                                Button {
+                                    UIPasteboard.general.string = message.content
+                                } label: {
+                                    Label("Copy text", systemImage: "doc.on.doc")
+                                }
+
+                                Button {
+                                    selectedEvidenceMessage = message
+                                } label: {
+                                    Label("Open evidence", systemImage: "point.topleft.down.curvedto.point.bottomright.up")
+                                }
+
+                                if room.canRequestWorkflow {
+                                    Divider()
+                                    Button {
+                                        viewModel.prepareRoomWorkRequest(from: message, type: .agentRunRequest)
+                                        isFocused = true
+                                    } label: {
+                                        Label("Request agent run", systemImage: "bolt.badge.clock")
+                                    }
+                                    Button {
+                                        viewModel.prepareRoomWorkRequest(from: message, type: .approvalRequest)
+                                        isFocused = true
+                                    } label: {
+                                        Label("Request approval", systemImage: "person.badge.key")
+                                    }
+                                    Button {
+                                        viewModel.prepareRoomWorkRequest(from: message, type: .memoryCandidate)
+                                        isFocused = true
+                                    } label: {
+                                        Label("Propose memory", systemImage: "brain.head.profile")
+                                    }
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: message.isUser ? .trailing : .leading)
                             .id(message.id)
-                            .accessibilityHint("Open Sonar evidence for this room message.")
+                            .accessibilityHint("Tap for evidence. Use visible message actions for reply and work requests.")
                         }
                     }
                     .padding(16)
@@ -1102,28 +1243,52 @@ private struct SonarRoomConversationView: View {
     }
 
     private var roomHeader: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "number")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(AppColors.accentElectric)
-                .frame(width: 24, height: 24)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: roomHeaderIcon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(roomHeaderTint)
+                    .frame(width: 24, height: 24)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(room.roomKindLabel)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(AppColors.textPrimary)
-                    .lineLimit(1)
-                Text(headerDetail)
-                    .font(.caption2)
-                    .foregroundStyle(AppColors.textTertiary)
-                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(room.roomKindLabel)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppColors.textPrimary)
+                        .lineLimit(1)
+                    Text(headerDetail)
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.textTertiary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+
+                if viewModel.isLoadingRoomMessages {
+                    ProgressView()
+                        .scaleEffect(0.75)
+                }
             }
 
-            Spacer(minLength: 0)
-
-            if viewModel.isLoadingRoomMessages {
-                ProgressView()
-                    .scaleEffect(0.75)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    roomChip(room.presence.capitalized, icon: "dot.radiowaves.left.and.right", tint: presenceTint)
+                    if room.unreadCount > 0 {
+                        roomChip("\(room.unreadCount) unread", icon: "circle.fill", tint: AppColors.accentAgent)
+                    }
+                    if room.mentionCount > 0 {
+                        roomChip("@\(room.mentionCount)", icon: "at", tint: AppColors.accentDanger)
+                    }
+                    if room.pendingCount > 0 {
+                        roomChip("\(room.pendingCount) waiting", icon: "person.badge.clock", tint: AppColors.accentWarning)
+                    }
+                    if room.protectedLane {
+                        roomChip("Protected", icon: "lock.shield", tint: AppColors.accentWarning)
+                    }
+                    roomChip(room.canRequestWorkflow ? "Workflows allowed" : "Chat only", icon: room.canRequestWorkflow ? "checkmark.seal" : "text.bubble", tint: room.canRequestWorkflow ? AppColors.accentSuccess : AppColors.textSecondary)
+                    if let owner = room.policyOwner, !owner.isEmpty {
+                        roomChip(owner, icon: "person.crop.circle", tint: AppColors.textSecondary)
+                    }
+                }
             }
         }
         .padding(.horizontal, 16)
@@ -1135,6 +1300,39 @@ private struct SonarRoomConversationView: View {
                 .frame(height: 0.5),
             alignment: .bottom
         )
+    }
+
+    private var roomHeaderIcon: String {
+        if room.protectedLane { return "lock.shield" }
+        if room.linkedTicketId != nil || room.channelPurpose == "service_request" { return "text.badge.checkmark" }
+        if room.linkedBoardId != nil || room.channelPurpose == "board" { return "square.stack.3d.up" }
+        return "number"
+    }
+
+    private var roomHeaderTint: Color {
+        if room.protectedLane { return AppColors.accentWarning }
+        if room.linkedTicketId != nil || room.channelPurpose == "service_request" { return AppColors.accentAgent }
+        if room.linkedBoardId != nil || room.channelPurpose == "board" { return AppColors.accentElectric }
+        return AppColors.accentElectric
+    }
+
+    private var presenceTint: Color {
+        switch room.presence.lowercased() {
+        case "live": return AppColors.accentSuccess
+        case "waiting", "active": return AppColors.accentWarning
+        default: return AppColors.textSecondary
+        }
+    }
+
+    private func roomChip(_ title: String, icon: String, tint: Color) -> some View {
+        Label(title, systemImage: icon)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(tint.opacity(0.10))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     private var headerDetail: String {
@@ -1162,6 +1360,35 @@ private struct SonarRoomConversationView: View {
 
     private var roomComposeBar: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if let replyingTo = viewModel.replyingToRoomMessage {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrowshape.turn.up.left")
+                        .foregroundStyle(AppColors.accentElectric)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Thread reply to \(replyingTo.displayName)")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppColors.textPrimary)
+                        Text(replyingTo.content.isEmpty ? "Empty message" : replyingTo.content)
+                            .font(.caption2)
+                            .foregroundStyle(AppColors.textTertiary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                    Button {
+                        viewModel.cancelRoomReply()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(AppColors.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Cancel thread reply")
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(AppColors.accentElectric.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+
             HStack(spacing: 8) {
                 ForEach(SonarRoomMessageType.allCases) { type in
                     Button {
@@ -1182,7 +1409,7 @@ private struct SonarRoomConversationView: View {
                     .help(type.detail)
                 }
                 Spacer(minLength: 0)
-                Text(viewModel.selectedRoomMessageType.detail)
+                Label(viewModel.selectedRoomMessageType.detail, systemImage: viewModel.selectedRoomMessageType.icon)
                     .font(.caption2)
                     .foregroundStyle(canUseMessageType(viewModel.selectedRoomMessageType) ? AppColors.textTertiary : AppColors.accentWarning)
                     .lineLimit(1)
@@ -1196,10 +1423,13 @@ private struct SonarRoomConversationView: View {
             }
 
             if !room.allowedActions.isEmpty {
-                Text("ORCA policy: \(room.allowedActions.joined(separator: ", "))")
-                    .font(.caption2)
-                    .foregroundStyle(AppColors.textTertiary)
-                    .lineLimit(1)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(room.allowedActions.prefix(8), id: \.self) { action in
+                            roomChip(action.replacingOccurrences(of: "_", with: " "), icon: actionIcon(action), tint: AppColors.textSecondary)
+                        }
+                    }
+                }
             }
 
             HStack(spacing: 10) {
@@ -1249,7 +1479,7 @@ private struct SonarRoomConversationView: View {
     private var roomPrompt: String {
         switch viewModel.selectedRoomMessageType {
         case .text:
-            return "Message room..."
+            return "Message \(room.displayName)..."
         case .toolRequest:
             return "Describe the tool request..."
         case .fileRequest:
@@ -1260,6 +1490,19 @@ private struct SonarRoomConversationView: View {
             return "Describe the agent run request..."
         case .memoryCandidate:
             return "Describe the memory candidate..."
+        }
+    }
+
+    private func actionIcon(_ action: String) -> String {
+        switch action {
+        case "post": return "paperplane"
+        case "workflow": return "slider.horizontal.3"
+        case "ticket": return "text.badge.checkmark"
+        case "approval": return "person.badge.key"
+        case "agent_run": return "bolt.badge.clock"
+        case "file": return "doc"
+        case "memory": return "brain.head.profile"
+        default: return "checkmark.circle"
         }
     }
 
@@ -1592,6 +1835,82 @@ private struct SonarRoomMessageRow: View {
     }
 }
 
+private struct SonarRoomMessageActionBar: View {
+    let message: SonarRoomMessage
+    let canRequestWorkflow: Bool
+    let onReply: () -> Void
+    let onCopy: () -> Void
+    let onEvidence: () -> Void
+    let onWorkRequest: (SonarRoomMessageType) -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if message.isUser { Spacer(minLength: 34) }
+
+            Button(action: onReply) {
+                actionIcon("arrowshape.turn.up.left", label: "Reply")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Reply in thread")
+
+            Button(action: onEvidence) {
+                actionIcon("point.topleft.down.curvedto.point.bottomright.up", label: "Evidence")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open evidence")
+
+            Button(action: onCopy) {
+                actionIcon("doc.on.doc", label: "Copy")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Copy message text")
+
+            if canRequestWorkflow {
+                Menu {
+                    Button {
+                        onWorkRequest(.agentRunRequest)
+                    } label: {
+                        Label("Request agent run", systemImage: "bolt.badge.clock")
+                    }
+                    Button {
+                        onWorkRequest(.approvalRequest)
+                    } label: {
+                        Label("Request approval", systemImage: "person.badge.key")
+                    }
+                    Button {
+                        onWorkRequest(.memoryCandidate)
+                    } label: {
+                        Label("Propose memory", systemImage: "brain.head.profile")
+                    }
+                } label: {
+                    actionIcon("plus.circle", label: "Work")
+                }
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .accessibilityLabel("Create work request from message")
+            }
+
+            if !message.isUser { Spacer(minLength: 34) }
+        }
+        .frame(maxWidth: 520, alignment: message.isUser ? .trailing : .leading)
+        .padding(.horizontal, message.isUser ? 50 : 40)
+    }
+
+    private func actionIcon(_ icon: String, label: String) -> some View {
+        Label(label, systemImage: icon)
+            .labelStyle(.iconOnly)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(AppColors.textTertiary)
+            .frame(width: 28, height: 24)
+            .background(AppColors.backgroundSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(AppColors.border.opacity(0.8), lineWidth: 1)
+            )
+    }
+}
+
 private struct SonarRoomRequestCard: View {
     let message: SonarRoomMessage
 
@@ -1715,12 +2034,14 @@ struct ConversationView: View {
                 ScrollView {
                     LazyVStack(spacing: 12) {
                         ForEach(viewModel.currentMessages, id: \.id) { message in
-                            Button {
+                            DMBubble(
+                                message: message,
+                                agent: agent,
+                                onRetry: { viewModel.retryMessage(message) }
+                            )
+                            .onTapGesture {
                                 selectedEvidenceMessage = message
-                            } label: {
-                                DMBubble(message: message, agent: agent)
                             }
-                            .buttonStyle(.plain)
                             .id(message.id)
                             .accessibilityHint("Open Sonar evidence for this message.")
                         }
@@ -1746,16 +2067,22 @@ struct ConversationView: View {
             // Error bar
             if let error = viewModel.error {
                 HStack {
-                    Image(systemName: "bolt.horizontal.circle.fill")
-                        .foregroundColor(AppColors.accentAgent)
+                    Image(systemName: viewModel.errorIsDestructive ? "exclamationmark.triangle.fill" : "bolt.horizontal.circle.fill")
+                        .foregroundColor(viewModel.errorIsDestructive ? AppColors.accentDanger : AppColors.accentAgent)
                     Text(error)
                         .font(.caption)
-                        .foregroundColor(AppColors.accentAgent)
+                        .foregroundColor(viewModel.errorIsDestructive ? AppColors.accentDanger : AppColors.accentAgent)
                     Spacer()
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
-                .background(AppColors.accentAgent.opacity(0.1))
+                .background((viewModel.errorIsDestructive ? AppColors.accentDanger : AppColors.accentAgent).opacity(0.1))
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if viewModel.errorIsDestructive {
+                        viewModel.retryLastFailedMessage()
+                    }
+                }
             }
 
             if let message = viewModel.ticketActionMessage {
@@ -1985,7 +2312,7 @@ struct ConversationView: View {
         if let ticketId = viewModel.activeTicketId {
             return "ORCA ticket \(String(ticketId.prefix(8)))"
         }
-        return "\(agent.name) chat surface"
+        return "\(agent.name) lane"
     }
 
     private var contextSummaryDetail: String {
@@ -2016,9 +2343,9 @@ struct ConversationView: View {
     private var deliveryTruthText: String {
         switch viewModel.selectedDeliveryMode {
         case .compute:
-            return "\(agent.name) compute helper, not live runtime"
+            return "Helper draft for \(agent.name), not live runtime"
         case .liveInbox:
-            return "\(agent.name) live inbox handoff"
+            return "Send to \(agent.name)'s inbox and wait for reply"
         case .agentRun:
             return "Agent Run requires attached ticket"
         case .auto:
@@ -2831,7 +3158,7 @@ struct ConversationView: View {
         }
         switch viewModel.selectedDeliveryMode {
         case .compute:
-            return "\(agent.name) compute helper"
+            return "Helper draft for \(agent.name)"
         case .agentRun:
             return "ORCA Agent Run"
         case .liveInbox:
@@ -2926,7 +3253,7 @@ struct ConversationView: View {
     private func deliveryLabel(for mode: DMDeliveryMode) -> String {
         switch mode {
         case .compute:
-            return "\(agent.name) compute"
+            return "Helper draft"
         case .liveInbox:
             return "\(agent.name) inbox"
         case .agentRun:
@@ -2960,7 +3287,7 @@ struct ConversationView: View {
             .disabled(viewModel.isCreatingTicket || viewModel.isStreaming)
             .accessibilityLabel(viewModel.activeTicketId == nil ? "Create ORCA ticket" : "Add ORCA ticket comment")
 
-            TextField("Message \(agent.name)...", text: Binding(
+            TextField("Message \(agent.name) lane...", text: Binding(
                 get: { viewModel.composedMessage },
                 set: {
                     viewModel.composedMessage = $0
@@ -3388,9 +3715,9 @@ private struct SonarSurfaceEventRow: View {
                 .font(.caption)
                 .foregroundStyle(AppColors.textSecondary)
                 .lineLimit(3)
-            Text([event.direction, event.actorKind, event.actorId, event.model].compactMap { $0 }.joined(separator: " · "))
+            Text(event.provenanceLine)
                 .font(.caption2)
-                .foregroundStyle(AppColors.textTertiary)
+                .foregroundStyle(event.isComputeDraft ? AppColors.accentWarning : AppColors.textTertiary)
                 .lineLimit(1)
         }
         .padding(12)
@@ -3399,11 +3726,13 @@ private struct SonarSurfaceEventRow: View {
     }
 
     private var icon: String {
-        event.status.lowercased().contains("fail") ? "exclamationmark.triangle" : "checkmark.circle"
+        if event.isComputeDraft { return "cpu" }
+        return event.status.lowercased().contains("fail") ? "exclamationmark.triangle" : "checkmark.circle"
     }
 
     private var tint: Color {
-        event.status.lowercased().contains("fail") ? AppColors.accentWarning : AppColors.accentSuccess
+        if event.isComputeDraft { return AppColors.accentWarning }
+        return event.status.lowercased().contains("fail") ? AppColors.accentWarning : AppColors.accentSuccess
     }
 }
 
@@ -3547,13 +3876,14 @@ private struct SonarSurfaceEventDTO: Decodable {
     let computeRunId: String?
     let provider: String?
     let model: String?
+    let provenance: String?
     let status: String
     let summary: String?
     let textPreview: String?
     let createdAt: Date
 
     enum CodingKeys: String, CodingKey {
-        case id, direction, status, summary, model, provider
+        case id, direction, status, summary, model, provider, provenance
         case eventType = "event_type"
         case actorKind = "actor_kind"
         case actorId = "actor_id"
@@ -3565,6 +3895,26 @@ private struct SonarSurfaceEventDTO: Decodable {
         case computeRunId = "compute_run_id"
         case textPreview = "text_preview"
         case createdAt = "created_at"
+    }
+
+    var isComputeDraft: Bool {
+        ["spark", "kimi", "openclaw"].contains((provider ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+    }
+
+    var provenanceLine: String {
+        var parts: [String] = [direction, actorKind]
+        if let actorId, !actorId.isEmpty {
+            parts.append(actorId)
+        }
+        if isComputeDraft {
+            parts.append("\((provider ?? "compute").capitalized) helper draft")
+        } else if let provenance, !provenance.isEmpty {
+            parts.append(provenance.replacingOccurrences(of: "_", with: " "))
+        }
+        if let model, !model.isEmpty {
+            parts.append(model)
+        }
+        return parts.joined(separator: " · ")
     }
 }
 
@@ -3605,6 +3955,7 @@ private struct SonarComputeRunDTO: Decodable {
 struct DMBubble: View {
     let message: DMMessage
     let agent: AgentInfo
+    var onRetry: (() -> Void)? = nil
 
     private var isUser: Bool { message.role == "user" }
 
@@ -3648,6 +3999,18 @@ struct DMBubble: View {
 
                 if !isUser {
                     MessageDeliveryLedger(message: message, agent: agent)
+                }
+
+                // Retry button for failed user messages
+                if isUser,
+                   DMUserMessageDeliveryState.parse(message.userDeliveryState) == .failed,
+                   let retry = onRetry {
+                    Button(action: retry) {
+                        Label("Retry", systemImage: "arrow.clockwise")
+                            .font(.caption.weight(.medium))
+                            .foregroundColor(AppColors.accentDanger)
+                    }
+                    .padding(.top, 2)
                 }
 
                 // Streaming indicator
@@ -3705,7 +4068,7 @@ struct DMBubble: View {
         if !message.content.isEmpty { return message.content }
         switch deliveryState {
         case .computeRunning:
-            return "Waiting for the compute helper answer..."
+            return "Waiting for the helper draft..."
         case .agentRunQueued:
             return "Agent Run queued in ORCA..."
         case .agentRunRunning:
@@ -3741,7 +4104,7 @@ struct DMBubble: View {
     private static func deliveryLabel(_ mode: DMDeliveryMode, agent: AgentInfo) -> String {
         switch mode {
         case .compute:
-            return "\(agent.name) compute"
+            return "Helper draft"
         case .liveInbox:
             return "\(agent.name) inbox"
         case .agentRun:
@@ -3759,39 +4122,84 @@ struct DMBubble: View {
 
     @ViewBuilder
     private var provenanceLabel: some View {
-        Label(provenance.displayLabel, systemImage: provenanceIcon)
+        Label(visibleProvenanceLabel, systemImage: provenanceIcon)
             .font(.caption2.weight(.semibold))
             .foregroundStyle(provenanceColor)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .background(provenanceColor.opacity(0.12))
             .clipShape(Capsule())
-            .accessibilityLabel("Response provenance: \(provenance.displayLabel)")
+            .accessibilityLabel("Response provenance: \(visibleProvenanceLabel)")
     }
 
     private var provenance: DMResponseProvenance {
+        if hasComputeAttribution {
+            return .compute
+        }
         if let value = DMResponseProvenance.parse(message.provenance) {
             return value
         }
         return DMResponseProvenance(deliveryMode: message.deliveryMode, source: message.source, lane: message.lane)
     }
 
+    private var visibleProvenanceLabel: String {
+        if let computeDraftLabel {
+            return computeDraftLabel
+        }
+        if provenance == .liveInbox, deliveryState == .responseReceived {
+            return "\(agent.name) replied"
+        }
+        return provenance.displayLabel
+    }
+
     @ViewBuilder
     private var deliveryStateLabel: some View {
-        if let deliveryState {
-            Label(deliveryState.displayLabel, systemImage: deliveryStateIcon)
+        if deliveryState != nil {
+            Label(visibleDeliveryStateLabel, systemImage: deliveryStateIcon)
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(deliveryStateColor)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
                 .background(deliveryStateColor.opacity(0.12))
                 .clipShape(Capsule())
-                .accessibilityLabel("Delivery state: \(deliveryState.displayLabel)")
+                .accessibilityLabel("Delivery state: \(visibleDeliveryStateLabel)")
         }
     }
 
     private var deliveryState: DMDeliveryState? {
         DMDeliveryState.parse(message.deliveryState)
+    }
+
+    private var visibleDeliveryStateLabel: String {
+        if deliveryState == .waitingForLiveAgent {
+            return "Waiting for \(agent.name)"
+        }
+        return deliveryState?.displayLabel ?? ""
+    }
+
+    private var hasComputeAttribution: Bool {
+        guard let model = message.modelUsed?.lowercased(), !model.isEmpty else { return false }
+        return model.contains("spark")
+            || model.contains("kimi")
+            || model.contains("openclaw")
+            || model.contains("qwen")
+    }
+
+    private var computeDraftLabel: String? {
+        guard hasComputeAttribution else { return nil }
+        let provider = computeProviderName
+        if agent.id == "aloha" {
+            return "\(provider) draft in Aloha's voice — she's offline"
+        }
+        return "\(provider) draft in \(agent.name)'s voice — live agent offline"
+    }
+
+    private var computeProviderName: String {
+        let model = message.modelUsed?.lowercased() ?? ""
+        if model.contains("spark") || model.contains("qwen") { return "Spark" }
+        if model.contains("kimi") { return "Kimi" }
+        if model.contains("openclaw") { return "OpenClaw" }
+        return "Compute"
     }
 
     private var deliveryStateIcon: String {
@@ -3960,7 +4368,7 @@ private struct MessageDeliveryLedger: View {
             handlerTitle = "Route"
             handlerIcon = "arrow.triangle.branch"
         case .compute:
-            handlerTitle = "\(agent.name) compute"
+            handlerTitle = "Helper draft"
             handlerIcon = "cpu"
         }
 
@@ -3993,7 +4401,7 @@ private struct MessageDeliveryLedger: View {
         case .routing:
             return "Routing through ORCA"
         case .computeRunning:
-            return "\(agent.name) compute helper accepted; waiting"
+            return "Helper draft accepted; waiting"
         case .waitingForLiveAgent:
             return "\(agent.name) inbox accepted; waiting"
         case .claimedByAgent:
@@ -4023,7 +4431,7 @@ private struct MessageDeliveryLedger: View {
         case .coordinationReview:
             return "\(agent.name) coordination review"
         case .compute:
-            return "\(agent.name) compute helper"
+            return "Helper draft"
         case .liveInbox:
             return "\(agent.name) live inbox"
         case .agentRun:

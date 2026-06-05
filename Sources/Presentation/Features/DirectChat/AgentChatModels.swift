@@ -123,13 +123,16 @@ extension AgentInfo {
     }
 
     var defaultDeliveryMode: DMDeliveryMode {
-        .compute
+        if ["aloha", "maui", "coral", "chief", "rooster", "reef"].contains(id) {
+            return .liveInbox
+        }
+        return .compute
     }
 
     var boundaryText: String {
         switch id {
         case "aloha":
-            return "Compute triage by default. Live inbox handoff is available when Aloha's runtime is awake; standards, memory, archive, and routing decisions still need ORCA evidence."
+            return "Live inbox is the default Aloha path when her runtime is awake. Compute helper remains available for quick triage, but real continuity comes from ORCA/live inbox."
         case "maui":
             return "Compute triage for engineering guidance. Real implementation belongs on tickets, runs, commits, and verification."
         case "chief":
@@ -242,7 +245,7 @@ enum DMResponseProvenance: String, Codable, Sendable {
     var displayLabel: String {
         switch self {
         case .coordinationReview: return "Coordination review handoff"
-        case .liveInbox: return "ORCA live inbox handoff"
+        case .liveInbox: return "Sent to inbox; waiting"
         case .compute: return "Compute helper, not live runtime"
         case .agentRun: return "ORCA Agent Run"
         case .fallback: return "Local guardrail fallback"
@@ -299,6 +302,18 @@ enum DMDeliveryState: String, Codable, Sendable {
         case .fallbackPresented: return "Local fallback shown"
         case .timedOut: return "Still waiting"
         }
+    }
+}
+
+enum DMUserMessageDeliveryState: String, Codable, Sendable {
+    case sending
+    case sent
+    case failed
+
+    static func parse(_ raw: String?) -> DMUserMessageDeliveryState? {
+        guard let raw else { return nil }
+        let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return DMUserMessageDeliveryState(rawValue: normalized)
     }
 }
 
@@ -485,6 +500,7 @@ final class DMMessage {
     var deliveryMode: String?
     var provenance: String?
     var deliveryState: String?
+    var userDeliveryState: String?
     var remoteMessageId: String?
     var computeRunId: String?
     var triageId: String?
@@ -509,6 +525,7 @@ final class DMMessage {
         self.deliveryMode = nil
         self.provenance = nil
         self.deliveryState = nil
+        self.userDeliveryState = nil
         self.remoteMessageId = nil
         self.computeRunId = nil
         self.triageId = nil
