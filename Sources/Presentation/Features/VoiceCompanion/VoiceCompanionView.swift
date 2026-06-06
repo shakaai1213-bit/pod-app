@@ -38,6 +38,8 @@ struct VoiceCompanionView: View {
 
                 // Routing toggles
                 routingTogglesView
+
+                realtimePackageView
             }
             .padding(.bottom, 20)
         }
@@ -203,8 +205,86 @@ struct VoiceCompanionView: View {
                         .fill(viewModel.routeToOpenClaw ? accentColor.opacity(0.2) : Color.gray.opacity(0.1))
                 )
             }
+
+            Button {
+                viewModel.routeToRealtimePackage.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(viewModel.routeToRealtimePackage ? accentColor : Color.gray.opacity(0.5))
+                        .frame(width: 8, height: 8)
+                    Text("LiveKit")
+                        .font(.caption)
+                        .foregroundColor(viewModel.routeToRealtimePackage ? .white : .gray)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(viewModel.routeToRealtimePackage ? accentColor.opacity(0.2) : Color.gray.opacity(0.1))
+                )
+            }
         }
         .padding(.top, 20)
+    }
+
+    private var realtimePackageView: some View {
+        VStack(spacing: 8) {
+            Text(viewModel.realtimeSessionText ?? viewModel.realtimePackageText)
+                .font(.caption)
+                .foregroundColor(.gray)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 20)
+
+            if viewModel.isRealtimeConnected && viewModel.realtimeRemoteParticipantCount == 0 {
+                HStack(spacing: 8) {
+                    Image(systemName: "person.crop.circle.badge.questionmark")
+                        .foregroundColor(.orange)
+                    Text("You are in the room. Aloha is offline until the voice worker is started.")
+                        .font(.caption.weight(.medium))
+                        .foregroundColor(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(Color.orange.opacity(0.12))
+                )
+                .padding(.horizontal, 20)
+            }
+
+            Button {
+                Task {
+                    if viewModel.isRealtimeConnected {
+                        await viewModel.leaveRealtimeVoice()
+                    } else {
+                        await viewModel.joinRealtimeVoice()
+                    }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    if viewModel.isPreparingRealtimeSession {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(0.8)
+                    } else {
+                        Image(systemName: viewModel.isRealtimeConnected ? "phone.down.circle" : "wave.3.right.circle")
+                    }
+                    Text(viewModel.isRealtimeConnected ? "Leave Voice Room" : "Join Voice Room")
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundColor(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(accentColor.opacity(viewModel.routeToRealtimePackage ? 0.35 : 0.12))
+                )
+            }
+            .disabled(!viewModel.routeToRealtimePackage || viewModel.isPreparingRealtimeSession)
+        }
+        .padding(.top, 12)
     }
 }
 
@@ -233,4 +313,3 @@ struct MessageBubble: View {
         }
     }
 }
-

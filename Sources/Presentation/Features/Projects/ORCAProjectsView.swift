@@ -658,6 +658,10 @@ private struct ORCAProjectDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.lg) {
                     projectInfo
+                    commandRoomSection
+                    decisionQueueSection
+                    workSummarySection
+                    agentSupportSection
                     proposedMilestonesSection
                     notesSection
                     tasksSection
@@ -708,13 +712,45 @@ private struct ORCAProjectDetailView: View {
 
     private var projectInfo: some View {
         VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack(alignment: .top, spacing: Theme.sm) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("PROJECT COMMAND ROOM")
+                        .podTextStyle(.label, color: AppColors.textTertiary)
+
+                    Text(activeProject.name)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(AppColors.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: Theme.sm)
+
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(activeProject.status.replacingOccurrences(of: "-", with: " ").capitalized)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(statusColor)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 4)
+                        .background(statusColor.opacity(0.12))
+                        .clipShape(Capsule())
+
+                    Text("ORCA truth")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(AppColors.textTertiary)
+                }
+            }
+
             if let goal = activeProject.goal, !goal.isEmpty {
                 Text(goal)
                     .podTextStyle(.body, color: AppColors.textSecondary)
             }
 
-            HStack(spacing: Theme.md) {
+            FlowLayout(horizontalSpacing: Theme.xs, verticalSpacing: Theme.xs) {
+                if let stage = activeProject.stage, !stage.isEmpty {
+                    metaPill(icon: "square.stack.3d.up", text: stage.replacingOccurrences(of: "-", with: " "), color: AppColors.accentElectric)
+                }
                 metaPill(icon: "flag.fill", text: "P\(activeProject.priority)", color: priorityColor)
+                metaPill(icon: "rectangle.3.group", text: boardLabel, color: AppColors.accentAgent)
                 if let dueDate = activeProject.dueDate {
                     metaPill(icon: "calendar", text: formatDate(dueDate), color: AppColors.textSecondary)
                 }
@@ -730,6 +766,129 @@ private struct ORCAProjectDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(AppColors.backgroundSecondary)
         .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+    }
+
+    private var commandRoomSection: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            sectionHeader("COMMAND", count: nil)
+
+            HStack(alignment: .top, spacing: Theme.sm) {
+                commandMetric(title: "Open tasks", value: "\(openTasks.count)", color: openTasks.isEmpty ? AppColors.accentSuccess : AppColors.accentWarning)
+                commandMetric(title: "Decisions", value: "\(decisionNotes.count)", color: decisionNotes.isEmpty ? AppColors.textTertiary : AppColors.accentElectric)
+                commandMetric(title: "Milestones", value: "\(acceptedMilestones.count)", color: acceptedMilestones.isEmpty ? AppColors.textTertiary : AppColors.accentAgent)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Label(nextAction.title, systemImage: nextAction.icon)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(nextAction.color)
+
+                Text(nextAction.detail)
+                    .font(.caption)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(Theme.sm)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(nextAction.color.opacity(0.1))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+
+            Text("Updated \(relativeDate(activeProject.updatedAt)) from ORCA project, task, note, and milestone records.")
+                .font(.caption2)
+                .foregroundStyle(AppColors.textTertiary)
+        }
+    }
+
+    private var decisionQueueSection: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            sectionHeader("DECISION QUEUE", count: pendingDecisions.count)
+
+            if pendingDecisions.isEmpty {
+                Text("No Tony decisions waiting on this project.")
+                    .font(.caption)
+                    .foregroundStyle(AppColors.textTertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(Theme.sm)
+                    .background(AppColors.backgroundTertiary)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+            } else {
+                VStack(spacing: Theme.xs) {
+                    ForEach(Array(pendingDecisions.prefix(4)), id: \.id) { item in
+                        HStack(alignment: .top, spacing: Theme.sm) {
+                            Image(systemName: item.icon)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(item.color)
+                                .frame(width: 18)
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(item.title)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(AppColors.textPrimary)
+                                    .lineLimit(2)
+
+                                Text(item.detail)
+                                    .font(.caption2)
+                                    .foregroundStyle(AppColors.textSecondary)
+                                    .lineLimit(2)
+                            }
+
+                            Spacer(minLength: 0)
+                        }
+                        .padding(Theme.sm)
+                        .background(AppColors.backgroundTertiary)
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+                    }
+                }
+            }
+        }
+    }
+
+    private var workSummarySection: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            sectionHeader("WORKFLOW", count: timelineRows.count)
+
+            if timelineRows.isEmpty {
+                Text("No project activity loaded yet.")
+                    .font(.caption)
+                    .foregroundStyle(AppColors.textTertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(Theme.sm)
+                    .background(AppColors.backgroundTertiary)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+            } else {
+                ProjectWorkflowPreview(rows: timelinePreviewRows)
+            }
+        }
+    }
+
+    private var agentSupportSection: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            sectionHeader("AGENT SUPPORT", count: nil)
+
+            VStack(alignment: .leading, spacing: Theme.xs) {
+                agentSupportRow(
+                    icon: "checkmark.seal",
+                    title: "Ready now",
+                    detail: "Agents can read the project goal, tasks, notes, milestone proposals, and accepted milestones through ORCA.",
+                    color: AppColors.accentSuccess
+                )
+                agentSupportRow(
+                    icon: "link",
+                    title: "Contract gap",
+                    detail: "Linked tickets should become a first-class ORCA project relation instead of a Pod-side guess.",
+                    color: AppColors.accentWarning
+                )
+                agentSupportRow(
+                    icon: "doc.text.magnifyingglass",
+                    title: "Next contract",
+                    detail: "Add `/api/v1/projects/{id}/agent-packet` so Maui, Merman, and workers wake with one canonical project brief.",
+                    color: AppColors.accentElectric
+                )
+            }
+            .padding(Theme.sm)
+            .background(AppColors.backgroundTertiary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+        }
     }
 
     private var proposedMilestonesSection: some View {
@@ -969,6 +1128,156 @@ private struct ORCAProjectDetailView: View {
         && !newNoteBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private var openTasks: [ProjectTaskDTO] {
+        tasks.filter { !closedStatuses.contains($0.status.lowercased()) }
+    }
+
+    private var blockedTasks: [ProjectTaskDTO] {
+        tasks.filter { $0.status.lowercased() == "blocked" }
+    }
+
+    private var decisionNotes: [ProjectNoteDTO] {
+        notes.filter { $0.noteType.lowercased() == "decision" || $0.signState?.lowercased() == "pending" }
+    }
+
+    private var pendingProposals: [ProjectMilestoneProposalDTO] {
+        activeProject.proposedMilestones ?? []
+    }
+
+    private var acceptedMilestones: [ProjectMilestoneDTO] {
+        activeProject.milestones ?? []
+    }
+
+    private var pendingDecisions: [ProjectCommandDecision] {
+        var items = pendingProposals.map {
+            ProjectCommandDecision(
+                title: $0.title,
+                detail: $0.description ?? "Milestone proposal awaiting accept, edit, or drop.",
+                icon: "sparkles",
+                color: AppColors.accentAgent
+            )
+        }
+
+        items.append(contentsOf: decisionNotes.prefix(3).map {
+            ProjectCommandDecision(
+                title: $0.title,
+                detail: $0.body,
+                icon: "signature",
+                color: AppColors.accentElectric
+            )
+        })
+
+        return items
+    }
+
+    private var timelineRows: [ProjectCommandTimelineRow] {
+        var rows: [ProjectCommandTimelineRow] = [
+            ProjectCommandTimelineRow(
+                title: "Project record updated",
+                subtitle: "\(activeProject.status.capitalized) · \(activeProject.stage ?? "stage unknown")",
+                date: activeProject.updatedAt,
+                icon: "folder",
+                color: statusColor
+            )
+        ]
+
+        rows.append(contentsOf: tasks.map {
+            ProjectCommandTimelineRow(
+                title: $0.title,
+                subtitle: "Task · \($0.status.replacingOccurrences(of: "-", with: " "))",
+                date: $0.updatedAt,
+                icon: "checklist",
+                color: taskColor($0)
+            )
+        })
+
+        rows.append(contentsOf: notes.map {
+            ProjectCommandTimelineRow(
+                title: $0.title,
+                subtitle: "\($0.typeLabel) · \($0.source ?? "ORCA note")",
+                date: $0.updatedAt,
+                icon: "note.text",
+                color: AppColors.accentElectric
+            )
+        })
+
+        rows.append(contentsOf: acceptedMilestones.compactMap {
+            guard let acceptedAt = $0.acceptedAt else { return nil }
+            return ProjectCommandTimelineRow(
+                title: $0.title,
+                subtitle: "Accepted milestone",
+                date: acceptedAt,
+                icon: "flag.checkered",
+                color: AppColors.accentSuccess
+            )
+        })
+
+        return rows.sorted { $0.date > $1.date }
+    }
+
+    private var timelinePreviewRows: [ProjectCommandTimelineRow] {
+        Array(timelineRows.prefix(6))
+    }
+
+    private var nextAction: ProjectCommandAction {
+        if !pendingProposals.isEmpty {
+            return ProjectCommandAction(
+                title: "Review milestone proposals",
+                detail: "\(pendingProposals.count) generated milestone\(pendingProposals.count == 1 ? "" : "s") need accept, edit, or drop before the project is cleanly plannable.",
+                icon: "sparkles",
+                color: AppColors.accentAgent
+            )
+        }
+
+        if !blockedTasks.isEmpty {
+            return ProjectCommandAction(
+                title: "Clear blockers",
+                detail: "\(blockedTasks.count) task\(blockedTasks.count == 1 ? "" : "s") marked blocked. Add a note or split work into tickets before dispatch.",
+                icon: "exclamationmark.triangle",
+                color: AppColors.accentWarning
+            )
+        }
+
+        if !openTasks.isEmpty {
+            return ProjectCommandAction(
+                title: "Work open tasks",
+                detail: "\(openTasks.count) open task\(openTasks.count == 1 ? "" : "s") can be used as the next agent handoff surface.",
+                icon: "checklist",
+                color: AppColors.accentElectric
+            )
+        }
+
+        if notes.isEmpty {
+            return ProjectCommandAction(
+                title: "Add project context",
+                detail: "The project has no notes yet. Add a decision, handoff, or finding so agents inherit the why, not only the task list.",
+                icon: "square.and.pencil",
+                color: AppColors.accentWarning
+            )
+        }
+
+        return ProjectCommandAction(
+            title: "Project is tidy",
+            detail: "No pending milestone proposals or open tasks are loaded from ORCA. Keep notes current as the project moves.",
+            icon: "checkmark.circle",
+            color: AppColors.accentSuccess
+        )
+    }
+
+    private var closedStatuses: Set<String> {
+        ["done", "completed", "closed", "archived", "cancelled", "canceled"]
+    }
+
+    private var boardLabel: String {
+        if let boardId = activeProject.boardId {
+            return "board \(shortUUID(boardId))"
+        }
+        if let boardIds = activeProject.boardIds, !boardIds.isEmpty {
+            return "\(boardIds.count) boards"
+        }
+        return "needs home"
+    }
+
     @MainActor
     private func createProjectNote() async {
         guard canSaveProjectNote else { return }
@@ -1013,6 +1322,101 @@ private struct ORCAProjectDetailView: View {
         case 3: return AppColors.accentWarning
         default: return AppColors.textTertiary
         }
+    }
+
+    private var statusColor: Color {
+        switch activeProject.status.lowercased() {
+        case "done", "completed", "shipped":
+            return AppColors.accentSuccess
+        case "blocked":
+            return AppColors.accentDanger
+        case "in-progress", "in_progress", "active", "live":
+            return AppColors.accentElectric
+        case "backlog", "scoping":
+            return AppColors.accentWarning
+        default:
+            return AppColors.textTertiary
+        }
+    }
+
+    private func sectionHeader(_ title: String, count: Int?) -> some View {
+        HStack(spacing: Theme.xs) {
+            Text(title)
+                .podTextStyle(.label, color: AppColors.textTertiary)
+
+            if let count, count > 0 {
+                Text("\(count)")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(AppColors.accentElectric)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(AppColors.accentElectric.opacity(0.12))
+                    .clipShape(Capsule())
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func commandMetric(title: String, value: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(value)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(color)
+
+            Text(title)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(AppColors.textTertiary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .padding(Theme.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+    }
+
+    private func agentSupportRow(icon: String, title: String, detail: String, color: Color) -> some View {
+        HStack(alignment: .top, spacing: Theme.sm) {
+            Image(systemName: icon)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(color)
+                .frame(width: 18)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.textPrimary)
+
+                Text(detail)
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func taskColor(_ task: ProjectTaskDTO) -> Color {
+        switch task.status.lowercased() {
+        case "done", "completed", "closed":
+            return AppColors.accentSuccess
+        case "blocked":
+            return AppColors.accentDanger
+        case "in-progress", "in_progress", "active":
+            return AppColors.accentElectric
+        default:
+            return AppColors.textTertiary
+        }
+    }
+
+    private func relativeDate(_ date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
+
+    private func shortUUID(_ uuid: UUID) -> String {
+        String(uuid.uuidString.prefix(8)).lowercased()
     }
 
     private func formatDate(_ date: Date) -> String {
@@ -1158,6 +1562,80 @@ private struct ORCAProjectDetailView: View {
         }
     }
 	}
+
+private struct ProjectCommandAction {
+    let title: String
+    let detail: String
+    let icon: String
+    let color: Color
+}
+
+private struct ProjectCommandDecision: Identifiable {
+    let id = UUID()
+    let title: String
+    let detail: String
+    let icon: String
+    let color: Color
+}
+
+private struct ProjectCommandTimelineRow: Identifiable {
+    let id = UUID()
+    let title: String
+    let subtitle: String
+    let date: Date
+    let icon: String
+    let color: Color
+}
+
+private struct ProjectWorkflowPreview: View {
+    let rows: [ProjectCommandTimelineRow]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                HStack(alignment: .top, spacing: Theme.sm) {
+                    Image(systemName: row.icon)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(row.color)
+                        .frame(width: 18)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(row.title)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppColors.textPrimary)
+                            .lineLimit(1)
+
+                        Text(row.subtitle)
+                            .font(.caption2)
+                            .foregroundStyle(AppColors.textSecondary)
+                            .lineLimit(2)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Text(relativeDate(row.date))
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.textTertiary)
+                        .lineLimit(1)
+                }
+                .padding(.vertical, Theme.xs)
+
+                if index < rows.count - 1 {
+                    Divider().overlay(AppColors.border)
+                }
+            }
+        }
+        .padding(.horizontal, Theme.sm)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+    }
+
+    private func relativeDate(_ date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
+}
 
 private struct ProjectMilestoneEditorSheet: View {
     @Environment(\.dismiss) private var dismiss

@@ -10,15 +10,24 @@ final class VoiceCompanionViewModel: ObservableObject {
     @Published var partialTranscript: String = ""
     @Published var statusText: String = "Tap and hold to speak"
     @Published var errorMessage: String?
+    @Published var realtimePackageText: String = "LiveKit package selected; checking ORCA..."
+    @Published var realtimeSessionText: String?
+    @Published var isPreparingRealtimeSession: Bool = false
+    @Published var isRealtimeConnected: Bool = false
+    @Published var realtimeRemoteParticipantCount: Int = 0
+    @Published var realtimeProviderStatus: RealtimeProviderStatus = .checking
 
     // Routing toggles
     @Published var routeToClaude: Bool = true
     @Published var routeToOpenClaw: Bool = true
+    @Published var routeToRealtimePackage: Bool = true
 
     // MARK: - Dependencies
     private let speechRecorder: SpeechRecorder
     private let claudeClient: ClaudeClient?
     private let openClawClient: OpenClawClient
+    private let liveKitConnection: LiveKitVoiceConnection
+    private var realtimeParticipantPollTask: Task<Void, Never>?
 
     // MARK: - System Prompt
     private let systemPrompt = """
@@ -45,6 +54,9 @@ final class VoiceCompanionViewModel: ObservableObject {
         }
 
         self.openClawClient = OpenClawClient()
+        self.liveKitConnection = LiveKitVoiceConnection()
+
+        Task { await refreshRealtimeProviderStatus() }
     }
 
     // MARK: - Recording Control
@@ -98,6 +110,94 @@ final class VoiceCompanionViewModel: ObservableObject {
         isRecording = false
         partialTranscript = ""
         statusText = "Tap and hold to speak"
+    }
+
+    // MARK: - Realtime Package
+    func refreshRealtimeProviderStatus() async {
+        realtimeProviderStatus = .checking
+        do {
+            let providers = try await openClawClient.fetchVoiceProviders()
+            if let liveKit = providers.first(where: { $0.provider == "livekit" }) {
+                if liveKit.configured {
+                    realtimeProviderStatus = .configured
+                    realtimePackageText = "LiveKit package ready: \(liveKit.livekitUrl ?? "configured")"
+                } else {
+                    realtimeProviderStatus = .needsConfiguration
+                    realtimePackageText = "LiveKit package selected; ORCA needs LIVEKIT_URL/API credentials"
+                }
+            } else {
+                realtimeProviderStatus = .unavailable
+                realtimePackageText = "No realtime voice package registered in ORCA"
+            }
+        } catch {
+            realtimeProviderStatus = .failed
+            realtimePackageText = "Could not read ORCA voice package status"
+        }
+    }
+
+    func prepareRealtimeSession() async {
+        guard routeToRealtimePackage else { return }
+        isPreparingRealtimeSession = true
+        defer { isPreparingRealtimeSession = false }
+        do {
+            let session = try await openClawClient.createLiveKitSession(agentSlug: "aloha", participantName: "Tony")
+            realtimeSessionText = "LiveKit room ready: \(session.roomName)"
+            statusText = "Realtime room prepared. Ready to join."
+        } catch {
+            realtimeSessionText = nil
+            errorMessage = "LiveKit session not ready: \(error.localizedDescription)"
+            await refreshRealtimeProviderStatus()
+        }
+    }
+
+    func joinRealtimeVoice() async {
+        guard routeToRealtimePackage else { return }
+        stopRealtimeParticipantStatusPolling()
+        isPreparingRealtimeSession = true
+        defer { isPreparingRealtimeSession = false }
+
+        do {
+            let session = try await openClawClient.createLiveKitSession(agentSlug: "aloha", participantName: "Tony")
+            realtimeSessionText = "LiveKit room ready: \(session.roomName)"
+            try await liveKitConnection.connect(session: session)
+            isRealtimeConnected = liveKitConnection.isConnected
+            realtimeRemoteParticipantCount = liveKitConnection.remoteParticipantCount
+            statusText = liveKitConnection.state.displayText
+            startRealtimeParticipantStatusPolling()
+        } catch {
+            isRealtimeConnected = liveKitConnection.isConnected
+            realtimeRemoteParticipantCount = liveKitConnection.remoteParticipantCount
+            realtimeSessionText = liveKitConnection.state.displayText
+            errorMessage = "LiveKit voice could not join: \(error.localizedDescription)"
+            await refreshRealtimeProviderStatus()
+        }
+    }
+
+    func leaveRealtimeVoice() async {
+        stopRealtimeParticipantStatusPolling()
+        await liveKitConnection.disconnect()
+        isRealtimeConnected = false
+        realtimeRemoteParticipantCount = 0
+        realtimeSessionText = liveKitConnection.state.displayText
+        statusText = "Realtime voice left"
+    }
+
+    private func startRealtimeParticipantStatusPolling() {
+        stopRealtimeParticipantStatusPolling()
+        realtimeParticipantPollTask = Task { [weak self] in
+            while self?.liveKitConnection.isConnected == true {
+                guard let self else { return }
+                self.realtimeRemoteParticipantCount = self.liveKitConnection.remoteParticipantCount
+                self.statusText = self.liveKitConnection.state.displayText
+                self.realtimeSessionText = self.liveKitConnection.state.displayText
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+            }
+        }
+    }
+
+    private func stopRealtimeParticipantStatusPolling() {
+        realtimeParticipantPollTask?.cancel()
+        realtimeParticipantPollTask = nil
     }
 
     // MARK: - Message Processing
@@ -164,6 +264,14 @@ final class VoiceCompanionViewModel: ObservableObject {
 }
 
 // MARK: - Supporting Types
+
+enum RealtimeProviderStatus: Equatable {
+    case checking
+    case configured
+    case needsConfiguration
+    case unavailable
+    case failed
+}
 
 struct VoiceMessage: Identifiable {
     let id: UUID

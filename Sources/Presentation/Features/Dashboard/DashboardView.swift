@@ -8,9 +8,12 @@ struct DashboardView: View {
     @State private var viewModel = DashboardViewModel()
     @State private var briefingModel = DashboardBriefingDoctrineModel()
     @State private var fundLandingModel = FundLandingViewModel()
+    @State private var fundUniverseLoopModel = FundUniverseLoopViewModel()
+    @State private var voiceViewModel = VoiceCompanionViewModel()
     @State private var selectedAgent: Agent?
     @State private var selectedBriefingSheet: DashboardBriefingSheetKind?
     @State private var showingFundLanding = false
+    @State private var showingVoiceRoom = false
     @State private var showingSettings = false
     @AppStorage("orca_display_name") private var displayName: String = "Captain"
 
@@ -26,16 +29,19 @@ struct DashboardView: View {
                     // 1. Agent status strip — fast lab pulse before owner-action queues.
                     agentStatusStrip
 
-                    // 2. Protected Fund visibility — read-only, no controls.
+                    // 2. Voice room status — primary realtime chat surface.
+                    dashboardVoiceBanner
+
+                    // 3. Protected Fund visibility — read-only, no controls.
                     dashboardFundLandingCard
 
-                    // 3. Tier 1 sign queue — "what needs your eyes"
+                    // 4. Tier 1 sign queue — "what needs your eyes"
                     CockpitSignQueueSection()
 
-                    // 4. Compact briefing + doctrine velocity line
+                    // 5. Compact briefing + doctrine velocity line
                     cockpitBriefingLine
 
-                    // 5. Top flow card — one blocker, tap → Work
+                    // 6. Top flow card — one blocker, tap → Work
                     cockpitFlowCard
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -53,6 +59,7 @@ struct DashboardView: View {
                             await viewModel.loadDashboard()
                             await briefingModel.load(force: true)
                             await fundLandingModel.load()
+                            await fundUniverseLoopModel.load()
                         }
                     } label: {
                         Image(systemName: viewModel.isLoading ? "hourglass" : "arrow.clockwise")
@@ -83,13 +90,20 @@ struct DashboardView: View {
                 SettingsView()
             }
             .sheet(isPresented: $showingFundLanding) {
-                FundLandingDetailSheet(landing: fundLandingModel.landing)
+                FundLandingDetailSheet(
+                    landing: fundLandingModel.landing,
+                    universeLoop: fundUniverseLoopModel.response
+                )
                     .presentationDetents([.medium, .large])
+            }
+            .sheet(isPresented: $showingVoiceRoom) {
+                VoiceCompanionView(viewModel: voiceViewModel)
             }
             .task {
                 await viewModel.loadDashboard()
                 await briefingModel.load()
                 await fundLandingModel.load()
+                await fundUniverseLoopModel.load()
             }
             .task {
                 await viewModel.startFlowReviewPolling()
@@ -98,6 +112,136 @@ struct DashboardView: View {
     }
 
     // MARK: - Fund Landing
+
+    private var dashboardVoiceBanner: some View {
+        Button {
+            showingVoiceRoom = true
+        } label: {
+            HStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(voiceStatusColor.opacity(0.14))
+                        .frame(width: 34, height: 34)
+
+                    Image(systemName: voiceBannerIcon)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(voiceStatusColor)
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Pod Voice Room")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(AppColors.textPrimary)
+
+                    Text(voiceBannerSubtitle)
+                        .font(.system(size: 11))
+                        .foregroundColor(AppColors.textSecondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Text(voiceBannerBadge)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(voiceStatusColor)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(voiceStatusColor.opacity(0.12))
+                    .clipShape(Capsule())
+
+                Image(systemName: "phone.arrow.up.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(voiceStatusColor)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(AppColors.backgroundSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                    .strokeBorder(voiceStatusColor.opacity(0.22), lineWidth: 0.75)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var voiceBannerIcon: String {
+        if voiceViewModel.isRealtimeConnected { return "waveform.circle.fill" }
+        switch voiceViewModel.realtimeProviderStatus {
+        case .checking:
+            return "mic.circle.fill"
+        case .configured:
+            return "phone.circle.fill"
+        case .needsConfiguration, .unavailable, .failed:
+            return "exclamationmark.circle.fill"
+        }
+    }
+
+    private var voiceBannerSubtitle: String {
+        if voiceViewModel.isRealtimeConnected {
+            return voiceViewModel.realtimeRemoteParticipantCount > 0
+                ? "Live with Aloha"
+                : "Connected; waiting for Aloha worker"
+        }
+        if voiceViewModel.isPreparingRealtimeSession {
+            return "Preparing LiveKit room"
+        }
+        if let sessionText = voiceViewModel.realtimeSessionText, sessionText.localizedCaseInsensitiveContains("ready") {
+            return "Session ready to join"
+        }
+        switch voiceViewModel.realtimeProviderStatus {
+        case .checking:
+            return "Checking ORCA voice package"
+        case .configured:
+            return "LiveKit configured; no active room"
+        case .needsConfiguration:
+            return "LiveKit needs ORCA credentials"
+        case .unavailable:
+            return "No voice package registered"
+        case .failed:
+            return "Could not verify voice package"
+        }
+    }
+
+    private var voiceBannerBadge: String {
+        if voiceViewModel.isRealtimeConnected {
+            return voiceViewModel.realtimeRemoteParticipantCount > 0 ? "LIVE" : "WAITING"
+        }
+        if voiceViewModel.isPreparingRealtimeSession { return "PREP" }
+        if let sessionText = voiceViewModel.realtimeSessionText, sessionText.localizedCaseInsensitiveContains("ready") {
+            return "SESSION"
+        }
+        switch voiceViewModel.realtimeProviderStatus {
+        case .checking:
+            return "CHECK"
+        case .configured:
+            return "CONFIG"
+        case .needsConfiguration:
+            return "SETUP"
+        case .unavailable:
+            return "OFF"
+        case .failed:
+            return "ERROR"
+        }
+    }
+
+    private var voiceStatusColor: Color {
+        if voiceViewModel.isRealtimeConnected {
+            return voiceViewModel.realtimeRemoteParticipantCount > 0 ? AppColors.accentSuccess : AppColors.accentWarning
+        }
+        if voiceViewModel.isPreparingRealtimeSession { return AppColors.accentElectric }
+        if let sessionText = voiceViewModel.realtimeSessionText, sessionText.localizedCaseInsensitiveContains("ready") {
+            return AppColors.accentElectric
+        }
+        switch voiceViewModel.realtimeProviderStatus {
+        case .checking, .configured:
+            return AppColors.accentElectric
+        case .needsConfiguration:
+            return AppColors.accentWarning
+        case .unavailable, .failed:
+            return AppColors.accentDanger
+        }
+    }
 
     private var dashboardFundLandingCard: some View {
         Button {
@@ -1126,6 +1270,7 @@ private enum DashboardBriefingSheetKind: String, Identifiable {
 
 private struct FundLandingDetailSheet: View {
     let landing: FundLanding?
+    let universeLoop: FundOSProductResponse?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -1163,6 +1308,8 @@ private struct FundLandingDetailSheet: View {
                             detailMetric("Landing", landing.summary?.agentLandingReady == true ? "ready" : "-")
                             detailMetric("Data App", landing.summary?.dataApplicationStatus ?? landing.agentLanding?.dataApplication?.status ?? "-")
                         }
+
+                        universeLoopCard
 
                         if let agentLanding = landing.agentLanding {
                             VStack(alignment: .leading, spacing: 8) {
@@ -1255,6 +1402,56 @@ private struct FundLandingDetailSheet: View {
         }
     }
 
+    @ViewBuilder
+    private var universeLoopCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "point.3.connected.trianglepath.dotted")
+                    .foregroundColor(AppColors.accentWarning)
+                Text("UNIVERSE LOOP")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(AppColors.textTertiary)
+                Spacer()
+                if let universeLoop {
+                    detailStatusPill(universeLoop.isAvailable ? "READ-ONLY" : "DEGRADED", color: universeLoop.isAvailable ? AppColors.accentSuccess : AppColors.accentWarning)
+                } else {
+                    detailStatusPill("WAITING", color: AppColors.textTertiary)
+                }
+            }
+
+            if let universeLoop, let loop = universeLoop.data {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                    detailMetric("Loop", loop.displayStatus)
+                    detailMetric("Miner", loop.minerStatus ?? "-")
+                    detailMetric("Queue", loop.queueItems.map(String.init) ?? "-")
+                    detailMetric("Urgent", loop.urgentSymbols?.joined(separator: ", ") ?? "-")
+                    detailMetric("Reviews", loop.completedReviews.map(String.init) ?? "-")
+                    detailMetric("Calibration", loop.calibrationPendingRows.map(String.init) ?? "-")
+                }
+                if !loop.displayBlockers.isEmpty {
+                    Text("Blockers: \(loop.displayBlockers.joined(separator: ", "))")
+                        .font(.system(size: 11))
+                        .foregroundColor(AppColors.textSecondary)
+                }
+                if let nextActions = loop.nextActions, !nextActions.isEmpty {
+                    Text("Next: \(nextActions.joined(separator: " · "))")
+                        .font(.system(size: 11))
+                        .foregroundColor(AppColors.textSecondary)
+                }
+                Text("No Miner dispatch, broker action, strategy promotion, or runtime mutation.")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(AppColors.accentWarning)
+            } else {
+                Text(universeLoop?.degradedReason ?? "Universe Loop is waiting for ORCA.")
+                    .font(.system(size: 12))
+                    .foregroundColor(AppColors.textSecondary)
+            }
+        }
+        .padding(12)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
     private func detailMetric(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label.uppercased())
@@ -1270,6 +1467,16 @@ private struct FundLandingDetailSheet: View {
         .padding(10)
         .background(AppColors.backgroundSecondary)
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func detailStatusPill(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.system(size: 10, weight: .bold))
+            .foregroundColor(color)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(color.opacity(0.12))
+            .clipShape(Capsule())
     }
 
     private func money(_ value: Double?) -> String {

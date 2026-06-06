@@ -71,7 +71,7 @@ struct podApp: App {
     }
 
     private func handleURL(_ url: URL) {
-        print("[podApp] URL received: \(url)")
+        print("[podApp] connect URL received")
         // pod://connect/<token> — bypasses the login form
         guard url.scheme == "pod",
               url.host == "connect",

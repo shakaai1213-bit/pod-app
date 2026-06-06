@@ -181,6 +181,8 @@ struct PredictionRadar {
     let feedbackRequestCount: Int
     let feedbackByOwner: [String: Int]
     let highPriority: [PredictionRadarRequest]
+    let modelVersions: [String: Int]
+    let missingDecisionTrace: Int
     let computeRunId: String?
     let computeStatus: String?
     let computeBackend: String?
@@ -802,11 +804,13 @@ private struct PredictionRadarDTO: Decodable {
     let market: Market?
     let earnings: Earnings?
     let feedback: Feedback?
+    let modelRegistry: ModelRegistry?
     let compute: Compute?
 
     private enum CodingKeys: String, CodingKey {
         case generatedAt = "generated_at"
         case status, market, earnings, feedback, compute
+        case modelRegistry = "model_registry"
     }
 
     struct Market: Decodable {
@@ -867,6 +871,16 @@ private struct PredictionRadarDTO: Decodable {
         }
     }
 
+    struct ModelRegistry: Decodable {
+        let missingTrace: Int?
+        let versions: [String: Int]?
+
+        private enum CodingKeys: String, CodingKey {
+            case missingTrace = "missing_trace"
+            case versions
+        }
+    }
+
     func toDomain() -> PredictionRadar {
         PredictionRadar(
             generatedAt: generatedAt,
@@ -877,6 +891,8 @@ private struct PredictionRadarDTO: Decodable {
             feedbackRequestCount: feedback?.requestCount ?? 0,
             feedbackByOwner: feedback?.requestsByOwner ?? [:],
             highPriority: feedback?.highPriority?.map { $0.toDomain() } ?? [],
+            modelVersions: modelRegistry?.versions ?? [:],
+            missingDecisionTrace: modelRegistry?.missingTrace ?? 0,
             computeRunId: compute?.computeRunId,
             computeStatus: compute?.status,
             computeBackend: compute?.actualBackend

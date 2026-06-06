@@ -1010,6 +1010,186 @@ struct StorageHygieneTicket: Codable, Hashable, Sendable {
     }
 }
 
+struct SkillLabSkill: Codable, Identifiable, Hashable, Sendable {
+    let id: UUID
+    let slug: String
+    let title: String
+    let purpose: String
+    let ownerAgent: String
+    let safetyOwner: String
+    let standardsOwner: String
+    let domain: String
+    let protected: Bool
+    let status: String
+    let activeVersionId: UUID?
+    let latestCandidateId: UUID?
+    let createdAt: Date
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, slug, title, purpose, domain, protected, status
+        case ownerAgent = "owner_agent"
+        case safetyOwner = "safety_owner"
+        case standardsOwner = "standards_owner"
+        case activeVersionId = "active_version_id"
+        case latestCandidateId = "latest_candidate_id"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+}
+
+struct SkillLabPromotionCandidate: Codable, Identifiable, Hashable, Sendable {
+    let id: UUID
+    let skillId: UUID
+    let status: String
+    let reviewState: String
+    let requiredReviewers: [String]?
+    let reviewersCompleted: [String]?
+    let riskLevel: String
+    let protected: Bool
+    let summary: String?
+    let diffSummary: String?
+    let approvalGate: String?
+    let createdAt: Date
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, status, protected, summary
+        case skillId = "skill_id"
+        case reviewState = "review_state"
+        case requiredReviewers = "required_reviewers"
+        case reviewersCompleted = "reviewers_completed"
+        case riskLevel = "risk_level"
+        case diffSummary = "diff_summary"
+        case approvalGate = "approval_gate"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+}
+
+struct SkillLabEvalRun: Codable, Identifiable, Hashable, Sendable {
+    let id: UUID
+    let skillId: UUID
+    let status: String
+    let benchmarkName: String
+    let optimizerRoute: String?
+    let targetRoute: String?
+    let validationScore: Double?
+    let testScore: Double?
+    let baselineScore: Double?
+    let regressionCount: Int
+    let accepted: Bool
+    let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, status, accepted
+        case skillId = "skill_id"
+        case benchmarkName = "benchmark_name"
+        case optimizerRoute = "optimizer_route"
+        case targetRoute = "target_route"
+        case validationScore = "validation_score"
+        case testScore = "test_score"
+        case baselineScore = "baseline_score"
+        case regressionCount = "regression_count"
+        case createdAt = "created_at"
+    }
+}
+
+struct SkillLabEvalCase: Codable, Identifiable, Hashable, Sendable {
+    let id: UUID
+    let skillId: UUID
+    let benchmarkName: String
+    let caseId: String
+    let inputText: String
+    let expectedOwnerAgent: String?
+    let expectedWorkerLane: String?
+    let expectedDeliveryMode: String?
+    let expectedNeedsTicket: Bool?
+    let expectedNeedsApproval: Bool?
+    let expectedRiskLevel: String?
+    let expectedNextAction: String?
+    let protected: Bool
+    let sourceRef: String?
+    let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, protected
+        case skillId = "skill_id"
+        case benchmarkName = "benchmark_name"
+        case caseId = "case_id"
+        case inputText = "input_text"
+        case expectedOwnerAgent = "expected_owner_agent"
+        case expectedWorkerLane = "expected_worker_lane"
+        case expectedDeliveryMode = "expected_delivery_mode"
+        case expectedNeedsTicket = "expected_needs_ticket"
+        case expectedNeedsApproval = "expected_needs_approval"
+        case expectedRiskLevel = "expected_risk_level"
+        case expectedNextAction = "expected_next_action"
+        case sourceRef = "source_ref"
+        case createdAt = "created_at"
+    }
+}
+
+struct SkillLabOverview: Codable, Hashable, Sendable {
+    let status: String
+    let route: String
+    let policy: String
+    let counts: [String: Int]
+    let skills: [SkillLabSkill]
+    let pendingPromotions: [SkillLabPromotionCandidate]
+    let recentEvalRuns: [SkillLabEvalRun]
+
+    enum CodingKeys: String, CodingKey {
+        case status, route, policy, counts, skills
+        case pendingPromotions = "pending_promotions"
+        case recentEvalRuns = "recent_eval_runs"
+    }
+}
+
+struct SkillLabDetail: Codable, Hashable, Sendable {
+    let status: String
+    let route: String
+    let policy: String
+    let skill: SkillLabSkill
+    let versions: [SkillLabVersion]
+    let evalCases: [SkillLabEvalCase]
+    let evalRuns: [SkillLabEvalRun]
+    let promotionCandidates: [SkillLabPromotionCandidate]
+    let counts: [String: Int]
+
+    enum CodingKeys: String, CodingKey {
+        case status, route, policy, skill, versions, counts
+        case evalCases = "eval_cases"
+        case evalRuns = "eval_runs"
+        case promotionCandidates = "promotion_candidates"
+    }
+}
+
+struct SkillLabVersion: Codable, Identifiable, Hashable, Sendable {
+    let id: UUID
+    let skillId: UUID
+    let version: String
+    let status: String
+    let skillText: String?
+    let skillPath: String?
+    let source: String
+    let sourceRef: String?
+    let benchmarkRef: String?
+    let createdBy: String?
+    let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, version, status, source
+        case skillId = "skill_id"
+        case skillText = "skill_text"
+        case skillPath = "skill_path"
+        case sourceRef = "source_ref"
+        case benchmarkRef = "benchmark_ref"
+        case createdBy = "created_by"
+        case createdAt = "created_at"
+    }
+}
+
 struct OrcaNote: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     let organizationId: UUID?
@@ -1181,6 +1361,8 @@ final class KnowledgeViewModel {
     var noteGovernanceAudit: NoteGovernanceAuditResponse?
     var noteGovernanceQueue: NoteGovernanceQueueResponse?
     var noteGovernanceExport: NoteGovernanceExportResponse?
+    var skillLabOverview: SkillLabOverview?
+    var selectedSkillLabDetail: SkillLabDetail?
     var isLoading: Bool = false
     var isLoadingWiki: Bool = false
     var isLoadingWikiDocuments: Bool = false
@@ -1194,6 +1376,8 @@ final class KnowledgeViewModel {
     var isLoadingMemoryCandidates: Bool = false
     var isLoadingMemoryQuery: Bool = false
     var isLoadingNotes: Bool = false
+    var isLoadingSkillLab: Bool = false
+    var isLoadingSkillLabDetail: Bool = false
     var isExportingReviewSync: Bool = false
     var isExportingRuntimeSync: Bool = false
     var isExportingRuntimeBurnDown: Bool = false
@@ -1218,6 +1402,8 @@ final class KnowledgeViewModel {
     var notesErrorMessage: String?
     var noteGovernanceErrorMessage: String?
     var noteGovernanceExportMessage: String?
+    var skillLabErrorMessage: String?
+    var skillLabDetailErrorMessage: String?
     var storageHygieneMessage: String?
     var memoryPromotionMessage: String?
     var memoryActionMessage: String?
@@ -1553,6 +1739,43 @@ final class KnowledgeViewModel {
                 self.runtimeSyncExports = []
                 self.runtimeBurnDownExports = []
                 self.isLoadingRuntimeSync = false
+            }
+        }
+    }
+
+    func loadSkillLab() async {
+        isLoadingSkillLab = true
+        skillLabErrorMessage = nil
+
+        do {
+            let overview: SkillLabOverview = try await APIClient.shared.get(path: "/api/v1/skill-lab")
+            await MainActor.run {
+                self.skillLabOverview = overview
+                self.isLoadingSkillLab = false
+            }
+        } catch {
+            await MainActor.run {
+                self.skillLabErrorMessage = error.localizedDescription
+                self.isLoadingSkillLab = false
+            }
+        }
+    }
+
+    func openSkillLabDetail(_ skill: SkillLabSkill) async {
+        selectedSkillLabDetail = nil
+        isLoadingSkillLabDetail = true
+        skillLabDetailErrorMessage = nil
+
+        do {
+            let detail: SkillLabDetail = try await APIClient.shared.get(path: "/api/v1/skill-lab/skills/\(skill.id.uuidString)")
+            await MainActor.run {
+                self.selectedSkillLabDetail = detail
+                self.isLoadingSkillLabDetail = false
+            }
+        } catch {
+            await MainActor.run {
+                self.skillLabDetailErrorMessage = error.localizedDescription
+                self.isLoadingSkillLabDetail = false
             }
         }
     }

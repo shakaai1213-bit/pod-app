@@ -19,6 +19,10 @@ struct ArmsTabView: View {
                             .padding(.bottom, 12)
                     }
 
+                    orcaMiniSection
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 14)
+
                     armFamilyPicker
                         .padding(.horizontal, 16)
                         .padding(.bottom, 14)
@@ -31,6 +35,31 @@ struct ArmsTabView: View {
             .background(AppColors.backgroundPrimary.ignoresSafeArea())
             .refreshable { await viewModel.load() }
             .task { await viewModel.startPolling() }
+            .confirmationDialog(
+                "Confirm arm dispatch",
+                isPresented: Binding(
+                    get: { viewModel.pendingWakeConfirmation != nil },
+                    set: { isPresented in
+                        if !isPresented {
+                            viewModel.pendingWakeConfirmation = nil
+                        }
+                    }
+                ),
+                titleVisibility: .visible
+            ) {
+                if let confirmation = viewModel.pendingWakeConfirmation {
+                    Button(confirmation.action == .greenLight
+                           ? "Green Light \(confirmation.arm.displayName)"
+                           : "Wake \(confirmation.arm.displayName)") {
+                        Task { await viewModel.confirmPendingWake() }
+                    }
+                }
+                Button("Cancel", role: .cancel) {
+                    viewModel.pendingWakeConfirmation = nil
+                }
+            } message: {
+                Text(viewModel.pendingWakeConfirmation?.reason ?? "This arm requires confirmation before wake.")
+            }
             .overlay(alignment: .bottom) {
                 if let toast = viewModel.toast {
                     toastView(toast)
@@ -87,6 +116,13 @@ struct ArmsTabView: View {
                     armCard(arm)
                 }
             }
+        }
+    }
+
+    private var orcaMiniSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionHeader("INFRA", count: 1, suffix: "surface")
+            orcaMiniCard(viewModel.orcaMiniStatus)
         }
     }
 
@@ -155,6 +191,9 @@ struct ArmsTabView: View {
                 if arm.directive != nil || arm.directiveStatus != nil {
                     valueRow(label: "Directive", value: arm.directiveStatusLabel)
                 }
+                if arm.directive != nil || arm.reviewState != nil {
+                    reviewRow(arm)
+                }
                 if arm.protected, let reason = arm.protectionReason, !reason.isEmpty {
                     protectedRow(reason)
                 }
@@ -202,7 +241,17 @@ struct ArmsTabView: View {
                     .disabled(viewModel.isBusy(arm))
                 }
 
-                Text("Directives stay in ORCA. Green Light uses the arm's existing directive and the arm reports status back here.")
+                if arm.canRequestReview {
+                    Button {
+                        Task { await viewModel.markReadyForReview(arm) }
+                    } label: {
+                        actionLabel(title: "Ready for \(arm.directiveActor.capitalized) Review", systemImage: "eyes", isBusy: viewModel.isBusy(arm))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.isBusy(arm) || arm.reviewState == arm.reviewReadyState)
+                }
+
+                Text("Maui directs Maui arms. Chief directs Chief arms. Arms report progress and readiness here; approvals stay with the main agents.")
                     .font(.system(size: 11))
                     .foregroundColor(AppColors.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -231,6 +280,100 @@ struct ArmsTabView: View {
         .padding(.vertical, 5)
         .background(arm.stateColor.opacity(0.12))
         .clipShape(Capsule())
+    }
+
+    private func orcaMiniCard(_ status: OrcaMiniStatus) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: "server.rack")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(status.statusColor)
+                    .frame(width: 34, height: 34)
+                    .background(status.statusColor.opacity(0.13))
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("ORCA Mini")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(AppColors.textPrimary)
+                    Text(status.tagId)
+                        .font(.system(size: 11))
+                        .foregroundColor(AppColors.textTertiary)
+                }
+
+                Spacer(minLength: 6)
+
+                miniStatusChip(status)
+            }
+
+            if !status.badges.isEmpty {
+                FlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                    ForEach(status.badges, id: \.label) { badge in
+                        miniBadge(badge)
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                miniMetricRow(label: "Disk", value: status.disk)
+                miniMetricRow(label: "Containers", value: status.containers)
+                miniMetricRow(label: "NFS", value: status.nfs)
+                miniMetricRow(label: "NATS", value: status.nats)
+                miniMetricRow(label: "Backup", value: status.lastBackup)
+                miniMetricRow(label: "Fresh", value: status.freshnessLabel)
+                if let source = status.source, !source.isEmpty {
+                    miniMetricRow(label: "Source", value: source)
+                }
+            }
+        }
+        .padding(14)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                .strokeBorder(status.statusColor.opacity(0.75), lineWidth: 1)
+        )
+    }
+
+    private func miniStatusChip(_ status: OrcaMiniStatus) -> some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(status.statusColor)
+                .frame(width: 7, height: 7)
+            Text(status.statusLabel)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(status.statusColor)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(status.statusColor.opacity(0.12))
+        .clipShape(Capsule())
+    }
+
+    private func miniBadge(_ badge: OrcaMiniBadge) -> some View {
+        Text(badge.label)
+            .font(.system(size: 10, weight: .bold))
+            .foregroundColor(badge.color)
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(badge.color.opacity(0.12))
+            .clipShape(Capsule())
+    }
+
+    private func miniMetricRow(label: String, value: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(label.uppercased())
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(AppColors.textTertiary)
+                .frame(width: 74, alignment: .leading)
+            Text(value)
+                .font(.system(size: 13))
+                .foregroundColor(AppColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
     }
 
     private func valueRow(label: String, value: String) -> some View {
@@ -315,6 +458,44 @@ struct ArmsTabView: View {
         }
         .padding(10)
         .background(AppColors.accentWarning.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func reviewRow(_ arm: ArmTag) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "eyes")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(arm.reviewStatusColor)
+                .frame(width: 58, alignment: .leading)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text("Review")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(arm.reviewStatusColor)
+                    Text(arm.reviewStatusLabel)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(arm.reviewStatusColor)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(arm.reviewStatusColor.opacity(0.12))
+                        .clipShape(Capsule())
+                }
+                if let reviewNote = arm.reviewNote, !reviewNote.isEmpty {
+                    Text(reviewNote)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(AppColors.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let reviewer = arm.reviewReportedBy, !reviewer.isEmpty {
+                    Text("by \(reviewer)")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(AppColors.textTertiary)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .background(arm.reviewStatusColor.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
@@ -490,6 +671,8 @@ struct ArmsTabView: View {
         case "chief-data": return "externaldrive.connected.to.line.below"
         case "chief-predictions": return "waveform.path.ecg.rectangle"
         case "chief-research": return "magnifyingglass"
+        case "chief-ml": return "point.3.connected.trianglepath.dotted"
+        case "chief-algos": return "curlybraces.square"
         default: return "person.crop.circle"
         }
     }

@@ -4005,10 +4005,20 @@ struct DMBubble: View {
                 if isUser,
                    DMUserMessageDeliveryState.parse(message.userDeliveryState) == .failed,
                    let retry = onRetry {
-                    Button(action: retry) {
-                        Label("Retry", systemImage: "arrow.clockwise")
-                            .font(.caption.weight(.medium))
+                    HStack(spacing: 8) {
+                        Label("Failed", systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption2.weight(.semibold))
                             .foregroundColor(AppColors.accentDanger)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(AppColors.accentDanger.opacity(0.12))
+                            .clipShape(Capsule())
+
+                        Button(action: retry) {
+                            Label("Retry", systemImage: "arrow.clockwise")
+                                .font(.caption.weight(.medium))
+                                .foregroundColor(AppColors.accentDanger)
+                        }
                     }
                     .padding(.top, 2)
                 }

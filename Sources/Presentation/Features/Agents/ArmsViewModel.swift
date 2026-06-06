@@ -5,6 +5,7 @@ import SwiftUI
 final class ArmsViewModel {
     var arms: [ArmTag] = ArmTag.placeholderArms
     var chiefArms: [ArmTag] = ArmTag.placeholderChiefArms
+    var orcaMiniStatus: OrcaMiniStatus = .missing()
     var directiveDrafts: [String: String] = [:]
     var expandedShipArms: Set<String> = []
     var shipHistoryByArm: [String: [ArmShip]] = [:]
@@ -12,6 +13,7 @@ final class ArmsViewModel {
     var isLoading = false
     var errorMessage: String?
     var toast: ArmsToast?
+    var pendingWakeConfirmation: WakeConfirmation?
 
     private let apiClient: APIClient
 
@@ -32,7 +34,22 @@ final class ArmsViewModel {
     func loadArms() async {
         async let mauiTask: Void = loadMauiArms()
         async let chiefTask: Void = loadChiefArms()
-        _ = await (mauiTask, chiefTask)
+        async let miniTask: Void = loadOrcaMiniStatus()
+        _ = await (mauiTask, chiefTask, miniTask)
+    }
+
+    @MainActor
+    private func loadOrcaMiniStatus() async {
+        do {
+            let response: ArmStateRegistryResponse = try await apiClient.get(path: "/api/v1/state-registry?prefix=infra.orca-mini&limit=20")
+            guard let tag = response.items.first(where: { $0.tagId == "infra.orca-mini.status" }) else {
+                orcaMiniStatus = .missing()
+                return
+            }
+            orcaMiniStatus = tag.toOrcaMiniStatus()
+        } catch {
+            orcaMiniStatus = .unavailable(reason: "State Registry unavailable")
+        }
     }
 
     @MainActor
@@ -163,7 +180,7 @@ final class ArmsViewModel {
         do {
             let response: ArmDirectiveWriteResponse = try await apiClient.put(
                 path: "/api/v1/jarvis/arm-directives/\(key)",
-                body: ArmDirectiveCreateRequest(directive: directive, postedBy: "maui")
+                body: ArmDirectiveCreateRequest(directive: directive, postedBy: arm.directiveActor)
             )
             directiveDrafts[key] = ""
             toast = ArmsToast(message: response.toastMessage, isError: false)
@@ -174,49 +191,103 @@ final class ArmsViewModel {
     }
 
     @MainActor
-    func greenLight(_ arm: ArmTag) async {
+    func markReadyForReview(_ arm: ArmTag) async {
         let key = arm.name.lowercased()
-        guard arm.canGreenLight else { return }
+        guard arm.canRequestReview else { return }
         busyArms.insert(key)
         defer { busyArms.remove(key) }
 
         do {
-            let _: ArmDirectiveWriteResponse? = try? await apiClient.patch(
+            let response: ArmDirectiveWriteResponse = try await apiClient.patch(
                 path: "/api/v1/jarvis/arm-directives/\(key)/status",
                 body: ArmDirectiveStatusPatchRequest(
                     status: nil,
-                    intentState: "green_lit",
-                    reportedBy: "tony",
-                    note: "Green Light from Pod"
+                    intentState: nil,
+                    reviewState: arm.reviewReadyState,
+                    reportedBy: arm.reviewReporter,
+                    note: nil,
+                    reviewNote: "Ready for \(arm.directiveActor.capitalized) review"
                 )
             )
-            let response: WakeResponse = try await apiClient.post(
-                path: "/api/v1/jarvis/arm-tags/\(key)/wake",
-                body: WakeRequest(postedBy: "tony", note: arm.directive)
-            )
-            toast = ArmsToast(message: response.toastMessage, isError: response.deliveryStatus == "failed")
+            toast = ArmsToast(message: "\(arm.displayName) \(response.directiveStatus)", isError: false)
             await load()
         } catch {
-            toast = ArmsToast(message: "Green Light failed", isError: true)
+            toast = ArmsToast(message: "Review request failed", isError: true)
         }
     }
 
+    // Green Light no longer dispatches on tap. It stages a confirmation; the
+    // actual approve-directive + wake happens in confirmPendingWake() after the
+    // user confirms in the dialog. Doctrine: a casual tap must not fire a
+    // non-casual action (launching an autonomous arm). Applies to ALL arms, not
+    // just the orca/compute wake_confirm set.
+    @MainActor
+    func greenLight(_ arm: ArmTag) async {
+        guard arm.canGreenLight else { return }
+        pendingWakeConfirmation = WakeConfirmation(
+            arm: arm,
+            postedBy: "tony",
+            note: arm.directive,
+            reason: "Green Light approves the directive and wakes \(arm.displayName) — this dispatches the arm to run its current directive autonomously. Confirm to proceed.",
+            action: .greenLight
+        )
+    }
+
+    // Plain wake also stages a confirmation rather than firing on tap.
     @MainActor
     func wake(_ arm: ArmTag, note: String = "") async {
+        guard arm.canWake else { return }
+        pendingWakeConfirmation = WakeConfirmation(
+            arm: arm,
+            postedBy: "maui",
+            note: note.isEmpty ? nil : note,
+            reason: "Waking \(arm.displayName) dispatches the arm to run its directive autonomously. Confirm to proceed.",
+            action: .wake
+        )
+    }
+
+    @MainActor
+    func confirmPendingWake() async {
+        // Capture into a local BEFORE clearing the published property — reading
+        // self.pendingWakeConfirmation after nilling it was the prior bug.
+        guard let pending = pendingWakeConfirmation else { return }
+        pendingWakeConfirmation = nil
+        let arm = pending.arm
         let key = arm.name.lowercased()
         guard arm.canWake else { return }
         busyArms.insert(key)
         defer { busyArms.remove(key) }
 
         do {
-            let response: WakeResponse = try await apiClient.post(
-                path: "/api/v1/jarvis/arm-tags/\(key)/wake",
-                body: WakeRequest(postedBy: "maui", note: note.isEmpty ? nil : note)
+            // Green Light first approves the directive (intent_state), then wakes.
+            if pending.action == .greenLight {
+                let _: ArmDirectiveWriteResponse? = try? await apiClient.patch(
+                    path: "/api/v1/jarvis/arm-directives/\(key)/status",
+                    body: ArmDirectiveStatusPatchRequest(
+                        status: nil,
+                        intentState: "green_lit",
+                        reviewState: nil,
+                        reportedBy: pending.postedBy,
+                        note: "Green Light from Pod",
+                        reviewNote: nil
+                    )
+                )
+            }
+            // confirm: true — user has explicitly confirmed in the dialog, so the
+            // server-side wake_confirm gate (orca/compute) is satisfied here too.
+            let response = try await sendWake(
+                arm,
+                postedBy: pending.postedBy,
+                note: pending.note,
+                confirm: true
             )
             toast = ArmsToast(message: response.toastMessage, isError: response.deliveryStatus == "failed")
             await load()
         } catch {
-            toast = ArmsToast(message: "Wake failed", isError: true)
+            toast = ArmsToast(
+                message: pending.action == .greenLight ? "Green Light failed" : "Wake failed",
+                isError: true
+            )
         }
     }
 
@@ -267,11 +338,190 @@ final class ArmsViewModel {
         let response: ArmShipsResponse = try await apiClient.get(path: "/api/v1/jarvis/arm-ships?arm=\(key)&limit=\(limit)")
         return response.ships.map { $0.toDomain(fallbackArm: key) }
     }
+
+    private func sendWake(_ arm: ArmTag, postedBy: String, note: String?, confirm: Bool) async throws -> WakeResponse {
+        let key = arm.name.lowercased()
+        let request = try await apiClient.buildRequest(
+            path: "/api/v1/jarvis/arm-tags/\(key)/wake",
+            method: "POST",
+            body: WakeRequest(postedBy: postedBy, note: note, confirm: confirm ? true : nil)
+        )
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw APIError.unknown
+        }
+        if http.statusCode == 409 {
+            throw WakeConfirmRequired(reason: Self.wakeConfirmReason(from: data))
+        }
+        guard (200...299).contains(http.statusCode) else {
+            throw APIError(code: http.statusCode, message: "Wake failed with status \(http.statusCode)")
+        }
+        return try JSONDecoder().decode(WakeResponse.self, from: data)
+    }
+
+    private static func wakeConfirmReason(from data: Data) -> String {
+        let fallback = "This arm requires confirmation before wake."
+        guard
+            let object = try? JSONSerialization.jsonObject(with: data),
+            let payload = object as? [String: Any]
+        else { return fallback }
+
+        if let reason = payload["wake_confirm_reason"] as? String, !reason.isEmpty {
+            return reason
+        }
+        if let detail = payload["detail"] as? String, !detail.isEmpty {
+            return detail
+        }
+        if let detail = payload["detail"] as? [String: Any] {
+            if let reason = detail["wake_confirm_reason"] as? String, !reason.isEmpty {
+                return reason
+            }
+            if let reason = detail["reason"] as? String, !reason.isEmpty {
+                return reason
+            }
+        }
+        return fallback
+    }
 }
 
 struct ArmsToast: Equatable {
     let message: String
     let isError: Bool
+}
+
+struct OrcaMiniStatus: Equatable {
+    let tagId: String
+    let state: String
+    let quality: String
+    let disk: String
+    let containers: String
+    let unhealthyContainers: [String]
+    let nfs: String
+    let nfsHealthy: Bool?
+    let nats: String
+    let natsHealthy: Bool?
+    let lastBackup: String
+    let backupStale: Bool
+    let contractUnknown: Bool
+    let updatedAt: Date?
+    let source: String?
+    let missingReason: String?
+
+    static func missing() -> OrcaMiniStatus {
+        OrcaMiniStatus(
+            tagId: "infra.orca-mini.status",
+            state: "waiting",
+            quality: "missing",
+            disk: "Waiting for tag",
+            containers: "Waiting for tag",
+            unhealthyContainers: [],
+            nfs: "Waiting for tag",
+            nfsHealthy: nil,
+            nats: "Waiting for tag",
+            natsHealthy: nil,
+            lastBackup: "Waiting for tag",
+            backupStale: false,
+            contractUnknown: true,
+            updatedAt: nil,
+            source: nil,
+            missingReason: "Tag missing"
+        )
+    }
+
+    static func unavailable(reason: String) -> OrcaMiniStatus {
+        OrcaMiniStatus(
+            tagId: "infra.orca-mini.status",
+            state: "unavailable",
+            quality: "degraded",
+            disk: "Unavailable",
+            containers: "Unavailable",
+            unhealthyContainers: [],
+            nfs: "Unavailable",
+            nfsHealthy: nil,
+            nats: "Unavailable",
+            natsHealthy: nil,
+            lastBackup: "Unavailable",
+            backupStale: false,
+            contractUnknown: true,
+            updatedAt: nil,
+            source: nil,
+            missingReason: reason
+        )
+    }
+
+    var hasAttention: Bool {
+        missingReason != nil || !unhealthyContainers.isEmpty || backupStale || contractUnknown || nfsHealthy == false || natsHealthy == false
+    }
+
+    var badges: [OrcaMiniBadge] {
+        var badges: [OrcaMiniBadge] = []
+        if let missingReason {
+            badges.append(OrcaMiniBadge(label: missingReason, color: AppColors.accentWarning))
+        }
+        if !unhealthyContainers.isEmpty {
+            badges.append(OrcaMiniBadge(label: "Unhealthy: \(unhealthyContainers.joined(separator: ", "))", color: AppColors.accentDanger))
+        }
+        if backupStale {
+            badges.append(OrcaMiniBadge(label: "Backup stale", color: AppColors.accentWarning))
+        }
+        if contractUnknown {
+            badges.append(OrcaMiniBadge(label: "Contract unknown", color: AppColors.accentWarning))
+        }
+        if nfsHealthy == false {
+            badges.append(OrcaMiniBadge(label: "NFS down", color: AppColors.accentDanger))
+        }
+        if natsHealthy == false {
+            badges.append(OrcaMiniBadge(label: "NATS down", color: AppColors.accentDanger))
+        }
+        return badges
+    }
+
+    var statusLabel: String {
+        if missingReason != nil { return "waiting" }
+        return hasAttention ? "attention" : "healthy"
+    }
+
+    var statusColor: Color {
+        if !unhealthyContainers.isEmpty || nfsHealthy == false || natsHealthy == false {
+            return AppColors.accentDanger
+        }
+        if missingReason != nil || backupStale || contractUnknown || quality.lowercased() == "degraded" || quality.lowercased() == "yellow" {
+            return AppColors.accentWarning
+        }
+        return AppColors.accentSuccess
+    }
+
+    var freshnessLabel: String {
+        guard let updatedAt else { return "unknown" }
+        return Self.relativeAge(from: updatedAt)
+    }
+
+    private static func relativeAge(from date: Date) -> String {
+        let seconds = max(0, Int(Date().timeIntervalSince(date)))
+        if seconds < 60 { return "\(seconds)s ago" }
+        if seconds < 3_600 { return "\(seconds / 60)m ago" }
+        if seconds < 86_400 { return "\(seconds / 3_600)h ago" }
+        return "\(seconds / 86_400)d ago"
+    }
+}
+
+struct OrcaMiniBadge {
+    let label: String
+    let color: Color
+}
+
+struct WakeConfirmation: Identifiable, Equatable {
+    enum Action: Equatable { case wake, greenLight }
+    let id = UUID()
+    let arm: ArmTag
+    let postedBy: String
+    let note: String?
+    let reason: String
+    var action: Action = .wake
+}
+
+private struct WakeConfirmRequired: Error {
+    let reason: String
 }
 
 struct ArmTag: Identifiable, Hashable {
@@ -310,6 +560,11 @@ struct ArmTag: Identifiable, Hashable {
     let intentState: String?
     let needsEngagement: Bool
     let needsEngagementReason: String?
+    let reviewState: String?
+    let reviewUpdatedAt: Date?
+    let reviewReportedBy: String?
+    let reviewNote: String?
+    let reviewEvidenceRef: String?
     let lastShip: ArmShip?
 
     var displayName: String {
@@ -328,12 +583,14 @@ struct ArmTag: Identifiable, Hashable {
         case "nats": return "NATS Arm"
         case "fish": return "Fish Arm"
         case "surfaces": return "Surfaces Arm"
-        case "chief-trading": return "Chief Trading Arm"
-        case "chief-fund": return "Chief Fund Arm"
-        case "chief-predictions": return "Chief Predictions Arm"
-        case "chief-mac-infra": return "Chief Mac Infra Arm"
-        case "chief-data": return "Chief Data Arm"
         case "chief-research": return "Chief Research Arm"
+        case "chief-data": return "Chief Data Arm"
+        case "chief-predictions": return "Chief Predictions Arm"
+        case "chief-ml": return "Chief ML Arm"
+        case "chief-trading": return "Chief Trading Arm"
+        case "chief-algos": return "Chief Algos Arm"
+        case "chief-fund": return "Chief Fund Arm"
+        case "chief-mac-infra": return "Chief Mac Infra Arm"
         default: return name.capitalized + " Arm"
         }
     }
@@ -341,11 +598,30 @@ struct ArmTag: Identifiable, Hashable {
     var isFund: Bool { name.lowercased() == "fund" }
 
     var canPostDirective: Bool {
-        canWake && !protected
+        !protected
     }
 
     var canGreenLight: Bool {
         canWake && !protected && proposedByArm && intentState?.lowercased() == "proposed" && directive?.isEmpty == false
+    }
+
+    var canRequestReview: Bool {
+        !protected && directive?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
+    var directiveActor: String {
+        family == .chief ? "chief" : "maui"
+    }
+
+    var reviewReadyState: String {
+        family == .chief ? "ready_for_chief" : "ready_for_maui"
+    }
+
+    var reviewReporter: String {
+        if let owner, owner.lowercased().hasSuffix("-arm") {
+            return owner
+        }
+        return family == .chief ? "\(name.lowercased())-arm" : "codex-\(name.lowercased())-arm"
     }
 
     var directivePlaceholder: String {
@@ -385,6 +661,24 @@ struct ArmTag: Identifiable, Hashable {
             return directive?.isEmpty == false ? "queued" : "none"
         }
         return directiveStatus.replacingOccurrences(of: "_", with: " ")
+    }
+
+    var reviewStatusLabel: String {
+        guard let reviewState, !reviewState.isEmpty else { return "not ready" }
+        return reviewState.replacingOccurrences(of: "_", with: " ")
+    }
+
+    var reviewStatusColor: Color {
+        switch reviewState?.lowercased() {
+        case "ready_for_maui", "ready_for_chief", "ready_for_aloha", "ready_for_rooster":
+            return AppColors.accentElectric
+        case "changes_requested":
+            return AppColors.accentDanger
+        case "reviewed":
+            return AppColors.accentSuccess
+        default:
+            return AppColors.textTertiary
+        }
     }
 
     var directiveStatusColor: Color {
@@ -494,6 +788,11 @@ struct ArmTag: Identifiable, Hashable {
             intentState: nil,
             needsEngagement: false,
             needsEngagementReason: nil,
+            reviewState: nil,
+            reviewUpdatedAt: nil,
+            reviewReportedBy: nil,
+            reviewNote: nil,
+            reviewEvidenceRef: nil,
             lastShip: nil
         )
     }
@@ -567,6 +866,29 @@ private extension AgentRunJSONValue {
         default:
             return nil
         }
+    }
+
+    var doubleValue: Double? {
+        switch self {
+        case .double(let value):
+            return value
+        case .int(let value):
+            return Double(value)
+        case .string(let text):
+            return Double(text.trimmingCharacters(in: .whitespacesAndNewlines))
+        default:
+            return nil
+        }
+    }
+
+    var objectValue: [String: AgentRunJSONValue]? {
+        guard case .object(let value) = self else { return nil }
+        return value
+    }
+
+    var arrayValue: [AgentRunJSONValue]? {
+        guard case .array(let value) = self else { return nil }
+        return value
     }
 }
 
@@ -777,12 +1099,18 @@ private struct StateRegistryTagDTO: Decodable {
             proposedByArm: bool("proposed_by_arm"),
             intentState: string("intent_state"),
             needsEngagement: bool("needs_engagement") ?? false,
-            needsEngagementReason: string("needs_engagement_reason")
+            needsEngagementReason: string("needs_engagement_reason"),
+            reviewState: string("review_state"),
+            reviewUpdatedAt: date("review_updated_at"),
+            reviewReportedBy: string("review_reported_by"),
+            reviewNote: string("review_note"),
+            reviewEvidenceRef: string("review_evidence_ref")
         )
     }
 
     func toArmTag(name: String, roster: ArmRosterEntryDTO?, directive: ArmDirective?, fallbackLastShip: ArmShip?) -> ArmTag {
         let isChiefFund = name == "chief-fund"
+        let protectedLane = roster?.protected ?? isChiefFund
         return ArmTag(
             id: "chief-\(name)",
             name: name,
@@ -803,9 +1131,9 @@ private struct StateRegistryTagDTO: Decodable {
             lastFetched: date("last_fetched"),
             agentSubject: roster?.agentSubject ?? "agents.chief.inbox",
             workspace: roster?.workspace,
-            canWake: false,
-            protected: roster?.protected ?? isChiefFund,
-            protectionReason: isChiefFund ? "Tier-4: Chief/Rooster/Tony approval required" : "Chief-controlled lane; Maui view only",
+            canWake: roster?.canWake ?? !isChiefFund,
+            protected: protectedLane,
+            protectionReason: protectedLane ? (roster?.protectionReason ?? "Tier-4: Chief/Rooster/Tony approval required") : roster?.protectionReason,
             lastWakeDeliveryStatus: string("last_wake_delivery_status"),
             lastWakeEnvelopeId: string("last_wake_envelope_id"),
             directiveStatus: directive?.status ?? string("directive_status"),
@@ -816,7 +1144,53 @@ private struct StateRegistryTagDTO: Decodable {
             intentState: directive?.intentState ?? string("intent_state"),
             needsEngagement: directive?.needsEngagement ?? bool("needs_engagement") ?? false,
             needsEngagementReason: directive?.needsEngagementReason ?? string("needs_engagement_reason"),
+            reviewState: directive?.reviewState ?? string("directive_review_state") ?? string("review_state"),
+            reviewUpdatedAt: directive?.reviewUpdatedAt ?? date("directive_review_updated_at") ?? date("review_updated_at"),
+            reviewReportedBy: directive?.reviewReportedBy ?? string("directive_review_reported_by") ?? string("review_reported_by"),
+            reviewNote: directive?.reviewNote ?? string("directive_review_note") ?? string("review_note"),
+            reviewEvidenceRef: directive?.reviewEvidenceRef ?? string("directive_review_evidence_ref") ?? string("review_evidence_ref"),
             lastShip: fallbackLastShip
+        )
+    }
+
+    func toOrcaMiniStatus() -> OrcaMiniStatus {
+        let unhealthyContainers = parsedUnhealthyContainers()
+        let nfsHealthy = bool("nfs_mounted") ?? bool("nfs_mount_ok") ?? healthyStatus(string("nfs_status") ?? string("nfs_mount_status"))
+        let natsHealthy = bool("nats_connected") ?? bool("nats_ok") ?? healthyStatus(string("nats_status") ?? string("nats_connection_status"))
+        let backupDate = date("last_backup_at") ?? date("backup_at")
+        let backupStale = bool("backup_stale")
+            ?? bool("last_backup_stale")
+            ?? staleStatus(string("backup_status"))
+            ?? backupDate.map(Self.isBackupStale)
+            ?? false
+        let contractUnknown = hasUnknownContainerStatus() || nfsHealthy == nil || natsHealthy == nil
+        return OrcaMiniStatus(
+            tagId: tagId,
+            state: string("state") ?? string("status") ?? "reported",
+            quality: string("quality") ?? quality ?? "green",
+            disk: diskLabel(),
+            containers: containerLabel(unhealthyContainers: unhealthyContainers),
+            unhealthyContainers: unhealthyContainers,
+            nfs: statusLabel(
+                boolValue: nfsHealthy,
+                explicit: string("nfs_status") ?? string("nfs_mount_status"),
+                healthyText: "mounted",
+                unhealthyText: "unmounted"
+            ),
+            nfsHealthy: nfsHealthy,
+            nats: statusLabel(
+                boolValue: natsHealthy,
+                explicit: string("nats_status") ?? string("nats_connection_status"),
+                healthyText: "connected",
+                unhealthyText: "disconnected"
+            ),
+            natsHealthy: natsHealthy,
+            lastBackup: backupLabel(),
+            backupStale: backupStale,
+            contractUnknown: contractUnknown,
+            updatedAt: date("updated_at") ?? updatedAt,
+            source: string("source"),
+            missingReason: nil
         )
     }
 
@@ -835,9 +1209,163 @@ private struct StateRegistryTagDTO: Decodable {
         return raw.intValue
     }
 
+    private func double(_ key: String) -> Double? {
+        guard let raw = value[key] else { return nil }
+        return raw.doubleValue
+    }
+
     private func date(_ key: String) -> Date? {
         guard let text = string(key) else { return nil }
         return ISO8601DateFormatter().date(from: text)
+    }
+
+    private func diskLabel() -> String {
+        if let label = string("disk_free_label") ?? string("disk") ?? string("disk_status") {
+            return label
+        }
+        if let gb = double("disk_free_gb") ?? double("free_disk_gb") {
+            return "\(Self.compactNumber(gb)) GB free"
+        }
+        if let percent = double("disk_free_percent") ?? double("free_disk_percent") {
+            return "\(Self.compactNumber(percent))% free"
+        }
+        return "unknown"
+    }
+
+    private func backupLabel() -> String {
+        if let label = string("last_backup") ?? string("last_backup_label") {
+            return label
+        }
+        if let backupAt = date("last_backup_at") ?? date("backup_at") {
+            return "\(Self.relativeAge(from: backupAt)) ago"
+        }
+        if let status = string("backup_status") {
+            return status
+        }
+        return "unknown"
+    }
+
+    private func containerLabel(unhealthyContainers: [String]) -> String {
+        if let label = string("containers_label") ?? string("container_status") {
+            return label
+        }
+        if let count = int("container_count") ?? int("containers_count") {
+            let unhealthyCount = unhealthyContainers.count
+            return unhealthyCount == 0 ? "\(count) healthy" : "\(count - unhealthyCount)/\(count) healthy"
+        }
+        if let containers = value["containers"]?.objectValue {
+            let count = containers.count
+            let unhealthyCount = unhealthyContainers.count
+            return unhealthyCount == 0 ? "\(count) healthy" : "\(count - unhealthyCount)/\(count) healthy"
+        }
+        return unhealthyContainers.isEmpty ? "unknown" : "\(unhealthyContainers.count) unhealthy"
+    }
+
+    private func parsedUnhealthyContainers() -> [String] {
+        if let explicit = value["unhealthy_containers"]?.arrayValue {
+            return explicit.compactMap(\.stringValue)
+        }
+        if let containers = value["containers"]?.objectValue {
+            return containers.compactMap { name, payload in
+                let status = Self.containerStatus(from: payload)
+                return Self.isContainerHealthy(status) ? nil : name
+            }
+            .sorted()
+        }
+        if let containers = value["containers"]?.arrayValue {
+            return containers.compactMap { payload in
+                guard let object = payload.objectValue else { return nil }
+                let name = object["name"]?.stringValue ?? object["container"]?.stringValue ?? "container"
+                let status = object["health"]?.stringValue ?? object["status"]?.stringValue ?? object["state"]?.stringValue
+                return Self.isContainerHealthy(status) ? nil : name
+            }
+        }
+        return []
+    }
+
+    private func hasUnknownContainerStatus() -> Bool {
+        if let containers = value["containers"]?.objectValue {
+            return containers.values.contains { payload in
+                Self.containerStatus(from: payload)?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
+            }
+        }
+        if let containers = value["containers"]?.arrayValue {
+            return containers.contains { payload in
+                guard let object = payload.objectValue else { return true }
+                let status = object["health"]?.stringValue ?? object["status"]?.stringValue ?? object["state"]?.stringValue
+                return status?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
+            }
+        }
+        return false
+    }
+
+    private func healthyStatus(_ status: String?) -> Bool? {
+        guard let status = status?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), !status.isEmpty else {
+            return nil
+        }
+        if ["ok", "up", "healthy", "mounted", "connected", "running", "true"].contains(status) {
+            return true
+        }
+        if ["down", "unhealthy", "unmounted", "disconnected", "stale", "failed", "false"].contains(status) {
+            return false
+        }
+        return nil
+    }
+
+    private func staleStatus(_ status: String?) -> Bool? {
+        guard let status = status?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), !status.isEmpty else {
+            return nil
+        }
+        if status.contains("stale") || status.contains("missing") || status.contains("failed") {
+            return true
+        }
+        if status.contains("fresh") || status.contains("ok") || status.contains("current") {
+            return false
+        }
+        return nil
+    }
+
+    private func statusLabel(boolValue: Bool?, explicit: String?, healthyText: String, unhealthyText: String) -> String {
+        if let explicit, !explicit.isEmpty {
+            return explicit
+        }
+        if let boolValue {
+            return boolValue ? healthyText : unhealthyText
+        }
+        return "unknown"
+    }
+
+    private static func containerStatus(from payload: AgentRunJSONValue) -> String? {
+        if let text = payload.stringValue {
+            return text
+        }
+        if let object = payload.objectValue {
+            return object["health"]?.stringValue ?? object["status"]?.stringValue ?? object["state"]?.stringValue
+        }
+        return nil
+    }
+
+    private static func isContainerHealthy(_ status: String?) -> Bool {
+        guard let status = status?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), !status.isEmpty else {
+            return false
+        }
+        return ["ok", "up", "healthy", "running"].contains(status)
+    }
+
+    private static func isBackupStale(_ date: Date) -> Bool {
+        Date().timeIntervalSince(date) > 30 * 60
+    }
+
+    private static func relativeAge(from date: Date) -> String {
+        let seconds = max(0, Int(Date().timeIntervalSince(date)))
+        if seconds < 60 { return "\(seconds)s" }
+        if seconds < 3_600 { return "\(seconds / 60)m" }
+        if seconds < 86_400 { return "\(seconds / 3_600)h" }
+        return "\(seconds / 86_400)d"
+    }
+
+    private static func compactNumber(_ value: Double) -> String {
+        value.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(value))" : String(format: "%.1f", value)
     }
 }
 
@@ -864,7 +1392,12 @@ private struct ArmDirectiveDTO: Decodable {
             proposedByArm: bool("proposed_by_arm"),
             intentState: string("intent_state"),
             needsEngagement: bool("needs_engagement") ?? false,
-            needsEngagementReason: string("needs_engagement_reason")
+            needsEngagementReason: string("needs_engagement_reason"),
+            reviewState: string("review_state"),
+            reviewUpdatedAt: date("review_updated_at"),
+            reviewReportedBy: string("review_reported_by"),
+            reviewNote: string("review_note"),
+            reviewEvidenceRef: string("review_evidence_ref")
         )
     }
 
@@ -914,6 +1447,11 @@ private struct ArmDirective: Hashable {
     let intentState: String?
     let needsEngagement: Bool
     let needsEngagementReason: String?
+    let reviewState: String?
+    let reviewUpdatedAt: Date?
+    let reviewReportedBy: String?
+    let reviewNote: String?
+    let reviewEvidenceRef: String?
 }
 
 private struct ArmRoutingResponse: Decodable {
@@ -998,6 +1536,11 @@ private struct ArmTagDTO: Decodable {
             intentState: directive?.intentState ?? data?.intentState,
             needsEngagement: directive?.needsEngagement ?? data?.needsEngagement ?? false,
             needsEngagementReason: directive?.needsEngagementReason ?? data?.needsEngagementReason,
+            reviewState: directive?.reviewState ?? data?.directiveReviewState,
+            reviewUpdatedAt: directive?.reviewUpdatedAt ?? data?.directiveReviewUpdatedAt,
+            reviewReportedBy: directive?.reviewReportedBy ?? data?.directiveReviewReportedBy,
+            reviewNote: directive?.reviewNote ?? data?.directiveReviewNote,
+            reviewEvidenceRef: directive?.reviewEvidenceRef ?? data?.directiveReviewEvidenceRef,
             lastShip: data?.lastShip?.resolvedArm(normalizedName) ?? fallbackLastShip
         )
     }
@@ -1036,6 +1579,11 @@ private struct ArmTagDataDTO: Decodable {
     let intentState: String?
     let needsEngagement: Bool?
     let needsEngagementReason: String?
+    let directiveReviewState: String?
+    let directiveReviewUpdatedAt: Date?
+    let directiveReviewReportedBy: String?
+    let directiveReviewNote: String?
+    let directiveReviewEvidenceRef: String?
     let lastShip: ArmShip?
 
     enum CodingKeys: String, CodingKey {
@@ -1058,6 +1606,11 @@ private struct ArmTagDataDTO: Decodable {
         case intentState = "intent_state"
         case needsEngagement = "needs_engagement"
         case needsEngagementReason = "needs_engagement_reason"
+        case directiveReviewState = "directive_review_state"
+        case directiveReviewUpdatedAt = "directive_review_updated_at"
+        case directiveReviewReportedBy = "directive_review_reported_by"
+        case directiveReviewNote = "directive_review_note"
+        case directiveReviewEvidenceRef = "directive_review_evidence_ref"
         case lastShip = "last_ship"
     }
 }
@@ -1065,16 +1618,22 @@ private struct ArmTagDataDTO: Decodable {
 private struct ArmDirectiveStatusPatchRequest: Encodable {
     let status: String?
     let intentState: String?
+    let reviewState: String?
     let reportedBy: String
     let note: String?
+    let reviewNote: String?
     let evidenceRef: String? = nil
+    let reviewEvidenceRef: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case status
         case intentState = "intent_state"
+        case reviewState = "review_state"
         case reportedBy = "reported_by"
         case note
+        case reviewNote = "review_note"
         case evidenceRef = "evidence_ref"
+        case reviewEvidenceRef = "review_evidence_ref"
     }
 }
 
@@ -1115,10 +1674,18 @@ private struct ArmDirectiveWriteResponse: Decodable {
 private struct WakeRequest: Encodable {
     let postedBy: String
     let note: String?
+    let confirm: Bool?
+
+    init(postedBy: String, note: String?, confirm: Bool? = nil) {
+        self.postedBy = postedBy
+        self.note = note
+        self.confirm = confirm
+    }
 
     enum CodingKeys: String, CodingKey {
         case postedBy = "posted_by"
         case note
+        case confirm
     }
 }
 

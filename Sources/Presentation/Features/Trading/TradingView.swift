@@ -427,6 +427,9 @@ struct TradingView: View {
                 Text("Earnings due/live \(radar.earningsDueCount) · generated \(radar.generatedAt ?? "pending")")
                     .podTextStyle(.caption, color: AppColors.textTertiary)
                     .lineLimit(2)
+                Text("Models \(modelVersionSummary(radar))")
+                    .podTextStyle(.caption, color: AppColors.textTertiary)
+                    .lineLimit(2)
             }
             .padding(Theme.md)
 
@@ -450,6 +453,20 @@ struct TradingView: View {
             }
         }
         .podCard(padding: 0)
+    }
+
+    private func modelVersionSummary(_ radar: PredictionRadar) -> String {
+        let versions = radar.modelVersions
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key.replacingOccurrences(of: "chief_", with: "")):\($0.value)" }
+            .joined(separator: " · ")
+        if versions.isEmpty {
+            return "pending"
+        }
+        if radar.missingDecisionTrace > 0 {
+            return "\(versions) · missing \(radar.missingDecisionTrace)"
+        }
+        return versions
     }
 
     private func marketPredictionCard(_ brief: MarketPredictionBrief) -> some View {

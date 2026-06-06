@@ -8,6 +8,7 @@ enum KnowledgeChip: String, CaseIterable, Identifiable {
     case wiki
     case review
     case notes
+    case skills
     case standards
 
     var id: String { rawValue }
@@ -19,6 +20,7 @@ enum KnowledgeChip: String, CaseIterable, Identifiable {
         case .wiki:      return "Wiki"
         case .review:    return "Review"
         case .notes:     return "Notes"
+        case .skills:    return "Skills"
         case .standards: return "Standards"
         }
     }
@@ -30,6 +32,7 @@ enum KnowledgeChip: String, CaseIterable, Identifiable {
         case .wiki:      return "doc.richtext"
         case .review:    return "tray.full"
         case .notes:     return "note.text"
+        case .skills:    return "wand.and.stars"
         case .standards: return "books.vertical"
         }
     }
@@ -45,6 +48,7 @@ struct KnowledgeView: View {
     @State private var editingStandard: Standard?
     @State private var selectedStandard: Standard?
     @State private var selectedNote: OrcaNote?
+    @State private var selectedSkillLabSkill: SkillLabSkill?
     @State private var noteFilter: OrcaNoteFilter = .all
     @State private var newSystemNoteTitle = ""
     @State private var newSystemNoteBody = ""
@@ -88,6 +92,7 @@ struct KnowledgeView: View {
                         await viewModel.loadReviewSyncPreview()
                         await viewModel.loadRuntimeSyncPreview()
                         await viewModel.loadMemoryCandidates()
+                        await viewModel.loadSkillLab()
                     }
                 }
 
@@ -114,6 +119,14 @@ struct KnowledgeView: View {
             }
             .sheet(item: $selectedNote) { note in
                 OrcaNoteDetailSheet(note: note)
+            }
+            .sheet(item: $selectedSkillLabSkill) { skill in
+                SkillLabDetailSheet(
+                    skill: skill,
+                    detail: viewModel.selectedSkillLabDetail,
+                    isLoading: viewModel.isLoadingSkillLabDetail,
+                    errorMessage: viewModel.skillLabDetailErrorMessage
+                )
             }
             .sheet(item: $viewModel.selectedWikiDocument) { document in
                 WikiDocumentMirrorSheet(
@@ -143,6 +156,7 @@ struct KnowledgeView: View {
                 await viewModel.loadReviewSyncPreview()
                 await viewModel.loadRuntimeSyncPreview()
                 await viewModel.loadMemoryCandidates()
+                await viewModel.loadSkillLab()
             }
         }
     }
@@ -221,6 +235,9 @@ struct KnowledgeView: View {
 
         case .notes:
             notesAndDecisionsSection
+
+        case .skills:
+            skillLabSection
 
         case .standards:
             categoryGrid
@@ -976,6 +993,114 @@ struct KnowledgeView: View {
                 )
             } else {
                 Text(viewModel.notesErrorMessage ?? "No ORCA notes or decisions yet.")
+                    .font(.caption)
+                    .foregroundColor(AppColors.textTertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(Theme.sm)
+                    .background(AppColors.backgroundSecondary)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+            }
+        }
+    }
+
+    private var skillLabSection: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack {
+                Label("Skill Lab", systemImage: "wand.and.stars")
+                    .font(.headline)
+                    .foregroundColor(AppColors.textPrimary)
+
+                Spacer()
+
+                Button {
+                    Task { await viewModel.loadSkillLab() }
+                } label: {
+                    Image(systemName: viewModel.isLoadingSkillLab ? "hourglass" : "arrow.clockwise")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(AppColors.accentElectric)
+                }
+                .disabled(viewModel.isLoadingSkillLab)
+                .accessibilityLabel("Refresh Skill Lab")
+            }
+
+            if viewModel.isLoadingSkillLab && viewModel.skillLabOverview == nil {
+                HStack(spacing: Theme.xs) {
+                    ProgressView()
+                        .scaleEffect(0.75)
+                    Text("Loading Skill Lab...")
+                        .font(.caption)
+                        .foregroundColor(AppColors.textTertiary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(Theme.sm)
+                .background(AppColors.backgroundSecondary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+            } else if let overview = viewModel.skillLabOverview {
+                VStack(alignment: .leading, spacing: Theme.sm) {
+                    HStack(spacing: Theme.sm) {
+                        RegistryStat(value: overview.counts["skills"] ?? overview.skills.count, label: "skills")
+                        RegistryStat(value: overview.counts["eval_cases"] ?? 0, label: "cases")
+                        RegistryStat(value: overview.counts["pending_promotions"] ?? overview.pendingPromotions.count, label: "pending")
+                        RegistryStat(value: overview.counts["recent_eval_runs"] ?? overview.recentEvalRuns.count, label: "evals")
+                    }
+
+                    Text(overview.policy)
+                        .font(.caption2)
+                        .foregroundColor(AppColors.textTertiary)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if !overview.skills.isEmpty {
+                        VStack(alignment: .leading, spacing: Theme.xs) {
+                            Text("Registered skills")
+                                .font(.caption.weight(.semibold))
+                                .foregroundColor(AppColors.textSecondary)
+
+                            ForEach(overview.skills.prefix(6)) { skill in
+                                Button {
+                                    selectedSkillLabSkill = skill
+                                    Task { await viewModel.openSkillLabDetail(skill) }
+                                } label: {
+                                    SkillLabSkillRow(skill: skill)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+
+                    if !overview.pendingPromotions.isEmpty {
+                        VStack(alignment: .leading, spacing: Theme.xs) {
+                            Text("Promotion candidates")
+                                .font(.caption.weight(.semibold))
+                                .foregroundColor(AppColors.textSecondary)
+
+                            ForEach(overview.pendingPromotions.prefix(5)) { candidate in
+                                SkillLabPromotionRow(candidate: candidate)
+                            }
+                        }
+                    }
+
+                    if !overview.recentEvalRuns.isEmpty {
+                        VStack(alignment: .leading, spacing: Theme.xs) {
+                            Text("Recent eval runs")
+                                .font(.caption.weight(.semibold))
+                                .foregroundColor(AppColors.textSecondary)
+
+                            ForEach(overview.recentEvalRuns.prefix(5)) { run in
+                                SkillLabEvalRunRow(run: run)
+                            }
+                        }
+                    }
+                }
+                .padding(Theme.sm)
+                .background(AppColors.backgroundSecondary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                        .stroke(AppColors.border, lineWidth: 1)
+                )
+            } else {
+                Text(viewModel.skillLabErrorMessage ?? "Skill Lab is unavailable from ORCA.")
                     .font(.caption)
                     .foregroundColor(AppColors.textTertiary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1764,6 +1889,298 @@ struct KnowledgeView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Theme.xxl)
+    }
+}
+
+// MARK: - Skill Lab Rows
+
+private struct SkillLabSkillRow: View {
+    let skill: SkillLabSkill
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: Theme.xs) {
+                Image(systemName: skill.protected ? "lock.shield" : "wand.and.stars")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(skill.protected ? AppColors.accentWarning : AppColors.accentElectric)
+                Text(skill.title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(AppColors.textPrimary)
+                    .lineLimit(1)
+                Spacer(minLength: Theme.xs)
+                Text(skill.status.replacingOccurrences(of: "_", with: " "))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundColor(AppColors.textSecondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(AppColors.backgroundTertiary)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+            }
+
+            Text(skill.purpose)
+                .font(.caption2)
+                .foregroundColor(AppColors.textTertiary)
+                .lineLimit(2)
+
+            Text("owner \(skill.ownerAgent) · safety \(skill.safetyOwner) · standards \(skill.standardsOwner) · \(skill.domain)")
+                .font(.caption2.monospaced())
+                .foregroundColor(AppColors.textTertiary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.xs)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+    }
+}
+
+private struct SkillLabPromotionRow: View {
+    let candidate: SkillLabPromotionCandidate
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: Theme.xs) {
+                Image(systemName: candidate.protected ? "exclamationmark.shield" : "person.crop.circle.badge.questionmark")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(candidate.protected ? AppColors.accentWarning : AppColors.accentAgent)
+                Text(candidate.summary ?? "Skill promotion candidate")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(AppColors.textPrimary)
+                    .lineLimit(2)
+                Spacer(minLength: Theme.xs)
+                Text(candidate.riskLevel)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundColor(AppColors.accentWarning)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(AppColors.accentWarning.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+            }
+
+            Text(candidate.reviewState.replacingOccurrences(of: "_", with: " "))
+                .font(.caption2)
+                .foregroundColor(AppColors.textSecondary)
+                .lineLimit(1)
+
+            let reviewers = candidate.requiredReviewers ?? []
+            if !reviewers.isEmpty {
+                Text("required: \(reviewers.joined(separator: ", "))")
+                    .font(.caption2.monospaced())
+                    .foregroundColor(AppColors.textTertiary)
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.xs)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+    }
+}
+
+private struct SkillLabEvalRunRow: View {
+    let run: SkillLabEvalRun
+
+    var body: some View {
+        HStack(spacing: Theme.xs) {
+            Image(systemName: run.accepted ? "checkmark.seal" : "chart.xyaxis.line")
+                .font(.caption.weight(.semibold))
+                .foregroundColor(run.accepted ? AppColors.accentSuccess : AppColors.textTertiary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(run.benchmarkName)
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(AppColors.textPrimary)
+                    .lineLimit(1)
+                Text(evalDetail)
+                    .font(.caption2)
+                    .foregroundColor(AppColors.textTertiary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: Theme.xs)
+            Text(run.status)
+                .font(.caption2.weight(.semibold))
+                .foregroundColor(AppColors.textSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.xs)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+    }
+
+    private var evalDetail: String {
+        var parts: [String] = []
+        if let score = run.validationScore {
+            parts.append("val \(score.formatted(.number.precision(.fractionLength(2))))")
+        }
+        if let route = run.targetRoute, !route.isEmpty {
+            parts.append("route \(route)")
+        }
+        parts.append("\(run.regressionCount) regressions")
+        return parts.joined(separator: " · ")
+    }
+}
+
+private struct SkillLabDetailSheet: View {
+    let skill: SkillLabSkill
+    let detail: SkillLabDetail?
+    let isLoading: Bool
+    let errorMessage: String?
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: Theme.md) {
+                    VStack(alignment: .leading, spacing: Theme.xs) {
+                        Text(skill.title)
+                            .font(.title3.weight(.semibold))
+                            .foregroundColor(AppColors.textPrimary)
+
+                        Text(skill.purpose)
+                            .font(.subheadline)
+                            .foregroundColor(AppColors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Text("owner \(skill.ownerAgent) · safety \(skill.safetyOwner) · standards \(skill.standardsOwner)")
+                            .font(.caption.monospaced())
+                            .foregroundColor(AppColors.textTertiary)
+                    }
+
+                    if isLoading && detail == nil {
+                        HStack(spacing: Theme.xs) {
+                            ProgressView()
+                                .scaleEffect(0.75)
+                            Text("Loading Skill Lab review packet...")
+                                .font(.caption)
+                                .foregroundColor(AppColors.textTertiary)
+                        }
+                    } else if let detail {
+                        VStack(alignment: .leading, spacing: Theme.sm) {
+                            HStack(spacing: Theme.sm) {
+                                RegistryStat(value: detail.counts["versions"] ?? detail.versions.count, label: "versions")
+                                RegistryStat(value: detail.counts["eval_cases"] ?? detail.evalCases.count, label: "cases")
+                                RegistryStat(value: detail.counts["eval_runs"] ?? detail.evalRuns.count, label: "evals")
+                                RegistryStat(value: detail.counts["promotion_candidates"] ?? detail.promotionCandidates.count, label: "promos")
+                            }
+
+                            Text(detail.policy)
+                                .font(.caption2)
+                                .foregroundColor(AppColors.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        if !detail.evalCases.isEmpty {
+                            SkillLabDetailGroup(title: "Eval corpus", icon: "checklist") {
+                                ForEach(detail.evalCases.prefix(12)) { evalCase in
+                                    SkillLabEvalCaseRow(evalCase: evalCase)
+                                }
+                            }
+                        }
+
+                        if !detail.promotionCandidates.isEmpty {
+                            SkillLabDetailGroup(title: "Promotion review", icon: "person.crop.circle.badge.questionmark") {
+                                ForEach(detail.promotionCandidates.prefix(6)) { candidate in
+                                    SkillLabPromotionRow(candidate: candidate)
+                                }
+                            }
+                        }
+
+                        if !detail.versions.isEmpty {
+                            SkillLabDetailGroup(title: "Versions", icon: "doc.on.doc") {
+                                ForEach(detail.versions.prefix(6)) { version in
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(version.version)
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundColor(AppColors.textPrimary)
+                                        Text("\(version.status) · \(version.source)")
+                                            .font(.caption2)
+                                            .foregroundColor(AppColors.textTertiary)
+                                            .lineLimit(1)
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(Theme.xs)
+                                    .background(AppColors.backgroundTertiary)
+                                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+                                }
+                            }
+                        }
+                    } else {
+                        Text(errorMessage ?? "Skill Lab detail is unavailable from ORCA.")
+                            .font(.caption)
+                            .foregroundColor(AppColors.textTertiary)
+                    }
+                }
+                .padding(Theme.md)
+            }
+            .background(AppColors.backgroundPrimary)
+            .navigationTitle("Skill Lab")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+private struct SkillLabDetailGroup<Content: View>: View {
+    let title: String
+    let icon: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            Label(title, systemImage: icon)
+                .font(.headline)
+                .foregroundColor(AppColors.textPrimary)
+
+            content
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.sm)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                .stroke(AppColors.border, lineWidth: 1)
+        )
+    }
+}
+
+private struct SkillLabEvalCaseRow: View {
+    let evalCase: SkillLabEvalCase
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: Theme.xs) {
+                Image(systemName: evalCase.protected ? "lock.shield" : "checklist")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(evalCase.protected ? AppColors.accentWarning : AppColors.accentElectric)
+                Text(evalCase.caseId.replacingOccurrences(of: "_", with: " "))
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(AppColors.textPrimary)
+                    .lineLimit(1)
+                Spacer(minLength: Theme.xs)
+                Text(evalCase.expectedRiskLevel ?? "risk ?")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundColor(evalCase.protected ? AppColors.accentWarning : AppColors.textSecondary)
+            }
+
+            Text(evalCase.inputText)
+                .font(.caption2)
+                .foregroundColor(AppColors.textSecondary)
+                .lineLimit(3)
+
+            Text("expect \(evalCase.expectedOwnerAgent ?? "?") · \(evalCase.expectedDeliveryMode ?? "?") · \(evalCase.expectedNextAction ?? "?")")
+                .font(.caption2.monospaced())
+                .foregroundColor(AppColors.textTertiary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.xs)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
     }
 }
 

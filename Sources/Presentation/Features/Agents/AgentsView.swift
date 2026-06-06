@@ -30,6 +30,32 @@ final class FundLandingViewModel {
     }
 }
 
+@Observable
+final class FundUniverseLoopViewModel {
+    var response: FundOSProductResponse?
+    var isLoading = false
+    var errorMessage: String?
+
+    private let apiClient: APIClient
+
+    init(apiClient: APIClient = .shared) {
+        self.apiClient = apiClient
+    }
+
+    @MainActor
+    func load() async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        do {
+            response = try await apiClient.get(path: "/api/v1/fund/os/universe-loop")
+        } catch {
+            errorMessage = "Universe Loop unavailable from ORCA"
+        }
+    }
+}
+
 struct FundLanding: Decodable {
     let status: String
     let schemaVersion: String
@@ -104,6 +130,171 @@ struct FundLanding: Decodable {
     }
 }
 
+struct FundOSProductResponse: Decodable {
+    let status: String
+    let schemaVersion: String
+    let route: String
+    let section: String
+    let sourceArtifact: String
+    let sourceReadable: Bool
+    let sourceFresh: Bool
+    let sourceMtime: String?
+    let sourceAgeSeconds: Int?
+    let generatedAt: String?
+    let readPolicy: String
+    let degradedReason: String?
+    let data: FundUniverseLoopController?
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case schemaVersion = "schema_version"
+        case route
+        case section
+        case sourceArtifact = "source_artifact"
+        case sourceReadable = "source_readable"
+        case sourceFresh = "source_fresh"
+        case sourceMtime = "source_mtime"
+        case sourceAgeSeconds = "source_age_seconds"
+        case generatedAt = "generated_at"
+        case readPolicy = "read_policy"
+        case degradedReason = "degraded_reason"
+        case data
+    }
+
+    var isAvailable: Bool { status == "available" && data != nil }
+    var freshnessLabel: String {
+        if let sourceAgeSeconds {
+            if sourceAgeSeconds < 60 { return "\(sourceAgeSeconds)s old" }
+            if sourceAgeSeconds < 3_600 { return "\(sourceAgeSeconds / 60)m old" }
+            return "\(sourceAgeSeconds / 3_600)h old"
+        }
+        return sourceFresh ? "fresh" : "unknown age"
+    }
+}
+
+struct FundUniverseLoopController: Decodable {
+    let universeLoopStatus: String?
+    let status: String?
+    let blocker: String?
+    let blockers: [String]?
+    let warnings: [String]?
+    let urgentSymbols: [String]?
+    let minerStatus: String?
+    let completedReviews: Int?
+    let calibrationPendingRows: Int?
+    let routeImplementation: String?
+    let queueItems: Int?
+    let nextActions: [String]?
+
+    private enum CodingKeys: String, CodingKey {
+        case universeLoopStatus = "universe_loop_status"
+        case status
+        case blocker
+        case blockers
+        case warnings
+        case urgentSymbols = "urgent_symbols"
+        case minerStatus = "miner_status"
+        case completedReviews = "completed_reviews"
+        case calibrationPendingRows = "calibration_pending_rows"
+        case routeImplementation = "route_implementation"
+        case queueItems = "queue_items"
+        case nextActions = "next_actions"
+        case queue
+        case miner
+        case reviews
+        case calibration
+        case orcaRoute = "orca_route"
+    }
+
+    private enum QueueKeys: String, CodingKey {
+        case items
+        case urgentSymbols = "urgent_symbols"
+    }
+
+    private enum MinerKeys: String, CodingKey {
+        case status
+    }
+
+    private enum ReviewKeys: String, CodingKey {
+        case completedReviews = "completed_reviews"
+    }
+
+    private enum CalibrationKeys: String, CodingKey {
+        case pendingRows = "pending_rows"
+    }
+
+    private enum ActionKeys: String, CodingKey {
+        case action
+        case owner
+        case status
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        universeLoopStatus = try container.decodeIfPresent(String.self, forKey: .universeLoopStatus)
+        status = try container.decodeIfPresent(String.self, forKey: .status)
+        blockers = try container.decodeIfPresent([String].self, forKey: .blockers)
+        warnings = try container.decodeIfPresent([String].self, forKey: .warnings)
+
+        let queue = try? container.nestedContainer(keyedBy: QueueKeys.self, forKey: .queue)
+        urgentSymbols = try container.decodeIfPresent([String].self, forKey: .urgentSymbols)
+            ?? queue?.decodeIfPresent([String].self, forKey: .urgentSymbols)
+
+        let miner = try? container.nestedContainer(keyedBy: MinerKeys.self, forKey: .miner)
+        minerStatus = try container.decodeIfPresent(String.self, forKey: .minerStatus)
+            ?? miner?.decodeIfPresent(String.self, forKey: .status)
+
+        let reviews = try? container.nestedContainer(keyedBy: ReviewKeys.self, forKey: .reviews)
+        completedReviews = try container.decodeIfPresent(Int.self, forKey: .completedReviews)
+            ?? reviews?.decodeIfPresent(Int.self, forKey: .completedReviews)
+
+        let calibration = try? container.nestedContainer(keyedBy: CalibrationKeys.self, forKey: .calibration)
+        calibrationPendingRows = try container.decodeIfPresent(Int.self, forKey: .calibrationPendingRows)
+            ?? calibration?.decodeIfPresent(Int.self, forKey: .pendingRows)
+
+        queueItems = try container.decodeIfPresent(Int.self, forKey: .queueItems)
+            ?? queue?.decodeIfPresent(Int.self, forKey: .items)
+
+        routeImplementation = try container.decodeIfPresent(String.self, forKey: .routeImplementation)
+            ?? container.decodeIfPresent(String.self, forKey: .orcaRoute)
+
+        if let blocker = try container.decodeIfPresent(String.self, forKey: .blocker) {
+            self.blocker = blocker
+        } else {
+            self.blocker = blockers?.first
+        }
+
+        if let strings = try? container.decodeIfPresent([String].self, forKey: .nextActions) {
+            nextActions = strings
+        } else if var actions = try? container.nestedUnkeyedContainer(forKey: .nextActions) {
+            var values: [String] = []
+            while !actions.isAtEnd {
+                let item = try actions.nestedContainer(keyedBy: ActionKeys.self)
+                let action = try item.decodeIfPresent(String.self, forKey: .action)
+                let owner = try item.decodeIfPresent(String.self, forKey: .owner)
+                let status = try item.decodeIfPresent(String.self, forKey: .status)
+                let parts = [action, owner.map { "owner: \($0)" }, status.map { "status: \($0)" }]
+                    .compactMap { $0 }
+                if !parts.isEmpty {
+                    values.append(parts.joined(separator: " · "))
+                }
+            }
+            nextActions = values
+        } else {
+            nextActions = nil
+        }
+    }
+
+    var displayStatus: String { universeLoopStatus ?? status ?? "unknown" }
+    var displayBlockers: [String] {
+        var values = blockers ?? []
+        if let blocker, !blocker.isEmpty, !values.contains(blocker) {
+            values.insert(blocker, at: 0)
+        }
+        return values
+    }
+}
+
 struct FundLandingSummary: Decodable {
     let agentLandingReady: Bool?
     let dataApplicationStatus: String?
@@ -152,6 +343,7 @@ struct AgentsView: View {
     @State private var viewModel = AgentsViewModel()
     @State private var focusModel = AgentFocusCardsModel()
     @State private var fundLandingModel = FundLandingViewModel()
+    @State private var fundUniverseLoopModel = FundUniverseLoopViewModel()
     @State private var selectedAgent: Agent?
     @State private var selectedFocusCard: AgentFocusCard?
     @State private var showingLogStream: Agent?
@@ -189,6 +381,7 @@ struct AgentsView: View {
             .refreshable {
                 await focusModel.load(force: true)
                 await fundLandingModel.load()
+                await fundUniverseLoopModel.load()
                 await viewModel.loadAgents()
                 await viewModel.loadAllInboxTails()
             }
@@ -213,6 +406,7 @@ struct AgentsView: View {
             .task {
                 await focusModel.load()
                 await fundLandingModel.load()
+                await fundUniverseLoopModel.load()
                 await viewModel.loadAgents()
                 consumePendingActivationAgent()
                 viewModel.subscribeToAgentState()
@@ -331,16 +525,20 @@ struct AgentsView: View {
                         .font(.system(size: 9, weight: .bold))
                         .foregroundColor(AppColors.textTertiary)
                         .kerning(0.5)
-                    ForEach(Array(card.stretch.prefix(3).enumerated()), id: \.offset) { idx, item in
-                        HStack(alignment: .firstTextBaseline, spacing: 4) {
-                            Text("\(idx + 1).")
-                                .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                                .foregroundColor(AppColors.textTertiary)
-                            Text(item.isEmpty ? "—" : item)
-                                .font(.system(size: 11))
-                                .foregroundColor(item.isEmpty ? AppColors.textTertiary : AppColors.textPrimary)
-                                .lineLimit(2)
+                    if card.hasStretch {
+                        ForEach(Array(card.stretch.prefix(3).enumerated()), id: \.offset) { idx, item in
+                            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                                Text("\(idx + 1).")
+                                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                    .foregroundColor(AppColors.textTertiary)
+                                Text(item)
+                                    .font(.system(size: 11))
+                                    .foregroundColor(AppColors.textPrimary)
+                                    .lineLimit(2)
+                            }
                         }
+                    } else {
+                        pendingORCARow("Stretch not published")
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -350,9 +548,13 @@ struct AgentsView: View {
                         .font(.system(size: 9, weight: .bold))
                         .foregroundColor(AppColors.textTertiary)
                         .kerning(0.5)
-                    roadmapRow("30d", card.roadmap.d30)
-                    roadmapRow("60d", card.roadmap.d60)
-                    roadmapRow("90d", card.roadmap.d90)
+                    if card.hasRoadmap {
+                        roadmapRow("30d", card.roadmap.d30)
+                        roadmapRow("60d", card.roadmap.d60)
+                        roadmapRow("90d", card.roadmap.d90)
+                    } else {
+                        pendingORCARow("Roadmap not published")
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -365,7 +567,7 @@ struct AgentsView: View {
                     .font(.system(size: 9, weight: .bold))
                     .foregroundColor(AppColors.textTertiary)
                     .kerning(0.5)
-                if let milestones = card.thisWeek {
+                if let milestones = card.thisWeek, !milestones.isEmpty {
                     ForEach(Array(milestones.prefix(5).enumerated()), id: \.element.id) { _, milestone in
                         HStack(alignment: .firstTextBaseline, spacing: 4) {
                             Text(milestone.statusDot)
@@ -378,9 +580,7 @@ struct AgentsView: View {
                         }
                     }
                 } else {
-                    Text("—")
-                        .font(.system(size: 11))
-                        .foregroundColor(AppColors.textTertiary)
+                    pendingORCARow("Weekly plan not published")
                 }
             }
 
@@ -393,11 +593,7 @@ struct AgentsView: View {
                         .font(.system(size: 9, weight: .bold))
                         .foregroundColor(AppColors.textTertiary)
                         .kerning(0.5)
-                    if card.isSkeleton {
-                        Text("waiting for morning log")
-                            .font(.system(size: 11))
-                            .foregroundColor(AppColors.textTertiary)
-                    } else {
+                    if card.hasFocusAreas {
                         ForEach(Array(card.focusAreas.prefix(3).enumerated()), id: \.offset) { idx, area in
                             if !area.label.isEmpty {
                                 HStack(alignment: .firstTextBaseline, spacing: 4) {
@@ -412,10 +608,16 @@ struct AgentsView: View {
                                 }
                             }
                         }
+                    } else {
+                        pendingORCARow("Morning log not published")
                     }
                 }
                 Spacer(minLength: 8)
-                fishChip(card.fish)
+                if card.hasFish {
+                    fishChip(card.fish)
+                } else {
+                    sourcePill("Fish pending")
+                }
             }
         }
         .padding(12)
@@ -498,6 +700,27 @@ struct AgentsView: View {
         }
     }
 
+    private func pendingORCARow(_ text: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: "clock.badge.questionmark")
+                .font(.system(size: 10, weight: .semibold))
+            Text(text)
+                .font(.system(size: 11))
+                .lineLimit(2)
+        }
+        .foregroundColor(AppColors.textTertiary)
+    }
+
+    private func sourcePill(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundColor(AppColors.textTertiary)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(AppColors.backgroundTertiary)
+            .clipShape(Capsule())
+    }
+
     private func fishChip(_ fish: AgentFocusFish) -> some View {
         HStack(spacing: 4) {
             Text(fish.icon)
@@ -541,6 +764,8 @@ struct AgentsView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8))
 
             fundLandingCard
+
+            fundUniverseLoopCard
 
             LazyVGrid(columns: [
                 GridItem(.flexible(), spacing: 8),
@@ -604,6 +829,114 @@ struct AgentsView: View {
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(AppColors.accentWarning.opacity(0.18), lineWidth: 1)
         )
+    }
+
+    private var fundUniverseLoopCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "point.3.connected.trianglepath.dotted")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(AppColors.accentWarning)
+                Text("Universe Loop")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(AppColors.textPrimary)
+                Spacer()
+                if fundUniverseLoopModel.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                } else if let response = fundUniverseLoopModel.response {
+                    statusPill(response.isAvailable ? "READ-ONLY" : "DEGRADED", color: response.isAvailable ? AppColors.accentSuccess : AppColors.accentWarning)
+                } else {
+                    statusPill("WAITING", color: AppColors.textTertiary)
+                }
+            }
+
+            if let response = fundUniverseLoopModel.response, let loop = response.data {
+                Text("Protected visibility only. No Miner dispatch, NATS publish, broker action, or runtime mutation.")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                LazyVGrid(columns: [
+                    GridItem(.flexible(), spacing: 8),
+                    GridItem(.flexible(), spacing: 8)
+                ], spacing: 8) {
+                    fundMetric("Status", loop.displayStatus)
+                    fundMetric("Miner", loop.minerStatus ?? "—")
+                    fundMetric("Queue", loop.queueItems.map(String.init) ?? "—")
+                    fundMetric("Reviews", loop.completedReviews.map(String.init) ?? "—")
+                    fundMetric("Calibration", loop.calibrationPendingRows.map(String.init) ?? "—")
+                    fundMetric("Route", loop.routeImplementation ?? "—")
+                }
+
+                if let urgentSymbols = loop.urgentSymbols, !urgentSymbols.isEmpty {
+                    wrappedTokenRow(title: "Urgent queue", values: urgentSymbols)
+                }
+
+                let blockers = loop.displayBlockers
+                if !blockers.isEmpty {
+                    compactTextList(title: "Blockers", values: blockers)
+                }
+
+                if let warnings = loop.warnings, !warnings.isEmpty {
+                    compactTextList(title: "Warnings", values: warnings)
+                }
+
+                if let nextActions = loop.nextActions, !nextActions.isEmpty {
+                    compactTextList(title: "Next actions", values: nextActions)
+                }
+
+                Text("Source: ORCA \(response.route) · \(response.freshnessLabel) · \(response.readPolicy)")
+                    .font(.system(size: 10))
+                    .foregroundColor(AppColors.textTertiary)
+                    .lineLimit(3)
+            } else {
+                Text(fundUniverseLoopModel.response?.degradedReason ?? fundUniverseLoopModel.errorMessage ?? "Waiting for ORCA Universe Loop route.")
+                    .font(.system(size: 12))
+                    .foregroundColor(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(12)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(AppColors.accentWarning.opacity(0.22), lineWidth: 1)
+        )
+    }
+
+    private func wrappedTokenRow(title: String, values: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title.uppercased())
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(AppColors.textTertiary)
+            FlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                ForEach(values, id: \.self) { value in
+                    Text(value)
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundColor(AppColors.accentWarning)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .background(AppColors.accentWarning.opacity(0.12))
+                        .clipShape(Capsule())
+                }
+            }
+        }
+    }
+
+    private func compactTextList(title: String, values: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title.uppercased())
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(AppColors.textTertiary)
+            ForEach(values.prefix(4), id: \.self) { value in
+                Text("• \(value)")
+                    .font(.system(size: 11))
+                    .foregroundColor(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 
     private var fundLandingCard: some View {
@@ -1134,6 +1467,10 @@ private struct AgentFocusCard: Identifiable, Hashable {
     let lastLogExcerpt: String?
     let lastUpdated: Date?
     let isSkeleton: Bool
+    let hasStretch: Bool
+    let hasRoadmap: Bool
+    let hasFish: Bool
+    let hasFocusAreas: Bool
 
     var id: String { agentId.lowercased() }
 
@@ -1152,7 +1489,6 @@ private struct AgentFocusCard: Identifiable, Hashable {
         return lastUpdated.relativeFormatted
     }
 
-    /// Render spec v1 defaults before the daily-log extractor petal wires up.
     static func skeleton(agentId: String) -> AgentFocusCard {
         let meta = AgentFocusDefaults.mainAgentMeta[agentId]!
         return AgentFocusCard(
@@ -1160,18 +1496,22 @@ private struct AgentFocusCard: Identifiable, Hashable {
             displayName: meta.name,
             emoji: meta.emoji,
             charter: meta.charter,
-            stretch: AgentFocusDefaults.stretch[agentId] ?? ["", "", ""],
-            roadmap: AgentFocusDefaults.roadmap[agentId] ?? .empty,
+            stretch: [],
+            roadmap: .empty,
             thisWeek: nil,
             focusAreas: [
-                AgentFocusArea(id: "1", label: "Waiting for morning log", evidenceRef: nil),
+                AgentFocusArea(id: "1", label: "", evidenceRef: nil),
                 AgentFocusArea(id: "2", label: "", evidenceRef: nil),
                 AgentFocusArea(id: "3", label: "", evidenceRef: nil)
             ],
-            fish: AgentFocusDefaults.fish[agentId] ?? AgentFocusFish(name: "—", icon: "—"),
+            fish: AgentFocusFish(name: "—", icon: "—"),
             lastLogExcerpt: nil,
             lastUpdated: nil,
-            isSkeleton: true
+            isSkeleton: true,
+            hasStretch: false,
+            hasRoadmap: false,
+            hasFish: false,
+            hasFocusAreas: false
         )
     }
 }
@@ -1191,44 +1531,6 @@ private enum AgentFocusDefaults {
         "aloha": ("Aloha", "🌸", "Backbone / Nerve / Flywheel / Doctrine gate"),
         "chief": ("Chief", "🦅", "Trading / P&L / Funding"),
         "rooster": ("Rooster", "🐓", "Security / Research / Knowledge")
-    ]
-
-    // SPEC-POD-AGENT-FOCUS-CARDS-2026-W22 v1 defaults — render before extractor petal lands.
-    static let stretch: [String: [String]] = [
-        "maui":    ["Speed of build", "Architectural taste", "Codex orchestration mastery"],
-        "aloha":   ["Crisp communication", "Organized team", "ORCA standards"],
-        "chief":   ["Disciplined trading conviction", "Funding velocity", "Learning loop compounding"],
-        "rooster": ["Security posture", "Adversarial thinking", "Research depth"]
-    ]
-
-    static let roadmap: [String: AgentRoadmap] = [
-        "maui": AgentRoadmap(
-            d30: "Pod cockpit V1 LIVE",
-            d60: "Memory Spine V2 + Project Automation v1.0",
-            d90: "Voice surface Phase 1 + Jarvis Arms autonomous"
-        ),
-        "aloha": AgentRoadmap(
-            d30: "Wiki→Pod auto-pairing fully closed",
-            d60: "Doc-ledger drives weekly retro signal",
-            d90: "agent_focus_card as ORCA entity"
-        ),
-        "chief": AgentRoadmap(
-            d30: "Funding-squeeze v1.4 LIVE",
-            d60: "Live capital deployment gate passed",
-            d90: "Strategy Journal sources forward bets"
-        ),
-        "rooster": AgentRoadmap(
-            d30: "35341da6 closed + harm-gate doctrine LIVE",
-            d60: "Guardian Phase 2 secure-by-design",
-            d90: "Security telemetry visible on Pod Dashboard"
-        )
-    ]
-
-    static let fish: [String: AgentFocusFish] = [
-        "maui":    AgentFocusFish(name: "Starfish",   icon: "⭐"),
-        "aloha":   AgentFocusFish(name: "Held",       icon: "—"),
-        "chief":   AgentFocusFish(name: "Chieffish",  icon: "🐟"),
-        "rooster": AgentFocusFish(name: "Roosterfish", icon: "🐔")
     ]
 }
 
@@ -1317,16 +1619,17 @@ private struct AgentFocusCardDTO: Decodable {
             AgentFocusArea(id: String($0 + 1), label: "", evidenceRef: nil)
         }
 
-        // STRETCH + ROADMAP fall back to spec v1 defaults when API omits them.
-        let stretchValues = stretch.map { Array($0.prefix(3)) + Array(repeating: "", count: max(0, 3 - $0.count)) }
-            ?? AgentFocusDefaults.stretch[id] ?? ["", "", ""]
+        let stretchValues = stretch.map { Array($0.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.prefix(3)) } ?? []
         let roadmapValue = roadmap.map { AgentRoadmap(d30: $0.d30 ?? "", d60: $0.d60 ?? "", d90: $0.d90 ?? "") }
-            ?? AgentFocusDefaults.roadmap[id] ?? .empty
+            ?? .empty
         let fishValue = fish.map { AgentFocusFish(name: $0.name, icon: $0.icon) }
-            ?? AgentFocusDefaults.fish[id] ?? AgentFocusFish(name: "—", icon: "—")
+            ?? AgentFocusFish(name: "—", icon: "—")
 
         // weekly-plan endpoint takes precedence; DTO field is fallback; nil = endpoint not live yet.
         let thisWeekValue = weeklyPlan ?? thisWeek
+        let hasRoadmap = !roadmapValue.d30.isEmpty || !roadmapValue.d60.isEmpty || !roadmapValue.d90.isEmpty
+        let hasFish = fishValue.name != "—" || fishValue.icon != "—"
+        let hasFocusAreas = paddedAreas.contains { !$0.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
         return AgentFocusCard(
             agentId: id,
@@ -1340,7 +1643,11 @@ private struct AgentFocusCardDTO: Decodable {
             fish: fishValue,
             lastLogExcerpt: lastLogExcerpt,
             lastUpdated: lastUpdated,
-            isSkeleton: false
+            isSkeleton: false,
+            hasStretch: !stretchValues.isEmpty,
+            hasRoadmap: hasRoadmap,
+            hasFish: hasFish,
+            hasFocusAreas: hasFocusAreas
         )
     }
 
@@ -1401,16 +1708,20 @@ private struct AgentFocusCardDetailSheet: View {
                             .font(.system(size: 11, weight: .bold))
                             .foregroundColor(AppColors.textTertiary)
                             .kerning(0.5)
-                        ForEach(Array(card.stretch.prefix(3).enumerated()), id: \.offset) { idx, item in
-                            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                Text("\(idx + 1).")
-                                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                                    .foregroundColor(AppColors.textTertiary)
-                                Text(item.isEmpty ? "—" : item)
-                                    .font(.system(size: 15, weight: .semibold))
-                                    .foregroundColor(item.isEmpty ? AppColors.textTertiary : AppColors.textPrimary)
-                                    .fixedSize(horizontal: false, vertical: true)
+                        if card.hasStretch {
+                            ForEach(Array(card.stretch.prefix(3).enumerated()), id: \.offset) { idx, item in
+                                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                    Text("\(idx + 1).")
+                                        .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                        .foregroundColor(AppColors.textTertiary)
+                                    Text(item)
+                                        .font(.system(size: 15, weight: .semibold))
+                                        .foregroundColor(AppColors.textPrimary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
                             }
+                        } else {
+                            detailPendingRow("ORCA has not published stretch areas for this agent.")
                         }
                     }
 
@@ -1420,13 +1731,21 @@ private struct AgentFocusCardDetailSheet: View {
                             .font(.system(size: 11, weight: .bold))
                             .foregroundColor(AppColors.textTertiary)
                             .kerning(0.5)
-                        detailRoadmapRow("30d", card.roadmap.d30)
-                        detailRoadmapRow("60d", card.roadmap.d60)
-                        detailRoadmapRow("90d", card.roadmap.d90)
+                        if card.hasRoadmap {
+                            detailRoadmapRow("30d", card.roadmap.d30)
+                            detailRoadmapRow("60d", card.roadmap.d60)
+                            detailRoadmapRow("90d", card.roadmap.d90)
+                        } else {
+                            detailPendingRow("ORCA has not published a roadmap for this agent.")
+                        }
                     }
 
                     HStack {
-                        fishPill
+                        if card.hasFish {
+                            fishPill
+                        } else {
+                            detailPendingPill("Fish pending")
+                        }
                         Spacer()
                         Text(card.lastUpdatedLabel)
                             .font(.system(size: 11))
@@ -1439,11 +1758,7 @@ private struct AgentFocusCardDetailSheet: View {
                             .font(.system(size: 11, weight: .bold))
                             .foregroundColor(AppColors.textTertiary)
                             .kerning(0.5)
-                        if card.isSkeleton {
-                            Text("Waiting for morning log extraction")
-                                .font(.system(size: 13))
-                                .foregroundColor(AppColors.textTertiary)
-                        } else {
+                        if card.hasFocusAreas {
                             ForEach(Array(card.focusAreas.prefix(3).enumerated()), id: \.offset) { idx, area in
                                 if !area.label.isEmpty {
                                     HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -1457,6 +1772,8 @@ private struct AgentFocusCardDetailSheet: View {
                                     }
                                 }
                             }
+                        } else {
+                            detailPendingRow("ORCA has not published today's focus areas.")
                         }
                     }
 
@@ -1513,6 +1830,28 @@ private struct AgentFocusCardDetailSheet: View {
                 .foregroundColor(value.isEmpty ? AppColors.textTertiary : AppColors.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private func detailPendingRow(_ text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: "clock.badge.questionmark")
+                .font(.system(size: 12, weight: .semibold))
+            Text(text)
+                .font(.system(size: 13))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .foregroundColor(AppColors.textTertiary)
+    }
+
+    private func detailPendingPill(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundColor(AppColors.textTertiary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(AppColors.backgroundSecondary)
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(AppColors.border, lineWidth: 0.5))
     }
 }
 

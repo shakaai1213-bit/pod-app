@@ -64,6 +64,8 @@
 	</dict>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>POD uses your microphone to transcribe voice messages into chat.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>POD may use your camera for future LiveKit voice and video rooms.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>POD uses speech recognition to convert your voice into text for chat messages.</string>
 	<key>UILaunchScreen</key>
