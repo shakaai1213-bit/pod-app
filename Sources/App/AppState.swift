@@ -41,6 +41,12 @@ final class AppState: ObservableObject {
 
     static let backendURL = AppConfig.backendURL
 
+    static func localBearerTokenFallback() -> String? {
+        let token = OrcaSecrets.bearerToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty, !token.contains("REPLACE_ME") else { return nil }
+        return token
+    }
+
     // MARK: - Initialization
 
     init() {
@@ -78,14 +84,19 @@ final class AppState: ObservableObject {
             await prepareNotifications()
             print("[AppState] Auto-login successful")
         } else {
-            print("[AppState] Auto-login skipped or failed")
+            if let localToken = Self.localBearerTokenFallback() {
+                print("[AppState] Keychain auto-login failed; trying local ORCA token fallback")
+                await authenticate(token: localToken)
+            } else {
+                print("[AppState] Auto-login skipped or failed")
+            }
         }
     }
 
     // MARK: - Authentication
 
     func authenticate(token: String) async {
-        print("[AppState] authenticate() called with token: \(token.prefix(8))...")
+        print("[AppState] authenticate() called")
         authDiagnostics.removeAll()
         appendDiagnostic("Starting auth against \(Self.backendURL)")
         appendDiagnostic("Token length: \(token.count)")
@@ -99,7 +110,7 @@ final class AppState: ObservableObject {
     /// Actual auth logic — called inside the timeout wrapper.
     /// All state mutations are @MainActor by virtue of the class being @MainActor.
     private func performAuth(token: String) async {
-        print("[AppState] performAuth: START token=\(token.prefix(8))... backendURL=\(Self.backendURL)")
+        print("[AppState] performAuth: START backendURL=\(Self.backendURL)")
         appendDiagnostic("Checking backend reachability")
 
         // Retry reachability check with internet test for iOS Simulator
@@ -247,7 +258,7 @@ final class AppState: ObservableObject {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue(token, forHTTPHeaderField: "X-Api-Key")
         request.timeoutInterval = 15
-        print("[AppState] verifyTokenDirectly: GET \(url.absoluteString) Bearer=\(token.prefix(8))...")
+        print("[AppState] verifyTokenDirectly: GET \(url.absoluteString)")
 
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -338,6 +349,7 @@ final class AppState: ObservableObject {
         switch tab {
         case .dashboard: navigationState = .dashboard
         case .runtime: navigationState = .dashboard
+        case .system: navigationState = .dashboard
         case .chat: navigationState = .chat(channelId: nil)
         case .work: navigationState = .projects(taskId: nil)
         case .captainsLog: navigationState = .dashboard  // legacy alias

@@ -26,6 +26,11 @@
 		2E01CCD350BCB92DC2E85AF9 /* OpenClawClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E3B24352E6EA572EDFD8493 /* OpenClawClient.swift */; };
 		30E2F95F8E6639796DE75463 /* TradingViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A893BBA804C06676605D8A94 /* TradingViewModel.swift */; };
 		32C299FC9E7655E4250BDFC6 /* TradingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B176EE740BDAAB1D3841B4F7 /* TradingView.swift */; };
+		A0B1C2D3E4F5061728394A5C /* LiveKitVoiceConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0B1C2D3E4F5061728394A5B /* LiveKitVoiceConnection.swift */; };
+		A0B1C2D3E4F5061728394A5D /* LiveKit in Frameworks */ = {isa = PBXBuildFile; productRef = A0B1C2D3E4F5061728394A60 /* LiveKit */; };
+		AA1000000000000000000001 /* SystemRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000000000000000000002 /* SystemRepository.swift */; };
+		AA1000000000000000000003 /* SystemViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000000000000000000004 /* SystemViewModel.swift */; };
+		AA1000000000000000000005 /* SystemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000000000000000000006 /* SystemView.swift */; };
 		367E10870A54B88CFB0699C9 /* CrewTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70E23BCCE4D9D3289B7D1F13 /* CrewTabView.swift */; };
 		37870C52287CAB60B0FCDB38 /* LabContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D98B88FCFC79DC5214247FB /* LabContent.swift */; };
 		38A4AD8CE06D7BDB153DB923 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1695C8CD499CB511B0C11D94 /* ChatView.swift */; };
@@ -189,6 +194,10 @@
 		916EBD9D032E8F9FE9864379 /* pod.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = pod.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		928284E5D88714A670BD7542 /* ProjectRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectRepository.swift; sourceTree = "<group>"; };
 		952F2ED4468BC7A6FAAEF442 /* AgentDetailSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentDetailSheet.swift; sourceTree = "<group>"; };
+		A0B1C2D3E4F5061728394A5B /* LiveKitVoiceConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveKitVoiceConnection.swift; sourceTree = "<group>"; };
+		AA1000000000000000000002 /* SystemRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemRepository.swift; sourceTree = "<group>"; };
+		AA1000000000000000000004 /* SystemViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemViewModel.swift; sourceTree = "<group>"; };
+		AA1000000000000000000006 /* SystemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemView.swift; sourceTree = "<group>"; };
 		A28A4672374ACF545BD664A8 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		A2D290EE8D7D2034F520F37F /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		A4E4C855478DA5C9D41034E0 /* CockpitSignQueueSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CockpitSignQueueSection.swift; sourceTree = "<group>"; };
@@ -275,6 +284,7 @@
 			isa = PBXGroup;
 			children = (
 				A72A5151CFC379FFABAD5E84 /* ClaudeClient.swift */,
+				A0B1C2D3E4F5061728394A5B /* LiveKitVoiceConnection.swift */,
 				3E3B24352E6EA572EDFD8493 /* OpenClawClient.swift */,
 				FBC7D0B7FA46F3CE605D98CB /* SpeechRecorder.swift */,
 				123B9D533AE21BBEEF5A4607 /* VoiceCompanionView.swift */,
@@ -470,6 +480,7 @@
 				9A8ADEE59E8F3FF33C20B1D0 /* Projects */,
 				11E553AE2F9ACF951DE1505E /* Research */,
 				2A71724B379D59F2E608C6AE /* Sonar */,
+				AA1000000000000000000007 /* System */,
 				45452DD4FB428A02C43F98B1 /* Tickets */,
 				CEFC1D1CDAAAE7311D0D8B4D /* Trading */,
 				11D06A5303C4235EC623115D /* VoiceCompanion */,
@@ -488,6 +499,7 @@
 				928284E5D88714A670BD7542 /* ProjectRepository.swift */,
 				7ED4159151441CB032A8460F /* ResearchRepository.swift */,
 				3AB0691F93E9F5494A3A79B1 /* StandardRepository.swift */,
+				AA1000000000000000000002 /* SystemRepository.swift */,
 			);
 			path = Repositories;
 			sourceTree = "<group>";
@@ -583,6 +595,15 @@
 				F5D15A077B49CD21B9DDADD5 /* StandardEditorView.swift */,
 			);
 			path = Knowledge;
+			sourceTree = "<group>";
+		};
+		AA1000000000000000000007 /* System */ = {
+			isa = PBXGroup;
+			children = (
+				AA1000000000000000000006 /* SystemView.swift */,
+				AA1000000000000000000004 /* SystemViewModel.swift */,
+			);
+			path = System;
 			sourceTree = "<group>";
 		};
 		B065A09A6C4D092D2D37F316 /* App */ = {
@@ -690,12 +711,24 @@
 		};
 /* End PBXGroup section */
 
+/* Begin PBXFrameworksBuildPhase section */
+		A0B1C2D3E4F5061728394A5E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A0B1C2D3E4F5061728394A5D /* LiveKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
 /* Begin PBXNativeTarget section */
 		951507A0FFC19619068FF58A /* pod */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 17F709919C2DCF0D571FE511 /* Build configuration list for PBXNativeTarget "pod" */;
 			buildPhases = (
 				74C81F98C914CBEE19FEB92B /* Sources */,
+				A0B1C2D3E4F5061728394A5E /* Frameworks */,
 				2D6E1E4343A0BD2FBD2C6903 /* Resources */,
 			);
 			buildRules = (
@@ -704,6 +737,7 @@
 			);
 			name = pod;
 			packageProductDependencies = (
+				A0B1C2D3E4F5061728394A60 /* LiveKit */,
 			);
 			productName = pod;
 			productReference = 916EBD9D032E8F9FE9864379 /* pod.app */;
@@ -733,6 +767,9 @@
 			);
 			mainGroup = 5861BAB59347675720796426;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A0B1C2D3E4F5061728394A5F /* XCRemoteSwiftPackageReference "client-sdk-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 50EBC1984C434E43EC37D857 /* Products */;
 			projectDirPath = "";
@@ -809,6 +846,7 @@
 				37870C52287CAB60B0FCDB38 /* LabContent.swift in Sources */,
 				86593144A1BCAD9B03792FD0 /* LabView.swift in Sources */,
 				8703A17F3CEAFF881EA6F5CA /* LogStreamView.swift in Sources */,
+				A0B1C2D3E4F5061728394A5C /* LiveKitVoiceConnection.swift in Sources */,
 				E887DC0291327FDCA8E3A7D2 /* MessageBubbleView.swift in Sources */,
 				B47D435E2BDD530CC9A6CC36 /* MockData.swift in Sources */,
 				C2595E99C59F93D07A054964 /* Navigation.swift in Sources */,
@@ -846,6 +884,9 @@
 				283E5B81FDD5BEDF1B7E6B17 /* StandardRepository.swift in Sources */,
 				1CE5ECB5B90CBAEBF1759980 /* StatusBadge.swift in Sources */,
 				7D73F19AA5F1A62E35E17CAC /* SwiftDataModels.swift in Sources */,
+				AA1000000000000000000001 /* SystemRepository.swift in Sources */,
+				AA1000000000000000000005 /* SystemView.swift in Sources */,
+				AA1000000000000000000003 /* SystemViewModel.swift in Sources */,
 				CBD4F56F27B316E7080C5790 /* TaskCardView.swift in Sources */,
 				BFAA01EF640B83F68B6F31B7 /* TaskDetailSheet.swift in Sources */,
 				861A20FEDA754C6D9F1E55AE /* TaskSafeSleep.swift in Sources */,
@@ -1088,6 +1129,25 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A0B1C2D3E4F5061728394A5F /* XCRemoteSwiftPackageReference "client-sdk-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/livekit/client-sdk-swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.13.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A0B1C2D3E4F5061728394A60 /* LiveKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A0B1C2D3E4F5061728394A5F /* XCRemoteSwiftPackageReference "client-sdk-swift" */;
+			productName = LiveKit;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = EEB3DFC71AA3E862C36EE6C1 /* Project object */;
 }

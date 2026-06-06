@@ -3,7 +3,7 @@ import Foundation
 // MARK: - App Tab
 
 // L1 Layout Revamp 2026-W22 (SPEC-POD-LAYOUT-REVAMP-2026-W22):
-// Visible tab bar: 7 tabs — dashboard, chat, work, crew, knowledge, lab, runtime
+// Visible tab bar: dashboard, chat, work, crew, knowledge, lab, runtime, system
 // Legacy cases (.captainsLog, .arms, .agents) kept for deep-link and nav-state compat.
 // They are not shown in the tab bar but remain routable.
 
@@ -16,6 +16,7 @@ enum AppTab: String, CaseIterable, Hashable {
     case knowledge
     case lab
     case runtime
+    case system
 
     // MARK: Legacy aliases (not in tab bar; kept for deep-link compat — 30-day dwell per spec)
     case captainsLog    // folded into Knowledge → Notes
@@ -31,6 +32,7 @@ enum AppTab: String, CaseIterable, Hashable {
         case .knowledge:   return "Knowledge"
         case .lab:         return "Lab"
         case .runtime:     return "Runtime"
+        case .system:      return "System"
         // Legacy
         case .captainsLog: return "Captain's Log"
         case .arms:        return "Arms + Team"
@@ -47,6 +49,7 @@ enum AppTab: String, CaseIterable, Hashable {
         case .knowledge:   return "books.vertical.fill"
         case .lab:         return "flask.fill"
         case .runtime:     return "waveform.path.ecg"
+        case .system:      return "server.rack"
         // Legacy (not shown in tab bar)
         case .captainsLog: return "square.and.pencil"
         case .arms:        return "person.3.sequence.fill"

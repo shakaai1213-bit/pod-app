@@ -135,6 +135,8 @@ struct ContentView: View {
             LabView()
         } else if selectedTab == .runtime {
             RuntimeView()
+        } else if selectedTab == .system {
+            SystemView()
         // MARK: Legacy aliases — routable via deep-link for 30-day dwell period
         } else if selectedTab == .arms {
             ArmsTabView()
@@ -166,8 +168,8 @@ struct ContentView: View {
     }
 
     private var visibleTabs: [AppTab] {
-        // L1 revamp 2026-W22: 9 → 7 tabs. Legacy cases excluded from bar (still deep-linkable).
-        [.dashboard, .chat, .work, .crew, .knowledge, .lab, .runtime]
+        // Legacy cases excluded from bar (still deep-linkable).
+        [.dashboard, .chat, .work, .crew, .knowledge, .lab, .runtime, .system]
     }
 
     private func tabBarButton(for tab: AppTab) -> some View {
@@ -1453,9 +1455,7 @@ private struct ComputeRouteChip: View {
 
 struct LoginView: View {
     @EnvironmentObject private var appState: AppState
-    // SEC-007 remediation 2026-05-08: default sourced from OrcaSecrets.swift
-    // (gitignored) instead of hardcoded literal.
-    @State private var token: String = UserDefaults.standard.string(forKey: "orca_auth_token") ?? OrcaSecrets.bearerToken
+    @State private var token: String = UserDefaults.standard.string(forKey: "orca_auth_token") ?? AppState.localBearerTokenFallback() ?? ""
     @State private var networkStatus: String = ""   // live network diagnostic
     @FocusState private var isTokenFocused: Bool
 
