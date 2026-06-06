@@ -73,6 +73,7 @@ public actor SSEStreamManager {
     enum StreamMode: Sendable {
         case chat
         case tickets
+        case boards
     }
 
     // MARK: - State
@@ -203,6 +204,60 @@ public actor SSEStreamManager {
 
         // The delegate yields .connected only after the HTTP response is
         // validated or a backend "connected" SSE event arrives.
+    }
+
+    /// Connect to a board-scoped lifecycle SSE stream.
+    /// Backend: `/api/v1/boards/<id>/stream` emits data-only JSON payloads
+    /// with `event` values such as ticket_added, ticket_updated, and stage_changed.
+    public func connectBoards(
+        boardId: String,
+        token: String,
+        baseURL: String
+    ) -> AsyncThrowingStream<SSEEvent, Error> {
+        isCancelled = false
+        markConnecting()
+        let urlString = "\(baseURL)/api/v1/boards/\(boardId)/stream"
+        guard URL(string: urlString) != nil else {
+            return AsyncThrowingStream { continuation in
+                continuation.finish(throwing: StreamError.invalidURL)
+            }
+        }
+
+        return AsyncThrowingStream<SSEEvent, Error> { [weak self] continuation in
+            continuation.onTermination = { [weak self] _ in
+                Task { [weak self] in
+                    await self?.disconnect()
+                }
+            }
+
+            Task { [weak self] in
+                await self?.runBoardsStream(boardId: boardId, token: token, baseURL: baseURL, continuation: continuation)
+            }
+        }
+    }
+
+    private func runBoardsStream(
+        boardId: String,
+        token: String,
+        baseURL: String,
+        continuation: AsyncThrowingStream<SSEEvent, Error>.Continuation
+    ) async {
+        let urlString = "\(baseURL)/api/v1/boards/\(boardId)/stream"
+        guard let url = URL(string: urlString) else {
+            continuation.finish(throwing: StreamError.invalidURL)
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue(token, forHTTPHeaderField: "X-Api-Key")
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        request.timeoutInterval = .infinity
+
+        let delegate = SSEDelegate(continuation: continuation, manager: self, mode: .boards)
+        session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        dataTask = session?.dataTask(with: request)
+        dataTask?.resume()
     }
 
     /// Called by SSEDelegate when data arrives.
@@ -348,7 +403,8 @@ private final class SSEDelegate: NSObject, URLSessionDataDelegate {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
 
         if trimmed.isEmpty {
-            if let type = eventType, let data = eventData, !data.isEmpty {
+            if let data = eventData, !data.isEmpty {
+                let type = eventType ?? "message"
                 dispatchEvent(type: type, data: data)
             }
             eventType = nil
@@ -428,6 +484,16 @@ private final class SSEDelegate: NSObject, URLSessionDataDelegate {
             }
             // Silent skip on undecodable — backend may add future event types
             // (e.g. heartbeat, schema bump); don't break the stream on those.
+        case .boards:
+            guard let jsonData = data.data(using: .utf8) else { return }
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            if (try? decoder.decode(BoardStreamEnvelope.self, from: jsonData)) != nil {
+                Task { [weak manager] in await manager?.markEvent() }
+                continuation.yield(.keepalive)
+            } else {
+                continuation.yield(.error(.decodingFailed("Could not decode BoardStreamEnvelope")))
+            }
         }
     }
 
@@ -563,6 +629,25 @@ public struct TicketLifecycleEnvelope: Codable, Sendable {
             case ticketId = "ticket_id"
             case boardId  = "board_id"
         }
+    }
+}
+
+/// Payload for board lifecycle events on `/api/v1/boards/<id>/stream`.
+private struct BoardStreamEnvelope: Codable, Sendable {
+    let event: String
+    let boardId: String
+    let generatedAt: Date?
+    let ticketCount: Int?
+    let projectCount: Int?
+    let projectStageCounts: [String: Int]?
+
+    enum CodingKeys: String, CodingKey {
+        case event
+        case boardId = "board_id"
+        case generatedAt = "generated_at"
+        case ticketCount = "ticket_count"
+        case projectCount = "project_count"
+        case projectStageCounts = "project_stage_counts"
     }
 }
 

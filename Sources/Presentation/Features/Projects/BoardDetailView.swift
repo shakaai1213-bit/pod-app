@@ -114,6 +114,15 @@ struct BoardDetailView: View {
             }
             .task {
                 await loadTasks()
+                viewModel.streamBoards(boardId: board.id)
+            }
+            .onChange(of: viewModel.boardStreamRefreshTick) { _, _ in
+                Task {
+                    await loadTasks()
+                }
+            }
+            .onDisappear {
+                viewModel.stopBoardStream()
             }
         }
     }

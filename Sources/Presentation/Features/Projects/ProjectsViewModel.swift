@@ -14,6 +14,7 @@ final class ProjectsViewModel {
     var selectedBoard: Board?
     var isLoading: Bool = false
     var errorMessage: String?
+    var boardStreamRefreshTick: Int = 0
 
     var filterAssignee: UUID?
     var filterTag: String?
@@ -22,6 +23,9 @@ final class ProjectsViewModel {
     // MARK: - Private
 
     private let apiClient = APIClient.shared
+    private var boardSSEManager: SSEStreamManager?
+    private var boardStreamTask: Task<Void, Never>?
+    private var boardStreamBoardId: UUID?
 
     // MARK: - Computed
 
@@ -186,6 +190,85 @@ final class ProjectsViewModel {
             }
         } catch {
             // Leave empty on error
+        }
+    }
+
+    /// Start live subscription to /api/v1/boards/{boardId}/stream. Reconnects
+    /// with exponential backoff capped at 30s. Calling for the same active board
+    /// is a no-op.
+    @MainActor
+    func streamBoards(boardId: UUID) {
+        if boardStreamTask != nil {
+            guard boardStreamBoardId != boardId else { return }
+            stopBoardStream()
+        }
+
+        boardStreamBoardId = boardId
+        boardStreamTask = Task { @MainActor in
+            guard let token = await apiClient.currentToken(), !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                self.errorMessage = "Live board updates need an ORCA auth token."
+                self.boardStreamTask = nil
+                self.boardStreamBoardId = nil
+                return
+            }
+
+            var backoffNanos: UInt64 = 2_000_000_000
+            while !Task.isCancelled {
+                let manager = SSEStreamManager()
+                self.boardSSEManager = manager
+                do {
+                    let events = await manager.connectBoards(
+                        boardId: boardId.uuidString,
+                        token: token,
+                        baseURL: AppState.backendURL
+                    )
+                    for try await event in events {
+                        if Task.isCancelled { return }
+                        switch event {
+                        case .connected:
+                            backoffNanos = 2_000_000_000
+                        case .keepalive:
+                            await self.refreshBoardAfterStreamEvent(boardId: boardId)
+                        case .error:
+                            break
+                        case .message, .ticketLifecycle:
+                            break
+                        }
+                    }
+                } catch {
+                    // Stream ended — fall through to backoff + reconnect.
+                }
+                if Task.isCancelled { break }
+                await manager.markReconnecting()
+                await TaskSafeSleep.sleep(nanoseconds: backoffNanos)
+                backoffNanos = min(backoffNanos * 2, 30_000_000_000)
+            }
+        }
+    }
+
+    @MainActor
+    func stopBoardStream() {
+        boardStreamTask?.cancel()
+        boardStreamTask = nil
+        boardStreamBoardId = nil
+        Task { [manager = boardSSEManager] in
+            await manager?.disconnect()
+        }
+        boardSSEManager = nil
+    }
+
+    private func refreshBoardAfterStreamEvent(boardId: UUID) async {
+        await loadTasks(boardId: boardId)
+        await loadBoards()
+        await MainActor.run {
+            boardStreamRefreshTick += 1
+        }
+    }
+
+    deinit {
+        boardStreamTask?.cancel()
+        Task { [manager = boardSSEManager] in
+            await manager?.disconnect()
         }
     }
 
