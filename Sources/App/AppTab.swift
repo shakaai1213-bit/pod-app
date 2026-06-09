@@ -3,8 +3,8 @@ import Foundation
 // MARK: - App Tab
 
 // L1 Layout Revamp 2026-W22 (SPEC-POD-LAYOUT-REVAMP-2026-W22):
-// Visible tab bar: dashboard, chat, work, crew, knowledge, lab, runtime, system
-// Legacy cases (.captainsLog, .arms, .agents) kept for deep-link and nav-state compat.
+// Visible tab bar: dashboard, chat, work, crew, knowledge, lab, runtime
+// Legacy cases (.captainsLog, .arms, .agents, .system) kept for deep-link and nav-state compat.
 // They are not shown in the tab bar but remain routable.
 
 enum AppTab: String, CaseIterable, Hashable {
@@ -16,7 +16,7 @@ enum AppTab: String, CaseIterable, Hashable {
     case knowledge
     case lab
     case runtime
-    case system
+    case system         // folded into Runtime → Overview; kept routable during dwell
 
     // MARK: Legacy aliases (not in tab bar; kept for deep-link compat — 30-day dwell per spec)
     case captainsLog    // folded into Knowledge → Notes

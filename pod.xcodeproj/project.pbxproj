@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		00A593658BB8B41971F04918 /* ORCAProjectsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B012FA2131C7C588DFF4EBAB /* ORCAProjectsView.swift */; };
+		00BFE77C91D9440CB62A0A01 /* PlanningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00BFE77C91D9440CB62A0A00 /* PlanningView.swift */; };
 		00E5120390A25C364860CB9E /* VoiceCompanionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 123B9D533AE21BBEEF5A4607 /* VoiceCompanionView.swift */; };
 		06AF85E590D1677BF0CA067C /* StandardEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5D15A077B49CD21B9DDADD5 /* StandardEditorView.swift */; };
 		09171C1766C130BFDB1E66F7 /* VoiceCompanionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30A2E30B6BCD93E8C0D2E71C /* VoiceCompanionViewModel.swift */; };
@@ -122,6 +123,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		00BFE77C91D9440CB62A0A00 /* PlanningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanningView.swift; sourceTree = "<group>"; };
 		05ADDFC32BFD813663C896B5 /* AppShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShortcuts.swift; sourceTree = "<group>"; };
 		0905CC7645A277BCFB4D4211 /* Typography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Typography.swift; sourceTree = "<group>"; };
 		0C828D5C39A08FAA8E8C6F7E /* AgentRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRepository.swift; sourceTree = "<group>"; };
@@ -362,6 +364,7 @@
 				8C7B958E1256F4D91985A185 /* ArmsTabView.swift */,
 				53BA388CD44F256C597D3FF1 /* ArmsViewModel.swift */,
 				28ED6950C2F15EC07D3C1331 /* LogStreamView.swift */,
+				00BFE77C91D9440CB62A0A00 /* PlanningView.swift */,
 			);
 			path = Agents;
 			sourceTree = "<group>";
@@ -861,6 +864,7 @@
 				2E01CCD350BCB92DC2E85AF9 /* OpenClawClient.swift in Sources */,
 				A166B4991DC01428DE7A9CFA /* OrcaSecrets.swift in Sources */,
 				99EA3523D26347EF51CBB81E /* PersistenceController.swift in Sources */,
+				00BFE77C91D9440CB62A0A01 /* PlanningView.swift in Sources */,
 				EC8129D43972E4CE42578BC1 /* PriorityBadge.swift in Sources */,
 				7007166115FC21DF1D224686 /* ProjectRepository.swift in Sources */,
 				1A5E2C9725EF8D386ABFBE57 /* Projects.swift in Sources */,

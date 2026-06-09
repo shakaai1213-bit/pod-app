@@ -8,7 +8,9 @@ final class ArmsViewModel {
     var orcaMiniStatus: OrcaMiniStatus = .missing()
     var directiveDrafts: [String: String] = [:]
     var expandedShipArms: Set<String> = []
+    var expandedEvidenceArms: Set<String> = []
     var shipHistoryByArm: [String: [ArmShip]] = [:]
+    var armOpsByArm: [String: ArmOpsSnapshot] = [:]
     var busyArms: Set<String> = []
     var isLoading = false
     var errorMessage: String?
@@ -35,7 +37,21 @@ final class ArmsViewModel {
         async let mauiTask: Void = loadMauiArms()
         async let chiefTask: Void = loadChiefArms()
         async let miniTask: Void = loadOrcaMiniStatus()
-        _ = await (mauiTask, chiefTask, miniTask)
+        async let opsTask: Void = loadArmOps()
+        _ = await (mauiTask, chiefTask, miniTask, opsTask)
+    }
+
+    @MainActor
+    private func loadArmOps() async {
+        do {
+            let response: ArmOpsResponse = try await apiClient.get(path: "/api/v1/jarvis/arm-ops")
+            armOpsByArm = Dictionary(uniqueKeysWithValues: response.arms.map {
+                let snapshot = $0.toDomain(generatedAt: response.generatedAt)
+                return (snapshot.name.lowercased(), snapshot)
+            })
+        } catch {
+            armOpsByArm = [:]
+        }
     }
 
     @MainActor
@@ -322,6 +338,24 @@ final class ArmsViewModel {
 
     func ships(for arm: ArmTag) -> [ArmShip] {
         shipHistoryByArm[arm.name.lowercased()] ?? arm.lastShip.map { [$0] } ?? []
+    }
+
+    func armOps(for arm: ArmTag) -> ArmOpsSnapshot? {
+        armOpsByArm[arm.name.lowercased()]
+    }
+
+    @MainActor
+    func toggleEvidence(for arm: ArmTag) {
+        let key = arm.name.lowercased()
+        if expandedEvidenceArms.contains(key) {
+            expandedEvidenceArms.remove(key)
+            return
+        }
+        expandedEvidenceArms.insert(key)
+    }
+
+    func isEvidenceExpanded(_ arm: ArmTag) -> Bool {
+        expandedEvidenceArms.contains(arm.name.lowercased())
     }
 
     @MainActor
@@ -820,6 +854,228 @@ enum ArmFamily: String, CaseIterable, Identifiable {
     }
 }
 
+struct ArmOpsSnapshot: Identifiable, Hashable {
+    let name: String
+    let family: ArmFamily
+    let displayName: String
+    let directiveStatus: String?
+    let intentState: String?
+    let dispatchStatus: String?
+    let reviewState: String?
+    let reviewReportedBy: String?
+    let latestRun: ArmRunEvidence?
+    let protected: Bool
+    let generatedAt: Date?
+
+    var id: String { name }
+
+    var hasEvidence: Bool {
+        latestRun != nil || dispatchStatus != nil || directiveStatus != nil || reviewState != nil
+    }
+
+    var stateLabel: String {
+        if let runStatus = latestRun?.runStatusStatus, !runStatus.isEmpty {
+            return runStatus.replacingOccurrences(of: "_", with: " ")
+        }
+        if let dispatchStatus, !dispatchStatus.isEmpty {
+            return dispatchStatus.replacingOccurrences(of: "_", with: " ")
+        }
+        if let directiveStatus, !directiveStatus.isEmpty {
+            return directiveStatus.replacingOccurrences(of: "_", with: " ")
+        }
+        if let intentState, !intentState.isEmpty {
+            return intentState.replacingOccurrences(of: "_", with: " ")
+        }
+        return latestRun?.statusLabel ?? "no run evidence"
+    }
+
+    var stateLabelKey: String {
+        stateLabel
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "_")
+            .replacingOccurrences(of: "-", with: "_")
+    }
+
+    var statusColor: Color {
+        let status = (latestRun?.runStatusStatus ?? dispatchStatus ?? directiveStatus ?? latestRun?.status ?? "").lowercased()
+        switch status {
+        case "completed", "done", "reviewed", "owner_reviewed":
+            return AppColors.accentSuccess
+        case "blocked", "failed", "cancelled", "error":
+            return AppColors.accentDanger
+        case "in_progress", "running", "dispatching", "review_ready":
+            return AppColors.accentWarning
+        default:
+            return latestRun == nil ? AppColors.textTertiary : AppColors.accentElectric
+        }
+    }
+}
+
+struct ArmRunEvidence: Identifiable, Hashable, Decodable {
+    let arm: String?
+    let tagId: String?
+    let runId: String?
+    let traceId: String?
+    let status: String?
+    let startedAt: Date?
+    let completedAt: Date?
+    let returncode: Int?
+    let runDir: String?
+    let promptPath: String?
+    let eventsPath: String?
+    let stderrPath: String?
+    let outputPath: String?
+    let resultPath: String?
+    let reportPath: String?
+    let activationContextPath: String?
+    let runStatusPath: String?
+    let evidencePath: String?
+    let codexThreadId: String?
+    let eventCount: Int
+    let fileChangeCount: Int
+    let result: [String: AgentRunJSONValue]?
+    let report: [String: AgentRunJSONValue]?
+    let activationContext: [String: AgentRunJSONValue]?
+    let runStatus: [String: AgentRunJSONValue]?
+    let workLogPath: String?
+
+    enum CodingKeys: String, CodingKey {
+        case arm
+        case tagId = "tag_id"
+        case runId = "run_id"
+        case traceId = "trace_id"
+        case status
+        case startedAt = "started_at"
+        case completedAt = "completed_at"
+        case returncode
+        case runDir = "run_dir"
+        case promptPath = "prompt_path"
+        case eventsPath = "events_path"
+        case stderrPath = "stderr_path"
+        case outputPath = "output_path"
+        case resultPath = "result_path"
+        case reportPath = "report_path"
+        case activationContextPath = "activation_context_path"
+        case runStatusPath = "run_status_path"
+        case evidencePath = "evidence_path"
+        case codexThreadId = "codex_thread_id"
+        case eventCount = "event_count"
+        case fileChangeCount = "file_change_count"
+        case result, report
+        case activationContext = "activation_context"
+        case runStatus = "run_status"
+        case workLogPath = "work_log_path"
+    }
+
+    var id: String {
+        runId ?? traceId ?? codexThreadId ?? runDir ?? "unknown-run"
+    }
+
+    var statusLabel: String {
+        (runStatusStatus ?? status)?.replacingOccurrences(of: "_", with: " ") ?? "unknown"
+    }
+
+    var compactId: String {
+        guard let runId, !runId.isEmpty else { return "No run id" }
+        return String(runId.prefix(22))
+    }
+
+    var threadLabel: String {
+        guard let codexThreadId, !codexThreadId.isEmpty else { return "No Codex thread" }
+        return String(codexThreadId.prefix(24))
+    }
+
+    var summary: String? {
+        Self.summary(from: report) ?? Self.summary(from: runStatus) ?? Self.summary(from: result)
+    }
+
+    var runStatusStatus: String? {
+        Self.string(["status", "state"], from: runStatus)
+    }
+
+    var directiveSummary: String? {
+        Self.string(["directive_summary", "directive", "body", "prompt", "summary"], from: activationContext)
+    }
+
+    var activationOwner: String? {
+        Self.string(["owner", "posted_by", "requested_by"], from: activationContext)
+    }
+
+    var activationFamily: String? {
+        Self.string(["family", "arm_family"], from: activationContext)
+    }
+
+    var permissionsSummary: String? {
+        var bits: [String] = []
+        if let mayApprove = Self.bool(["may_approve", "can_approve"], from: activationContext) {
+            bits.append("may approve: \(mayApprove ? "true" : "false")")
+        }
+        if let reviewRequired = Self.string(["review_required", "owner_review_required", "approval_required"], from: activationContext) {
+            bits.append(reviewRequired)
+        }
+        if let reviewer = Self.string(["reviewer", "review_owner", "owner_review"], from: activationContext) {
+            bits.append("review: \(reviewer)")
+        }
+        if bits.isEmpty {
+            return nil
+        }
+        return bits.joined(separator: " · ")
+    }
+
+    var reportSummary: String? {
+        Self.summary(from: report)
+    }
+
+    var reportFindings: [String] {
+        Self.stringList(["findings"], from: report)
+    }
+
+    var reportDeliverables: [String] {
+        Self.stringList(["deliverables", "files_touched", "outputs"], from: report)
+    }
+
+    var reportBlockedOn: [String] {
+        Self.stringList(["blocked_on", "blockers"], from: report) + Self.stringList(["blocked_on"], from: runStatus)
+    }
+
+    private static func summary(from object: [String: AgentRunJSONValue]?) -> String? {
+        string(["summary", "message", "result", "outcome"], from: object)
+    }
+
+    private static func string(_ keys: [String], from object: [String: AgentRunJSONValue]?) -> String? {
+        guard let object else { return nil }
+        for key in keys {
+            if let value = object[key]?.stringValue {
+                return value
+            }
+        }
+        return nil
+    }
+
+    private static func bool(_ keys: [String], from object: [String: AgentRunJSONValue]?) -> Bool? {
+        guard let object else { return nil }
+        for key in keys {
+            if let value = object[key]?.boolValue {
+                return value
+            }
+        }
+        return nil
+    }
+
+    private static func stringList(_ keys: [String], from object: [String: AgentRunJSONValue]?) -> [String] {
+        guard let object else { return [] }
+        for key in keys {
+            if let array = object[key]?.arrayValue {
+                return array.compactMap(\.stringValue)
+            }
+            if let string = object[key]?.stringValue {
+                return [string]
+            }
+        }
+        return []
+    }
+}
+
 private extension AgentRunJSONValue {
     var stringValue: String? {
         switch self {
@@ -975,6 +1231,59 @@ struct ArmShip: Identifiable, Hashable, Decodable {
 
 private struct ArmTagsResponse: Decodable {
     let arms: [ArmTagDTO]
+}
+
+private struct ArmOpsResponse: Decodable {
+    let arms: [ArmOpsEntryDTO]
+    let generatedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case arms
+        case generatedAt = "generated_at"
+    }
+}
+
+private struct ArmOpsEntryDTO: Decodable {
+    let name: String
+    let familyRaw: String
+    let displayName: String
+    let directive: [String: AgentRunJSONValue]?
+    let dispatch: [String: AgentRunJSONValue]?
+    let review: [String: AgentRunJSONValue]?
+    let latestRun: ArmRunEvidence?
+    let protected: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case name, directive, dispatch, review, protected
+        case familyRaw = "family"
+        case displayName = "display_name"
+        case latestRun = "latest_run"
+    }
+
+    func toDomain(generatedAt: Date?) -> ArmOpsSnapshot {
+        ArmOpsSnapshot(
+            name: name.lowercased(),
+            family: familyRaw == "chief" ? .chief : .maui,
+            displayName: displayName,
+            directiveStatus: string("status", in: directive) ?? string("directive_status", in: directive),
+            intentState: string("intent_state", in: directive),
+            dispatchStatus: string("status", in: dispatch),
+            reviewState: string("state", in: review) ?? string("review_state", in: directive),
+            reviewReportedBy: string("reported_by", in: review) ?? string("review_reported_by", in: directive),
+            latestRun: latestRun,
+            protected: protected,
+            generatedAt: generatedAt
+        )
+    }
+
+    private func string(_ key: String, in object: [String: AgentRunJSONValue]?) -> String? {
+        payload(from: object)?[key]?.stringValue ?? object?[key]?.stringValue
+    }
+
+    private func payload(from object: [String: AgentRunJSONValue]?) -> [String: AgentRunJSONValue]? {
+        guard let object else { return nil }
+        return object["value"]?.objectValue ?? object
+    }
 }
 
 private struct ArmShipsResponse: Decodable {

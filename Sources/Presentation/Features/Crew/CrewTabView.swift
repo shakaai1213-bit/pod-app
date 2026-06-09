@@ -10,6 +10,7 @@ import SwiftUI
 struct CrewTabView: View {
     enum Segment: String, CaseIterable, Identifiable {
         case agents
+        case planning
         case arms
 
         var id: String { rawValue }
@@ -17,6 +18,7 @@ struct CrewTabView: View {
         var title: String {
             switch self {
             case .agents: return "Agents · Focus · Workers"
+            case .planning: return "Planning"
             case .arms:   return "Arm Dispatch"
             }
         }
@@ -24,6 +26,7 @@ struct CrewTabView: View {
         var shortTitle: String {
             switch self {
             case .agents: return "Agents"
+            case .planning: return "Plan"
             case .arms:   return "Dispatch"
             }
         }
@@ -37,6 +40,8 @@ struct CrewTabView: View {
                 switch segment {
                 case .agents:
                     AgentsView()
+                case .planning:
+                    PlanningView()
                 case .arms:
                     ArmsTabView()
                 }

@@ -203,9 +203,15 @@ struct ArmsTabView: View {
                 if arm.needsEngagement {
                     needsEngagementRow(arm)
                 }
+                if let ops = viewModel.armOps(for: arm), ops.hasEvidence {
+                    armOpsLifecycleStrip(ops)
+                }
                 lastShipRow(arm)
                 if viewModel.isShipsExpanded(arm) {
                     shipHistoryRows(for: arm)
+                }
+                if let ops = viewModel.armOps(for: arm), ops.hasEvidence {
+                    armOpsRow(arm, ops: ops)
                 }
             }
 
@@ -577,6 +583,207 @@ struct ArmsTabView: View {
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(AppColors.border, lineWidth: 0.5)
         )
+    }
+
+    private func armOpsRow(_ arm: ArmTag, ops: ArmOpsSnapshot) -> some View {
+        Button {
+            viewModel.toggleEvidence(for: arm)
+        } label: {
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "shippingbox.and.arrow.backward.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(ops.statusColor)
+                        .frame(width: 58, alignment: .leading)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Text("Run evidence")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(ops.statusColor)
+                            Text(ops.stateLabel)
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(ops.statusColor)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(ops.statusColor.opacity(0.12))
+                                .clipShape(Capsule())
+                        }
+                        Text(ops.latestRun.map { "\($0.compactId) · \($0.statusLabel)" } ?? "Directive state only")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(AppColors.textPrimary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Image(systemName: viewModel.isEvidenceExpanded(arm) ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(AppColors.textTertiary)
+                        .padding(.top, 3)
+                }
+
+                if viewModel.isEvidenceExpanded(arm) {
+                    armOpsEvidenceDetails(ops)
+                }
+            }
+            .padding(10)
+            .background(ops.statusColor.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func armOpsLifecycleStrip(_ ops: ArmOpsSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 7) {
+                Image(systemName: "arrow.triangle.branch")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(ops.statusColor)
+                    .frame(width: 58, alignment: .leading)
+                Text("Hand lifecycle")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(ops.statusColor)
+                Text(ops.stateLabel)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(ops.statusColor)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(ops.statusColor.opacity(0.12))
+                    .clipShape(Capsule())
+                Spacer(minLength: 0)
+            }
+
+            FlowLayout(horizontalSpacing: 5, verticalSpacing: 5) {
+                lifecyclePill("parked directive", isActive: ops.directiveStatus != nil || ops.intentState != nil, color: AppColors.accentElectric)
+                lifecyclePill("in progress", isActive: ["received", "in_progress", "running", "dispatching"].contains(ops.stateLabelKey), color: AppColors.accentWarning)
+                lifecyclePill("blocked / failed", isActive: ["blocked", "failed", "error"].contains(ops.stateLabelKey), color: AppColors.accentDanger)
+                lifecyclePill("review ready", isActive: ["review_ready", "ready_for_maui", "ready_for_chief"].contains(ops.stateLabelKey) || ops.reviewState != nil, color: AppColors.accentElectric)
+                lifecyclePill("owner reviewed", isActive: ["completed", "done", "reviewed", "owner_reviewed"].contains(ops.stateLabelKey), color: AppColors.accentSuccess)
+            }
+
+            Text("Hands report progress here. Maui/Chief review and complete the work.")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(AppColors.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(10)
+        .background(ops.statusColor.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func lifecyclePill(_ text: String, isActive: Bool, color: Color) -> some View {
+        Text(text)
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundColor(isActive ? color : AppColors.textTertiary)
+            .lineLimit(1)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(isActive ? color.opacity(0.12) : AppColors.backgroundTertiary.opacity(0.75))
+            .clipShape(Capsule())
+    }
+
+    private func armOpsEvidenceDetails(_ ops: ArmOpsSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            if let latestRun = ops.latestRun {
+                evidenceSubhead("Activation context")
+                evidenceMetric(label: "Run", value: latestRun.runId ?? "—")
+                evidenceMetric(label: "Arm", value: latestRun.arm ?? ops.name)
+                if let owner = latestRun.activationOwner {
+                    evidenceMetric(label: "Owner", value: owner)
+                }
+                if let family = latestRun.activationFamily {
+                    evidenceMetric(label: "Family", value: family)
+                }
+                if let directive = latestRun.directiveSummary {
+                    evidenceMetric(label: "Directive", value: directive)
+                }
+                if let activationPath = latestRun.activationContextPath {
+                    evidenceMetric(label: "Context", value: activationPath)
+                }
+                if let permissions = latestRun.permissionsSummary {
+                    evidenceMetric(label: "Perms", value: permissions)
+                }
+
+                evidenceSubhead("Run status")
+                if let runStatus = latestRun.runStatusStatus {
+                    evidenceMetric(label: "Status", value: runStatus.replacingOccurrences(of: "_", with: " "))
+                }
+                if let runStatusPath = latestRun.runStatusPath {
+                    evidenceMetric(label: "Status file", value: runStatusPath)
+                }
+                evidenceMetric(label: "Thread", value: latestRun.codexThreadId ?? "—")
+                evidenceMetric(label: "Events", value: "\(latestRun.eventCount) events · \(latestRun.fileChangeCount) file changes")
+                if let completedAt = latestRun.completedAt {
+                    evidenceMetric(label: "Done", value: completedAt.formatted(date: .abbreviated, time: .shortened))
+                } else if let startedAt = latestRun.startedAt {
+                    evidenceMetric(label: "Started", value: startedAt.formatted(date: .abbreviated, time: .shortened))
+                }
+                if let summary = latestRun.summary {
+                    evidenceMetric(label: "Summary", value: summary)
+                }
+
+                evidenceSubhead("Evidence & report")
+                if let evidencePath = latestRun.evidencePath {
+                    evidenceMetric(label: "Evidence", value: evidencePath)
+                }
+                if let reportSummary = latestRun.reportSummary {
+                    evidenceMetric(label: "Report", value: reportSummary)
+                }
+                evidenceList(label: "Findings", values: latestRun.reportFindings)
+                evidenceList(label: "Deliver", values: latestRun.reportDeliverables)
+                evidenceList(label: "Blocked", values: latestRun.reportBlockedOn)
+                if let reportPath = latestRun.reportPath {
+                    evidenceMetric(label: "Report file", value: reportPath)
+                }
+                if let eventsPath = latestRun.eventsPath {
+                    evidenceMetric(label: "Events", value: eventsPath)
+                }
+            } else {
+                evidenceMetric(label: "Run", value: "No hand run indexed yet")
+            }
+
+            if let reviewState = ops.reviewState, !reviewState.isEmpty {
+                evidenceMetric(label: "Review", value: reviewState.replacingOccurrences(of: "_", with: " "))
+            }
+            if let reviewer = ops.reviewReportedBy, !reviewer.isEmpty {
+                evidenceMetric(label: "By", value: reviewer)
+            }
+            if let generatedAt = ops.generatedAt {
+                evidenceMetric(label: "Read", value: generatedAt.formatted(date: .omitted, time: .shortened))
+            }
+        }
+        .padding(.top, 2)
+    }
+
+    private func evidenceSubhead(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(.system(size: 9, weight: .bold))
+            .foregroundColor(AppColors.textTertiary)
+            .padding(.top, 4)
+    }
+
+    private func evidenceMetric(label: String, value: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(label.uppercased())
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundColor(AppColors.textTertiary)
+                .frame(width: 52, alignment: .leading)
+            Text(value)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(AppColors.textSecondary)
+                .lineLimit(3)
+                .truncationMode(.middle)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+    }
+
+    @ViewBuilder
+    private func evidenceList(label: String, values: [String]) -> some View {
+        if !values.isEmpty {
+            evidenceMetric(label: label, value: values.prefix(4).joined(separator: "\n"))
+        }
     }
 
     private func protectedRow(_ reason: String) -> some View {

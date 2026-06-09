@@ -60,13 +60,137 @@ enum ProjectLifecycleStage: String, CaseIterable {
     }
 }
 
+private let projectStagePreferredOrder: [String] = [
+    "assessment",
+    "definition",
+    "blueprint",
+    "scoping",
+    "planning",
+    "ready",
+    "active",
+    "in-progress",
+    "in_progress",
+    "review",
+    "needs-review",
+    "blocked",
+    "paused",
+    "handoff",
+    "live",
+    "maintain",
+    "done",
+    "closed",
+    "cancelled",
+    "canceled"
+]
+
+private func normalizedProjectStage(_ stage: String?) -> String {
+    (stage ?? "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .lowercased()
+        .replacingOccurrences(of: "_", with: "-")
+}
+
+private func projectStageSortIndex(_ stage: String) -> Int {
+    let normalized = normalizedProjectStage(stage)
+    return projectStagePreferredOrder
+        .map { normalizedProjectStage($0) }
+        .firstIndex(of: normalized) ?? Int.max
+}
+
+private func projectStageDisplayName(_ stage: String) -> String {
+    let normalized = normalizedProjectStage(stage)
+    if let lifecycleStage = ProjectLifecycleStage(rawValue: normalized) {
+        return lifecycleStage.displayName
+    }
+    return normalized
+        .replacingOccurrences(of: "-", with: " ")
+        .split(separator: " ")
+        .map { $0.capitalized }
+        .joined(separator: " ")
+}
+
+private func projectStageColor(_ stage: String) -> Color {
+    let normalized = normalizedProjectStage(stage)
+    if let lifecycleStage = ProjectLifecycleStage(rawValue: normalized) {
+        return lifecycleStage.color
+    }
+
+    switch normalized {
+    case "planning", "ready":
+        return Color(hexString: "06B6D4")
+    case "review", "needs-review":
+        return AppColors.accentWarning
+    case "blocked":
+        return AppColors.accentDanger
+    case "paused":
+        return Color(hexString: "A855F7")
+    case "maintain":
+        return Color(hexString: "14B8A6")
+    case "done", "completed", "shipped":
+        return AppColors.accentSuccess
+    default:
+        return AppColors.textTertiary
+    }
+}
+
+private func projectStageIcon(_ stage: String) -> String {
+    let normalized = normalizedProjectStage(stage)
+    if let lifecycleStage = ProjectLifecycleStage(rawValue: normalized) {
+        return lifecycleStage.icon
+    }
+
+    switch normalized {
+    case "planning":
+        return "calendar"
+    case "ready":
+        return "checkmark.seal"
+    case "review", "needs-review":
+        return "eye"
+    case "blocked":
+        return "exclamationmark.triangle.fill"
+    case "paused":
+        return "pause.circle.fill"
+    case "maintain":
+        return "wrench.and.screwdriver"
+    case "done", "completed", "shipped":
+        return "checkmark.circle.fill"
+    default:
+        return "tag.fill"
+    }
+}
+
+private let noProjectStageFilter = "__pod_no_stage__"
+
+private enum ProjectSurfaceMode: String, CaseIterable {
+    case command
+    case roadmap
+    case table
+
+    var label: String {
+        switch self {
+        case .command: return "Command"
+        case .roadmap: return "Roadmap"
+        case .table: return "Table"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .command: return "square.stack.3d.up"
+        case .roadmap: return "point.topleft.down.curvedto.point.bottomright.up"
+        case .table: return "tablecells"
+        }
+    }
+}
+
 // MARK: - ORCA Projects View (Kanban)
 
 struct ORCAProjectsView: View {
     @State private var viewModel = ORCAProjectsViewModel()
     @State private var showingNewProject = false
     @State private var selectedProject: ProjectDTO?
-    @State private var selectedStage: ProjectLifecycleStage? = nil
+    @State private var selectedStages: Set<String> = []
+    @State private var selectedMode: ProjectSurfaceMode = .command
 
     var body: some View {
         NavigationStack {
@@ -78,8 +202,10 @@ struct ORCAProjectsView: View {
                     loadingView
                 } else {
                     VStack(spacing: 0) {
+                        projectCommandOverview
+                        projectModePicker
                         lifecycleFilterBar
-                        kanbanContent
+                        projectModeContent
                     }
                 }
             }
@@ -113,13 +239,98 @@ struct ORCAProjectsView: View {
 
     // MARK: - Lifecycle Filter Bar
 
+    private var projectCommandOverview: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack(alignment: .top, spacing: Theme.sm) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("PROJECT COMMAND")
+                        .podTextStyle(.label, color: AppColors.textTertiary)
+
+                    Text("Tap a project to open its Command Room.")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppColors.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: Theme.sm)
+
+                Text("ORCA truth")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(AppColors.accentElectric)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(AppColors.accentElectric.opacity(0.12))
+                    .clipShape(Capsule())
+            }
+
+            HStack(spacing: Theme.sm) {
+                projectCommandMetric("Projects", value: "\(viewModel.projects.count)", color: AppColors.accentElectric)
+                projectCommandMetric("Active", value: "\(activeProjectCount)", color: AppColors.accentAgent)
+                projectCommandMetric("Needs home", value: "\(projectsNeedingHomeCount)", color: projectsNeedingHomeCount > 0 ? AppColors.accentWarning : AppColors.accentSuccess)
+                projectCommandMetric("Proposals", value: "\(milestoneProposalCount)", color: milestoneProposalCount > 0 ? AppColors.accentWarning : AppColors.textTertiary)
+            }
+        }
+        .padding(Theme.md)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+        .padding(.horizontal, Theme.md)
+        .padding(.top, Theme.md)
+    }
+
+    private var projectModePicker: some View {
+        Picker("Project view", selection: $selectedMode) {
+            ForEach(ProjectSurfaceMode.allCases, id: \.self) { mode in
+                Label(mode.label, systemImage: mode.icon).tag(mode)
+            }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal, Theme.md)
+        .padding(.top, Theme.sm)
+    }
+
+    private var activeProjectCount: Int {
+        viewModel.projects.filter {
+            ["active", "live", "in-progress", "in_progress", "scoping"].contains($0.status.lowercased())
+        }.count
+    }
+
+    private var projectsNeedingHomeCount: Int {
+        viewModel.projects.filter { $0.boardId == nil && ($0.boardIds?.isEmpty ?? true) }.count
+    }
+
+    private var milestoneProposalCount: Int {
+        viewModel.projects.reduce(0) { total, project in
+            total + (project.proposedMilestones?.count ?? 0)
+        }
+    }
+
+    private func projectCommandMetric(_ label: String, value: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(color)
+                .lineLimit(1)
+
+            Text(label)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(AppColors.textTertiary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .padding(.vertical, Theme.xs)
+        .padding(.horizontal, Theme.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+    }
+
     private var lifecycleFilterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: Theme.sm) {
                 filterChip(label: "All", stage: nil)
 
-                ForEach(ProjectLifecycleStage.allCases, id: \.self) { stage in
-                    filterChip(label: stage.displayName, stage: stage)
+                ForEach(stageFilterOptions, id: \.self) { stage in
+                    filterChip(label: stageFilterLabel(stage), stage: stage)
                 }
             }
             .padding(.horizontal, Theme.md)
@@ -128,22 +339,55 @@ struct ORCAProjectsView: View {
         .background(AppColors.backgroundPrimary)
     }
 
-    private func filterChip(label: String, stage: ProjectLifecycleStage?) -> some View {
-        let isSelected = selectedStage == stage
-        let color = stage?.color ?? AppColors.accentElectric
+    private var stageFilterOptions: [String] {
+        let values = Set(viewModel.projects.compactMap { project -> String? in
+            guard let stage = project.stage?.trimmingCharacters(in: .whitespacesAndNewlines), !stage.isEmpty else {
+                return nil
+            }
+            return stage
+        })
+
+        var sorted = values.sorted { lhs, rhs in
+            let lhsIndex = projectStageSortIndex(lhs)
+            let rhsIndex = projectStageSortIndex(rhs)
+            if lhsIndex != rhsIndex { return lhsIndex < rhsIndex }
+            return projectStageDisplayName(lhs) < projectStageDisplayName(rhs)
+        }
+        if viewModel.projects.contains(where: { normalizedProjectStage($0.stage).isEmpty }) {
+            sorted.append(noProjectStageFilter)
+        }
+        return sorted
+    }
+
+    private func stageFilterLabel(_ stage: String) -> String {
+        let count = viewModel.projects.filter { projectMatchesStage($0, stage) }.count
+        if stage == noProjectStageFilter {
+            return "No Stage \(count)"
+        }
+        return "\(projectStageDisplayName(stage)) \(count)"
+    }
+
+    private func filterChip(label: String, stage: String?) -> some View {
+        let isSelected = stage.map { selectedStages.contains($0) } ?? selectedStages.isEmpty
+        let color = stage.map(projectStageColor) ?? AppColors.accentElectric
 
         return Button {
             withAnimation(.easeInOut(duration: 0.2)) {
-                if selectedStage == stage {
-                    selectedStage = nil
+                guard let stage else {
+                    selectedStages.removeAll()
+                    return
+                }
+
+                if selectedStages.contains(stage) {
+                    selectedStages.remove(stage)
                 } else {
-                    selectedStage = stage
+                    selectedStages.insert(stage)
                 }
             }
         } label: {
             HStack(spacing: 4) {
                 if let stage = stage {
-                    Image(systemName: stage.icon)
+                    Image(systemName: stage == noProjectStageFilter ? "questionmark.circle" : projectStageIcon(stage))
                         .font(.system(size: 10, weight: .medium))
                 }
                 Text(label)
@@ -166,8 +410,8 @@ struct ORCAProjectsView: View {
     // Single vertical list sorted by priority (P1 → P5). Stage moved to card header.
     // [DUPLICATE — DEAD] / cancelled / done projects are hidden from default Active view.
 
-    private var kanbanContent: some View {
-        let visible = viewModel.projects
+    private var filteredProjects: [ProjectDTO] {
+        viewModel.projects
             .filter { p in
                 // Hide cancelled and DUPLICATE-DEAD from default view
                 let s = p.status.lowercased()
@@ -176,18 +420,32 @@ struct ORCAProjectsView: View {
                 return true
             }
             .filter { p in
-                guard let selectedStage else { return true }
-                return p.stage == selectedStage.rawValue
+                guard !selectedStages.isEmpty else { return true }
+                return selectedStages.contains { projectMatchesStage(p, $0) }
             }
             .sorted { $0.priority < $1.priority }  // P1 first
+    }
 
-        return ScrollView(.vertical, showsIndicators: false) {
+    @ViewBuilder
+    private var projectModeContent: some View {
+        switch selectedMode {
+        case .command:
+            commandContent
+        case .roadmap:
+            roadmapContent
+        case .table:
+            tableContent
+        }
+    }
+
+    private var commandContent: some View {
+        ScrollView(.vertical, showsIndicators: false) {
             LazyVStack(spacing: 8) {
-                if visible.isEmpty {
+                if filteredProjects.isEmpty {
                     listEmptyState
                         .padding(.top, 60)
                 } else {
-                    ForEach(visible) { project in
+                    ForEach(filteredProjects) { project in
                         ORCAProjectCard(project: project)
                             .onTapGesture { selectedProject = project }
                     }
@@ -198,6 +456,75 @@ struct ORCAProjectsView: View {
         }
     }
 
+    private var roadmapContent: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            LazyVStack(spacing: Theme.sm) {
+                if filteredProjects.isEmpty {
+                    listEmptyState
+                        .padding(.top, 60)
+                } else {
+                    ForEach(roadmapStages, id: \.self) { stage in
+                        let projects = projectsForRoadmapStage(stage)
+                        if !projects.isEmpty {
+                            ProjectRoadmapStageSection(
+                                stage: stage,
+                                projects: projects,
+                                stageIndex: roadmapStageIndex(stage),
+                                stageCount: max(stageFilterOptions.count, 1),
+                                onProjectTap: { selectedProject = $0 }
+                            )
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, Theme.md)
+            .padding(.vertical, Theme.sm)
+        }
+    }
+
+    private var tableContent: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            LazyVStack(spacing: 1) {
+                if filteredProjects.isEmpty {
+                    listEmptyState
+                        .padding(.top, 60)
+                } else {
+                    ProjectTableHeader()
+                    ForEach(filteredProjects) { project in
+                        ProjectTableRow(project: project)
+                            .onTapGesture { selectedProject = project }
+                    }
+                }
+            }
+            .padding(.horizontal, Theme.md)
+            .padding(.vertical, Theme.sm)
+        }
+    }
+
+    private var roadmapStages: [String] {
+        if !selectedStages.isEmpty {
+            return stageFilterOptions.filter { selectedStages.contains($0) }
+        }
+        return stageFilterOptions.filter { stage in
+            filteredProjects.contains { projectMatchesStage($0, stage) }
+        }
+    }
+
+    private func projectsForRoadmapStage(_ stage: String) -> [ProjectDTO] {
+        filteredProjects.filter { projectMatchesStage($0, stage) }
+    }
+
+    private func roadmapStageIndex(_ stage: String) -> Int {
+        (stageFilterOptions.firstIndex(of: stage) ?? 0) + 1
+    }
+
+    private func projectMatchesStage(_ project: ProjectDTO, _ stage: String) -> Bool {
+        if stage == noProjectStageFilter {
+            return normalizedProjectStage(project.stage).isEmpty
+        }
+        return normalizedProjectStage(project.stage) == normalizedProjectStage(stage)
+    }
+
     private var listEmptyState: some View {
         VStack(spacing: 12) {
             Image(systemName: "square.stack.3d.up")
@@ -206,7 +533,7 @@ struct ORCAProjectsView: View {
             Text("No active projects")
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(AppColors.textTertiary)
-            Text(selectedStage == nil ? "Tap + to start one" : "No projects in this stage")
+            Text(selectedStages.isEmpty ? "Tap + to start one" : "No projects in these stages")
                 .font(.system(size: 13))
                 .foregroundStyle(AppColors.textTertiary.opacity(0.7))
         }
@@ -409,19 +736,17 @@ private struct ORCAProjectCard: View {
     @ViewBuilder
     private var stageBadge: some View {
         if let stage = project.stage {
-            let lifecycleStage = ProjectLifecycleStage(rawValue: stage)
-            let badgeColor = lifecycleStage?.color ?? AppColors.textTertiary
             HStack(spacing: 3) {
-                Image(systemName: lifecycleStage?.icon ?? "tag.fill")
+                Image(systemName: projectStageIcon(stage))
                     .font(.system(size: 9, weight: .medium))
-                Text((lifecycleStage?.displayName ?? stage.replacingOccurrences(of: "_", with: " ")).uppercased())
+                Text(projectStageDisplayName(stage).uppercased())
                     .font(.system(size: 9, weight: .bold))
                     .kerning(0.3)
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
-            .background(badgeColor)
+            .background(projectStageColor(stage))
             .clipShape(Capsule())
         }
     }
@@ -1585,6 +1910,237 @@ private struct ProjectCommandTimelineRow: Identifiable {
     let date: Date
     let icon: String
     let color: Color
+}
+
+private struct ProjectRoadmapStageSection: View {
+    let stage: String
+    let projects: [ProjectDTO]
+    let stageIndex: Int
+    let stageCount: Int
+    let onProjectTap: (ProjectDTO) -> Void
+
+    private var isNoStage: Bool {
+        stage == noProjectStageFilter
+    }
+
+    private var progressFraction: CGFloat {
+        guard stageCount > 0 else { return 0 }
+        return CGFloat(stageIndex) / CGFloat(stageCount)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack(alignment: .firstTextBaseline, spacing: Theme.sm) {
+                HStack(spacing: Theme.xs) {
+                    Image(systemName: isNoStage ? "questionmark.circle" : projectStageIcon(stage))
+                        .font(.caption.weight(.semibold))
+                    Text(isNoStage ? "No Stage" : projectStageDisplayName(stage))
+                        .font(.subheadline.weight(.semibold))
+                }
+                .foregroundStyle(isNoStage ? AppColors.textTertiary : projectStageColor(stage))
+
+                Text("\(projects.count)")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(AppColors.textTertiary)
+
+                Spacer(minLength: Theme.xs)
+
+                Text(isNoStage ? "Unclassified" : "Step \(stageIndex) of \(stageCount)")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(AppColors.textTertiary)
+            }
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(AppColors.backgroundTertiary)
+                    Capsule()
+                        .fill((isNoStage ? AppColors.textTertiary : projectStageColor(stage)).opacity(0.75))
+                        .frame(width: max(proxy.size.width * progressFraction, 10))
+                }
+            }
+            .frame(height: 6)
+
+            VStack(spacing: Theme.xs) {
+                ForEach(projects) { project in
+                    ProjectRoadmapProjectRow(project: project)
+                        .onTapGesture { onProjectTap(project) }
+                }
+            }
+        }
+        .padding(Theme.md)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+    }
+}
+
+private struct ProjectRoadmapProjectRow: View {
+    let project: ProjectDTO
+
+    var body: some View {
+        HStack(alignment: .top, spacing: Theme.sm) {
+            Circle()
+                .fill(priorityColor)
+                .frame(width: 8, height: 8)
+                .padding(.top, 5)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(project.name)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.textPrimary)
+                    .lineLimit(1)
+
+                HStack(spacing: Theme.xs) {
+                    Text("P\(project.priority)")
+                    Text(project.status.replacingOccurrences(of: "_", with: " ").replacingOccurrences(of: "-", with: " "))
+                    if project.boardId == nil && (project.boardIds?.isEmpty ?? true) {
+                        Text("needs home")
+                            .foregroundStyle(AppColors.accentWarning)
+                    }
+                    if let dueDate = project.dueDate {
+                        Text(dueDate.formatted(date: .abbreviated, time: .omitted))
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(AppColors.textTertiary)
+                .lineLimit(1)
+            }
+
+            Spacer(minLength: Theme.xs)
+
+            Text(relativeShort(project.updatedAt))
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(AppColors.textTertiary)
+                .lineLimit(1)
+        }
+        .padding(Theme.sm)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+    }
+
+    private var priorityColor: Color {
+        switch project.priority {
+        case 1: return AppColors.accentDanger
+        case 2: return Color(hexString: "F97316")
+        case 3: return AppColors.accentWarning
+        case 4: return Color(hexString: "3B82F6")
+        default: return AppColors.textTertiary
+        }
+    }
+
+    private func relativeShort(_ date: Date) -> String {
+        let secs = Int(Date().timeIntervalSince(date))
+        if secs < 60 { return "now" }
+        if secs < 3600 { return "\(secs/60)m" }
+        if secs < 86400 { return "\(secs/3600)h" }
+        if secs < 86400 * 7 { return "\(secs/86400)d" }
+        return "\(secs/(86400 * 7))w"
+    }
+}
+
+private struct ProjectTableHeader: View {
+    var body: some View {
+        HStack(spacing: Theme.sm) {
+            Text("Project")
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text("Stage")
+                .frame(width: 86, alignment: .leading)
+            Text("P")
+                .frame(width: 28, alignment: .center)
+            Text("Updated")
+                .frame(width: 48, alignment: .trailing)
+        }
+        .font(.caption2.weight(.bold))
+        .foregroundStyle(AppColors.textTertiary)
+        .padding(.horizontal, Theme.sm)
+        .padding(.vertical, Theme.xs)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+    }
+}
+
+private struct ProjectTableRow: View {
+    let project: ProjectDTO
+
+    var body: some View {
+        HStack(alignment: .center, spacing: Theme.sm) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(project.name)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.textPrimary)
+                    .lineLimit(1)
+
+                Text(subtitle)
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.textTertiary)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            stagePill
+                .frame(width: 86, alignment: .leading)
+
+            Text("\(project.priority)")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(priorityColor)
+                .frame(width: 28, alignment: .center)
+
+            Text(relativeShort(project.updatedAt))
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(AppColors.textTertiary)
+                .frame(width: 48, alignment: .trailing)
+        }
+        .padding(.horizontal, Theme.sm)
+        .padding(.vertical, Theme.xs)
+        .background(AppColors.backgroundTertiary)
+    }
+
+    private var subtitle: String {
+        var bits: [String] = []
+        bits.append(String(project.id.uuidString.replacingOccurrences(of: "-", with: "").prefix(8)))
+        bits.append(project.status.replacingOccurrences(of: "_", with: " ").replacingOccurrences(of: "-", with: " "))
+        if project.boardId == nil && (project.boardIds?.isEmpty ?? true) {
+            bits.append("needs home")
+        }
+        return bits.joined(separator: " · ")
+    }
+
+    private var stagePill: some View {
+        let stage = project.stage ?? noProjectStageFilter
+        let isNoStage = normalizedProjectStage(project.stage).isEmpty
+        return HStack(spacing: 3) {
+            Image(systemName: isNoStage ? "questionmark.circle" : projectStageIcon(stage))
+                .font(.system(size: 8, weight: .semibold))
+            Text(isNoStage ? "No Stage" : projectStageDisplayName(stage))
+                .font(.system(size: 9, weight: .bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(isNoStage ? AppColors.textTertiary : projectStageColor(stage))
+        .clipShape(Capsule())
+    }
+
+    private var priorityColor: Color {
+        switch project.priority {
+        case 1: return AppColors.accentDanger
+        case 2: return Color(hexString: "F97316")
+        case 3: return AppColors.accentWarning
+        case 4: return Color(hexString: "3B82F6")
+        default: return AppColors.textTertiary
+        }
+    }
+
+    private func relativeShort(_ date: Date) -> String {
+        let secs = Int(Date().timeIntervalSince(date))
+        if secs < 60 { return "now" }
+        if secs < 3600 { return "\(secs/60)m" }
+        if secs < 86400 { return "\(secs/3600)h" }
+        if secs < 86400 * 7 { return "\(secs/86400)d" }
+        return "\(secs/(86400 * 7))w"
+    }
 }
 
 private struct ProjectWorkflowPreview: View {

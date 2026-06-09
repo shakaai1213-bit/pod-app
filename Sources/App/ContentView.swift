@@ -169,7 +169,7 @@ struct ContentView: View {
 
     private var visibleTabs: [AppTab] {
         // Legacy cases excluded from bar (still deep-linkable).
-        [.dashboard, .chat, .work, .crew, .knowledge, .lab, .runtime, .system]
+        [.dashboard, .chat, .work, .crew, .knowledge, .lab, .runtime]
     }
 
     private func tabBarButton(for tab: AppTab) -> some View {
@@ -282,25 +282,47 @@ struct ContentView: View {
     }
 }
 
+private enum RuntimeSurfaceMode: String, CaseIterable {
+    case overview
+    case fleet
+    case tags
+
+    var title: String {
+        switch self {
+        case .overview: return "Overview"
+        case .fleet: return "Fleet"
+        case .tags: return "Tags"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .overview: return "waveform.path.ecg"
+        case .fleet: return "server.rack"
+        case .tags: return "tag"
+        }
+    }
+}
+
+private extension String {
+    var runtimeDisplayLabel: String {
+        replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .capitalized
+    }
+}
+
 private struct RuntimeView: View {
     @State private var model = RuntimeViewModel()
+    @State private var selectedMode: RuntimeSurfaceMode = .overview
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.md) {
                     header
-                    fundSurfaceSection
-                    summaryStrip
-                    startupTruthSection
-                    computeSummarySection
-                    computeRoutesSection
-                    classificationSyncSection
-                    runtimeFleetSection
-                    tagGroup(title: "Core", prefixes: ["orca.", "nats.", "compute.", "memory."])
-                    tagGroup(title: "Agents", prefixes: ["agent."])
-                    tagGroup(title: "Workers", prefixes: ["worker."])
-                    tagGroup(title: "Surfaces", prefixes: ["surface."])
+                    runtimeModePicker
+                    runtimeModeContent
                 }
                 .padding(.horizontal, Theme.md)
                 .padding(.top, Theme.lg)
@@ -319,7 +341,7 @@ private struct RuntimeView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Runtime")
                     .podTextStyle(.title1, color: AppColors.textPrimary)
-                Text("Live tags from ORCA State Registry")
+                Text("ORCA health, fleet registry, compute routes, and live state tags")
                     .podTextStyle(.body, color: AppColors.textSecondary)
             }
 
@@ -336,6 +358,125 @@ private struct RuntimeView: View {
                     .clipShape(Circle())
             }
             .disabled(model.isLoading)
+        }
+    }
+
+    private var runtimeModePicker: some View {
+        Picker("Runtime view", selection: $selectedMode) {
+            ForEach(RuntimeSurfaceMode.allCases, id: \.self) { mode in
+                Label(mode.title, systemImage: mode.icon).tag(mode)
+            }
+        }
+        .pickerStyle(.segmented)
+    }
+
+    @ViewBuilder
+    private var runtimeModeContent: some View {
+        switch selectedMode {
+        case .overview:
+            controlRoomSection
+            fundSurfaceSection
+            summaryStrip
+            startupTruthSection
+            computeSummarySection
+            classificationSyncSection
+        case .fleet:
+            runtimeFleetSection
+            computeRoutesSection
+            classificationSyncSection
+        case .tags:
+            summaryStrip
+            tagGroup(title: "Core", prefixes: ["orca.", "nats.", "compute.", "memory."])
+            tagGroup(title: "Agents", prefixes: ["agent."])
+            tagGroup(title: "Workers", prefixes: ["worker."])
+            tagGroup(title: "Surfaces", prefixes: ["surface."])
+        }
+    }
+
+    private var controlRoomSection: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("CONTROL ROOM")
+                        .podTextStyle(.label, color: AppColors.textTertiary)
+                    Text(model.controlRoomDigest?.status.runtimeDisplayLabel ?? "Digest unavailable")
+                        .podTextStyle(.caption, color: controlRoomColor)
+                }
+
+                Spacer()
+
+                if let digest = model.controlRoomDigest {
+                    Text("\(digest.signalCount) signal\(digest.signalCount == 1 ? "" : "s")")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(controlRoomColor)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(controlRoomColor.opacity(0.12))
+                        .clipShape(Capsule())
+                }
+            }
+
+            if let digest = model.controlRoomDigest {
+                if let generatedAt = digest.generatedAt {
+                    Text("Generated \(generatedAt.formatted(date: .abbreviated, time: .shortened))")
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.textTertiary)
+                }
+
+                VStack(alignment: .leading, spacing: Theme.xs) {
+                    ForEach(digest.sections.prefix(4)) { section in
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: Theme.xs) {
+                                Text(section.title)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(AppColors.textPrimary)
+                                    .lineLimit(1)
+                                if let status = section.status, !status.isEmpty {
+                                    Text(status.runtimeDisplayLabel.uppercased())
+                                        .font(.caption2.weight(.bold))
+                                        .foregroundStyle(statusRuntimeColor(status))
+                                }
+                            }
+                            if let summary = section.summary, !summary.isEmpty {
+                                Text(summary)
+                                    .font(.caption2)
+                                    .foregroundStyle(AppColors.textSecondary)
+                                    .lineLimit(2)
+                            }
+                        }
+                    }
+                }
+            } else if model.isLoading {
+                Text("Loading ORCA control room...")
+                    .podTextStyle(.caption, color: AppColors.textTertiary)
+            } else {
+                Text("Control room digest unavailable.")
+                    .podTextStyle(.caption, color: AppColors.textTertiary)
+            }
+        }
+        .padding(Theme.sm)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                .strokeBorder(controlRoomColor.opacity(0.35), lineWidth: 1)
+        )
+    }
+
+    private var controlRoomColor: Color {
+        statusRuntimeColor(model.controlRoomDigest?.status ?? "unknown")
+    }
+
+    private func statusRuntimeColor(_ status: String) -> Color {
+        switch status.lowercased().replacingOccurrences(of: "-", with: "_") {
+        case "ok", "ready", "running", "active", "loaded", "healthy", "green", "good":
+            return AppColors.accentSuccess
+        case "warning", "warn", "degraded", "stale", "yellow", "needs_attention":
+            return AppColors.accentWarning
+        case "error", "failed", "down", "critical", "red", "unavailable":
+            return AppColors.accentDanger
+        default:
+            return AppColors.textTertiary
         }
     }
 
@@ -749,6 +890,7 @@ private final class RuntimeViewModel {
     var runtimeUnits: [RuntimeUnitDTO] = []
     var runtimeRegistrySummary: RuntimeRegistrySummaryDTO?
     var runtimeRegistryGeneratedAt: Date?
+    var controlRoomDigest: ControlRoomDigestDTO?
     var classificationSyncPreview: RuntimeClassificationSyncPreviewDTO?
     var classificationSyncExports: [RuntimeClassificationSyncArtifactDTO] = []
     var startupStatus: StartupStatusResponseDTO?
@@ -769,11 +911,12 @@ private final class RuntimeViewModel {
         errorMessage = nil
         defer { isLoading = false }
 
-        // L5: partial-load resilience — all 7 fire in parallel via async let,
+        // L5: partial-load resilience — all requests fire in parallel via async let,
         // but each is awaited with try? so one unavailable endpoint doesn't
         // blank the entire Runtime screen.
         async let stateResponse: StateRegistryResponse = APIClient.shared.get(path: "/api/v1/state-registry?limit=80")
         async let runtimeResponse: RuntimeRegistryResponseDTO = APIClient.shared.get(path: "/api/v1/runtime-registry?limit=120")
+        async let controlRoomResponse: ControlRoomDigestDTO = APIClient.shared.get(path: "/api/v1/control-room/digest")
         async let syncResponse: RuntimeClassificationSyncPreviewDTO = APIClient.shared.get(path: "/api/v1/runtime-registry/classification-sync/preview?limit=20")
         async let syncExportsResponse: RuntimeClassificationSyncExportsDTO = APIClient.shared.get(path: "/api/v1/runtime-registry/classification-sync/exports?limit=5")
         async let startupResponse: StartupStatusResponseDTO = APIClient.shared.get(path: "/api/v1/startup/status")
@@ -804,6 +947,7 @@ private final class RuntimeViewModel {
             errorMessage = "Fleet registry unavailable."
         }
 
+        controlRoomDigest = try? await controlRoomResponse
         classificationSyncPreview = try? await syncResponse
         classificationSyncExports = (try? await syncExportsResponse)?.items ?? []
         startupStatus = try? await startupResponse
