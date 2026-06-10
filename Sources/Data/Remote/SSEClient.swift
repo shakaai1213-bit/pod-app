@@ -38,6 +38,7 @@ public actor SSEStreamManager {
     public enum SSEEvent: Sendable {
         case connected
         case message(MessageNewPayload)
+        case presence(PresencePayload)
         case ticketLifecycle(TicketLifecycleEnvelope)
         case keepalive
         case error(StreamError)
@@ -449,7 +450,7 @@ private final class SSEDelegate: NSObject, URLSessionDataDelegate {
     }
 
     private func dispatchEvent(type: String, data: String) {
-        // "connected" and "keepalive" are stream-agnostic.
+        // "connected", "keepalive", and "presence" are stream-agnostic.
         if type == "keepalive" {
             Task { [weak manager] in await manager?.markEvent() }
             continuation.yield(.keepalive)
@@ -457,6 +458,18 @@ private final class SSEDelegate: NSObject, URLSessionDataDelegate {
         }
         if type == "connected" {
             yieldConnectedOnce()
+            return
+        }
+        if type == "presence" {
+            guard let jsonData = data.data(using: .utf8) else { return }
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            if let payload = try? decoder.decode(PresencePayload.self, from: jsonData) {
+                Task { [weak manager] in await manager?.markEvent() }
+                continuation.yield(.presence(payload))
+            } else {
+                continuation.yield(.error(.decodingFailed("Could not decode PresencePayload")))
+            }
             return
         }
         switch mode {
@@ -605,6 +618,45 @@ public struct MessageNewPayload: Codable, Sendable {
         try container.encodeIfPresent(responseState, forKey: .responseState)
         try container.encodeIfPresent(triageId, forKey: .triageId)
         try container.encodeIfPresent(triageTraceId, forKey: .triageTraceId)
+    }
+}
+
+/// Payload for `presence` events carried on chat streams.
+public struct PresencePayload: Codable, Sendable {
+    public let agentId: String
+    public let state: String
+    public let working: Bool
+    public let lastSeen: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case agentId = "agent_id"
+        case agent
+        case name
+        case state
+        case working
+        case isWorking = "is_working"
+        case lastSeen = "last_seen"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        agentId = try container.decodeIfPresent(String.self, forKey: .agentId)
+            ?? container.decodeIfPresent(String.self, forKey: .agent)
+            ?? container.decodeIfPresent(String.self, forKey: .name)
+            ?? ""
+        state = try container.decodeIfPresent(String.self, forKey: .state) ?? "offline"
+        working = try container.decodeIfPresent(Bool.self, forKey: .working)
+            ?? container.decodeIfPresent(Bool.self, forKey: .isWorking)
+            ?? false
+        lastSeen = try container.decodeIfPresent(Date.self, forKey: .lastSeen)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(agentId, forKey: .agentId)
+        try container.encode(state, forKey: .state)
+        try container.encode(working, forKey: .working)
+        try container.encodeIfPresent(lastSeen, forKey: .lastSeen)
     }
 }
 

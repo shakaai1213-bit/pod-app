@@ -18,9 +18,14 @@ struct DirectChatView: View {
             viewModel.setModelContext(modelContext)
         }
         .task {
+            viewModel.startPresenceMonitoring()
             await viewModel.loadAgentRegistry()
+            await viewModel.loadAgentPresence()
             await viewModel.loadSonarHealth()
             await viewModel.loadORCAChannelSummaries()
+        }
+        .onDisappear {
+            viewModel.stopPresenceMonitoring()
         }
         .onChange(of: viewModel.navigationPath.count) { _, count in
             if count == 0 {
@@ -866,6 +871,8 @@ struct AgentRowView: View {
                 Image(systemName: agent.icon)
                     .font(.system(size: 18))
                     .foregroundColor(Color(hexString: agent.color))
+                AgentPresenceDot(presence: viewModel.presence(for: agent))
+                    .offset(x: 16, y: 16)
             }
 
             // Name + last message
@@ -953,6 +960,27 @@ struct AgentRowView: View {
             .filter { !$0.isEmpty }
             .prefix(2)
         return Array(chips.prefix(4))
+    }
+}
+
+private struct AgentPresenceDot: View {
+    let presence: AgentPresence
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(AppColors.backgroundPrimary)
+                .frame(width: 16, height: 16)
+            Circle()
+                .fill(presence.state.color)
+                .frame(width: 10, height: 10)
+            if presence.isWorking {
+                Circle()
+                    .strokeBorder(AppColors.accentElectric, lineWidth: 1.5)
+                    .frame(width: 16, height: 16)
+            }
+        }
+        .accessibilityLabel("\(presence.state.label)\(presence.isWorking ? ", working" : "")")
     }
 }
 
@@ -4085,6 +4113,8 @@ struct DMBubble: View {
             return "Agent Run is running in ORCA..."
         case .waitingForLiveAgent:
             return "Waiting for the live inbox reply..."
+        case .deliveryNatsFailed, .agentUnresponsive:
+            return "Not delivered - agent unreachable"
         default:
             return message.isStreaming ? "Routing through ORCA..." : ""
         }
@@ -4100,6 +4130,8 @@ struct DMBubble: View {
             return "Agent Run running."
         case .waitingForLiveAgent:
             return "Live inbox acknowledged."
+        case .deliveryNatsFailed, .agentUnresponsive:
+            return "Delivery failed."
         default:
             return message.content.isEmpty ? "Routing through ORCA." : "Receiving..."
         }
@@ -4184,6 +4216,9 @@ struct DMBubble: View {
         if deliveryState == .waitingForLiveAgent {
             return "Waiting for \(agent.name)"
         }
+        if deliveryState == .deliveryNatsFailed || deliveryState == .agentUnresponsive {
+            return "not delivered - agent unreachable"
+        }
         return deliveryState?.displayLabel ?? ""
     }
 
@@ -4222,6 +4257,8 @@ struct DMBubble: View {
         case .waitingForLiveAgent: return "hourglass"
         case .claimedByAgent: return "hand.raised"
         case .responseReceived: return "checkmark.circle"
+        case .deliveryNatsFailed: return "antenna.radiowaves.left.and.right.slash"
+        case .agentUnresponsive: return "person.crop.circle.badge.exclamationmark"
         case .failed: return "exclamationmark.triangle"
         case .fallbackPresented: return "exclamationmark.triangle"
         case .timedOut: return "clock.badge.exclamationmark"
@@ -4235,7 +4272,7 @@ struct DMBubble: View {
             return AppColors.accentElectric
         case .responseReceived:
             return AppColors.accentSuccess
-        case .failed, .fallbackPresented, .timedOut:
+        case .deliveryNatsFailed, .agentUnresponsive, .failed, .fallbackPresented, .timedOut:
             return AppColors.accentWarning
         case nil:
             return AppColors.textTertiary
@@ -4245,6 +4282,7 @@ struct DMBubble: View {
     private var provenanceIcon: String {
         switch provenance {
         case .coordinationReview: return "person.2.wave.2"
+        case .timeoutFallback: return "clock.badge.exclamationmark"
         case .liveInbox: return "tray.full"
         case .compute: return "cpu"
         case .agentRun: return "bolt.badge.clock"
@@ -4258,6 +4296,7 @@ struct DMBubble: View {
     private var provenanceColor: Color {
         switch provenance {
         case .coordinationReview: return AppColors.accentSuccess
+        case .timeoutFallback: return AppColors.accentWarning
         case .liveInbox: return AppColors.accentSuccess
         case .compute: return AppColors.accentElectric
         case .agentRun: return AppColors.accentAgent
@@ -4271,7 +4310,7 @@ struct DMBubble: View {
     private var bubbleBackground: Color {
         if isUser { return AppColors.accentElectric }
         switch provenance {
-        case .fallback:
+        case .fallback, .timeoutFallback:
             return AppColors.accentWarning.opacity(0.10)
         case .ticket:
             return AppColors.accentAgent.opacity(0.10)
@@ -4288,7 +4327,7 @@ struct DMBubble: View {
 
     private var bubbleBorderColor: Color {
         switch provenance {
-        case .fallback:
+        case .fallback, .timeoutFallback:
             return AppColors.accentWarning.opacity(0.45)
         case .ticket:
             return AppColors.accentAgent.opacity(0.35)
@@ -4304,7 +4343,7 @@ struct DMBubble: View {
     }
 
     private var messageTextColor: Color {
-        provenance == .fallback || provenance == .protected ? AppColors.accentWarning : AppColors.textPrimary
+        provenance == .fallback || provenance == .timeoutFallback || provenance == .protected ? AppColors.accentWarning : AppColors.textPrimary
     }
 }
 
@@ -4348,7 +4387,10 @@ private struct MessageDeliveryLedger: View {
     }
 
     private var steps: [(title: String, icon: String, state: StepState)] {
-        let failed = deliveryState == .failed || deliveryState == .fallbackPresented
+        let failed = deliveryState == .failed
+            || deliveryState == .deliveryNatsFailed
+            || deliveryState == .agentUnresponsive
+            || deliveryState == .fallbackPresented
         let timedOut = deliveryState == .timedOut
         let finalDone = deliveryState == .responseReceived
         let waiting = deliveryState == .computeRunning
@@ -4422,6 +4464,10 @@ private struct MessageDeliveryLedger: View {
             return "Agent Run running"
         case .responseReceived:
             return "Reply/evidence received"
+        case .deliveryNatsFailed:
+            return "Not delivered - NATS failed"
+        case .agentUnresponsive:
+            return "Not delivered - agent unreachable"
         case .fallbackPresented:
             return "Local fallback, not agent reply"
         case .failed:
@@ -4440,6 +4486,8 @@ private struct MessageDeliveryLedger: View {
             ?? DMResponseProvenance(deliveryMode: message.deliveryMode, source: message.source, lane: message.lane) {
         case .coordinationReview:
             return "\(agent.name) coordination review"
+        case .timeoutFallback:
+            return "Compute fallback after timeout"
         case .compute:
             return "Helper draft"
         case .liveInbox:

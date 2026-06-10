@@ -229,6 +229,8 @@ final class ChatViewModel {
                             Task { _ = await self.offlineQueue.flush() }
                         case .message(let payload):
                             await self.handleSSEMessage(payload)
+                        case .presence:
+                            break  // presence is surfaced in Sonar/direct chat.
                         case .ticketLifecycle:
                             break  // not expected on chat stream; harmless no-op
                         case .keepalive:

@@ -231,7 +231,7 @@ final class ProjectsViewModel {
                             await self.refreshBoardAfterStreamEvent(boardId: boardId)
                         case .error:
                             break
-                        case .message, .ticketLifecycle:
+                        case .message, .presence, .ticketLifecycle:
                             break
                         }
                     }

@@ -188,6 +188,7 @@ enum DMDeliveryMode: String, Codable, Sendable {
 enum DMResponseProvenance: String, Codable, Sendable {
     case liveInbox = "live_inbox"
     case coordinationReview = "coordination_review"
+    case timeoutFallback = "timeout_fallback"
     case compute
     case agentRun = "agent_run"
     case fallback
@@ -201,6 +202,8 @@ enum DMResponseProvenance: String, Codable, Sendable {
         switch normalized {
         case "coordination", "coordination_review", "review_coordination":
             return .coordinationReview
+        case "timeout_fallback", "compute_timeout_fallback", "fallback_after_timeout":
+            return .timeoutFallback
         case "agent_inbox", "direct_agent_inbox":
             return .liveInbox
         case "local_guardrail", "local_fallback":
@@ -226,6 +229,8 @@ enum DMResponseProvenance: String, Codable, Sendable {
                 self = .protected
             } else if raw.contains("coordination_review") || raw.contains("coordination") {
                 self = .coordinationReview
+            } else if raw.contains("timeout_fallback") || (raw.contains("fallback") && raw.contains("timeout")) {
+                self = .timeoutFallback
             } else if raw.contains("fallback") || raw.contains("local_guardrail") {
                 self = .fallback
             } else if raw.contains("ticket") {
@@ -245,6 +250,7 @@ enum DMResponseProvenance: String, Codable, Sendable {
     var displayLabel: String {
         switch self {
         case .coordinationReview: return "Coordination review handoff"
+        case .timeoutFallback: return "Compute fallback after timeout"
         case .liveInbox: return "Sent to inbox; waiting"
         case .compute: return "Compute helper, not live runtime"
         case .agentRun: return "ORCA Agent Run"
@@ -265,6 +271,8 @@ enum DMDeliveryState: String, Codable, Sendable {
     case waitingForLiveAgent = "waiting_for_live_agent"
     case claimedByAgent = "claimed_by_agent"
     case responseReceived = "response_received"
+    case deliveryNatsFailed = "delivery_nats_failed"
+    case agentUnresponsive = "agent_unresponsive"
     case failed
     case fallbackPresented = "fallback_presented"
     case timedOut = "timed_out"
@@ -273,6 +281,10 @@ enum DMDeliveryState: String, Codable, Sendable {
         guard let raw else { return nil }
         let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         switch normalized {
+        case "nats_failed", "nats_delivery_failed", "delivery_failed_nats":
+            return .deliveryNatsFailed
+        case "agent_unreachable", "unreachable", "no_agent_response":
+            return .agentUnresponsive
         case "waiting_for_agent", "agent_pending", "live_pending", "live_inbox_pending":
             return .waitingForLiveAgent
         case "accepted", "pending", "queued", "running", "in_progress", "async_pending", "compute_pending", "compute_accepted":
@@ -298,6 +310,8 @@ enum DMDeliveryState: String, Codable, Sendable {
         case .waitingForLiveAgent: return "Live inbox accepted; waiting"
         case .claimedByAgent: return "Live agent claimed"
         case .responseReceived: return "Final reply received"
+        case .deliveryNatsFailed: return "Not delivered - NATS failed"
+        case .agentUnresponsive: return "Not delivered - agent unreachable"
         case .failed: return "Failed"
         case .fallbackPresented: return "Local fallback shown"
         case .timedOut: return "Still waiting"

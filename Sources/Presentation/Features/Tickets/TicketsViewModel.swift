@@ -3942,6 +3942,8 @@ final class TicketsViewModel {
                         case .error:
                             self.liveStatus = .stale
                             self.liveStatusDetail = "Live ticket stream reported an error; reconnecting..."
+                        case .presence:
+                            break  // chat presence is handled by Sonar.
                         case .message:
                             break  // chat events not expected on this stream
                         }

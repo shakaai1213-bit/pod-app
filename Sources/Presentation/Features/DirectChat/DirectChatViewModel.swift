@@ -81,6 +81,7 @@ final class DirectChatViewModel {
     var sonarHealth: SonarHealth?
     var isLoadingSonarHealth: Bool = false
     var sonarContactsGeneratedAt: Date?
+    var agentPresenceById: [String: AgentPresence] = [:]
 
     // Conversation data from SwiftData
     var conversations: [DMConversation] = []
@@ -98,6 +99,7 @@ final class DirectChatViewModel {
     private var ticketLiveTicketId: String?
     private var agentRunRefreshTask: Task<Void, Never>?
     private var roomAutoRefreshTask: Task<Void, Never>?
+    private var presenceRefreshTask: Task<Void, Never>?
     private var pendingTicketContinuation: (ticketId: String, ticketTitle: String, agentId: String, channelId: String?)?
 
     // MARK: - Setup
@@ -140,6 +142,74 @@ final class DirectChatViewModel {
         } catch {
             // Keep the static chat roster visible, but label it as static in the UI.
         }
+    }
+
+    func startPresenceMonitoring() {
+        presenceRefreshTask?.cancel()
+        presenceRefreshTask = Task { [weak self] in
+            guard let self else { return }
+            await self.loadAgentPresence()
+            while !Task.isCancelled {
+                await TaskSafeSleep.sleep(seconds: 60)
+                if Task.isCancelled { return }
+                await self.loadAgentPresence()
+            }
+        }
+    }
+
+    func stopPresenceMonitoring() {
+        presenceRefreshTask?.cancel()
+        presenceRefreshTask = nil
+    }
+
+    func loadAgentPresence() async {
+        do {
+            let response: SonarPresenceResponseDTO = try await api.get(path: "/api/v1/sonar/presence")
+            var mapped = agentPresenceById
+            for presence in response.presences {
+                mapped[AgentRosterPolicy.normalizedName(presence.agentId)] = presence
+            }
+            agentPresenceById = mapped
+        } catch {
+            // Presence is advisory; static roster, registry, and room state remain usable.
+        }
+    }
+
+    func presence(for agent: AgentInfo) -> AgentPresence {
+        let key = AgentRosterPolicy.normalizedName(agent.id)
+        if var presence = agentPresenceById[key] {
+            if let channelId = currentChannelId(for: agent),
+               liveSSEConnectedChannels.contains(channelId) {
+                presence.isWorking = true
+            }
+            return presence
+        }
+        if let registryAgent = registryAgent(for: agent) {
+            return AgentPresence(
+                agentId: agent.id,
+                state: AgentPresence.State(agentState: registryAgent.status),
+                isWorking: currentChannelId(for: agent).map { liveSSEConnectedChannels.contains($0) } ?? false,
+                lastSeen: registryAgent.lastActivity
+            )
+        }
+        return AgentPresence(
+            agentId: agent.id,
+            state: .offline,
+            isWorking: currentChannelId(for: agent).map { liveSSEConnectedChannels.contains($0) } ?? false,
+            lastSeen: nil
+        )
+    }
+
+    private func applyPresencePayload(_ payload: PresencePayload) {
+        let agentId = payload.agentId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !agentId.isEmpty else { return }
+        let presence = AgentPresence(
+            agentId: agentId,
+            state: AgentPresence.State(rawValue: payload.state.lowercased()) ?? .offline,
+            isWorking: payload.working,
+            lastSeen: payload.lastSeen
+        )
+        agentPresenceById[AgentRosterPolicy.normalizedName(agentId)] = presence
     }
 
     var directChatAgents: [AgentInfo] {
@@ -1443,6 +1513,8 @@ final class DirectChatViewModel {
                         excluding: acknowledgedMessageId,
                         since: minimumCreatedAt
                     )
+                case .presence(let payload):
+                    applyPresencePayload(payload)
                 case .keepalive:
                     break
                 case .error:
@@ -1817,7 +1889,9 @@ final class DirectChatViewModel {
             || normalizedSource.contains("schoolhouse")
             || parsedState == .computeRunning
             || parsedState == .waitingForLiveAgent
-            || parsedState == .claimedByAgent {
+            || parsedState == .claimedByAgent
+            || parsedState == .deliveryNatsFailed
+            || parsedState == .agentUnresponsive {
             return true
         }
         return false
@@ -1854,6 +1928,8 @@ final class DirectChatViewModel {
             || parsedState == .computeRunning
             || parsedState == .waitingForLiveAgent
             || parsedState == .claimedByAgent
+            || parsedState == .deliveryNatsFailed
+            || parsedState == .agentUnresponsive
     }
 
     private static func normalizedDeliveryState(_ raw: String?) -> String? {
@@ -1898,7 +1974,7 @@ final class DirectChatViewModel {
 
     private static func isPendingAsyncDeliveryState(_ raw: String?) -> Bool {
         switch DMDeliveryState.parse(raw) {
-        case .waitingForLiveAgent, .computeRunning:
+        case .waitingForLiveAgent, .computeRunning, .deliveryNatsFailed, .agentUnresponsive:
             return true
         default:
             return false
@@ -2914,6 +2990,8 @@ final class DirectChatViewModel {
                         break
                     case .error:
                         self.ticketLiveStatus = "Ticket stream paused; use refresh if status looks stale."
+                    case .presence:
+                        break
                     case .message:
                         break
                     }
@@ -4515,6 +4593,132 @@ struct DirectChatORCAMessageDTO: Decodable {
     }
 }
 
+struct AgentPresence: Hashable, Sendable {
+    enum State: String, Hashable, Sendable {
+        case active
+        case idle
+        case offline
+
+        init(agentState: AgentState) {
+            switch agentState {
+            case .online, .busy:
+                self = .active
+            case .idle:
+                self = .idle
+            case .offline, .error, .provisioning:
+                self = .offline
+            }
+        }
+
+        var label: String {
+            switch self {
+            case .active: return "Active"
+            case .idle: return "Idle"
+            case .offline: return "Offline"
+            }
+        }
+
+        var color: Color {
+            switch self {
+            case .active: return AppColors.accentSuccess
+            case .idle: return AppColors.accentWarning
+            case .offline: return AppColors.textTertiary
+            }
+        }
+    }
+
+    let agentId: String
+    var state: State
+    var isWorking: Bool
+    let lastSeen: Date?
+}
+
+private struct SonarPresenceResponseDTO: Decodable {
+    let presences: [AgentPresence]
+
+    struct PresenceDTO: Decodable {
+        let agentId: String
+        let state: String
+        let working: Bool
+        let lastSeen: Date?
+
+        enum CodingKeys: String, CodingKey {
+            case agentId = "agent_id"
+            case agent
+            case name
+            case state
+            case working
+            case isWorking = "is_working"
+            case lastSeen = "last_seen"
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            agentId = try container.decodeIfPresent(String.self, forKey: .agentId)
+                ?? container.decodeIfPresent(String.self, forKey: .agent)
+                ?? container.decodeIfPresent(String.self, forKey: .name)
+                ?? ""
+            state = try container.decodeIfPresent(String.self, forKey: .state) ?? "offline"
+            working = try container.decodeIfPresent(Bool.self, forKey: .working)
+                ?? container.decodeIfPresent(Bool.self, forKey: .isWorking)
+                ?? false
+            lastSeen = try container.decodeIfPresent(Date.self, forKey: .lastSeen)
+        }
+
+        func domain(agentIdOverride: String? = nil) -> AgentPresence? {
+            let id = (agentIdOverride ?? agentId).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !id.isEmpty else { return nil }
+            return AgentPresence(
+                agentId: id,
+                state: AgentPresence.State(rawValue: state.lowercased()) ?? .offline,
+                isWorking: working,
+                lastSeen: lastSeen
+            )
+        }
+    }
+
+    struct DynamicCodingKey: CodingKey {
+        let stringValue: String
+        let intValue: Int? = nil
+
+        init?(stringValue: String) {
+            self.stringValue = stringValue
+        }
+
+        init?(intValue: Int) {
+            return nil
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        if let array = try? [PresenceDTO](from: decoder) {
+            presences = array.compactMap { $0.domain() }
+            return
+        }
+
+        let container = try decoder.container(keyedBy: DynamicCodingKey.self)
+        if let key = DynamicCodingKey(stringValue: "agents"),
+           let array = try? container.decode([PresenceDTO].self, forKey: key) {
+            presences = array.compactMap { $0.domain() }
+            return
+        }
+        if let key = DynamicCodingKey(stringValue: "presence"),
+           let array = try? container.decode([PresenceDTO].self, forKey: key) {
+            presences = array.compactMap { $0.domain() }
+            return
+        }
+
+        var values: [AgentPresence] = []
+        for key in container.allKeys {
+            if let dto = try? container.decode(PresenceDTO.self, forKey: key),
+               let domain = dto.domain(agentIdOverride: key.stringValue) {
+                values.append(domain)
+            }
+        }
+        presences = values
+    }
+}
+
 struct SonarRoom: Identifiable, Hashable {
     enum RoomGroup: Hashable {
         case ticket
@@ -4805,7 +5009,10 @@ enum SonarRoomFilter: String, CaseIterable, Identifiable, Hashable {
         case .mentions:
             return room.mentionCount > 0
         case .waiting:
-            return room.pendingCount > 0 || room.latestResponseState == DMDeliveryState.waitingForLiveAgent.rawValue
+            return room.pendingCount > 0
+                || room.latestResponseState == DMDeliveryState.waitingForLiveAgent.rawValue
+                || room.latestResponseState == DMDeliveryState.deliveryNatsFailed.rawValue
+                || room.latestResponseState == DMDeliveryState.agentUnresponsive.rawValue
         case .live:
             return room.activeSSEClients > 0 || room.presence == "live"
         }
@@ -5014,6 +5221,12 @@ struct SonarRoomMessage: Identifiable, Hashable {
         }
         if DMDeliveryState.parse(responseState) == .waitingForLiveAgent || DMDeliveryState.parse(deliveryState) == .waitingForLiveAgent {
             return "Waiting for \(agentDisplayName)"
+        }
+        if DMDeliveryState.parse(responseState) == .deliveryNatsFailed || DMDeliveryState.parse(deliveryState) == .deliveryNatsFailed {
+            return DMDeliveryState.deliveryNatsFailed.displayLabel
+        }
+        if DMDeliveryState.parse(responseState) == .agentUnresponsive || DMDeliveryState.parse(deliveryState) == .agentUnresponsive {
+            return DMDeliveryState.agentUnresponsive.displayLabel
         }
         if DMResponseProvenance.parse(provenance) == .liveInbox, !isUser {
             return "\(agentDisplayName) replied"
