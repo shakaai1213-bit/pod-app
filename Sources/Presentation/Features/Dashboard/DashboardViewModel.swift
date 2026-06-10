@@ -16,6 +16,7 @@ final class DashboardViewModel {
     var stateTags: [StateTagDTO] = []
     var chiefProtectionTags: [StateTagDTO] = []
     var startupStatus: DashboardStartupStatusResponse?
+    var presenceRollup: DashboardPresenceRollup?
     var ticketFlowReview: TicketFlowReview?
     var ticketFlowLastUpdated: Date?
     var ticketFlowErrorMessage: String?
@@ -170,6 +171,13 @@ final class DashboardViewModel {
         }
 
         do {
+            let response: DashboardSonarHealthDTO = try await apiClient.get(path: "/api/v1/sonar/health")
+            presenceRollup = response.presenceRollup
+        } catch {
+            presenceRollup = nil
+        }
+
+        do {
             let response: StateRegistryResponse = try await apiClient.get(
                 path: "/api/v1/state-registry?prefix=agent.&limit=8"
             )
@@ -270,6 +278,136 @@ private struct DashboardTicketFlowReviewDTO: Decodable {
             counts: counts.toDomain(),
             items: items.map { $0.toDomain() }
         )
+    }
+}
+
+struct DashboardPresenceRollup: Hashable {
+    let active: Int
+    let idle: Int
+    let offline: Int
+
+    var total: Int { active + idle + offline }
+}
+
+private struct DashboardSonarHealthDTO: Decodable {
+    let presenceRollup: DashboardPresenceRollup?
+
+    private struct CheckDTO: Decodable {
+        let key: String
+        let label: String?
+        let count: Int?
+        let detail: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case key
+            case label
+            case count
+            case detail
+        }
+    }
+
+    private struct DynamicCodingKey: CodingKey {
+        let stringValue: String
+        let intValue: Int? = nil
+
+        init?(stringValue: String) {
+            self.stringValue = stringValue
+        }
+
+        init?(intValue: Int) {
+            return nil
+        }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case presence
+        case presenceCounts = "presence_counts"
+        case presenceRollup = "presence_rollup"
+        case presenceSummary = "presence_summary"
+        case counts
+        case checks
+        case active
+        case idle
+        case offline
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        if let direct = Self.decodeRollup(from: container) {
+            presenceRollup = direct
+            return
+        }
+
+        for key in [CodingKeys.presence, .presenceCounts, .presenceRollup, .presenceSummary, .counts] {
+            if let object = try? container.decode([String: AgentRunJSONValue].self, forKey: key),
+               let rollup = Self.rollup(from: object) {
+                presenceRollup = rollup
+                return
+            }
+        }
+
+        if let checks = try? container.decode([CheckDTO].self, forKey: .checks) {
+            presenceRollup = Self.rollup(from: checks)
+            return
+        }
+
+        presenceRollup = nil
+    }
+
+    private static func decodeRollup(from container: KeyedDecodingContainer<CodingKeys>) -> DashboardPresenceRollup? {
+        let active = (try? container.decodeIfPresent(Int.self, forKey: .active)) ?? 0
+        let idle = (try? container.decodeIfPresent(Int.self, forKey: .idle)) ?? 0
+        let offline = (try? container.decodeIfPresent(Int.self, forKey: .offline)) ?? 0
+        guard active + idle + offline > 0 else { return nil }
+        return DashboardPresenceRollup(active: active, idle: idle, offline: offline)
+    }
+
+    private static func rollup(from object: [String: AgentRunJSONValue]) -> DashboardPresenceRollup? {
+        let active = intValue(object["active"])
+            ?? intValue(object["online"])
+            ?? intValue(object["live"])
+            ?? 0
+        let idle = intValue(object["idle"])
+            ?? intValue(object["away"])
+            ?? intValue(object["quiet"])
+            ?? 0
+        let offline = intValue(object["offline"])
+            ?? intValue(object["down"])
+            ?? 0
+        guard active + idle + offline > 0 else { return nil }
+        return DashboardPresenceRollup(active: active, idle: idle, offline: offline)
+    }
+
+    private static func rollup(from checks: [CheckDTO]) -> DashboardPresenceRollup? {
+        var active = 0
+        var idle = 0
+        var offline = 0
+
+        for check in checks {
+            let haystack = "\(check.key) \(check.label ?? "") \(check.detail ?? "")".lowercased()
+            guard let count = check.count else { continue }
+            if haystack.contains("active") || haystack.contains("online") || haystack.contains("live") {
+                active += count
+            } else if haystack.contains("idle") || haystack.contains("away") || haystack.contains("quiet") {
+                idle += count
+            } else if haystack.contains("offline") || haystack.contains("down") {
+                offline += count
+            }
+        }
+
+        guard active + idle + offline > 0 else { return nil }
+        return DashboardPresenceRollup(active: active, idle: idle, offline: offline)
+    }
+
+    private static func intValue(_ value: AgentRunJSONValue?) -> Int? {
+        switch value {
+        case .int(let value): return value
+        case .double(let value): return Int(value)
+        case .string(let value): return Int(value)
+        case .bool(let value): return value ? 1 : 0
+        case .object, .array, .null, nil: return nil
+        }
     }
 }
 

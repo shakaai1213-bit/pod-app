@@ -894,6 +894,116 @@ struct MemoryQueryResponse: Codable, Hashable, Sendable {
     }
 }
 
+struct KnowledgePacketSearchResponse: Decodable, Hashable, Sendable {
+    let results: [KnowledgePacketSearchResult]
+
+    private enum CodingKeys: String, CodingKey {
+        case items
+        case results
+        case packets
+        case data
+    }
+
+    init(from decoder: Decoder) throws {
+        if let array = try? [KnowledgePacketSearchResult](from: decoder) {
+            results = array
+            return
+        }
+
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        results = try container.decodeIfPresent([KnowledgePacketSearchResult].self, forKey: .items)
+            ?? container.decodeIfPresent([KnowledgePacketSearchResult].self, forKey: .results)
+            ?? container.decodeIfPresent([KnowledgePacketSearchResult].self, forKey: .packets)
+            ?? container.decodeIfPresent([KnowledgePacketSearchResult].self, forKey: .data)
+            ?? []
+    }
+}
+
+struct KnowledgePacketSearchResult: Decodable, Identifiable, Hashable, Sendable {
+    let id: String
+    let title: String
+    let lane: String
+    let sourceType: String
+    let body: String
+    let evidenceRef: String?
+    let createdAt: String?
+    let score: Double?
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case packetId = "packet_id"
+        case knowledgeId = "knowledge_id"
+        case title
+        case name
+        case summary
+        case lane
+        case laneId = "lane_id"
+        case sourceType = "source_type"
+        case source
+        case type
+        case body
+        case content
+        case text
+        case markdown
+        case snippet
+        case evidenceRef = "evidence_ref"
+        case evidenceRefs = "evidence_refs"
+        case evidence
+        case ref
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case score
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(String.self, forKey: .id)
+            ?? container.decodeIfPresent(String.self, forKey: .packetId)
+            ?? container.decodeIfPresent(String.self, forKey: .knowledgeId)
+            ?? UUID().uuidString
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+            ?? container.decodeIfPresent(String.self, forKey: .name)
+            ?? container.decodeIfPresent(String.self, forKey: .summary)
+            ?? "Untitled packet"
+        lane = try container.decodeIfPresent(String.self, forKey: .lane)
+            ?? container.decodeIfPresent(String.self, forKey: .laneId)
+            ?? "knowledge"
+        sourceType = try container.decodeIfPresent(String.self, forKey: .sourceType)
+            ?? container.decodeIfPresent(String.self, forKey: .source)
+            ?? container.decodeIfPresent(String.self, forKey: .type)
+            ?? "packet"
+        body = try container.decodeIfPresent(String.self, forKey: .body)
+            ?? container.decodeIfPresent(String.self, forKey: .content)
+            ?? container.decodeIfPresent(String.self, forKey: .markdown)
+            ?? container.decodeIfPresent(String.self, forKey: .text)
+            ?? container.decodeIfPresent(String.self, forKey: .snippet)
+            ?? ""
+        let evidenceRefs = try container.decodeIfPresent([String].self, forKey: .evidenceRefs)
+        evidenceRef = try container.decodeIfPresent(String.self, forKey: .evidenceRef)
+            ?? evidenceRefs?.first
+            ?? container.decodeIfPresent(String.self, forKey: .evidence)
+            ?? container.decodeIfPresent(String.self, forKey: .ref)
+        createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
+            ?? container.decodeIfPresent(String.self, forKey: .updatedAt)
+        score = try container.decodeIfPresent(Double.self, forKey: .score)
+    }
+
+    var sourceIcon: String {
+        switch sourceType.lowercased() {
+        case "wiki", "doc", "document", "markdown": return "doc.richtext"
+        case "memory", "memory_candidate": return "brain.head.profile"
+        case "sonar", "message", "chat": return "bubble.left.and.bubble.right"
+        case "ticket", "task": return "checklist"
+        case "standard", "doctrine": return "books.vertical"
+        default: return "shippingbox"
+        }
+    }
+
+    var displayLane: String {
+        lane.replacingOccurrences(of: "_", with: " ").uppercased()
+    }
+}
+
 struct MemoryCandidateQueueSummary: Codable, Hashable, Sendable {
     let total: Int
     let byLifecycle: [String: Int]
@@ -1357,6 +1467,9 @@ final class KnowledgeViewModel {
     var memoryOps: MemoryOpsResponse?
     var memoryQueryText: String = ""
     var memoryQueryResponse: MemoryQueryResponse?
+    var knowledgePacketQueryText: String = ""
+    var knowledgePacketResults: [KnowledgePacketSearchResult] = []
+    var selectedKnowledgePacket: KnowledgePacketSearchResult?
     var notes: [OrcaNote] = []
     var noteGovernanceAudit: NoteGovernanceAuditResponse?
     var noteGovernanceQueue: NoteGovernanceQueueResponse?
@@ -1375,6 +1488,7 @@ final class KnowledgeViewModel {
     var isLoadingRuntimeSync: Bool = false
     var isLoadingMemoryCandidates: Bool = false
     var isLoadingMemoryQuery: Bool = false
+    var isLoadingKnowledgePackets: Bool = false
     var isLoadingNotes: Bool = false
     var isLoadingSkillLab: Bool = false
     var isLoadingSkillLabDetail: Bool = false
@@ -1399,6 +1513,7 @@ final class KnowledgeViewModel {
     var runtimeBurnDownMessage: String?
     var memoryCandidatesErrorMessage: String?
     var memoryQueryErrorMessage: String?
+    var knowledgePacketErrorMessage: String?
     var notesErrorMessage: String?
     var noteGovernanceErrorMessage: String?
     var noteGovernanceExportMessage: String?
@@ -1837,6 +1952,40 @@ final class KnowledgeViewModel {
             await MainActor.run {
                 self.memoryQueryResponse = nil
                 self.memoryQueryErrorMessage = "Memory search unavailable: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func searchKnowledgePackets() async {
+        let query = knowledgePacketQueryText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else {
+            await MainActor.run {
+                self.knowledgePacketResults = []
+                self.knowledgePacketErrorMessage = nil
+            }
+            return
+        }
+
+        isLoadingKnowledgePackets = true
+        knowledgePacketErrorMessage = nil
+        defer { isLoadingKnowledgePackets = false }
+
+        do {
+            let request = try await APIClient.shared.buildRequest(
+                path: "/api/v1/knowledge/packets",
+                queryItems: [
+                    URLQueryItem(name: "query", value: query)
+                ]
+            )
+            let response: KnowledgePacketSearchResponse = try await APIClient.shared.perform(request)
+            await MainActor.run {
+                self.knowledgePacketResults = response.results
+                self.knowledgePacketErrorMessage = nil
+            }
+        } catch {
+            await MainActor.run {
+                self.knowledgePacketResults = []
+                self.knowledgePacketErrorMessage = "Knowledge search unavailable: \(error.localizedDescription)"
             }
         }
     }

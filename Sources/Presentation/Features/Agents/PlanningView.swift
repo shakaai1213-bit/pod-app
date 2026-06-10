@@ -576,7 +576,7 @@ struct PlanningView: View {
             sectionHeader("PLANNING CONTEXT", count: context.contextItemCount)
 
             if let current = context.currentBlock {
-                contextRow(label: "Current", block: current, color: AppColors.accentSuccess)
+                currentBlockCard(current)
             }
             if let next = context.nextBlock {
                 contextRow(label: "Next", block: next, color: AppColors.accentElectric)
@@ -585,7 +585,7 @@ struct PlanningView: View {
                 contextRow(label: "Checkpoint", block: checkpoint, color: AppColors.accentWarning)
             }
             ForEach(context.overdue.prefix(3)) { block in
-                contextRow(label: "Overdue", block: block, color: AppColors.accentWarning)
+                contextRow(label: "Overdue", block: block, color: AppColors.accentDanger)
             }
             if !context.dependencyOrder.isEmpty {
                 FlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
@@ -607,6 +607,39 @@ struct PlanningView: View {
             }
         }
         .planningCard()
+    }
+
+    private func currentBlockCard(_ block: PlanningContextBlock) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 6) {
+                Image(systemName: "target")
+                    .font(.system(size: 12, weight: .semibold))
+                Text("CURRENT BLOCK")
+                    .font(.system(size: 10, weight: .bold))
+            }
+            .foregroundColor(AppColors.accentSuccess)
+
+            Text(block.title)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(AppColors.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            let meta = block.contextMeta
+            if !meta.isEmpty {
+                Text(meta)
+                    .font(.system(size: 11))
+                    .foregroundColor(AppColors.textSecondary)
+                    .lineLimit(3)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppColors.accentSuccess.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusSmall)
+                .strokeBorder(AppColors.accentSuccess.opacity(0.28), lineWidth: 0.75)
+        )
     }
 
     private func contextRow(label: String, block: PlanningContextBlock, color: Color) -> some View {

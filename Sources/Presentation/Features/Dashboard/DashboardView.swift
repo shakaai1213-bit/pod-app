@@ -1133,6 +1133,8 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: Theme.sm) {
             sectionHeader("Agent Status", count: viewModel.agents.count)
 
+            dashboardPresenceRollupStrip
+
             if viewModel.isLoading {
                 loadingAgentsView
             } else if viewModel.agents.isEmpty {
@@ -1149,6 +1151,41 @@ struct DashboardView: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private var dashboardPresenceRollupStrip: some View {
+        if let rollup = viewModel.presenceRollup {
+            HStack(spacing: 7) {
+                Text("team:")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(AppColors.textTertiary)
+
+                presenceCount("active", rollup.active, color: AppColors.accentSuccess)
+                presenceCount("idle", rollup.idle, color: AppColors.accentWarning)
+                presenceCount("offline", rollup.offline, color: AppColors.textTertiary)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(AppColors.backgroundSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.radiusSmall)
+                    .strokeBorder(AppColors.border, lineWidth: 0.5)
+            )
+        }
+    }
+
+    private func presenceCount(_ label: String, _ count: Int, color: Color) -> some View {
+        HStack(spacing: 3) {
+            Text("\(count)")
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+            Text(label)
+                .font(.system(size: 11, weight: .semibold))
+        }
+        .foregroundColor(color)
     }
 
     // MARK: - Needs Attention Section

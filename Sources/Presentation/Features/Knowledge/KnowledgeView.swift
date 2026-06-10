@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Knowledge Chip (L4 — SPEC-POD-LAYOUT-REVAMP-2026-W22 §5)
 
@@ -56,6 +57,7 @@ struct KnowledgeView: View {
     @State private var isSavingSystemNote = false
     @State private var systemNoteStatus: String?
     @State private var searchText = ""
+    @State private var knowledgeSearchTask: Task<Void, Never>?
     @State private var selectedChip: KnowledgeChip = .memory
 
     // MARK: - Body
@@ -74,6 +76,7 @@ struct KnowledgeView: View {
                     ScrollView {
                         VStack(spacing: Theme.lg) {
                             searchBar
+                            knowledgePacketSearchSection
                             knowledgeChipContent
                         }
                         .padding(.horizontal, Theme.md)
@@ -134,6 +137,10 @@ struct KnowledgeView: View {
                     isLoading: viewModel.isLoadingSelectedWikiDocument,
                     errorMessage: viewModel.wikiDocumentsErrorMessage
                 )
+            }
+            .sheet(item: $viewModel.selectedKnowledgePacket) { packet in
+                KnowledgePacketDetailSheet(packet: packet)
+                    .presentationDetents([.medium, .large])
             }
             .onAppear {
                 configureReviewerIdentity()
@@ -259,19 +266,35 @@ struct KnowledgeView: View {
                 .font(.system(size: 14, weight: .medium))
                 .foregroundColor(AppColors.textTertiary)
 
-            TextField("Search standards, tags, authors…", text: $searchText)
+            TextField("Ask what the team has already learned.", text: $searchText)
                 .font(.subheadline)
                 .foregroundColor(AppColors.textPrimary)
                 .tint(AppColors.accentElectric)
                 .autocorrectionDisabled()
+                .submitLabel(.search)
+                .onSubmit {
+                    knowledgeSearchTask?.cancel()
+                    viewModel.knowledgePacketQueryText = searchText
+                    Task { await viewModel.searchKnowledgePackets() }
+                }
                 .onChange(of: searchText) { _, newValue in
                     viewModel.searchText = newValue
+                    viewModel.knowledgePacketQueryText = newValue
+                    knowledgeSearchTask?.cancel()
+                    knowledgeSearchTask = Task {
+                        try? await Task.sleep(nanoseconds: 350_000_000)
+                        if Task.isCancelled { return }
+                        await viewModel.searchKnowledgePackets()
+                    }
                 }
 
             if !searchText.isEmpty {
                 Button {
                     searchText = ""
                     viewModel.searchText = ""
+                    viewModel.knowledgePacketQueryText = ""
+                    knowledgeSearchTask?.cancel()
+                    Task { await viewModel.searchKnowledgePackets() }
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 14))
@@ -287,6 +310,76 @@ struct KnowledgeView: View {
             RoundedRectangle(cornerRadius: Theme.radiusMedium)
                 .stroke(AppColors.border, lineWidth: 1)
         )
+    }
+
+    private var knowledgePacketSearchSection: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack {
+                Label("Knowledge Search", systemImage: "sparkle.magnifyingglass")
+                    .font(.headline)
+                    .foregroundColor(AppColors.textPrimary)
+
+                Spacer()
+
+                if viewModel.isLoadingKnowledgePackets {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                } else if !viewModel.knowledgePacketResults.isEmpty {
+                    Text("\(viewModel.knowledgePacketResults.count)")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(AppColors.textTertiary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(AppColors.backgroundTertiary)
+                        .clipShape(Capsule())
+                }
+            }
+
+            if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text("Ask what the team has already learned.")
+                    .font(.caption)
+                    .foregroundColor(AppColors.textTertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(Theme.sm)
+                    .background(AppColors.backgroundSecondary)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                            .stroke(AppColors.border, lineWidth: 1)
+                    )
+            } else if let error = viewModel.knowledgePacketErrorMessage {
+                Text(error)
+                    .font(.caption)
+                    .foregroundColor(AppColors.accentWarning)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(Theme.sm)
+                    .background(AppColors.backgroundSecondary)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+            } else if viewModel.knowledgePacketResults.isEmpty && !viewModel.isLoadingKnowledgePackets {
+                Text("No knowledge packets matched this search.")
+                    .font(.caption)
+                    .foregroundColor(AppColors.textTertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(Theme.sm)
+                    .background(AppColors.backgroundSecondary)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+            } else {
+                LazyVStack(spacing: Theme.xs) {
+                    ForEach(viewModel.knowledgePacketResults.prefix(10)) { packet in
+                        KnowledgePacketResultRow(packet: packet) {
+                            viewModel.selectedKnowledgePacket = packet
+                        }
+                    }
+                }
+                .padding(Theme.sm)
+                .background(AppColors.backgroundSecondary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                        .stroke(AppColors.border, lineWidth: 1)
+                )
+            }
+        }
     }
 
     private var chronogramSection: some View {
@@ -3295,6 +3388,146 @@ struct StandardRowView: View {
             )
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Knowledge Packet Search
+
+private struct KnowledgePacketResultRow: View {
+    let packet: KnowledgePacketSearchResult
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: packet.sourceIcon)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(AppColors.accentElectric)
+                    .frame(width: 24, height: 24)
+                    .background(AppColors.accentElectric.opacity(0.12))
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(packet.title)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(AppColors.textPrimary)
+                            .lineLimit(2)
+
+                        Spacer(minLength: 6)
+
+                        Text(packet.displayLane)
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(AppColors.accentAgent)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(AppColors.accentAgent.opacity(0.12))
+                            .clipShape(Capsule())
+                    }
+
+                    if !packet.body.isEmpty {
+                        Text(packet.body)
+                            .font(.caption)
+                            .foregroundColor(AppColors.textSecondary)
+                            .lineLimit(3)
+                    }
+
+                    HStack(spacing: 6) {
+                        Text(packet.sourceType.replacingOccurrences(of: "_", with: " "))
+                        if let evidenceRef = packet.evidenceRef, !evidenceRef.isEmpty {
+                            Text(String(evidenceRef.prefix(36)))
+                        }
+                    }
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(AppColors.textTertiary)
+                }
+            }
+            .padding(.vertical, 7)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct KnowledgePacketDetailSheet: View {
+    let packet: KnowledgePacketSearchResult
+    @Environment(\.dismiss) private var dismiss
+    @State private var copiedEvidence = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: Theme.md) {
+                    HStack(spacing: 8) {
+                        Label(packet.sourceType.replacingOccurrences(of: "_", with: " "), systemImage: packet.sourceIcon)
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(AppColors.accentElectric)
+
+                        Text(packet.displayLane)
+                            .font(.caption2.weight(.bold))
+                            .foregroundColor(AppColors.accentAgent)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(AppColors.accentAgent.opacity(0.12))
+                            .clipShape(Capsule())
+                    }
+
+                    Text(packet.title)
+                        .font(.title3.weight(.bold))
+                        .foregroundColor(AppColors.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(packet.body.isEmpty ? "No packet body returned." : packet.body)
+                        .font(.body)
+                        .foregroundColor(AppColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let evidenceRef = packet.evidenceRef, !evidenceRef.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("EVIDENCE REF")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(AppColors.textTertiary)
+
+                            HStack(alignment: .top, spacing: 8) {
+                                Text(evidenceRef)
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .foregroundColor(AppColors.textSecondary)
+                                    .textSelection(.enabled)
+                                    .fixedSize(horizontal: false, vertical: true)
+
+                                Spacer(minLength: 8)
+
+                                Button {
+                                    UIPasteboard.general.string = evidenceRef
+                                    copiedEvidence = true
+                                } label: {
+                                    Image(systemName: copiedEvidence ? "checkmark" : "doc.on.doc")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundColor(copiedEvidence ? AppColors.accentSuccess : AppColors.accentElectric)
+                                        .frame(width: 30, height: 30)
+                                        .background(AppColors.backgroundTertiary)
+                                        .clipShape(Circle())
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Copy evidence reference")
+                            }
+                        }
+                        .padding(Theme.sm)
+                        .background(AppColors.backgroundSecondary)
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+                    }
+                }
+                .padding(Theme.md)
+            }
+            .background(AppColors.backgroundPrimary)
+            .navigationTitle("Packet")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
     }
 }
 
