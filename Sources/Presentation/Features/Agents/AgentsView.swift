@@ -457,7 +457,6 @@ struct AgentsView: View {
                 }
             }
 
-            deputyStrip
         }
     }
 
@@ -586,6 +585,21 @@ struct AgentsView: View {
 
             Divider()
 
+            if !card.research.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("RESEARCH")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(AppColors.textTertiary)
+                        .kerning(0.5)
+                    Text(card.research.prefix(3).joined(separator: " · "))
+                        .font(.system(size: 11))
+                        .foregroundColor(AppColors.textSecondary)
+                        .lineLimit(2)
+                }
+
+                Divider()
+            }
+
             // Today's 3 from morning daily log + Fish chip
             HStack(alignment: .top, spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
@@ -614,9 +628,29 @@ struct AgentsView: View {
                 }
                 Spacer(minLength: 8)
                 if card.hasFish {
-                    fishChip(card.fish)
+                    VStack(alignment: .trailing, spacing: 4) {
+                        fishChip(card.fish)
+                        fishFeedMiniRow("last", card.fish.feed?.lastRunAt ?? "unknown")
+                        fishFeedMiniRow("loop", card.fish.feed?.analysisLoopStatus ?? "unknown")
+                        Text(card.fish.feed?.lastFinding?.nilIfBlank ?? "last finding unknown")
+                            .font(.system(size: 10))
+                            .foregroundColor(AppColors.textTertiary)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.trailing)
+                            .frame(maxWidth: 140, alignment: .trailing)
+                    }
                 } else {
-                    sourcePill("Fish pending")
+                    VStack(alignment: .trailing, spacing: 4) {
+                        sourcePill("No Fish assigned")
+                        fishFeedMiniRow("last", "unknown")
+                        fishFeedMiniRow("loop", "unknown")
+                        Text("last finding unknown")
+                            .font(.system(size: 10))
+                            .foregroundColor(AppColors.textTertiary)
+                            .lineLimit(1)
+                            .multilineTextAlignment(.trailing)
+                            .frame(maxWidth: 140, alignment: .trailing)
+                    }
                 }
             }
         }
@@ -631,7 +665,10 @@ struct AgentsView: View {
     }
 
     private func agentForFocusCard(_ card: AgentFocusCard) -> Agent? {
-        viewModel.agents.first { $0.name.lowercased() == card.id }
+        viewModel.agents.first {
+            let name = $0.name.lowercased()
+            return name == card.id || (card.id == "shaka" && name == "shaka-agent")
+        }
     }
 
     private func focusStatusPill(_ agent: Agent) -> some View {
@@ -733,6 +770,15 @@ struct AgentsView: View {
         .padding(.vertical, 4)
         .background(AppColors.backgroundTertiary)
         .clipShape(Capsule())
+    }
+
+    private func fishFeedMiniRow(_ label: String, _ value: String) -> some View {
+        Text("\(label): \(value)")
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundColor(AppColors.textTertiary)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .frame(maxWidth: 140, alignment: .trailing)
     }
 
     // MARK: - Protected Chief/Fund
@@ -1427,6 +1473,21 @@ private struct AgentFocusArea: Identifiable, Hashable {
 private struct AgentFocusFish: Hashable {
     let name: String
     let icon: String
+    let feed: AgentFocusFishFeed?
+}
+
+private struct AgentFocusFishFeed: Hashable {
+    let lastRunAt: String?
+    let lastFinding: String?
+    let analysisLoopStatus: String
+    let runtimeStatus: String?
+
+    static let unknown = AgentFocusFishFeed(
+        lastRunAt: "unknown",
+        lastFinding: "status unknown",
+        analysisLoopStatus: "unknown",
+        runtimeStatus: nil
+    )
 }
 
 // L7c reshape (SPEC-POD-AGENT-FOCUS-CARDS v1, Tony 2026-05-25):
@@ -1461,6 +1522,7 @@ private struct AgentFocusCard: Identifiable, Hashable {
     let charter: String
     let stretch: [String]            // 3 aspirational areas (REFRAME)
     let roadmap: AgentRoadmap         // 30d / 60d / 90d trajectory
+    let research: [String]
     let thisWeek: [WeeklyMilestone]?  // Weekly plan milestones from /api/v1/agents/{name}/weekly-plan
     let focusAreas: [AgentFocusArea]  // Today's 3 from morning daily log
     let fish: AgentFocusFish
@@ -1480,6 +1542,9 @@ private struct AgentFocusCard: Identifiable, Hashable {
         case "aloha": return Color(hexString: "A855F7")
         case "chief": return Color(hexString: "22C55E")
         case "rooster": return AppColors.accentDanger
+        case "coral": return Color(hexString: "06B6D4")
+        case "reef": return Color(hexString: "14B8A6")
+        case "shaka": return Color(hexString: "F97316")
         default: return AppColors.accentElectric
         }
     }
@@ -1498,13 +1563,14 @@ private struct AgentFocusCard: Identifiable, Hashable {
             charter: meta.charter,
             stretch: [],
             roadmap: .empty,
+            research: [],
             thisWeek: nil,
             focusAreas: [
                 AgentFocusArea(id: "1", label: "", evidenceRef: nil),
                 AgentFocusArea(id: "2", label: "", evidenceRef: nil),
                 AgentFocusArea(id: "3", label: "", evidenceRef: nil)
             ],
-            fish: AgentFocusFish(name: "—", icon: "—"),
+            fish: AgentFocusFish(name: "—", icon: "—", feed: nil),
             lastLogExcerpt: nil,
             lastUpdated: nil,
             isSkeleton: true,
@@ -1525,13 +1591,137 @@ private struct AgentFocusDeputy: Identifiable {
 }
 
 private enum AgentFocusDefaults {
-    static let mainAgentOrder = ["maui", "aloha", "chief", "rooster"]
+    static let mainAgentOrder = ["maui", "aloha", "chief", "rooster", "coral", "reef", "shaka"]
     static let mainAgentMeta: [String: (name: String, emoji: String, charter: String)] = [
-        "maui": ("Maui", "🪝", "Pod / Lifecycle / Compute / Codex orchestrator"),
+        "maui": ("Maui", "🌋", "Pod / Lifecycle / Compute / Codex orchestrator"),
         "aloha": ("Aloha", "🌸", "Backbone / Nerve / Flywheel / Doctrine gate"),
         "chief": ("Chief", "🦅", "Trading / P&L / Funding"),
-        "rooster": ("Rooster", "🐓", "Security / Research / Knowledge")
+        "rooster": ("Rooster", "🐓", "Security / Research / Knowledge / Team Tooling"),
+        "coral": ("Coral", "🪸", "Ops / Watchdogs / Storage"),
+        "reef": ("Reef", "🐡", "Surfaces / Tools / Watchdogs"),
+        "shaka": ("Shaka", "🤙", "CEO / Decision proxy / Cross-team coordination")
     ]
+
+    static let fallbackCards: [String: AgentFocusCard] = Dictionary(
+        uniqueKeysWithValues: fallbackCardList.map { ($0.id, $0) }
+    )
+
+    private static let fallbackCardList: [AgentFocusCard] = [
+        staticCard(
+            agentId: "maui",
+            stretch: ["speed of build", "architectural taste", "Codex orchestration mastery"],
+            roadmap: AgentRoadmap(
+                d30: "Pod cockpit V1 LIVE",
+                d60: "Memory Spine V2 + Project Automation v1.0",
+                d90: "Voice surface Phase 1 + Jarvis Arms autonomous"
+            ),
+            research: ["AI coding agent orchestration patterns", "mobile cockpit UX", "SwiftUI compose performance"],
+            fish: AgentFocusFish(name: "Starfish", icon: "⭐", feed: .unknown)
+        ),
+        staticCard(
+            agentId: "aloha",
+            stretch: ["crisp communication", "organized team", "ORCA standards"],
+            roadmap: AgentRoadmap(
+                d30: "wiki→Pod auto-pairing fully closed",
+                d60: "doc-ledger drives weekly retro signal",
+                d90: "agent_focus_card as ORCA entity"
+            ),
+            research: ["doctrine + governance patterns in agentic teams", "pattern languages for org structure", "measurement loops in autonomous systems"],
+            fish: AgentFocusFish(name: "—", icon: "—", feed: nil)
+        ),
+        staticCard(
+            agentId: "chief",
+            stretch: ["disciplined trading conviction", "funding velocity", "learning loop compounding"],
+            roadmap: AgentRoadmap(
+                d30: "funding-squeeze v1.4 LIVE",
+                d60: "live capital deployment gate passed",
+                d90: "Strategy Journal becomes source of forward bets"
+            ),
+            research: ["funding-squeeze regime patterns", "pre-stop signals", "walk-forward validation methods"],
+            fish: AgentFocusFish(name: "Chieffish", icon: "🐟", feed: .unknown)
+        ),
+        staticCard(
+            agentId: "rooster",
+            stretch: ["security posture", "adversarial thinking", "research depth"],
+            roadmap: AgentRoadmap(
+                d30: "harm-gate doctrine LIVE + first MCP server shipped",
+                d60: "Guardian Phase 2 + 2 more MCP/skills",
+                d90: "security telemetry on Pod Dashboard"
+            ),
+            research: ["adversarial prompt injection", "CVE feeds", "MCP server design patterns"],
+            fish: AgentFocusFish(name: "Roosterfish", icon: "🐔", feed: .unknown)
+        ),
+        staticCard(
+            agentId: "coral",
+            stretch: ["operational invisibility", "cold-tier mastery", "storage charter readiness"],
+            roadmap: AgentRoadmap(
+                d30: "hygiene petal in stable cadence",
+                d60: "cold-prune Q1 complete",
+                d90: "promotable to charter primary on Storage"
+            ),
+            research: ["cold-tier storage patterns", "quarantine UX in ops tooling", "weekly retro cadence design"],
+            fish: AgentFocusFish(name: "—", icon: "—", feed: nil)
+        ),
+        staticCard(
+            agentId: "reef",
+            stretch: ["substrate reliability", "tools maturity", "zero-friction watchdog ops"],
+            roadmap: AgentRoadmap(
+                d30: "MCP registry health real-time",
+                d60: "watchdog fleet self-heals",
+                d90: "promotable to charter primary on Watchdogs"
+            ),
+            research: ["MCP registry health patterns", "tool-tier observability", "self-healing system design"],
+            fish: AgentFocusFish(name: "—", icon: "—", feed: nil)
+        ),
+        staticCard(
+            agentId: "shaka",
+            stretch: ["Keep work moving without Tony", "Batch Tony's plate", "Cross-lane unblocking reflex"],
+            roadmap: AgentRoadmap(
+                d30: "lead-view LIVE in Pod",
+                d60: "Fix Program closed GATE1 passed",
+                d90: "daily briefing fully Schoolhouse-native"
+            ),
+            research: ["agentic coordination patterns", "lead-managed ticket plates", "OPC model"],
+            fish: AgentFocusFish(name: "—", icon: "—", feed: nil)
+        )
+    ]
+
+    static func fallbackCard(agentId: String) -> AgentFocusCard {
+        fallbackCards[agentId] ?? AgentFocusCard.skeleton(agentId: agentId)
+    }
+
+    private static func staticCard(
+        agentId: String,
+        stretch: [String],
+        roadmap: AgentRoadmap,
+        research: [String],
+        fish: AgentFocusFish
+    ) -> AgentFocusCard {
+        let meta = mainAgentMeta[agentId]!
+        return AgentFocusCard(
+            agentId: agentId,
+            displayName: meta.name,
+            emoji: meta.emoji,
+            charter: meta.charter,
+            stretch: stretch,
+            roadmap: roadmap,
+            research: research,
+            thisWeek: nil,
+            focusAreas: [
+                AgentFocusArea(id: "1", label: "", evidenceRef: nil),
+                AgentFocusArea(id: "2", label: "", evidenceRef: nil),
+                AgentFocusArea(id: "3", label: "", evidenceRef: nil)
+            ],
+            fish: fish,
+            lastLogExcerpt: nil,
+            lastUpdated: nil,
+            isSkeleton: false,
+            hasStretch: true,
+            hasRoadmap: true,
+            hasFish: fish.name != "—" || fish.icon != "—",
+            hasFocusAreas: false
+        )
+    }
 }
 
 @MainActor
@@ -1578,7 +1768,7 @@ private final class AgentFocusCardsModel {
         }()
 
         let (dto, weeklyPlan) = await (focusCardResult, weeklyPlanResult)
-        guard let dto else { return AgentFocusCard.skeleton(agentId: agentId) }
+        guard let dto else { return AgentFocusDefaults.fallbackCard(agentId: agentId) }
         return dto.toDomain(fallbackId: agentId, weeklyPlan: weeklyPlan)
     }
 }
@@ -1593,10 +1783,11 @@ private struct AgentFocusCardDTO: Decodable {
     let lastUpdated: Date?
     let stretch: [String]?
     let roadmap: RoadmapDTO?
+    let research: [String]?
     let thisWeek: [WeeklyMilestone]?
 
     enum CodingKeys: String, CodingKey {
-        case charter, fish, stretch, roadmap
+        case charter, fish, stretch, roadmap, research
         case agentId = "agent_id"
         case displayName = "display_name"
         case focusAreas = "focus_areas"
@@ -1622,8 +1813,15 @@ private struct AgentFocusCardDTO: Decodable {
         let stretchValues = stretch.map { Array($0.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.prefix(3)) } ?? []
         let roadmapValue = roadmap.map { AgentRoadmap(d30: $0.d30 ?? "", d60: $0.d60 ?? "", d90: $0.d90 ?? "") }
             ?? .empty
-        let fishValue = fish.map { AgentFocusFish(name: $0.name, icon: $0.icon) }
-            ?? AgentFocusFish(name: "—", icon: "—")
+        let fishValue = fish.map {
+            AgentFocusFish(
+                name: $0.name,
+                icon: $0.icon,
+                feed: $0.feed?.toDomain()
+            )
+        } ?? AgentFocusFish(name: "—", icon: "—", feed: nil)
+        let fallback = AgentFocusDefaults.fallbackCard(agentId: fallbackId)
+        let researchValue = research?.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? fallback.research
 
         // weekly-plan endpoint takes precedence; DTO field is fallback; nil = endpoint not live yet.
         let thisWeekValue = weeklyPlan ?? thisWeek
@@ -1636,16 +1834,19 @@ private struct AgentFocusCardDTO: Decodable {
             displayName: displayName.replacingOccurrences(of: meta.emoji, with: "").trimmingCharacters(in: .whitespacesAndNewlines),
             emoji: meta.emoji,
             charter: charter.isEmpty ? meta.charter : charter,
-            stretch: stretchValues,
-            roadmap: roadmapValue,
+            stretch: stretchValues.isEmpty ? fallback.stretch : stretchValues,
+            roadmap: hasRoadmap ? roadmapValue : fallback.roadmap,
+            research: researchValue,
             thisWeek: thisWeekValue,
             focusAreas: paddedAreas,
-            fish: fishValue,
+            fish: hasFish && fishValue.feed == nil
+                ? AgentFocusFish(name: fishValue.name, icon: fishValue.icon, feed: .unknown)
+                : fishValue,
             lastLogExcerpt: lastLogExcerpt,
             lastUpdated: lastUpdated,
             isSkeleton: false,
-            hasStretch: !stretchValues.isEmpty,
-            hasRoadmap: hasRoadmap,
+            hasStretch: !stretchValues.isEmpty || fallback.hasStretch,
+            hasRoadmap: hasRoadmap || fallback.hasRoadmap,
             hasFish: hasFish,
             hasFocusAreas: hasFocusAreas
         )
@@ -1665,6 +1866,40 @@ private struct AgentFocusCardDTO: Decodable {
     struct FishDTO: Decodable {
         let name: String
         let icon: String
+        let feed: FishFeedDTO?
+    }
+
+    struct FishFeedDTO: Decodable {
+        let lastRunAt: String?
+        let lastFinding: String?
+        let analysisLoopStatus: String?
+        let runtimeStatus: String?
+
+        enum CodingKeys: String, CodingKey {
+            case lastRunAt = "last_run_at"
+            case lastRunTs = "last_run_ts"
+            case lastFinding = "last_finding"
+            case analysisLoopStatus = "analysis_loop_status"
+            case runtimeStatus = "runtime_status"
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            lastRunAt = try container.decodeIfPresent(String.self, forKey: .lastRunAt)
+                ?? container.decodeIfPresent(String.self, forKey: .lastRunTs)
+            lastFinding = try container.decodeIfPresent(String.self, forKey: .lastFinding)
+            analysisLoopStatus = try container.decodeIfPresent(String.self, forKey: .analysisLoopStatus)
+            runtimeStatus = try container.decodeIfPresent(String.self, forKey: .runtimeStatus)
+        }
+
+        func toDomain() -> AgentFocusFishFeed {
+            AgentFocusFishFeed(
+                lastRunAt: lastRunAt,
+                lastFinding: lastFinding,
+                analysisLoopStatus: analysisLoopStatus ?? "pending",
+                runtimeStatus: runtimeStatus
+            )
+        }
     }
 
     struct RoadmapDTO: Decodable {
@@ -1740,16 +1975,44 @@ private struct AgentFocusCardDetailSheet: View {
                         }
                     }
 
+                    if !card.research.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("RESEARCH")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(AppColors.textTertiary)
+                                .kerning(0.5)
+                            ForEach(card.research.prefix(4), id: \.self) { item in
+                                Text("• \(item)")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(AppColors.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+
                     HStack {
                         if card.hasFish {
                             fishPill
                         } else {
-                            detailPendingPill("Fish pending")
+                            detailPendingPill("No Fish assigned")
                         }
                         Spacer()
                         Text(card.lastUpdatedLabel)
                             .font(.system(size: 11))
                             .foregroundColor(AppColors.textTertiary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("FISH FEEDING")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(AppColors.textTertiary)
+                            .kerning(0.5)
+                        detailFeedRow("Last run", card.fish.feed?.lastRunAt ?? "unknown")
+                        detailFeedRow("Finding", card.fish.feed?.lastFinding ?? "last finding unknown")
+                        detailFeedRow("Loop", card.fish.feed?.analysisLoopStatus ?? "unknown")
+                        if let runtimeStatus = card.fish.feed?.runtimeStatus {
+                            detailFeedRow("Runtime", runtimeStatus)
+                        }
                     }
 
                     // Today's 3 from morning daily log
@@ -1819,6 +2082,19 @@ private struct AgentFocusCardDetailSheet: View {
         .overlay(Capsule().stroke(AppColors.border, lineWidth: 0.5))
     }
 
+    private func detailFeedRow(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(label)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(AppColors.textTertiary)
+                .frame(width: 68, alignment: .leading)
+            Text(value)
+                .font(.system(size: 13))
+                .foregroundColor(AppColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     private func detailRoadmapRow(_ horizon: String, _ value: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(horizon)
@@ -1852,6 +2128,13 @@ private struct AgentFocusCardDetailSheet: View {
             .background(AppColors.backgroundSecondary)
             .clipShape(Capsule())
             .overlay(Capsule().stroke(AppColors.border, lineWidth: 0.5))
+    }
+}
+
+private extension String {
+    var nilIfBlank: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 

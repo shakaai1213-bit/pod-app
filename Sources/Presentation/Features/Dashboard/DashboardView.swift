@@ -7,11 +7,14 @@ struct DashboardView: View {
     @EnvironmentObject private var appState: AppState
     @State private var viewModel = DashboardViewModel()
     @State private var briefingModel = DashboardBriefingDoctrineModel()
+    @State private var dailyBriefingModel = DailyBriefingPanelModel()
     @State private var fundLandingModel = FundLandingViewModel()
     @State private var fundUniverseLoopModel = FundUniverseLoopViewModel()
     @State private var voiceViewModel = VoiceCompanionViewModel()
     @State private var selectedAgent: Agent?
     @State private var selectedBriefingSheet: DashboardBriefingSheetKind?
+    @State private var isDailyBriefingExpanded = false
+    @State private var expandedDailyBriefingSections: Set<DailyBriefingSection> = []
     @State private var showingFundLanding = false
     @State private var showingVoiceRoom = false
     @State private var showingSettings = false
@@ -35,13 +38,16 @@ struct DashboardView: View {
                     // 3. Protected Fund visibility — read-only, no controls.
                     dashboardFundLandingCard
 
-                    // 4. Tier 1 sign queue — "what needs your eyes"
+                    // 4. Daily briefing — collapsible read-only note from ORCA.
+                    dailyBriefingPanel
+
+                    // 5. Tier 1 sign queue — "what needs your eyes"
                     CockpitSignQueueSection()
 
-                    // 5. Compact briefing + doctrine velocity line
+                    // 6. Compact briefing + doctrine velocity line
                     cockpitBriefingLine
 
-                    // 6. Top flow card — one blocker, tap → Work
+                    // 7. Top flow card — one blocker, tap → Work
                     cockpitFlowCard
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -58,6 +64,7 @@ struct DashboardView: View {
                         Task {
                             await viewModel.loadDashboard()
                             await briefingModel.load(force: true)
+                            await dailyBriefingModel.load(force: true)
                             await fundLandingModel.load()
                             await fundUniverseLoopModel.load()
                         }
@@ -102,6 +109,7 @@ struct DashboardView: View {
             .task {
                 await viewModel.loadDashboard()
                 await briefingModel.load()
+                await dailyBriefingModel.load()
                 await fundLandingModel.load()
                 await fundUniverseLoopModel.load()
             }
@@ -347,6 +355,116 @@ struct DashboardView: View {
     private func dashboardNumber(_ value: Double?) -> String {
         guard let value else { return "-" }
         return value.formatted(.number.precision(.fractionLength(3)))
+    }
+
+    // MARK: - Daily Briefing Panel
+
+    private var dailyBriefingPanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    isDailyBriefingExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 9) {
+                    Image(systemName: "newspaper.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(AppColors.accentElectric)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Daily Briefing")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(AppColors.textPrimary)
+                        Text(dailyBriefingFreshnessText)
+                            .font(.system(size: 11))
+                            .foregroundColor(AppColors.textTertiary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+
+                    if dailyBriefingModel.isLoading {
+                        ProgressView()
+                            .scaleEffect(0.65)
+                    }
+
+                    Image(systemName: isDailyBriefingExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(AppColors.textTertiary)
+                }
+            }
+            .buttonStyle(.plain)
+
+            if isDailyBriefingExpanded {
+                if let briefing = dailyBriefingModel.briefing {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(DailyBriefingSection.allCases) { section in
+                            dailyBriefingSectionRow(section, briefing: briefing)
+                        }
+                    }
+                } else {
+                    Text("No briefing posted today")
+                        .font(.system(size: 12))
+                        .foregroundColor(AppColors.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 2)
+                }
+            }
+        }
+        .padding(12)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                .strokeBorder(AppColors.border, lineWidth: 0.5)
+        )
+    }
+
+    private var dailyBriefingFreshnessText: String {
+        if let createdAt = dailyBriefingModel.briefing?.createdAt {
+            return "Posted \(createdAt.relativeFormatted)"
+        }
+        return dailyBriefingModel.isLoading ? "Loading latest briefing" : "No briefing posted today"
+    }
+
+    private func dailyBriefingSectionRow(_ section: DailyBriefingSection, briefing: DailyBriefingNote) -> some View {
+        let isExpanded = expandedDailyBriefingSections.contains(section)
+        return VStack(alignment: .leading, spacing: 6) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    if isExpanded {
+                        expandedDailyBriefingSections.remove(section)
+                    } else {
+                        expandedDailyBriefingSections.insert(section)
+                    }
+                }
+            } label: {
+                HStack(spacing: 7) {
+                    Text(section.title)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(AppColors.textPrimary)
+                    Spacer()
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(AppColors.textTertiary)
+                }
+                .padding(.horizontal, 9)
+                .padding(.vertical, 7)
+                .background(AppColors.backgroundPrimary)
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                Text(briefing.sectionText(section))
+                    .font(.system(size: 12))
+                    .foregroundColor(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 9)
+                    .padding(.bottom, 3)
+            }
+        }
     }
 
     // MARK: - Cockpit Briefing Line (compact — combines briefing + doctrine)
@@ -1535,6 +1653,166 @@ private struct FundLandingDetailSheet: View {
         let concentration = landing.req008OiConcentrationEth.map { $0.formatted(.number.precision(.fractionLength(2))) } ?? "-"
         let threshold = landing.req008ThresholdPercent.map { $0.formatted(.number.precision(.fractionLength(1))) } ?? "-"
         return "\(concentration)/\(threshold)%"
+    }
+}
+
+private enum DailyBriefingSection: String, CaseIterable, Identifiable {
+    case research
+    case lessons
+    case objectives
+    case pnl
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .research: return "Research"
+        case .lessons: return "Lessons"
+        case .objectives: return "Objectives"
+        case .pnl: return "P&L"
+        }
+    }
+
+    var aliases: [String] {
+        switch self {
+        case .research: return ["research"]
+        case .lessons: return ["lessons", "lesson"]
+        case .objectives: return ["objectives", "objective", "goals", "priorities"]
+        case .pnl: return ["p&l", "pnl", "p/l", "profit and loss"]
+        }
+    }
+}
+
+@MainActor
+@Observable
+private final class DailyBriefingPanelModel {
+    private(set) var briefing: DailyBriefingNote?
+    private(set) var isLoading = false
+
+    func load(force: Bool = false) async {
+        if isLoading { return }
+        if !force && briefing != nil { return }
+
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            let response: PaginatedResponse<DailyBriefingNoteDTO> = try await APIClient.shared.get(
+                path: "/api/v1/notes?type=daily_briefing&limit=1"
+            )
+            briefing = response.items.first?.toDomain()
+        } catch {
+            do {
+                let notes: [DailyBriefingNoteDTO] = try await APIClient.shared.get(
+                    path: "/api/v1/notes?type=daily_briefing&limit=1"
+                )
+                briefing = notes.first?.toDomain()
+            } catch {
+                briefing = nil
+            }
+        }
+    }
+}
+
+private struct DailyBriefingNote: Hashable {
+    let id: String
+    let body: String
+    let createdAt: Date?
+    let sections: [DailyBriefingSection: String]
+
+    func sectionText(_ section: DailyBriefingSection) -> String {
+        sections[section]?.nilIfBlank ?? "No \(section.title.lowercased()) in briefing yet"
+    }
+}
+
+private struct DailyBriefingNoteDTO: Codable {
+    let id: String?
+    let body: String
+    let createdAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case body
+        case content
+        case text
+        case markdown
+        case createdAt = "created_at"
+        case created
+        case timestamp
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(String.self, forKey: .id)
+        body = try container.decodeIfPresent(String.self, forKey: .body)
+            ?? container.decodeIfPresent(String.self, forKey: .content)
+            ?? container.decodeIfPresent(String.self, forKey: .markdown)
+            ?? container.decodeIfPresent(String.self, forKey: .text)
+            ?? ""
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
+            ?? container.decodeIfPresent(Date.self, forKey: .created)
+            ?? container.decodeIfPresent(Date.self, forKey: .timestamp)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(id, forKey: .id)
+        try container.encode(body, forKey: .body)
+        try container.encodeIfPresent(createdAt, forKey: .createdAt)
+    }
+
+    func toDomain() -> DailyBriefingNote {
+        DailyBriefingNote(
+            id: id ?? body,
+            body: body,
+            createdAt: createdAt,
+            sections: Self.parseSections(body)
+        )
+    }
+
+    private static func parseSections(_ markdown: String) -> [DailyBriefingSection: String] {
+        var parsed: [DailyBriefingSection: String] = [:]
+        var current: DailyBriefingSection?
+        var buffer: [String] = []
+
+        func flush() {
+            guard let current else { return }
+            let value = buffer.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !value.isEmpty {
+                parsed[current] = value
+            }
+        }
+
+        for line in markdown.components(separatedBy: .newlines) {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.hasPrefix("##") {
+                flush()
+                let title = trimmed
+                    .drop(while: { $0 == "#" })
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased()
+                current = DailyBriefingSection.allCases.first { section in
+                    section.aliases.contains { title == $0 || title.contains($0) }
+                }
+                buffer = []
+            } else if current != nil {
+                buffer.append(line)
+            }
+        }
+        flush()
+
+        if parsed.isEmpty, !markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            parsed[.research] = markdown
+        }
+
+        return parsed
+    }
+}
+
+private extension String {
+    var nilIfBlank: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 
