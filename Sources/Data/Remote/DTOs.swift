@@ -617,6 +617,15 @@ enum AgentStatus: String, Codable {
     case offline
     case error
     case provisioning
+    case active
+
+    // One unknown status string must never nuke the whole roster decode
+    // (2026-06-11: backend started returning "active"; the dashboard showed
+    // "No agents available" + count 0 while the presence strip showed 5).
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = AgentStatus(rawValue: raw.lowercased()) ?? .offline
+    }
 }
 
 // MARK: - Send Message Request

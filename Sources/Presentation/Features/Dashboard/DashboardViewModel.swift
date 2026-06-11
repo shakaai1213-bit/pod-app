@@ -259,6 +259,7 @@ final class DashboardViewModel {
     private func mapAgentStatus(_ status: AgentStatus) -> AgentState {
         switch status {
         case .online:  return .online
+        case .active:  return .online   // backend "active" = working right now
         case .busy:    return .busy
         case .idle:    return .idle
         case .offline: return .offline

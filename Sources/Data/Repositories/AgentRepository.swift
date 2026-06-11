@@ -97,6 +97,7 @@ final class AgentRepository {
     private func mapStatus(_ dtoStatus: AgentStatus) -> AgentState {
         switch dtoStatus {
         case .online:  return .online
+        case .active:  return .online   // backend "active" = working right now
         case .busy:    return .busy
         case .idle:    return .idle
         case .offline: return .offline

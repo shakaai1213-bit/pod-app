@@ -182,6 +182,7 @@ final class WallDisplayViewModel {
     private static func agentState(from status: AgentStatus) -> AgentState {
         switch status {
         case .online: return .online
+        case .active: return .online
         case .busy: return .busy
         case .idle: return .idle
         case .offline: return .offline
