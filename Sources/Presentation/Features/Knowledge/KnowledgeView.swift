@@ -1483,6 +1483,22 @@ struct KnowledgeView: View {
                 .accessibilityLabel("Create or update memory promotion review ticket")
 
                 Button {
+                    Task { await viewModel.requestMemoryReviewExportPacket() }
+                } label: {
+                    if viewModel.isRequestingMemoryReviewExport {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                    } else {
+                        Image(systemName: "doc.badge.arrow.up")
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(AppColors.accentElectric)
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(viewModel.isRequestingMemoryReviewExport)
+                .accessibilityLabel("Create read-only memory candidate review export packet")
+
+                Button {
                     Task { await viewModel.generateStorageHygieneTicket() }
                 } label: {
                     if viewModel.isGeneratingStorageHygieneTicket {
@@ -1535,6 +1551,12 @@ struct KnowledgeView: View {
                             .foregroundColor(message.lowercased().contains("unavailable") ? AppColors.accentWarning : AppColors.accentSuccess)
                             .lineLimit(2)
                     }
+                    if let message = viewModel.memoryReviewExportMessage {
+                        Text(message)
+                            .font(.caption2.weight(.medium))
+                            .foregroundColor(message.lowercased().contains("unavailable") ? AppColors.accentWarning : AppColors.accentSuccess)
+                            .lineLimit(2)
+                    }
                     if let message = viewModel.memoryActionMessage {
                         Text(message)
                             .font(.caption2.weight(.medium))
@@ -1557,6 +1579,8 @@ struct KnowledgeView: View {
                     if let extraction = viewModel.dailyLogExtraction {
                         dailyLogCoverageRow(extraction.summary)
                     }
+
+                    memoryExtractionArtifactsPanel(queue: queue)
 
                     memorySearchSurface
 
@@ -1630,6 +1654,253 @@ struct KnowledgeView: View {
                 .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
             }
         }
+    }
+
+    private func memoryExtractionArtifactsPanel(queue: MemoryCandidateQueueResponse) -> some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            HStack(spacing: Theme.xs) {
+                Image(systemName: "doc.text.magnifyingglass")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(AppColors.accentElectric)
+                Text("Extraction Artifacts")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(AppColors.textSecondary)
+                Spacer(minLength: 0)
+                Text(reviewGatedStatus(for: queue))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundColor(AppColors.accentWarning)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(AppColors.accentWarning.opacity(0.12))
+                    .clipShape(Capsule())
+            }
+
+            HStack(spacing: Theme.sm) {
+                RegistryStat(value: queue.items.count, label: "candidates")
+                RegistryStat(value: viewModel.dailyLogExtraction?.summary.candidateMemoryItems ?? queue.items.count, label: "extracted")
+                RegistryStat(value: viewModel.dailyLogExtraction?.summary.missingAgents.count ?? 0, label: "missing")
+            }
+
+            if let generatedAt = viewModel.dailyLogExtraction?.generatedAt ?? queue.generatedAt {
+                Text("Generated \(generatedAt.formatted(date: .abbreviated, time: .shortened))")
+                    .font(.caption2)
+                    .foregroundColor(AppColors.textTertiary)
+            }
+
+            if let path = viewModel.dailyLogExtraction?.artifactPath, !path.isEmpty {
+                artifactPathButton(title: "Latest daily-log extraction", path: path)
+            }
+
+            if let dated = viewModel.dateAddressedDailyLogExtraction,
+               let path = dated.artifactPath,
+               !path.isEmpty {
+                artifactPathButton(
+                    title: "By date \(viewModel.dateAddressedDailyLogDate ?? viewModel.latestDailyLogArtifactDate ?? dated.records.first?.date ?? "latest")",
+                    path: path
+                )
+            } else if let date = viewModel.latestDailyLogArtifactDate {
+                HStack(spacing: Theme.xs) {
+                    Image(systemName: "calendar.badge.exclamationmark")
+                        .font(.caption2)
+                        .foregroundColor(AppColors.accentWarning)
+                    Text(viewModel.dateAddressedDailyLogErrorMessage ?? "Date-addressable extraction for \(date) is not available from ORCA.")
+                        .font(.caption2)
+                        .foregroundColor(AppColors.accentWarning)
+                        .lineLimit(2)
+                }
+            }
+
+            Divider()
+                .background(AppColors.border)
+
+            HStack(spacing: Theme.xs) {
+                Button {
+                    Task { await viewModel.requestMemoryReviewExportPacket() }
+                } label: {
+                    HStack(spacing: 5) {
+                        if viewModel.isRequestingMemoryReviewExport {
+                            ProgressView()
+                                .scaleEffect(0.65)
+                        } else {
+                            Image(systemName: "doc.badge.arrow.up")
+                                .font(.caption2.weight(.semibold))
+                        }
+                        Text("Request review export")
+                            .font(.caption2.weight(.semibold))
+                    }
+                    .foregroundColor(AppColors.accentElectric)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(AppColors.backgroundSecondary)
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(viewModel.isRequestingMemoryReviewExport)
+                .accessibilityLabel("Request read-only candidate review export packet")
+
+                Text("Read-only")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundColor(AppColors.textTertiary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(AppColors.backgroundSecondary)
+                    .clipShape(Capsule())
+
+                Spacer(minLength: 0)
+            }
+
+            if let export = viewModel.memoryReviewExport {
+                memoryReviewExportPacketPanel(export)
+            } else if hasMemoryExportPacket(queue) {
+                artifactPathButton(title: "Candidate export packet", path: queue.artifactPath)
+                artifactPathButton(title: "Review overlay", path: queue.overlayPath)
+                artifactPathButton(title: "Audit trail", path: queue.auditPath)
+                artifactPathButton(title: "Export directory", path: queue.exportDir)
+            } else {
+                HStack(spacing: Theme.xs) {
+                    Image(systemName: "lock.doc")
+                        .font(.caption2)
+                        .foregroundColor(AppColors.textTertiary)
+                    Text("Request a read-only ORCA review export packet to render packet links and coverage metadata.")
+                        .font(.caption2)
+                        .foregroundColor(AppColors.textTertiary)
+                        .lineLimit(2)
+                }
+                .padding(Theme.xs)
+                .background(AppColors.backgroundSecondary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.xs)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+    }
+
+    private func memoryReviewExportPacketPanel(_ export: MemoryCandidateReviewExportResponse) -> some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            HStack(alignment: .top, spacing: Theme.xs) {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.caption2)
+                    .foregroundColor(AppColors.accentSuccess)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(export.exportId)
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(AppColors.textSecondary)
+                        .lineLimit(1)
+                    Text("Generated \(export.generatedAt.formatted(date: .abbreviated, time: .shortened))")
+                        .font(.caption2)
+                        .foregroundColor(AppColors.textTertiary)
+                }
+                Spacer(minLength: 0)
+                Text("Review gated")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundColor(AppColors.accentWarning)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(AppColors.accentWarning.opacity(0.12))
+                    .clipShape(Capsule())
+                Text("Read-only")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundColor(AppColors.accentSuccess)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(AppColors.accentSuccess.opacity(0.12))
+                    .clipShape(Capsule())
+            }
+
+            HStack(spacing: Theme.sm) {
+                RegistryStat(value: export.candidateCounts.total, label: "total")
+                RegistryStat(value: export.candidateCounts.pendingReview, label: "pending")
+                RegistryStat(value: export.presentAgents.count, label: "present")
+                RegistryStat(value: export.missingAgents.count, label: "missing")
+            }
+
+            let coverage = export.coverageStatus.replacingOccurrences(of: "_", with: " ").capitalized
+            Text("Coverage: \(coverage)")
+                .font(.caption2.weight(.semibold))
+                .foregroundColor(export.coverageStatus == "complete" ? AppColors.accentSuccess : AppColors.accentWarning)
+
+            if !export.missingAgents.isEmpty {
+                Text("Missing: \(export.missingAgents.joined(separator: ", "))")
+                    .font(.caption2)
+                    .foregroundColor(AppColors.accentWarning)
+                    .lineLimit(2)
+            } else if !export.presentAgents.isEmpty {
+                Text("Present: \(export.presentAgents.joined(separator: ", "))")
+                    .font(.caption2)
+                    .foregroundColor(AppColors.textTertiary)
+                    .lineLimit(2)
+            }
+
+            if !export.url.isEmpty {
+                artifactPathButton(title: "ORCA review export URL", path: export.url)
+            }
+            if !export.markdownPath.isEmpty {
+                artifactPathButton(title: "Review packet markdown", path: export.markdownPath)
+            }
+            if !export.jsonPath.isEmpty {
+                artifactPathButton(title: "Review packet JSON", path: export.jsonPath)
+            }
+            ForEach(Array(export.sourceArtifactRefs.enumerated()), id: \.offset) { index, ref in
+                artifactPathButton(title: "Source artifact \(index + 1)", path: ref)
+            }
+        }
+        .padding(Theme.xs)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+    }
+
+    private func artifactPathButton(title: String, path: String) -> some View {
+        Button {
+            openArtifactPath(path)
+        } label: {
+            HStack(alignment: .top, spacing: Theme.xs) {
+                Image(systemName: "arrow.up.forward.app")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundColor(AppColors.accentElectric)
+                    .frame(width: 16, height: 16)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundColor(AppColors.textSecondary)
+                    Text(path)
+                        .font(.caption2.monospaced())
+                        .foregroundColor(AppColors.textTertiary)
+                        .lineLimit(2)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(Theme.xs)
+            .background(AppColors.backgroundSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open \(title)")
+    }
+
+    private func hasMemoryExportPacket(_ queue: MemoryCandidateQueueResponse) -> Bool {
+        !queue.artifactPath.isEmpty || !queue.overlayPath.isEmpty || !queue.auditPath.isEmpty || !queue.exportDir.isEmpty
+    }
+
+    private func reviewGatedStatus(for queue: MemoryCandidateQueueResponse) -> String {
+        if queue.items.contains(where: { $0.isSensitive || !$0.pendingApprovals.isEmpty }) {
+            return "Review gated"
+        }
+        return "Read only"
+    }
+
+    private func openArtifactPath(_ path: String) {
+        guard !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let url: URL
+        if let parsed = URL(string: path), parsed.scheme != nil {
+            url = parsed
+        } else if path.hasPrefix("/api/"), let parsed = URL(string: "\(AppConfig.backendURL)\(path)") {
+            url = parsed
+        } else {
+            url = URL(fileURLWithPath: path)
+        }
+        UIApplication.shared.open(url)
     }
 
     private func dailyLogCoverageRow(_ summary: DailyLogExtractionSummary) -> some View {

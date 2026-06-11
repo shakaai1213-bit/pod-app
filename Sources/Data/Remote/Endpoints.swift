@@ -43,6 +43,10 @@ enum Endpoint {
     case updateProject(UUID)
     case listProjectTasks(projectId: UUID)
     case createProjectTask(projectId: UUID, title: String, priority: Int?, status: String?)
+
+    // MARK: - Memory
+
+    case memoryCandidateReviewExport
 }
 
 // MARK: - Endpoint Configuration
@@ -104,12 +108,15 @@ extension Endpoint {
 
         case .createProjectTask(let projectId, _, _, _):
             return "\(Endpoint.basePath)/projects/\(projectId)/tasks"
+
+        case .memoryCandidateReviewExport:
+            return "\(Endpoint.basePath)/memory/candidates/review-export"
         }
     }
 
     var method: HTTPMethod {
         switch self {
-        case .sendMessage, .createProject, .createProjectTask:
+        case .sendMessage, .createProject, .createProjectTask, .memoryCandidateReviewExport:
             return .post
         case .updateProject:
             return .patch

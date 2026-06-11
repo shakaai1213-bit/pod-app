@@ -832,6 +832,107 @@ struct MemoryPromotionTicketResponse: Codable, Hashable, Sendable {
     }
 }
 
+struct MemoryCandidateReviewExportCounts: Codable, Hashable, Sendable {
+    let total: Int
+    let byLifecycle: [String: Int]
+    let bySensitivityClass: [String: Int]
+    let byReviewState: [String: Int]
+    let pendingReview: Int
+
+    static let empty = MemoryCandidateReviewExportCounts(
+        total: 0,
+        byLifecycle: [:],
+        bySensitivityClass: [:],
+        byReviewState: [:],
+        pendingReview: 0
+    )
+
+    enum CodingKeys: String, CodingKey {
+        case total
+        case byLifecycle = "by_lifecycle"
+        case bySensitivityClass = "by_sensitivity_class"
+        case byReviewState = "by_review_state"
+        case pendingReview = "pending_review"
+    }
+}
+
+struct MemoryCandidateReviewExportResponse: Codable, Identifiable, Hashable, Sendable {
+    var id: String { exportId }
+    let exportId: String
+    let generatedAt: Date
+    let candidateCounts: MemoryCandidateReviewExportCounts
+    let sourceArtifactRefs: [String]
+    let coverageStatus: String
+    let presentAgents: [String]
+    let missingAgents: [String]
+    let markdownPath: String
+    let jsonPath: String
+    let url: String
+    let message: String
+
+    enum CodingKeys: String, CodingKey {
+        case exportId = "export_id"
+        case generatedAt = "generated_at"
+        case candidateCounts = "candidate_counts"
+        case sourceArtifactRefs = "source_artifact_refs"
+        case coverageStatus = "coverage_status"
+        case presentAgents = "present_agents"
+        case missingAgents = "missing_agents"
+        case markdownPath = "markdown_path"
+        case jsonPath = "json_path"
+        case url, message
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        exportId = try container.decode(String.self, forKey: .exportId)
+        generatedAt = try container.decode(Date.self, forKey: .generatedAt)
+        coverageStatus = try container.decodeIfPresent(String.self, forKey: .coverageStatus) ?? "unknown"
+        presentAgents = try container.decodeIfPresent([String].self, forKey: .presentAgents) ?? []
+        missingAgents = try container.decodeIfPresent([String].self, forKey: .missingAgents) ?? []
+        markdownPath = try container.decodeIfPresent(String.self, forKey: .markdownPath) ?? ""
+        jsonPath = try container.decodeIfPresent(String.self, forKey: .jsonPath) ?? ""
+        url = try container.decodeIfPresent(String.self, forKey: .url) ?? ""
+        message = try container.decodeIfPresent(String.self, forKey: .message) ?? "Review export packet generated."
+        candidateCounts = try container.decodeIfPresent(
+            MemoryCandidateReviewExportCounts.self,
+            forKey: .candidateCounts
+        ) ?? .empty
+
+        if let refs = try? container.decode([String].self, forKey: .sourceArtifactRefs) {
+            sourceArtifactRefs = refs
+        } else if let refs = try? container.decode([String: String].self, forKey: .sourceArtifactRefs) {
+            sourceArtifactRefs = refs.keys.sorted().compactMap { key in refs[key] }
+        } else if let refs = try? container.decode([String: JSONValue].self, forKey: .sourceArtifactRefs) {
+            sourceArtifactRefs = refs.keys.sorted().compactMap { key in
+                switch refs[key] {
+                case .string(let value): return value
+                case .object(let value):
+                    if case .string(let path)? = value["path"] { return path }
+                    if case .string(let path)? = value["artifact_path"] { return path }
+                    if case .string(let url)? = value["url"] { return url }
+                    return nil
+                default: return nil
+                }
+            }
+        } else if let refs = try? container.decode([JSONValue].self, forKey: .sourceArtifactRefs) {
+            sourceArtifactRefs = refs.compactMap { ref in
+                switch ref {
+                case .string(let value): return value
+                case .object(let value):
+                    if case .string(let path)? = value["path"] { return path }
+                    if case .string(let path)? = value["artifact_path"] { return path }
+                    if case .string(let url)? = value["url"] { return url }
+                    return nil
+                default: return nil
+                }
+            }
+        } else {
+            sourceArtifactRefs = []
+        }
+    }
+}
+
 struct MemoryCandidateActionResponse: Codable, Hashable, Sendable {
     let ok: Bool
     let candidate: DailyLogExtractionCandidate
@@ -1463,8 +1564,11 @@ final class KnowledgeViewModel {
     var runtimeSyncExports: [RuntimeClassificationSyncArtifact] = []
     var runtimeBurnDownExports: [RuntimeClassificationSyncArtifact] = []
     var dailyLogExtraction: DailyLogExtractionResponse?
+    var dateAddressedDailyLogExtraction: DailyLogExtractionResponse?
+    var dateAddressedDailyLogDate: String?
     var memoryCandidateQueue: MemoryCandidateQueueResponse?
     var memoryOps: MemoryOpsResponse?
+    var memoryReviewExport: MemoryCandidateReviewExportResponse?
     var memoryQueryText: String = ""
     var memoryQueryResponse: MemoryQueryResponse?
     var knowledgePacketQueryText: String = ""
@@ -1497,6 +1601,7 @@ final class KnowledgeViewModel {
     var isExportingRuntimeBurnDown: Bool = false
     var isGeneratingStorageHygieneTicket: Bool = false
     var isGeneratingMemoryPromotionTicket: Bool = false
+    var isRequestingMemoryReviewExport: Bool = false
     var memoryActionCandidateIds: Set<String> = []
     var isExportingNoteGovernance: Bool = false
     var reviewActionInFlightDocId: String?
@@ -1512,6 +1617,7 @@ final class KnowledgeViewModel {
     var runtimeSyncMessage: String?
     var runtimeBurnDownMessage: String?
     var memoryCandidatesErrorMessage: String?
+    var dateAddressedDailyLogErrorMessage: String?
     var memoryQueryErrorMessage: String?
     var knowledgePacketErrorMessage: String?
     var notesErrorMessage: String?
@@ -1521,6 +1627,7 @@ final class KnowledgeViewModel {
     var skillLabDetailErrorMessage: String?
     var storageHygieneMessage: String?
     var memoryPromotionMessage: String?
+    var memoryReviewExportMessage: String?
     var memoryActionMessage: String?
     var reviewerIdentity = "maui"
 
@@ -1543,6 +1650,14 @@ final class KnowledgeViewModel {
         }
 
         return result.sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    var latestDailyLogArtifactDate: String? {
+        guard let extraction = dailyLogExtraction else { return nil }
+        if let date = extraction.summary.byDate.keys.sorted(by: >).first {
+            return date
+        }
+        return extraction.records.map(\.date).sorted(by: >).first
     }
 
     var categoryCounts: [StandardCategory: Int] {
@@ -1898,6 +2013,7 @@ final class KnowledgeViewModel {
     func loadMemoryCandidates() async {
         isLoadingMemoryCandidates = true
         memoryCandidatesErrorMessage = nil
+        dateAddressedDailyLogErrorMessage = nil
 
         do {
             async let extractionTask: DailyLogExtractionResponse = APIClient.shared.get(path: "/api/v1/daily-log-extractions/latest")
@@ -1909,13 +2025,41 @@ final class KnowledgeViewModel {
                 self.memoryOps = queue.ops
                 self.isLoadingMemoryCandidates = false
             }
+            if let artifactDate = latestDailyLogArtifactDate {
+                await loadDailyLogExtraction(for: artifactDate)
+            }
         } catch {
             await MainActor.run {
                 self.dailyLogExtraction = nil
+                self.dateAddressedDailyLogExtraction = nil
+                self.dateAddressedDailyLogDate = nil
                 self.memoryCandidateQueue = nil
                 self.memoryOps = nil
                 self.memoryCandidatesErrorMessage = error.localizedDescription
                 self.isLoadingMemoryCandidates = false
+            }
+        }
+    }
+
+    func loadDailyLogExtraction(for artifactDate: String) async {
+        let cleanDate = artifactDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanDate.isEmpty else { return }
+
+        do {
+            let encodedDate = cleanDate.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? cleanDate
+            let extraction: DailyLogExtractionResponse = try await APIClient.shared.get(
+                path: "/api/v1/daily-log-extractions/by-date/\(encodedDate)"
+            )
+            await MainActor.run {
+                self.dateAddressedDailyLogExtraction = extraction
+                self.dateAddressedDailyLogDate = cleanDate
+                self.dateAddressedDailyLogErrorMessage = nil
+            }
+        } catch {
+            await MainActor.run {
+                self.dateAddressedDailyLogExtraction = nil
+                self.dateAddressedDailyLogDate = cleanDate
+                self.dateAddressedDailyLogErrorMessage = "Date-addressable extraction unavailable: \(error.localizedDescription)"
             }
         }
     }
@@ -2117,6 +2261,27 @@ final class KnowledgeViewModel {
         } catch {
             await MainActor.run {
                 self.memoryPromotionMessage = "Memory promotion review unavailable: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func requestMemoryReviewExportPacket() async {
+        isRequestingMemoryReviewExport = true
+        memoryReviewExportMessage = nil
+        defer { isRequestingMemoryReviewExport = false }
+
+        do {
+            let response: MemoryCandidateReviewExportResponse = try await APIClient.shared.post(
+                path: "/api/v1/memory/candidates/review-export",
+                body: EmptyRequest()
+            )
+            await MainActor.run {
+                self.memoryReviewExport = response
+                self.memoryReviewExportMessage = response.message
+            }
+        } catch {
+            await MainActor.run {
+                self.memoryReviewExportMessage = "Review export packet unavailable: \(error.localizedDescription)"
             }
         }
     }
