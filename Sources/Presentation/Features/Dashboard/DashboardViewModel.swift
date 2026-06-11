@@ -34,7 +34,10 @@ final class DashboardViewModel {
     }
 
     var inProgressCount: Int {
-        projects.filter { $0.status == .inProgress }.count
+        tickets.filter { ticket in
+            let status = ticket.status.lowercased()
+            return status == "in_progress" || status == "in-progress"
+        }.count
     }
 
     var agentsOnlineCount: Int {

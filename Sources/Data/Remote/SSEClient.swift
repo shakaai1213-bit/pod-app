@@ -552,9 +552,11 @@ public struct MessageNewPayload: Codable, Sendable {
     public let responseState: String?
     public let triageId: String?
     public let triageTraceId: String?
+    public let fileAttachment: ChatFileAttachment?
 
     enum CodingKeys: String, CodingKey {
         case id, channelId, content
+        case metadata
         case channelIdSnake = "channel_id"
         case senderId = "sender_id"
         case senderUserId = "sender_user_id"
@@ -571,6 +573,10 @@ public struct MessageNewPayload: Codable, Sendable {
         case responseState = "response_state"
         case triageId = "triage_id"
         case triageTraceId = "triage_trace_id"
+    }
+
+    private struct Metadata: Codable, Sendable {
+        let file: String?
     }
 
     public init(from decoder: Decoder) throws {
@@ -596,6 +602,8 @@ public struct MessageNewPayload: Codable, Sendable {
         responseState = try container.decodeIfPresent(String.self, forKey: .responseState)
         triageId = try container.decodeIfPresent(String.self, forKey: .triageId)
         triageTraceId = try container.decodeIfPresent(String.self, forKey: .triageTraceId)
+        let metadata = try container.decodeIfPresent(Metadata.self, forKey: .metadata)
+        fileAttachment = ChatFileAttachment(path: metadata?.file)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -618,6 +626,9 @@ public struct MessageNewPayload: Codable, Sendable {
         try container.encodeIfPresent(responseState, forKey: .responseState)
         try container.encodeIfPresent(triageId, forKey: .triageId)
         try container.encodeIfPresent(triageTraceId, forKey: .triageTraceId)
+        if let fileAttachment {
+            try container.encode(Metadata(file: fileAttachment.path), forKey: .metadata)
+        }
     }
 }
 

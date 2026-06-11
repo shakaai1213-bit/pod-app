@@ -76,7 +76,7 @@ struct ChannelDTO: Codable, Identifiable {
 
 // MARK: - Message DTO
 
-struct MessageDTO: Codable, Identifiable {
+struct MessageDTO: Decodable, Identifiable {
     let id: String
     let channelId: String
     let authorId: String
@@ -89,15 +89,20 @@ struct MessageDTO: Codable, Identifiable {
     let replyToId: String?
     let isThreadReply: Bool
     let threadCount: Int
+    let fileAttachment: ChatFileAttachment?
 
     enum CodingKeys: String, CodingKey {
-        case id, content, isAgent, agentId, reactions, threadCount
+        case id, content, isAgent, agentId, reactions, threadCount, metadata
         case channelId = "channel_id"
         case authorId = "sender_user_id"
         case authorName = "sender_name"
         case timestamp = "created_at"
         case replyToId = "reply_to_id"
         case isThreadReply = "is_thread_reply"
+    }
+
+    private struct Metadata: Decodable {
+        let file: String?
     }
 
     init(from decoder: Decoder) throws {
@@ -113,6 +118,8 @@ struct MessageDTO: Codable, Identifiable {
         replyToId = try container.decodeIfPresent(String.self, forKey: .replyToId)
         isThreadReply = try container.decodeIfPresent(Bool.self, forKey: .isThreadReply) ?? false
         threadCount = try container.decodeIfPresent(Int.self, forKey: .threadCount) ?? 0
+        let metadata = try container.decodeIfPresent(Metadata.self, forKey: .metadata)
+        fileAttachment = ChatFileAttachment(path: metadata?.file)
         // Infer isAgent from presence of sender_agent_id
         isAgent = self.agentId != nil
     }
@@ -275,10 +282,11 @@ struct InboxTailEntryDTO: Codable, Identifiable, Hashable {
     let timestamp: String
     let textPreview: String
     let headline: String
+    let file: String?
     let isUnread: Bool
 
     enum CodingKeys: String, CodingKey {
-        case id, from, type, timestamp, headline
+        case id, from, type, timestamp, headline, file
         case textPreview = "text_preview"
         case isUnread = "is_unread"
     }
@@ -288,6 +296,11 @@ struct InboxTailEntryDTO: Codable, Identifiable, Hashable {
         if !headline.isEmpty { return headline }
         if !textPreview.isEmpty { return textPreview }
         return "(no content)"
+    }
+
+    var fileDisplayName: String? {
+        guard let file, !file.isEmpty else { return nil }
+        return URL(fileURLWithPath: file).lastPathComponent
     }
 }
 
@@ -649,6 +662,221 @@ struct PaginatedResponse<T: Codable>: Codable {
     let offset: Int?
 }
 
+// MARK: - Lead Plate
+
+enum LeadPlateJSONValue: Decodable, Hashable {
+    case string(String)
+    case number(Double)
+    case bool(Bool)
+    case object([String: LeadPlateJSONValue])
+    case array([LeadPlateJSONValue])
+    case null
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            self = .null
+        } else if let value = try? container.decode(Bool.self) {
+            self = .bool(value)
+        } else if let value = try? container.decode(Double.self) {
+            self = .number(value)
+        } else if let value = try? container.decode(String.self) {
+            self = .string(value)
+        } else if let value = try? container.decode([String: LeadPlateJSONValue].self) {
+            self = .object(value)
+        } else if let value = try? container.decode([LeadPlateJSONValue].self) {
+            self = .array(value)
+        } else {
+            self = .null
+        }
+    }
+
+    var compactDescription: String {
+        switch self {
+        case .string(let value):
+            return value
+        case .number(let value):
+            return value.truncatingRemainder(dividingBy: 1) == 0 ? String(Int(value)) : String(format: "%.2f", value)
+        case .bool(let value):
+            return value ? "true" : "false"
+        case .object(let value):
+            let pairs = value.sorted(by: { $0.key < $1.key }).prefix(4).map { key, item in
+                "\(key.displayLabel): \(item.scalarDescription)"
+            }
+            return pairs.isEmpty ? "object" : pairs.joined(separator: " · ")
+        case .array(let value):
+            let items = value.prefix(4).map(\.scalarDescription)
+            return items.isEmpty ? "[]" : items.joined(separator: " · ")
+        case .null:
+            return "null"
+        }
+    }
+
+    var scalarDescription: String {
+        switch self {
+        case .object(let value):
+            return value["title"]?.scalarDescription
+                ?? value["ticket_id"]?.scalarDescription
+                ?? value["id"]?.scalarDescription
+                ?? "object"
+        case .array(let value):
+            return "\(value.count) items"
+        default:
+            return compactDescription
+        }
+    }
+
+    subscript(key: String) -> LeadPlateJSONValue? {
+        if case .object(let value) = self {
+            return value[key]
+        }
+        return nil
+    }
+}
+
+struct LeadPlateReadDTO: Decodable {
+    let lead: LeadPlateLeadDTO
+    let summary: LeadPlateSummaryDTO
+    let reports: [LeadPlateReportRowDTO]
+    let decisionQueue: [LeadPlateDecisionTicketDTO]
+    let source: LeadPlateSourceDTO
+
+    enum CodingKeys: String, CodingKey {
+        case lead, summary, reports, source
+        case decisionQueue = "decision_queue"
+    }
+}
+
+struct LeadPlateLeadDTO: Decodable {
+    let leadId: String
+    let leadName: String
+    let ownedBoards: [LeadPlateBoardRefDTO]
+    let ownedProjects: [[String: LeadPlateJSONValue]]
+    let activeReportCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case leadId = "lead_id"
+        case leadName = "lead_name"
+        case ownedBoards = "owned_boards"
+        case ownedProjects = "owned_projects"
+        case activeReportCount = "active_report_count"
+    }
+}
+
+struct LeadPlateBoardRefDTO: Decodable, Hashable, Identifiable {
+    let boardId: String
+    let boardName: String?
+
+    var id: String { boardId }
+    var displayName: String { boardName?.nilIfBlank ?? boardId }
+
+    enum CodingKeys: String, CodingKey {
+        case boardId = "board_id"
+        case boardName = "board_name"
+        case id
+        case name
+        case title
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        boardId = try container.decodeIfPresent(String.self, forKey: .boardId)
+            ?? container.decodeIfPresent(String.self, forKey: .id)
+            ?? "unknown-board"
+        boardName = try container.decodeIfPresent(String.self, forKey: .boardName)
+            ?? container.decodeIfPresent(String.self, forKey: .name)
+            ?? container.decodeIfPresent(String.self, forKey: .title)
+    }
+}
+
+struct LeadPlateSummaryDTO: Decodable {
+    let idle: Int
+    let blocked: Int
+    let decisionQueue: Int
+    let staleClaim: Int
+    let pressureStates: [String: Int]
+
+    enum CodingKeys: String, CodingKey {
+        case idle, blocked
+        case decisionQueue = "decision_queue"
+        case staleClaim = "stale_claim"
+        case pressureStates = "pressure_states"
+    }
+}
+
+struct LeadPlateReportRowDTO: Decodable, Identifiable {
+    let agentId: String
+    let agentName: String
+    let boardRefs: [LeadPlateBoardRefDTO]
+    let counts: LeadPlateCountsDTO
+    let pressureState: String
+    let pressureReasons: [[String: LeadPlateJSONValue]]
+    let timeLedger: [String: LeadPlateJSONValue]
+    let drilldownTicketRefs: [[String: LeadPlateJSONValue]]
+
+    var id: String { agentId }
+
+    enum CodingKeys: String, CodingKey {
+        case agentId = "agent_id"
+        case agentName = "agent_name"
+        case boardRefs = "board_refs"
+        case counts
+        case pressureState = "pressure_state"
+        case pressureReasons = "pressure_reasons"
+        case timeLedger = "time_ledger"
+        case drilldownTicketRefs = "drilldown_ticket_refs"
+    }
+}
+
+struct LeadPlateCountsDTO: Decodable {
+    let open: Int
+    let claimed: Int
+    let inProgress: Int
+    let blocked: Int
+    let staleClaim: Int
+    let idle: Int
+    let decisionQueue: Int
+    let totalOpenWorkload: Int
+
+    enum CodingKeys: String, CodingKey {
+        case open, claimed, blocked, idle
+        case inProgress = "in_progress"
+        case staleClaim = "stale_claim"
+        case decisionQueue = "decision_queue"
+        case totalOpenWorkload = "total_open_workload"
+    }
+}
+
+struct LeadPlateDecisionTicketDTO: Decodable, Identifiable {
+    let ticketId: String
+    let title: String
+    let agentId: String?
+    let agentName: String?
+    let status: String
+    let approvalState: String
+    let boardId: String?
+    let priority: String?
+    let updatedAt: String?
+
+    var id: String { ticketId }
+
+    enum CodingKeys: String, CodingKey {
+        case title, status, priority
+        case ticketId = "ticket_id"
+        case agentId = "agent_id"
+        case agentName = "agent_name"
+        case approvalState = "approval_state"
+        case boardId = "board_id"
+        case updatedAt = "updated_at"
+    }
+}
+
+struct LeadPlateSourceDTO: Decodable {
+    let sources: [String]
+    let provenance: [String: LeadPlateJSONValue]
+    let gaps: [[String: LeadPlateJSONValue]]
+}
+
 // MARK: - Projects
 
 struct ProjectDTO: Codable, Identifiable {
@@ -884,5 +1112,18 @@ struct ProjectCreateRequest: Encodable {
         case name, goal, description, priority, stage
         case dueDate = "due_date"
         case boardId = "board_id"
+    }
+}
+
+private extension String {
+    var nilIfBlank: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    var displayLabel: String {
+        replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .capitalized
     }
 }

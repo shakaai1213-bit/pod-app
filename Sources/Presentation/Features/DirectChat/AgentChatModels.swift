@@ -473,6 +473,24 @@ struct DirectChatTriagePreview: Identifiable, Hashable, Sendable {
     }
 }
 
+public struct ChatFileAttachment: Hashable, Sendable {
+    public let path: String
+    public let displayName: String
+    public let context: String?
+
+    public init?(path rawPath: String?) {
+        let trimmed = rawPath?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return nil }
+
+        let url = URL(fileURLWithPath: trimmed)
+        let basename = url.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
+        let directory = url.deletingLastPathComponent().path
+        self.path = trimmed
+        self.displayName = basename.isEmpty ? trimmed : basename
+        self.context = directory.isEmpty || directory == "." ? nil : directory
+    }
+}
+
 @Model
 final class DMConversation {
     @Attribute(.unique) var agentId: String
@@ -519,6 +537,7 @@ final class DMMessage {
     var computeRunId: String?
     var triageId: String?
     var triageTraceId: String?
+    var fileAttachmentPath: String?
 
     var conversation: DMConversation?
 
@@ -544,5 +563,10 @@ final class DMMessage {
         self.computeRunId = nil
         self.triageId = nil
         self.triageTraceId = nil
+        self.fileAttachmentPath = nil
+    }
+
+    var fileAttachment: ChatFileAttachment? {
+        ChatFileAttachment(path: fileAttachmentPath)
     }
 }

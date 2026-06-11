@@ -1618,6 +1618,7 @@ final class DirectChatViewModel {
         message.remoteMessageId = payload.id
         message.triageId = payload.triageId
         message.triageTraceId = payload.triageTraceId
+        message.fileAttachmentPath = payload.fileAttachment?.path
         message.conversation = conversation
         ctx.insert(message)
         currentMessages.append(message)
@@ -1697,6 +1698,7 @@ final class DirectChatViewModel {
                 message.remoteMessageId = reply.id
                 message.triageId = reply.triageId
                 message.triageTraceId = reply.triageTraceId
+                message.fileAttachmentPath = reply.fileAttachment?.path
                 message.conversation = conversation
                 ctx.insert(message)
                 currentMessages.append(message)
@@ -1772,6 +1774,7 @@ final class DirectChatViewModel {
                     existing.traceId = remote.traceId ?? existing.traceId
                     existing.triageId = remote.triageId ?? existing.triageId
                     existing.triageTraceId = remote.triageTraceId ?? existing.triageTraceId
+                    existing.fileAttachmentPath = remote.fileAttachment?.path ?? existing.fileAttachmentPath
                     conversation.lastMessageText = remote.content
                     conversation.lastMessageDate = remote.createdAt
                     didChange = true
@@ -1816,6 +1819,7 @@ final class DirectChatViewModel {
                     localMatch.traceId = localMatch.traceId ?? remote.traceId
                     localMatch.triageId = localMatch.triageId ?? remote.triageId
                     localMatch.triageTraceId = localMatch.triageTraceId ?? remote.triageTraceId
+                    localMatch.fileAttachmentPath = localMatch.fileAttachmentPath ?? remote.fileAttachment?.path
                     existingRemoteIds.insert(remote.id)
                     didChange = true
                     continue
@@ -1844,6 +1848,7 @@ final class DirectChatViewModel {
                 message.remoteMessageId = remote.id
                 message.triageId = remote.triageId
                 message.triageTraceId = remote.triageTraceId
+                message.fileAttachmentPath = remote.fileAttachment?.path
                 message.conversation = conversation
                 ctx.insert(message)
                 currentMessages.append(message)
@@ -4546,10 +4551,11 @@ struct DirectChatORCAMessageDTO: Decodable {
     let surfaceEventProvenance: String?
     let replyToId: String?
     let isThreadReply: Bool
+    let fileAttachment: ChatFileAttachment?
     let createdAt: Date
 
     enum CodingKeys: String, CodingKey {
-        case id, content, source, lane, provenance, provider, model
+        case id, content, source, lane, provenance, provider, model, metadata
         case senderUserId = "sender_user_id"
         case senderAgentId = "sender_agent_id"
         case senderName = "sender_name"
@@ -4566,6 +4572,39 @@ struct DirectChatORCAMessageDTO: Decodable {
         case replyToId = "reply_to_id"
         case isThreadReply = "is_thread_reply"
         case createdAt = "created_at"
+    }
+
+    private struct Metadata: Decodable {
+        let file: String?
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        senderUserId = try container.decodeIfPresent(String.self, forKey: .senderUserId)
+        senderAgentId = try container.decodeIfPresent(String.self, forKey: .senderAgentId)
+        senderName = try container.decodeIfPresent(String.self, forKey: .senderName)
+        senderType = try container.decodeIfPresent(String.self, forKey: .senderType)
+        senderEmoji = try container.decodeIfPresent(String.self, forKey: .senderEmoji)
+        content = try container.decode(String.self, forKey: .content)
+        messageType = try container.decodeIfPresent(String.self, forKey: .messageType) ?? "text"
+        traceId = try container.decodeIfPresent(String.self, forKey: .traceId)
+        source = try container.decodeIfPresent(String.self, forKey: .source)
+        lane = try container.decodeIfPresent(String.self, forKey: .lane)
+        deliveryMode = try container.decodeIfPresent(String.self, forKey: .deliveryMode)
+        provenance = try container.decodeIfPresent(String.self, forKey: .provenance)
+        responseState = try container.decodeIfPresent(String.self, forKey: .responseState)
+        deliveryState = try container.decodeIfPresent(String.self, forKey: .deliveryState)
+        triageId = try container.decodeIfPresent(String.self, forKey: .triageId)
+        triageTraceId = try container.decodeIfPresent(String.self, forKey: .triageTraceId)
+        provider = try container.decodeIfPresent(String.self, forKey: .provider)
+        model = try container.decodeIfPresent(String.self, forKey: .model)
+        surfaceEventProvenance = try container.decodeIfPresent(String.self, forKey: .surfaceEventProvenance)
+        replyToId = try container.decodeIfPresent(String.self, forKey: .replyToId)
+        isThreadReply = try container.decodeIfPresent(Bool.self, forKey: .isThreadReply) ?? false
+        let metadata = try container.decodeIfPresent(Metadata.self, forKey: .metadata)
+        fileAttachment = ChatFileAttachment(path: metadata?.file)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
     }
 
     var computeProvider: String? {
@@ -5180,6 +5219,7 @@ struct SonarRoomMessage: Identifiable, Hashable {
     let deliveryState: String
     let replyToId: String?
     let isThreadReply: Bool
+    let fileAttachment: ChatFileAttachment?
     let createdAt: Date
 
     init(dto: DirectChatORCAMessageDTO) {
@@ -5201,6 +5241,7 @@ struct SonarRoomMessage: Identifiable, Hashable {
         self.deliveryState = dto.deliveryState ?? "delivered"
         self.replyToId = dto.replyToId
         self.isThreadReply = dto.isThreadReply
+        self.fileAttachment = dto.fileAttachment
         self.createdAt = dto.createdAt
     }
 

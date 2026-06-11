@@ -52,6 +52,7 @@ struct Message: Identifiable, Hashable, Sendable {
     var isHighlighted: Bool
     var replyTo: UUID?  // Parent message ID for threading
     var queueState: CachedQueueMessage.QueueState?  // nil = not cached
+    var fileAttachment: ChatFileAttachment?
 
     init(
         id: UUID = UUID(),
@@ -66,7 +67,8 @@ struct Message: Identifiable, Hashable, Sendable {
         reactions: [Reaction] = [],
         isHighlighted: Bool = false,
         replyTo: UUID? = nil,
-        queueState: CachedQueueMessage.QueueState? = nil
+        queueState: CachedQueueMessage.QueueState? = nil,
+        fileAttachment: ChatFileAttachment? = nil
     ) {
         self.id = id
         self.channelId = channelId
@@ -81,6 +83,7 @@ struct Message: Identifiable, Hashable, Sendable {
         self.isHighlighted = isHighlighted
         self.replyTo = replyTo
         self.queueState = queueState
+        self.fileAttachment = fileAttachment
     }
 }
 
@@ -293,7 +296,8 @@ final class ChatViewModel {
             agentId: payload.senderAgentId,
             content: payload.content,
             timestamp: payload.timestamp ?? Date(),
-            replyTo: payload.replyToId != nil ? UUID(uuidString: payload.replyToId!) : nil
+            replyTo: payload.replyToId != nil ? UUID(uuidString: payload.replyToId!) : nil,
+            fileAttachment: payload.fileAttachment
         )
         messages.append(newMessage)
     }
@@ -373,7 +377,8 @@ final class ChatViewModel {
                         timestamp: dto.timestamp,
                         reactions: dto.reactions?.map { r in
                             Reaction(emoji: r.emoji, count: r.count, userIds: r.userIds, isReactedByMe: false)
-                        } ?? []
+                        } ?? [],
+                        fileAttachment: dto.fileAttachment
                     )
                 }
             }

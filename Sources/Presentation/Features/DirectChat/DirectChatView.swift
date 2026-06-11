@@ -1623,6 +1623,7 @@ private struct SonarRoomMessageEvidenceDrawer: View {
             evidenceRow("Channel", short(room.id))
             evidenceRow("Source", message.source)
             evidenceRow("Lane", message.lane)
+            evidenceRow("File", message.fileAttachment?.path)
             if message.isThreadReply {
                 evidenceRow("Thread", "Reply")
             } else if !threadReplies.isEmpty {
@@ -1766,6 +1767,7 @@ private struct SonarRoomMessageEvidenceDrawer: View {
         Trace: \(message.traceId ?? "not recorded")
         Source: \(message.source ?? "not recorded")
         Lane: \(message.lane ?? "not recorded")
+        File: \(message.fileAttachment?.path ?? "not recorded")
         Surface events: \(surfaceEvents.map(\.id).joined(separator: ", "))
         Compute runs: \(computeRuns.map(\.id).joined(separator: ", "))
         Thread replies: \(threadReplies.count)
@@ -1827,6 +1829,11 @@ private struct SonarRoomMessageRow: View {
                             RoundedRectangle(cornerRadius: 18, style: .continuous)
                                 .strokeBorder(message.isUser ? Color.clear : AppColors.border, lineWidth: 1)
                         )
+
+                    if let attachment = message.fileAttachment {
+                        ChatFileAttachmentChip(attachment: attachment, compact: true)
+                            .frame(maxWidth: 420)
+                    }
 
                     if let status = message.statusLabel {
                         HStack(spacing: 6) {
@@ -1973,6 +1980,10 @@ private struct SonarRoomRequestCard: View {
                     .font(.subheadline)
                     .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
+
+                if let attachment = message.fileAttachment {
+                    ChatFileAttachmentChip(attachment: attachment, compact: true)
+                }
 
                 HStack(spacing: 8) {
                     if let status = message.statusLabel {
@@ -3577,6 +3588,7 @@ private struct SonarEvidenceDrawer: View {
             evidenceRow("Compute run", short(message.computeRunId))
             evidenceRow("Channel", short(channelId))
             evidenceRow("Ticket", short(activeTicketId))
+            evidenceRow("File", message.fileAttachment?.path)
             evidenceRow("Model", message.modelUsed?.isEmpty == false ? message.modelUsed : nil)
         }
         .padding(14)
@@ -3700,6 +3712,7 @@ private struct SonarEvidenceDrawer: View {
         Provenance: \(provenanceLabel)
         Trace: \(message.traceId ?? "not recorded")
         Compute run: \(message.computeRunId ?? "not recorded")
+        File: \(message.fileAttachment?.path ?? "not recorded")
         Model: \(message.modelUsed ?? "not recorded")
         Surface events: \(surfaceEvents.map(\.id).joined(separator: ", "))
         Compute runs: \(computeRuns.map(\.id).joined(separator: ", "))
@@ -4024,6 +4037,11 @@ struct DMBubble: View {
                             .strokeBorder(bubbleBorderColor, lineWidth: isUser ? 0 : 1)
                     )
                     .opacity(message.isStreaming && message.content.isEmpty ? 0.6 : 1)
+
+                if let attachment = message.fileAttachment {
+                    ChatFileAttachmentChip(attachment: attachment, compact: true)
+                        .frame(maxWidth: 420)
+                }
 
                 if !isUser {
                     MessageDeliveryLedger(message: message, agent: agent)

@@ -81,7 +81,9 @@ final class ChannelRepository {
                                 userIds: r.userIds,
                                 isReactedByMe: false
                             )
-                        } ?? []
+                        } ?? [],
+                        replyTo: dto.replyToId.flatMap { UUID(uuidString: $0) },
+                        fileAttachment: dto.fileAttachment
                     )
                 }
             }
@@ -116,7 +118,8 @@ final class ChannelRepository {
             content: dto.content,
             timestamp: dto.timestamp,
             reactions: [],
-            replyTo: dto.replyToId.flatMap { UUID(uuidString: $0) }
+            replyTo: dto.replyToId.flatMap { UUID(uuidString: $0) },
+            fileAttachment: dto.fileAttachment
         )
 
         await cache.syncMessages([message], for: channelId)

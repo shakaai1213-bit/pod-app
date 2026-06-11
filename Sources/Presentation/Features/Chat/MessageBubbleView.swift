@@ -1,6 +1,65 @@
 import SwiftUI
 import SwiftData
 
+struct ChatFileAttachmentChip: View {
+    let attachment: ChatFileAttachment
+    var compact: Bool = false
+
+    @State private var didCopy = false
+
+    var body: some View {
+        Button {
+            copyPath()
+        } label: {
+            HStack(alignment: .center, spacing: 8) {
+                Image(systemName: didCopy ? "checkmark.circle.fill" : "doc.text")
+                    .font(.system(size: compact ? 13 : 15, weight: .semibold))
+                    .foregroundStyle(didCopy ? AppColors.accentSuccess : AppColors.accentElectric)
+                    .frame(width: 18)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(attachment.displayName)
+                        .font(compact ? .caption.weight(.semibold) : .subheadline.weight(.semibold))
+                        .foregroundStyle(AppColors.textPrimary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    Text(attachment.context ?? attachment.path)
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.textTertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, compact ? 9 : 10)
+            .padding(.vertical, compact ? 7 : 8)
+            .background(AppColors.accentElectric.opacity(0.10))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(AppColors.accentElectric.opacity(0.24), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button {
+                copyPath()
+            } label: {
+                Label("Copy File Path", systemImage: "doc.on.doc")
+            }
+        }
+        .accessibilityLabel("File attachment \(attachment.displayName)")
+        .accessibilityHint("Copies the full file path")
+    }
+
+    private func copyPath() {
+        UIPasteboard.general.string = attachment.path
+        didCopy = true
+    }
+}
+
 // MARK: - Message Bubble View
 
 struct MessageBubbleView: View {
@@ -188,16 +247,22 @@ struct MessageBubbleView: View {
 
     @ViewBuilder
     private var messageContentView: some View {
-        // System messages are plain
-        if message.authorRole == .system {
-            Text(message.content)
-                .font(.subheadline)
-                .foregroundColor(AppColors.textSecondary)
-        } else {
-            MarkdownContentView(content: message.content)
-                .environment(\.openURL, OpenURLAction { url in
-                    return .systemAction
-                })
+        VStack(alignment: .leading, spacing: 8) {
+            // System messages are plain
+            if message.authorRole == .system {
+                Text(message.content)
+                    .font(.subheadline)
+                    .foregroundColor(AppColors.textSecondary)
+            } else {
+                MarkdownContentView(content: message.content)
+                    .environment(\.openURL, OpenURLAction { url in
+                        return .systemAction
+                    })
+            }
+
+            if let attachment = message.fileAttachment {
+                ChatFileAttachmentChip(attachment: attachment)
+            }
         }
     }
 

@@ -865,6 +865,18 @@ struct AgentDetailSheet: View {
                 Text(entry.displayTitle)
                     .podTextStyle(.body, color: AppColors.textSecondary)
                     .lineLimit(2)
+                if let fileName = entry.fileDisplayName {
+                    HStack(spacing: 6) {
+                        Image(systemName: "doc.text")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(AppColors.accentElectric)
+                        Text(fileName)
+                            .podTextStyle(.caption, color: AppColors.accentElectric)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    .accessibilityLabel("File drop \(fileName)")
+                }
             }
         }
         .padding(Theme.md)
