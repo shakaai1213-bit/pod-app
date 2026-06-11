@@ -6,6 +6,7 @@ private let planningAgentOrder = [
 ]
 
 private enum PlanningSurfaceMode: String, CaseIterable, Identifiable {
+    case timeline
     case today
     case agent
     case fleet
@@ -14,6 +15,7 @@ private enum PlanningSurfaceMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .timeline: return "Timeline"
         case .today: return "Today"
         case .agent: return "Agent"
         case .fleet: return "Fleet"
@@ -22,6 +24,7 @@ private enum PlanningSurfaceMode: String, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
+        case .timeline: return "chart.bar.doc.horizontal"
         case .today: return "calendar.day.timeline.left"
         case .agent: return "person.crop.circle.badge.clock"
         case .fleet: return "person.3.sequence.fill"
@@ -35,6 +38,7 @@ final class PlanningViewModel {
     var agentEvents: [PlanningEvent] = []
     var planningContext: PlanningContext?
     var fleetPlanning: FleetPlanningSnapshot?
+    var fleetTimeline: FleetTimelineSnapshot?
     var selectedAgent = "maui"
     var isLoading = false
     var errorMessage: String?
@@ -55,7 +59,8 @@ final class PlanningViewModel {
         async let teamTask: Void = loadTeamToday()
         async let agentTask: Void = loadSelectedAgent()
         async let fleetTask: Void = loadFleet()
-        _ = await (teamTask, agentTask, fleetTask)
+        async let timelineTask: Void = loadTimeline()
+        _ = await (teamTask, agentTask, fleetTask, timelineTask)
         generatedAt = Date()
     }
 
@@ -65,6 +70,15 @@ final class PlanningViewModel {
             fleetPlanning = try await apiClient.get(path: "/api/v1/planning/fleet")
         } catch {
             fleetPlanning = nil
+        }
+    }
+
+    @MainActor
+    func loadTimeline() async {
+        do {
+            fleetTimeline = try await apiClient.get(path: "/api/v1/planning/fleet/timeline")
+        } catch {
+            fleetTimeline = nil
         }
     }
 
@@ -439,6 +453,8 @@ struct PlanningView: View {
 
                     Group {
                         switch selectedMode {
+                        case .timeline:
+                            timelineSection
                         case .today:
                             teamTodaySection
                         case .agent:
@@ -454,6 +470,28 @@ struct PlanningView: View {
             .background(AppColors.backgroundPrimary.ignoresSafeArea())
             .refreshable { await viewModel.load() }
             .task { await viewModel.load() }
+        }
+    }
+
+    @ViewBuilder
+    private var timelineSection: some View {
+        if let snapshot = viewModel.fleetTimeline {
+            PlanningTimelineView(snapshot: snapshot)
+        } else if viewModel.isLoading {
+            ProgressView("Loading fleet timeline…")
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 40)
+        } else {
+            VStack(spacing: 8) {
+                Image(systemName: "chart.bar.doc.horizontal")
+                    .font(.system(size: 28))
+                    .foregroundColor(AppColors.textSecondary)
+                Text("Fleet timeline unavailable from ORCA.")
+                    .font(.system(size: 13))
+                    .foregroundColor(AppColors.textSecondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 40)
         }
     }
 
