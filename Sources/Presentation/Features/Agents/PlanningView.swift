@@ -8,6 +8,7 @@ private let planningAgentOrder = [
 private enum PlanningSurfaceMode: String, CaseIterable, Identifiable {
     case today
     case agent
+    case fleet
 
     var id: String { rawValue }
 
@@ -15,6 +16,7 @@ private enum PlanningSurfaceMode: String, CaseIterable, Identifiable {
         switch self {
         case .today: return "Today"
         case .agent: return "Agent"
+        case .fleet: return "Fleet"
         }
     }
 
@@ -22,6 +24,7 @@ private enum PlanningSurfaceMode: String, CaseIterable, Identifiable {
         switch self {
         case .today: return "calendar.day.timeline.left"
         case .agent: return "person.crop.circle.badge.clock"
+        case .fleet: return "person.3.sequence.fill"
         }
     }
 }
@@ -31,6 +34,7 @@ final class PlanningViewModel {
     var teamEvents: [PlanningEvent] = []
     var agentEvents: [PlanningEvent] = []
     var planningContext: PlanningContext?
+    var fleetPlanning: FleetPlanningSnapshot?
     var selectedAgent = "maui"
     var isLoading = false
     var errorMessage: String?
@@ -50,8 +54,18 @@ final class PlanningViewModel {
 
         async let teamTask: Void = loadTeamToday()
         async let agentTask: Void = loadSelectedAgent()
-        _ = await (teamTask, agentTask)
+        async let fleetTask: Void = loadFleet()
+        _ = await (teamTask, agentTask, fleetTask)
         generatedAt = Date()
+    }
+
+    @MainActor
+    func loadFleet() async {
+        do {
+            fleetPlanning = try await apiClient.get(path: "/api/v1/planning/fleet")
+        } catch {
+            fleetPlanning = nil
+        }
     }
 
     @MainActor
@@ -318,6 +332,34 @@ struct PlanningEvent: Decodable, Identifiable, Hashable {
     }
 }
 
+struct FleetPlanningSnapshot: Decodable, Hashable {
+    let asOf: String
+    let agents: [FleetPlanningEntry]
+
+    private enum CodingKeys: String, CodingKey {
+        case asOf = "as_of"
+        case agents
+    }
+}
+
+struct FleetPlanningEntry: Decodable, Hashable, Identifiable {
+    let agent: String
+    let currentBlock: PlanningContextBlock?
+    let nextBlock: PlanningContextBlock?
+    let overdueCount: Int
+    let nextCheckpoint: PlanningContextBlock?
+
+    var id: String { agent }
+
+    private enum CodingKeys: String, CodingKey {
+        case agent
+        case currentBlock = "current_block"
+        case nextBlock = "next_block"
+        case overdueCount = "overdue_count"
+        case nextCheckpoint = "next_checkpoint"
+    }
+}
+
 struct PlanningContext: Decodable, Hashable {
     let agent: String
     let asOf: String?
@@ -401,6 +443,8 @@ struct PlanningView: View {
                             teamTodaySection
                         case .agent:
                             agentPlanningSection
+                        case .fleet:
+                            fleetPlanningSection
                         }
                     }
                     .padding(.horizontal, 16)
@@ -518,6 +562,78 @@ struct PlanningView: View {
                         planningEventCard(event, showAgent: true)
                     }
                 }
+            }
+        }
+    }
+
+    private var fleetPlanningSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader("FLEET PLANNER", count: viewModel.fleetPlanning?.agents.count ?? 0)
+
+            if let snapshot = viewModel.fleetPlanning, !snapshot.agents.isEmpty {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 240), spacing: 10)],
+                    spacing: 10
+                ) {
+                    ForEach(snapshot.agents) { entry in
+                        fleetAgentCard(entry)
+                    }
+                }
+                if !snapshot.asOf.isEmpty {
+                    Text("as of \(snapshot.asOf)")
+                        .font(.system(size: 11))
+                        .foregroundColor(AppColors.textSecondary)
+                        .padding(.top, 4)
+                }
+            } else if viewModel.isLoading {
+                planningEmpty(icon: "hourglass", title: "Loading fleet planner")
+            } else {
+                planningEmpty(icon: "person.3.sequence", title: "Fleet planner unavailable")
+            }
+        }
+    }
+
+    private func fleetAgentCard(_ entry: FleetPlanningEntry) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(entry.agent.capitalized)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(AppColors.textPrimary)
+                Spacer()
+                if entry.overdueCount > 0 {
+                    Text("\(entry.overdueCount) overdue")
+                        .font(.system(size: 11, weight: .semibold))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(AppColors.accentWarning.opacity(0.18))
+                        .foregroundColor(AppColors.accentWarning)
+                        .clipShape(Capsule())
+                }
+            }
+
+            fleetBlockRow(label: "NOW", block: entry.currentBlock, accent: AppColors.accentSuccess)
+            fleetBlockRow(label: "NEXT", block: entry.nextBlock, accent: AppColors.accentElectric)
+        }
+        .padding(12)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func fleetBlockRow(label: String, block: PlanningContextBlock?, accent: Color) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(label)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(accent)
+                .frame(width: 36, alignment: .leading)
+            if let block {
+                Text(block.title)
+                    .font(.system(size: 12))
+                    .foregroundColor(AppColors.textPrimary)
+                    .lineLimit(2)
+            } else {
+                Text("—")
+                    .font(.system(size: 12))
+                    .foregroundColor(AppColors.textSecondary)
             }
         }
     }
