@@ -2395,6 +2395,11 @@ private struct NewORCATaskSheet: View {
     @State private var title = ""
     @State private var description = ""
     @State private var priority = 3
+    @State private var showsDeadline = false
+    @State private var dueAt = Date()
+    @State private var dueAtSourceKind = MilestoneDueAtSourceKind.tony
+    @State private var dueAtExternalSource = ""
+    @State private var dueAtSourceMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -2413,6 +2418,14 @@ private struct NewORCATaskSheet: View {
                 Text("New tasks start in ORCA's default project-task state.")
                     .font(.caption)
                     .foregroundStyle(AppColors.textSecondary)
+
+                MilestoneDeadlineSection(
+                    isExpanded: $showsDeadline,
+                    dueAt: $dueAt,
+                    sourceKind: $dueAtSourceKind,
+                    externalSource: $dueAtExternalSource,
+                    validationMessage: dueAtSourceMessage
+                )
             }
             .navigationTitle("New Task")
             .navigationBarTitleDisplayMode(.inline)
@@ -2422,13 +2435,23 @@ private struct NewORCATaskSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create") {
+                        let source = showsDeadline
+                            ? TicketsViewModel.dueAtSource(kind: dueAtSourceKind, externalSource: dueAtExternalSource)
+                            : nil
+                        guard !showsDeadline || source != nil else {
+                            dueAtSourceMessage = "Deadline/date requires Tony or external:<source> attribution."
+                            return
+                        }
+                        dueAtSourceMessage = nil
                         Task {
                             do {
                                 let task = try await ProjectRepository().createTask(
                                     projectId: projectId,
                                     title: title,
                                     description: description.isEmpty ? nil : description,
-                                    priority: priority
+                                    priority: priority,
+                                    dueAt: showsDeadline ? dueAt : nil,
+                                    dueAtSource: source
                                 )
                                 onCreated(task)
                                 dismiss()

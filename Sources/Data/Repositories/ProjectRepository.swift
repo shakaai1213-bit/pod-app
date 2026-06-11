@@ -187,21 +187,39 @@ actor ProjectRepository {
         )
     }
 
-    func createTask(projectId: UUID, title: String, description: String? = nil, priority: Int = 3) async throws -> ProjectTaskDTO {
+    func createTask(
+        projectId: UUID,
+        title: String,
+        description: String? = nil,
+        priority: Int = 3,
+        dueAt: Date? = nil,
+        dueAtSource: String? = nil
+    ) async throws -> ProjectTaskDTO {
         struct Body: Encodable {
             let projectId: UUID
             let title: String
             let description: String?
             let priority: Int
+            let dueAt: Date?
+            let dueAtSource: String?
 
             enum CodingKeys: String, CodingKey {
                 case projectId = "project_id"
                 case title, description, priority
+                case dueAt = "due_at"
+                case dueAtSource = "due_at_source"
             }
         }
         return try await api.post(
             path: "/api/v1/projects/\(projectId)/tasks",
-            body: Body(projectId: projectId, title: title, description: description, priority: priority)
+            body: Body(
+                projectId: projectId,
+                title: title,
+                description: description,
+                priority: priority,
+                dueAt: dueAt,
+                dueAtSource: dueAtSource
+            )
         )
     }
 

@@ -2008,6 +2008,14 @@ struct CreateTicketSheet: View {
                         .foregroundColor(AppColors.textPrimary)
                 }
 
+                MilestoneDeadlineSection(
+                    isExpanded: $viewModel.newShowsDeadline,
+                    dueAt: $viewModel.newDueAt,
+                    sourceKind: $viewModel.newDueAtSourceKind,
+                    externalSource: $viewModel.newDueAtExternalSource,
+                    validationMessage: viewModel.newDueAtSourceMessage
+                )
+
                 Section("Priority") {
                     Picker("Priority", selection: $viewModel.newPriority) {
                         ForEach(TicketPriority.allCases, id: \.self) { p in
@@ -2135,6 +2143,63 @@ struct CreateTicketSheet: View {
         .presentationDragIndicator(.visible)
         .task {
             await viewModel.loadBoardOptions()
+        }
+    }
+}
+
+enum MilestoneDueAtSourceKind: String, CaseIterable, Identifiable {
+    case tony
+    case external
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .tony: return "Tony"
+        case .external: return "External"
+        }
+    }
+}
+
+struct MilestoneDeadlineSection: View {
+    @Binding var isExpanded: Bool
+    @Binding var dueAt: Date
+    @Binding var sourceKind: MilestoneDueAtSourceKind
+    @Binding var externalSource: String
+    let validationMessage: String?
+
+    var body: some View {
+        Section("Deadline") {
+            Toggle(isOn: $isExpanded.animation(.easeInOut(duration: 0.15))) {
+                Label("Add deadline/date", systemImage: "calendar.badge.clock")
+            }
+
+            if isExpanded {
+                Text("Deadline/date requires Tony or external attribution.")
+                    .font(.caption)
+                    .foregroundStyle(AppColors.textSecondary)
+
+                DatePicker("Date", selection: $dueAt, displayedComponents: [.date])
+
+                Picker("Source", selection: $sourceKind) {
+                    ForEach(MilestoneDueAtSourceKind.allCases) { source in
+                        Text(source.label).tag(source)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                if sourceKind == .external {
+                    TextField("external:<source>", text: $externalSource)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                }
+
+                if let validationMessage {
+                    Text(validationMessage)
+                        .font(.caption)
+                        .foregroundStyle(AppColors.accentDanger)
+                }
+            }
         }
     }
 }

@@ -1365,6 +1365,11 @@ final class TicketsViewModel {
     var newToolPolicy = "bounded_workspace_edits_owner_review"
     var newAcceptanceCriteria = ""
     var newDoneMeans = ""
+    var newShowsDeadline = false
+    var newDueAt = Date()
+    var newDueAtSourceKind = MilestoneDueAtSourceKind.tony
+    var newDueAtExternalSource = ""
+    var newDueAtSourceMessage: String?
     var newBoardId = ""
     var newBoardOptions: [TicketBoardOption] = []
     var isLoadingBoardOptions = false
@@ -2866,6 +2871,13 @@ final class TicketsViewModel {
         }
         isCreating = true
         defer { isCreating = false }
+        let dueAt = newShowsDeadline ? newDueAt : nil
+        let dueAtSource = newShowsDeadline ? Self.dueAtSource(kind: newDueAtSourceKind, externalSource: newDueAtExternalSource) : nil
+        guard !newShowsDeadline || dueAtSource != nil else {
+            newDueAtSourceMessage = "Deadline/date requires Tony or external:<source> attribution."
+            return
+        }
+        newDueAtSourceMessage = nil
 
         let body = CreateTicketBody(
             title: newTitle.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -2896,6 +2908,8 @@ final class TicketsViewModel {
             runtimeReason: directionPreview?.runtimeReason,
             handoffSubject: directionPreview?.handoffSubject,
             handoffPacket: Self.handoffPacket(for: directionPreview),
+            dueAt: dueAt,
+            dueAtSource: dueAtSource,
             boardId: newBoardId,
             parentTicketId: nil,
             lessonsLearned: nil
@@ -2917,6 +2931,11 @@ final class TicketsViewModel {
             newToolPolicy = "bounded_workspace_edits_owner_review"
             newAcceptanceCriteria = ""
             newDoneMeans = ""
+            newShowsDeadline = false
+            newDueAt = Date()
+            newDueAtSourceKind = .tony
+            newDueAtExternalSource = ""
+            newDueAtSourceMessage = nil
             newBoardId = Self.defaultBoardId(from: newBoardOptions, ticketType: newTicketType, tags: newTags)
             roughIntake = ""
             draftMessage = nil
@@ -2933,6 +2952,17 @@ final class TicketsViewModel {
 
     private static func apiPriority(_ priority: TicketPriority) -> String {
         priority == .normal ? "medium" : priority.rawValue
+    }
+
+    static func dueAtSource(kind: MilestoneDueAtSourceKind, externalSource: String) -> String? {
+        switch kind {
+        case .tony:
+            return "Tony"
+        case .external:
+            let source = externalSource.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !source.isEmpty else { return nil }
+            return source.lowercased().hasPrefix("external:") ? source : "external:\(source)"
+        }
     }
 
     private static func defaultBoardId(from boards: [TicketBoardOption], ticketType: String, tags: String) -> String {
@@ -4635,6 +4665,8 @@ private struct CreateTicketBody: Encodable {
     let runtimeReason: String?
     let handoffSubject: String?
     let handoffPacket: [String: String]
+    let dueAt: Date?
+    let dueAtSource: String?
     let boardId: String?
     let parentTicketId: String?   // POD-4: subtask hierarchy
     let lessonsLearned: String?  // POD-4: lessons-learned capture
@@ -4658,6 +4690,8 @@ private struct CreateTicketBody: Encodable {
         case runtimeReason = "runtime_reason"
         case handoffSubject = "handoff_subject"
         case handoffPacket = "handoff_packet"
+        case dueAt = "due_at"
+        case dueAtSource = "due_at_source"
         case boardId = "board_id"
         case parentTicketId  = "parent_ticket_id"
         case lessonsLearned  = "lessons_learned"

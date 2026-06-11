@@ -501,6 +501,11 @@ private struct NewTaskSheet: View {
     @State private var title = ""
     @State private var description = ""
     @State private var selectedBoard: Board?
+    @State private var showsDeadline = false
+    @State private var dueAt = Date()
+    @State private var dueAtSourceKind = MilestoneDueAtSourceKind.tony
+    @State private var dueAtExternalSource = ""
+    @State private var dueAtSourceMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -515,6 +520,14 @@ private struct NewTaskSheet: View {
                         Text(board.name).tag(board as Board?)
                     }
                 }
+
+                MilestoneDeadlineSection(
+                    isExpanded: $showsDeadline,
+                    dueAt: $dueAt,
+                    sourceKind: $dueAtSourceKind,
+                    externalSource: $dueAtExternalSource,
+                    validationMessage: dueAtSourceMessage
+                )
             }
             .navigationTitle("New Task")
             .navigationBarTitleDisplayMode(.inline)
@@ -525,8 +538,22 @@ private struct NewTaskSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
                         guard let board = selectedBoard, !title.isEmpty else { return }
+                        let source = showsDeadline
+                            ? TicketsViewModel.dueAtSource(kind: dueAtSourceKind, externalSource: dueAtExternalSource)
+                            : nil
+                        guard !showsDeadline || source != nil else {
+                            dueAtSourceMessage = "Deadline/date requires Tony or external:<source> attribution."
+                            return
+                        }
+                        dueAtSourceMessage = nil
                         Task {
-                            await viewModel.createTask(boardId: board.id, title: title, description: description)
+                            await viewModel.createTask(
+                                boardId: board.id,
+                                title: title,
+                                description: description,
+                                dueAt: showsDeadline ? dueAt : nil,
+                                dueAtSource: source
+                            )
                             dismiss()
                         }
                     } label: {

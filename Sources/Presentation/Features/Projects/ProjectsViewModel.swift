@@ -317,9 +317,20 @@ final class ProjectsViewModel {
 
     // MARK: - Mutations
 
-    func createTask(boardId: UUID, title: String, description: String) async {
+    func createTask(
+        boardId: UUID,
+        title: String,
+        description: String,
+        dueAt: Date? = nil,
+        dueAtSource: String? = nil
+    ) async {
         do {
-            let body = CreateTaskRequest(title: title, description: description)
+            let body = CreateTaskRequest(
+                title: title,
+                description: description,
+                dueAt: dueAt,
+                dueAtSource: dueAtSource
+            )
             let dto: TaskDTO = try await apiClient.post(path: "/api/v1/boards/\(boardId)/tasks", body: body)
             let task = ProjectTask(
                 id: UUID(uuidString: dto.id) ?? UUID(),
@@ -471,6 +482,14 @@ struct Board: Identifiable, Codable, Hashable {
 struct CreateTaskRequest: Encodable {
     let title: String
     let description: String
+    let dueAt: Date?
+    let dueAtSource: String?
+
+    enum CodingKeys: String, CodingKey {
+        case title, description
+        case dueAt = "due_at"
+        case dueAtSource = "due_at_source"
+    }
 }
 
 struct MoveTaskRequest: Encodable {
