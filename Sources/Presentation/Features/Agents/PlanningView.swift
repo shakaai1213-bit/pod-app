@@ -10,6 +10,7 @@ private enum PlanningSurfaceMode: String, CaseIterable, Identifiable {
     case today
     case agent
     case fleet
+    case health
 
     var id: String { rawValue }
 
@@ -19,6 +20,7 @@ private enum PlanningSurfaceMode: String, CaseIterable, Identifiable {
         case .today: return "Today"
         case .agent: return "Agent"
         case .fleet: return "Fleet"
+        case .health: return "Health"
         }
     }
 
@@ -28,6 +30,7 @@ private enum PlanningSurfaceMode: String, CaseIterable, Identifiable {
         case .today: return "calendar.day.timeline.left"
         case .agent: return "person.crop.circle.badge.clock"
         case .fleet: return "person.3.sequence.fill"
+        case .health: return "gauge.with.dots.needle.bottom.50percent"
         }
     }
 }
@@ -39,6 +42,7 @@ final class PlanningViewModel {
     var planningContext: PlanningContext?
     var fleetPlanning: FleetPlanningSnapshot?
     var fleetTimeline: FleetTimelineSnapshot?
+    var planHealth: [PlanHealthRow] = []
     var selectedAgent = "maui"
     var isLoading = false
     var errorMessage: String?
@@ -60,7 +64,8 @@ final class PlanningViewModel {
         async let agentTask: Void = loadSelectedAgent()
         async let fleetTask: Void = loadFleet()
         async let timelineTask: Void = loadTimeline()
-        _ = await (teamTask, agentTask, fleetTask, timelineTask)
+        async let healthTask: Void = loadPlanHealth()
+        _ = await (teamTask, agentTask, fleetTask, timelineTask, healthTask)
         generatedAt = Date()
     }
 
@@ -79,6 +84,18 @@ final class PlanningViewModel {
             fleetTimeline = try await apiClient.get(path: "/api/v1/planning/fleet/timeline")
         } catch {
             fleetTimeline = nil
+        }
+    }
+
+    @MainActor
+    func loadPlanHealth() async {
+        do {
+            let response: StateRegistryResponse = try await apiClient.get(
+                path: "/api/v1/state-registry?prefix=plan.health.&limit=100"
+            )
+            planHealth = PlanHealthRow.rows(from: response.items)
+        } catch {
+            planHealth = []
         }
     }
 
@@ -374,6 +391,63 @@ struct FleetPlanningEntry: Decodable, Hashable, Identifiable {
     }
 }
 
+struct PlanHealthRow: Identifiable, Hashable {
+    let id: String
+    let initiativeId: String
+    let status: String
+    let note: String?
+    let lastChecked: Date?
+
+    var displayName: String {
+        initiativeId
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .capitalized
+    }
+
+    var statusLabel: String {
+        status.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+
+    var color: Color {
+        switch status.lowercased() {
+        case "on_track": return AppColors.accentSuccess
+        case "at_risk": return AppColors.accentWarning
+        case "blocked": return .orange
+        case "behind": return AppColors.accentDanger
+        default: return AppColors.textSecondary
+        }
+    }
+
+    var lastCheckedLabel: String {
+        guard let lastChecked else { return "not checked" }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: lastChecked, relativeTo: Date())
+    }
+
+    static func rows(from tags: [StateTagDTO]) -> [PlanHealthRow] {
+        var buckets: [String: [String: StateTagDTO]] = [:]
+        for tag in tags where tag.tagId.hasPrefix("plan.health.") {
+            let parts = tag.tagId.split(separator: ".").map(String.init)
+            guard parts.count >= 4, parts[2] != "last_run" else { continue }
+            let initiative = parts[2]
+            let field = parts[3]
+            buckets[initiative, default: [:]][field] = tag
+        }
+        return buckets.map { initiative, fields in
+            PlanHealthRow(
+                id: initiative,
+                initiativeId: initiative,
+                status: fields["status"]?.valueText ?? "unknown",
+                note: fields["note"]?.valueText,
+                lastChecked: fields["last_checked"]?.updatedAt
+            )
+        }
+        .sorted { $0.initiativeId < $1.initiativeId }
+    }
+}
+
 struct PlanningContext: Decodable, Hashable {
     let agent: String
     let asOf: String?
@@ -461,6 +535,8 @@ struct PlanningView: View {
                             agentPlanningSection
                         case .fleet:
                             fleetPlanningSection
+                        case .health:
+                            PlanHealthView(rows: viewModel.planHealth, isLoading: viewModel.isLoading)
                         }
                     }
                     .padding(.horizontal, 16)
@@ -551,6 +627,12 @@ struct PlanningView: View {
                     value: "Read",
                     color: AppColors.textSecondary,
                     icon: "lock.open.display"
+                )
+                planningChip(
+                    title: "Health",
+                    value: "\(viewModel.planHealth.count)",
+                    color: viewModel.planHealth.isEmpty ? AppColors.textTertiary : AppColors.accentSuccess,
+                    icon: "gauge.with.dots.needle.bottom.50percent"
                 )
             }
             .padding(.horizontal, 2)
@@ -903,6 +985,85 @@ struct PlanningView: View {
             Spacer(minLength: 0)
         }
         .planningCard()
+    }
+}
+
+struct PlanHealthView: View {
+    let rows: [PlanHealthRow]
+    let isLoading: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("PLAN HEALTH")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(AppColors.textTertiary)
+                Spacer()
+                Text("\(rows.count)")
+                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                    .foregroundColor(AppColors.textSecondary)
+            }
+
+            if rows.isEmpty {
+                planningEmptyState
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 10)], spacing: 10) {
+                    ForEach(rows) { row in
+                        planHealthCard(row)
+                    }
+                }
+            }
+        }
+    }
+
+    private var planningEmptyState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: isLoading ? "hourglass" : "gauge.with.dots.needle.bottom.50percent")
+                .font(.system(size: 28))
+                .foregroundColor(AppColors.textSecondary)
+            Text(isLoading ? "Loading plan health" : "No plan health tags published")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(AppColors.textSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 40)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func planHealthCard(_ row: PlanHealthRow) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(row.displayName)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(AppColors.textPrimary)
+                    .lineLimit(2)
+                Spacer(minLength: 8)
+                Text(row.statusLabel)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(row.color)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(row.color.opacity(0.14))
+                    .clipShape(Capsule())
+            }
+
+            Text(row.note ?? "No note")
+                .font(.system(size: 12))
+                .foregroundColor(AppColors.textSecondary)
+                .lineLimit(2)
+
+            Text("Last checked: \(row.lastCheckedLabel)")
+                .font(.system(size: 11))
+                .foregroundColor(AppColors.textTertiary)
+        }
+        .padding(12)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(row.color.opacity(0.20), lineWidth: 0.75)
+        )
     }
 }
 
