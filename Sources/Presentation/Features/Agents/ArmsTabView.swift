@@ -110,6 +110,7 @@ struct ArmsTabView: View {
     private var armsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             sectionHeader(selectedFamily.title.uppercased(), count: selectedArms.count)
+            shipSummaryBanner(viewModel.shipSummaryState(for: selectedFamily))
 
             VStack(spacing: 10) {
                 ForEach(selectedArms) { arm in
@@ -382,6 +383,53 @@ struct ArmsTabView: View {
         }
     }
 
+    private func shipSummaryBanner(_ state: ArmShipSummaryState) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            if state.status == .loading {
+                ProgressView()
+                    .scaleEffect(0.7)
+                    .tint(state.color)
+                    .frame(width: 18, height: 18)
+            } else {
+                Circle()
+                    .fill(state.color)
+                    .frame(width: 8, height: 8)
+                    .padding(.top, 5)
+                    .frame(width: 18, height: 18)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text("Ship summary")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(state.color)
+                    Text(state.label)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(state.color)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(state.color.opacity(0.12))
+                        .clipShape(Capsule())
+                }
+                Text(state.message)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let source = state.source {
+                    Text(source)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(AppColors.textTertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .background(state.color.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
     private func valueRow(label: String, value: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Text(label.uppercased())
@@ -556,23 +604,27 @@ struct ArmsTabView: View {
 
     private func shipHistoryRows(for arm: ArmTag) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            ForEach(viewModel.ships(for: arm)) { ship in
-                HStack(alignment: .top, spacing: 8) {
-                    Circle()
-                        .fill(ship.reviewColor)
-                        .frame(width: 7, height: 7)
-                        .padding(.top, 5)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(ship.subject)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(AppColors.textPrimary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Text("\(ship.timestamp.formatted(date: .abbreviated, time: .shortened)) · \(ship.area) · \(ship.gate) · \(ship.sha) · \(ship.reviewLabel)")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(AppColors.textTertiary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+            switch viewModel.shipHistoryState(for: arm) {
+            case .loading:
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .scaleEffect(0.75)
+                        .tint(AppColors.accentElectric)
+                    Text("Loading ship history")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(AppColors.textSecondary)
                     Spacer(minLength: 0)
+                }
+            case .empty:
+                shipHistoryMessage("No ship history recorded for this arm.", color: AppColors.textTertiary, isWarning: false)
+            case .error(let message):
+                shipHistoryMessage(message, color: AppColors.accentWarning, isWarning: true)
+                ForEach(viewModel.ships(for: arm)) { ship in
+                    shipHistoryItem(ship)
+                }
+            case .loaded(let ships):
+                ForEach(ships) { ship in
+                    shipHistoryItem(ship)
                 }
             }
         }
@@ -583,6 +635,39 @@ struct ArmsTabView: View {
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(AppColors.border, lineWidth: 0.5)
         )
+    }
+
+    private func shipHistoryItem(_ ship: ArmShip) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Circle()
+                .fill(ship.reviewColor)
+                .frame(width: 7, height: 7)
+                .padding(.top, 5)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(ship.subject)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(AppColors.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("\(ship.timestamp.formatted(date: .abbreviated, time: .shortened)) · \(ship.area) · \(ship.gate) · \(ship.sha) · \(ship.reviewLabel)")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(AppColors.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func shipHistoryMessage(_ message: String, color: Color, isWarning: Bool) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: isWarning ? "exclamationmark.triangle.fill" : "tray")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(color)
+            Text(message)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(color)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
     }
 
     private func armOpsRow(_ arm: ArmTag, ops: ArmOpsSnapshot) -> some View {
