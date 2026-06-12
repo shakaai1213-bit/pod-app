@@ -6,6 +6,8 @@ final class ArmsViewModel {
     var arms: [ArmTag] = ArmTag.placeholderArms
     var chiefArms: [ArmTag] = ArmTag.placeholderChiefArms
     var orcaMiniStatus: OrcaMiniStatus = .missing()
+    var substrateStatuses: [SubstrateStatus] = SubstrateStatus.placeholders()
+    var substrateStatusState: SubstrateStatusState = .idle
     var directiveDrafts: [String: String] = [:]
     var expandedShipArms: Set<String> = []
     var expandedEvidenceArms: Set<String> = []
@@ -46,8 +48,9 @@ final class ArmsViewModel {
         async let mauiTask: Void = loadMauiArms()
         async let chiefTask: Void = loadChiefArms()
         async let miniTask: Void = loadOrcaMiniStatus()
+        async let substrateTask: Void = loadSubstrateStatuses()
         async let opsTask: Void = loadArmOps()
-        _ = await (mauiTask, chiefTask, miniTask, opsTask)
+        _ = await (mauiTask, chiefTask, miniTask, substrateTask, opsTask)
     }
 
     @MainActor
@@ -126,6 +129,19 @@ final class ArmsViewModel {
             orcaMiniStatus = tag.toOrcaMiniStatus()
         } catch {
             orcaMiniStatus = .unavailable(reason: "State Registry unavailable")
+        }
+    }
+
+    @MainActor
+    private func loadSubstrateStatuses() async {
+        substrateStatusState = .loading
+        do {
+            let response: SubstrateStateRegistryResponse = try await apiClient.get(path: "/api/v1/state-registry?prefix=substrate.&limit=80")
+            substrateStatuses = SubstrateStatus.merge(items: response.items)
+            substrateStatusState = response.items.isEmpty ? .empty : .loaded
+        } catch {
+            substrateStatuses = SubstrateStatus.placeholders(missingReason: "State Registry unavailable")
+            substrateStatusState = .error("Substrate status unavailable")
         }
     }
 
@@ -660,6 +676,234 @@ struct OrcaMiniStatus: Equatable {
 struct OrcaMiniBadge {
     let label: String
     let color: Color
+}
+
+enum SubstrateStatusState: Equatable {
+    case idle
+    case loading
+    case loaded
+    case empty
+    case error(String)
+
+    var label: String {
+        switch self {
+        case .idle: return "waiting"
+        case .loading: return "loading"
+        case .loaded: return "live"
+        case .empty: return "empty"
+        case .error: return "error"
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .idle: return "Substrate status waiting."
+        case .loading: return "Loading substrate status."
+        case .loaded: return "DDS substrate probes loaded."
+        case .empty: return "No substrate tags returned by ORCA."
+        case .error(let message): return message
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .loaded: return AppColors.accentSuccess
+        case .loading: return AppColors.accentElectric
+        case .empty, .idle: return AppColors.textTertiary
+        case .error: return AppColors.accentWarning
+        }
+    }
+}
+
+struct SubstrateStatus: Identifiable, Hashable {
+    static let orderedNames = ["claude", "codex", "kimi", "spark", "compute_router", "orca", "nats", "local_runner"]
+
+    let id: String
+    let name: String
+    let status: String
+    let lastProbe: Date?
+    let limitedUntil: Date?
+    let evidence: String?
+    let updatedAt: Date?
+    let ttlSeconds: Int?
+    let missingReason: String?
+
+    static func placeholders(missingReason: String? = nil) -> [SubstrateStatus] {
+        orderedNames.map {
+            SubstrateStatus(
+                id: $0,
+                name: $0,
+                status: "unknown",
+                lastProbe: nil,
+                limitedUntil: nil,
+                evidence: nil,
+                updatedAt: nil,
+                ttlSeconds: nil,
+                missingReason: missingReason ?? "Tag missing"
+            )
+        }
+    }
+
+    fileprivate static func merge(items: [SubstrateStateRegistryTagDTO]) -> [SubstrateStatus] {
+        var records: [String: [String: SubstrateStateRegistryTagDTO]] = [:]
+
+        for item in items where item.tagId.hasPrefix("substrate.") {
+            let remainder = String(item.tagId.dropFirst("substrate.".count))
+            let parts = remainder.split(separator: ".", maxSplits: 1).map(String.init)
+            guard let name = parts.first?.lowercased(), orderedNames.contains(name) else { continue }
+            let field = parts.count > 1 ? parts[1].lowercased() : "record"
+            records[name, default: [:]][field] = item
+        }
+
+        return orderedNames.map { name in
+            guard let fields = records[name], !fields.isEmpty else {
+                return placeholders().first { $0.name == name }!
+            }
+
+            let recordValue = fields["record"]?.objectValue
+            let status = Self.string("status", fields: fields, record: recordValue)
+                ?? Self.string("state", fields: fields, record: recordValue)
+                ?? "unknown"
+            let lastProbe = Self.date("last_probe", fields: fields, record: recordValue)
+                ?? Self.date("lastProbe", fields: fields, record: recordValue)
+            let limitedUntil = Self.date("limited_until", fields: fields, record: recordValue)
+                ?? Self.date("limitedUntil", fields: fields, record: recordValue)
+            let evidence = Self.sanitizedEvidence(Self.string("evidence", fields: fields, record: recordValue))
+            let newestUpdatedAt = fields.values.compactMap(\.updatedAt).max()
+            let ttlSeconds = fields.values.compactMap(\.ttlSeconds).min() ?? Self.defaultTTLSeconds(for: name)
+
+            return SubstrateStatus(
+                id: name,
+                name: name,
+                status: status,
+                lastProbe: lastProbe,
+                limitedUntil: limitedUntil,
+                evidence: evidence,
+                updatedAt: newestUpdatedAt,
+                ttlSeconds: ttlSeconds,
+                missingReason: nil
+            )
+        }
+    }
+
+    var displayName: String {
+        switch name {
+        case "compute_router": return "Compute Router"
+        case "local_runner": return "Local Runner"
+        case "orca": return "ORCA"
+        case "nats": return "NATS"
+        default: return name.capitalized
+        }
+    }
+
+    var effectiveStatus: String {
+        if missingReason != nil { return "unknown" }
+        if isStale { return "stale" }
+        return normalizedStatus
+    }
+
+    var normalizedStatus: String {
+        let clean = status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return clean.isEmpty ? "unknown" : clean
+    }
+
+    var statusLabel: String {
+        effectiveStatus.replacingOccurrences(of: "_", with: " ")
+    }
+
+    var statusColor: Color {
+        switch effectiveStatus {
+        case "healthy": return AppColors.accentSuccess
+        case "limited", "degraded", "stale": return AppColors.accentWarning
+        case "offline": return AppColors.accentDanger
+        default: return AppColors.textTertiary
+        }
+    }
+
+    var isStale: Bool {
+        guard let probeDate = lastProbe ?? updatedAt else { return missingReason == nil }
+        let ttl = ttlSeconds ?? Self.defaultTTLSeconds(for: name)
+        return Date().timeIntervalSince(probeDate) > Double(ttl)
+    }
+
+    var lastProbeLabel: String {
+        guard let probeDate = lastProbe ?? updatedAt else { return "no probe" }
+        return "\(Self.relativeAge(from: probeDate)) ago"
+    }
+
+    var limitedUntilLabel: String? {
+        guard let limitedUntil else { return nil }
+        let seconds = Int(limitedUntil.timeIntervalSince(Date()))
+        if seconds > 0 {
+            return "limited \(Self.durationLabel(seconds))"
+        }
+        return "limit expired \(Self.durationLabel(abs(seconds))) ago"
+    }
+
+    var evidenceLabel: String {
+        if let missingReason { return missingReason }
+        return evidence ?? "No evidence summary"
+    }
+
+    private static func string(_ key: String, fields: [String: SubstrateStateRegistryTagDTO], record: [String: AgentRunJSONValue]?) -> String? {
+        if let value = record?[key]?.stringValue { return value }
+        return fields[key]?.value.stringValue ?? fields[key]?.objectValue?[key]?.stringValue
+    }
+
+    private static func date(_ key: String, fields: [String: SubstrateStateRegistryTagDTO], record: [String: AgentRunJSONValue]?) -> Date? {
+        string(key, fields: fields, record: record).flatMap(Self.parseDate)
+    }
+
+    private static func parseDate(_ text: String) -> Date? {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractional.date(from: text) { return date }
+        return ISO8601DateFormatter().date(from: text)
+    }
+
+    private static func defaultTTLSeconds(for name: String) -> Int {
+        switch name {
+        case "claude": return 600
+        case "codex": return 1_800
+        case "kimi", "spark": return 300
+        case "orca": return 120
+        case "compute_router", "nats", "local_runner": return 180
+        default: return 300
+        }
+    }
+
+    private static func sanitizedEvidence(_ text: String?) -> String? {
+        guard let text else { return nil }
+        let lower = text.lowercased()
+        let sensitiveTerms = ["authorization", "bearer ", "x-api-key", "api_key", "apikey", "token", "secret", "password", "cookie"]
+        guard !sensitiveTerms.contains(where: { lower.contains($0) }) else {
+            return "Evidence redacted"
+        }
+        let singleLine = text
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !singleLine.isEmpty else { return nil }
+        if singleLine.count > 96 {
+            return String(singleLine.prefix(96)) + "..."
+        }
+        return singleLine
+    }
+
+    private static func relativeAge(from date: Date) -> String {
+        let seconds = max(0, Int(Date().timeIntervalSince(date)))
+        if seconds < 60 { return "\(seconds)s" }
+        if seconds < 3_600 { return "\(seconds / 60)m" }
+        if seconds < 86_400 { return "\(seconds / 3_600)h" }
+        return "\(seconds / 86_400)d"
+    }
+
+    private static func durationLabel(_ seconds: Int) -> String {
+        if seconds < 60 { return "\(seconds)s" }
+        if seconds < 3_600 { return "\(seconds / 60)m" }
+        if seconds < 86_400 { return "\(seconds / 3_600)h" }
+        return "\(seconds / 86_400)d"
+    }
 }
 
 struct WakeConfirmation: Identifiable, Equatable {
@@ -1621,6 +1865,29 @@ private struct ArmRosterEntryDTO: Decodable {
 
 private struct ArmStateRegistryResponse: Decodable {
     let items: [StateRegistryTagDTO]
+}
+
+private struct SubstrateStateRegistryResponse: Decodable {
+    let items: [SubstrateStateRegistryTagDTO]
+}
+
+private struct SubstrateStateRegistryTagDTO: Decodable {
+    let tagId: String
+    let value: AgentRunJSONValue
+    let quality: String?
+    let updatedAt: Date?
+    let ttlSeconds: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case value, quality
+        case tagId = "tag_id"
+        case updatedAt = "updated_at"
+        case ttlSeconds = "ttl_seconds"
+    }
+
+    var objectValue: [String: AgentRunJSONValue]? {
+        value.objectValue
+    }
 }
 
 private struct StateRegistryTagDTO: Decodable {

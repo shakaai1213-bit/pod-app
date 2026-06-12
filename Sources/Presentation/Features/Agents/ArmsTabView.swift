@@ -23,6 +23,10 @@ struct ArmsTabView: View {
                         .padding(.horizontal, 16)
                         .padding(.bottom, 14)
 
+                    substrateStatusSection
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 14)
+
                     armFamilyPicker
                         .padding(.horizontal, 16)
                         .padding(.bottom, 14)
@@ -125,6 +129,64 @@ struct ArmsTabView: View {
             sectionHeader("INFRA", count: 1, suffix: "surface")
             orcaMiniCard(viewModel.orcaMiniStatus)
         }
+    }
+
+    private var substrateStatusSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionHeader("SUBSTRATES", count: viewModel.substrateStatuses.count, suffix: "DDS")
+            substrateStatusCard
+        }
+    }
+
+    private var substrateStatusCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 8) {
+                if viewModel.substrateStatusState == .loading {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                        .tint(viewModel.substrateStatusState.color)
+                        .frame(width: 18, height: 18)
+                } else {
+                    Circle()
+                        .fill(viewModel.substrateStatusState.color)
+                        .frame(width: 8, height: 8)
+                        .frame(width: 18, height: 18)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text("Substrate probes")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(AppColors.textPrimary)
+                        Text(viewModel.substrateStatusState.label)
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(viewModel.substrateStatusState.color)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(viewModel.substrateStatusState.color.opacity(0.12))
+                            .clipShape(Capsule())
+                    }
+                    Text(viewModel.substrateStatusState.message)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(AppColors.textTertiary)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            VStack(spacing: 8) {
+                ForEach(viewModel.substrateStatuses) { substrate in
+                    substrateStatusRow(substrate)
+                }
+            }
+        }
+        .padding(14)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                .strokeBorder(viewModel.substrateStatusState.color.opacity(0.65), lineWidth: 1)
+        )
     }
 
     private var selectedArms: [ArmTag] {
@@ -381,6 +443,68 @@ struct ArmsTabView: View {
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
+    }
+
+    private func substrateStatusRow(_ substrate: SubstrateStatus) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 8) {
+                Text(substrate.displayName)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(AppColors.textPrimary)
+                    .frame(width: 108, alignment: .leading)
+                    .lineLimit(1)
+
+                substrateStatusChip(substrate)
+
+                Spacer(minLength: 4)
+
+                Text(substrate.lastProbeLabel)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(substrate.isStale ? AppColors.accentWarning : AppColors.textTertiary)
+                    .lineLimit(1)
+            }
+
+            HStack(alignment: .top, spacing: 6) {
+                Text(substrate.evidenceLabel)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(AppColors.textSecondary)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: 0)
+
+                if let limitedUntil = substrate.limitedUntilLabel {
+                    Text(limitedUntil)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(AppColors.accentWarning)
+                        .lineLimit(1)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(AppColors.accentWarning.opacity(0.12))
+                        .clipShape(Capsule())
+                }
+            }
+        }
+        .padding(9)
+        .background(substrate.statusColor.opacity(0.07))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func substrateStatusChip(_ substrate: SubstrateStatus) -> some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(substrate.statusColor)
+                .frame(width: 7, height: 7)
+            Text(substrate.statusLabel)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(substrate.statusColor)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(substrate.statusColor.opacity(0.12))
+        .clipShape(Capsule())
     }
 
     private func shipSummaryBanner(_ state: ArmShipSummaryState) -> some View {
