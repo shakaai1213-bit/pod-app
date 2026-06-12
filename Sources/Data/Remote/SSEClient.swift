@@ -550,6 +550,9 @@ public struct MessageNewPayload: Codable, Sendable {
     public let deliveryMode: String?
     public let provenance: String?
     public let responseState: String?
+    public let deliveryError: String?
+    public let deliveryFailedHop: String?
+    public let deliveryEvidence: String?
     public let triageId: String?
     public let triageTraceId: String?
     public let fileAttachment: ChatFileAttachment?
@@ -571,12 +574,31 @@ public struct MessageNewPayload: Codable, Sendable {
         case messageType = "message_type"
         case deliveryMode = "delivery_mode"
         case responseState = "response_state"
+        case deliveryError = "delivery_error"
+        case deliveryFailedHop = "delivery_failed_hop"
+        case failedHop = "failed_hop"
+        case deliveryEvidence = "delivery_evidence"
+        case evidence
         case triageId = "triage_id"
         case triageTraceId = "triage_trace_id"
     }
 
     private struct Metadata: Codable, Sendable {
         let file: String?
+        let deliveryError: String?
+        let deliveryFailedHop: String?
+        let failedHop: String?
+        let deliveryEvidence: String?
+        let evidence: String?
+
+        enum CodingKeys: String, CodingKey {
+            case file
+            case deliveryError = "delivery_error"
+            case deliveryFailedHop = "delivery_failed_hop"
+            case failedHop = "failed_hop"
+            case deliveryEvidence = "delivery_evidence"
+            case evidence
+        }
     }
 
     public init(from decoder: Decoder) throws {
@@ -603,6 +625,16 @@ public struct MessageNewPayload: Codable, Sendable {
         triageId = try container.decodeIfPresent(String.self, forKey: .triageId)
         triageTraceId = try container.decodeIfPresent(String.self, forKey: .triageTraceId)
         let metadata = try container.decodeIfPresent(Metadata.self, forKey: .metadata)
+        deliveryError = (try? container.decodeIfPresent(String.self, forKey: .deliveryError))
+            ?? metadata?.deliveryError
+        deliveryFailedHop = (try? container.decodeIfPresent(String.self, forKey: .deliveryFailedHop))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .failedHop))
+            ?? metadata?.deliveryFailedHop
+            ?? metadata?.failedHop
+        deliveryEvidence = (try? container.decodeIfPresent(String.self, forKey: .deliveryEvidence))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .evidence))
+            ?? metadata?.deliveryEvidence
+            ?? metadata?.evidence
         fileAttachment = ChatFileAttachment(path: metadata?.file)
     }
 
@@ -624,10 +656,23 @@ public struct MessageNewPayload: Codable, Sendable {
         try container.encodeIfPresent(deliveryMode, forKey: .deliveryMode)
         try container.encodeIfPresent(provenance, forKey: .provenance)
         try container.encodeIfPresent(responseState, forKey: .responseState)
+        try container.encodeIfPresent(deliveryError, forKey: .deliveryError)
+        try container.encodeIfPresent(deliveryFailedHop, forKey: .deliveryFailedHop)
+        try container.encodeIfPresent(deliveryEvidence, forKey: .deliveryEvidence)
         try container.encodeIfPresent(triageId, forKey: .triageId)
         try container.encodeIfPresent(triageTraceId, forKey: .triageTraceId)
         if let fileAttachment {
-            try container.encode(Metadata(file: fileAttachment.path), forKey: .metadata)
+            try container.encode(
+                Metadata(
+                    file: fileAttachment.path,
+                    deliveryError: nil,
+                    deliveryFailedHop: nil,
+                    failedHop: nil,
+                    deliveryEvidence: nil,
+                    evidence: nil
+                ),
+                forKey: .metadata
+            )
         }
     }
 }

@@ -1071,7 +1071,10 @@ final class DirectChatViewModel {
                     assistantMsg.traceId = dispatch.run.traceId ?? outgoingTraceId
                     assistantMsg.remoteMessageId = dispatch.commentId
                     assistantMsg.latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
-                    userMsg.userDeliveryState = DMUserMessageDeliveryState.sent.rawValue
+                    userMsg.userDeliveryState = Self.userDeliveryState(
+                        remoteUserMessageId: dispatch.commentId,
+                        responseState: assistantMsg.deliveryState
+                    ).rawValue
                     conversation.lastMessageText = assistantMsg.content
                     conversation.lastMessageDate = Date()
                     try? ctx.save()
@@ -1097,9 +1100,6 @@ final class DirectChatViewModel {
                     traceId: assistantMsg.traceId
                 )
                 for try await chunk in stream {
-                    if userMsg.userDeliveryState != DMUserMessageDeliveryState.sent.rawValue {
-                        userMsg.userDeliveryState = DMUserMessageDeliveryState.sent.rawValue
-                    }
                     let responseMode = DMDeliveryMode.parse(chunk.metadata?.deliveryMode)
                     let responseProvenance = DMResponseProvenance.parse(chunk.metadata?.provenance)
                     let responseState = DMDeliveryState.parse(chunk.metadata?.responseState)
@@ -1136,6 +1136,12 @@ final class DirectChatViewModel {
                         routeProgressSteps = Self.routeProgressSteps(for: deliveryMode, stage: .responseReceived)
                     }
 
+                    assistantMsg.deliveryError = chunk.metadata?.deliveryError
+                    assistantMsg.deliveryFailedHop = chunk.metadata?.deliveryFailedHop
+                    assistantMsg.deliveryEvidence = chunk.metadata?.deliveryEvidence
+                    userMsg.deliveryError = chunk.metadata?.deliveryError
+                    userMsg.deliveryFailedHop = chunk.metadata?.deliveryFailedHop
+                    userMsg.deliveryEvidence = chunk.metadata?.deliveryEvidence
                     assistantMsg.modelUsed = chunk.metadata?.displayName
                     assistantMsg.tokenCount = chunk.metadata?.tokenCount
                     assistantMsg.traceId = chunk.metadata?.traceId
@@ -1148,6 +1154,10 @@ final class DirectChatViewModel {
                     userMsg.traceId = userMsg.traceId ?? chunk.metadata?.traceId
                     userMsg.triageId = chunk.metadata?.triageId ?? userMsg.triageId
                     userMsg.triageTraceId = chunk.metadata?.traceId ?? userMsg.triageTraceId
+                    userMsg.userDeliveryState = Self.userDeliveryState(
+                        remoteUserMessageId: chunk.metadata?.userMessageId,
+                        responseState: assistantMsg.deliveryState
+                    ).rawValue
                     assistantMsg.remoteMessageId = chunk.metadata?.assistantMessageId
                     if let channelId = chunk.metadata?.channelId {
                         conversation.orcaChannelId = channelId
@@ -1157,9 +1167,10 @@ final class DirectChatViewModel {
                 // Finalize
                 assistantMsg.isStreaming = false
                 assistantMsg.latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
-                if userMsg.userDeliveryState != DMUserMessageDeliveryState.sent.rawValue {
-                    userMsg.userDeliveryState = DMUserMessageDeliveryState.sent.rawValue
-                }
+                userMsg.userDeliveryState = Self.userDeliveryState(
+                    remoteUserMessageId: userMsg.remoteMessageId,
+                    responseState: assistantMsg.deliveryState
+                ).rawValue
                 conversation.lastMessageText = assistantMsg.content
                 conversation.lastMessageDate = Date()
                 try? ctx.save()
@@ -1233,7 +1244,7 @@ final class DirectChatViewModel {
 
     func retryMessage(_ message: DMMessage) {
         guard message.role == "user",
-              DMUserMessageDeliveryState.parse(message.userDeliveryState) == .failed,
+              Self.isRetryableUserDelivery(message.userDeliveryState),
               !isStreaming else { return }
         composedMessage = message.content
         sendMessage()
@@ -1241,7 +1252,7 @@ final class DirectChatViewModel {
 
     func retryLastFailedMessage() {
         guard let message = currentMessages.last(where: {
-            $0.role == "user" && DMUserMessageDeliveryState.parse($0.userDeliveryState) == .failed
+            $0.role == "user" && Self.isRetryableUserDelivery($0.userDeliveryState)
         }) else { return }
         retryMessage(message)
     }
@@ -1643,6 +1654,9 @@ final class DirectChatViewModel {
             lane: payload.lane,
             responseState: payload.responseState
         ) ?? DMDeliveryState.responseReceived.rawValue
+        message.deliveryError = payload.deliveryError
+        message.deliveryFailedHop = payload.deliveryFailedHop
+        message.deliveryEvidence = payload.deliveryEvidence
         message.traceId = payload.traceId
         message.remoteMessageId = payload.id
         message.triageId = payload.triageId
@@ -1723,6 +1737,9 @@ final class DirectChatViewModel {
                     lane: reply.lane,
                     responseState: reply.responseState
                 ) ?? DMDeliveryState.responseReceived.rawValue
+                message.deliveryError = reply.deliveryError
+                message.deliveryFailedHop = reply.deliveryFailedHop
+                message.deliveryEvidence = reply.deliveryEvidence
                 message.traceId = reply.traceId
                 message.remoteMessageId = reply.id
                 message.triageId = reply.triageId
@@ -1799,6 +1816,15 @@ final class DirectChatViewModel {
                         lane: remote.lane,
                         responseState: remote.responseState
                     ) ?? existing.deliveryState
+                    existing.deliveryError = remote.deliveryError ?? existing.deliveryError
+                    existing.deliveryFailedHop = remote.deliveryFailedHop ?? existing.deliveryFailedHop
+                    existing.deliveryEvidence = remote.deliveryEvidence ?? existing.deliveryEvidence
+                    if existing.role == "user" {
+                        existing.userDeliveryState = Self.userDeliveryState(
+                            remoteUserMessageId: remote.id,
+                            responseState: existing.deliveryState ?? remote.deliveryState ?? remote.responseState
+                        ).rawValue
+                    }
                     existing.modelUsed = remote.computeAttributionLabel ?? existing.modelUsed
                     existing.traceId = remote.traceId ?? existing.traceId
                     existing.triageId = remote.triageId ?? existing.triageId
@@ -1844,6 +1870,15 @@ final class DirectChatViewModel {
                         lane: remote.lane,
                         responseState: remote.responseState
                     )
+                    localMatch.deliveryError = localMatch.deliveryError ?? remote.deliveryError
+                    localMatch.deliveryFailedHop = localMatch.deliveryFailedHop ?? remote.deliveryFailedHop
+                    localMatch.deliveryEvidence = localMatch.deliveryEvidence ?? remote.deliveryEvidence
+                    if localMatch.role == "user" {
+                        localMatch.userDeliveryState = Self.userDeliveryState(
+                            remoteUserMessageId: remote.id,
+                            responseState: localMatch.deliveryState ?? remote.deliveryState ?? remote.responseState
+                        ).rawValue
+                    }
                     localMatch.modelUsed = localMatch.modelUsed ?? remote.computeAttributionLabel
                     localMatch.traceId = localMatch.traceId ?? remote.traceId
                     localMatch.triageId = localMatch.triageId ?? remote.triageId
@@ -1872,6 +1907,15 @@ final class DirectChatViewModel {
                     lane: remote.lane,
                     responseState: remote.responseState
                 ) ?? DMDeliveryState.responseReceived.rawValue
+                message.deliveryError = remote.deliveryError
+                message.deliveryFailedHop = remote.deliveryFailedHop
+                message.deliveryEvidence = remote.deliveryEvidence
+                if role == "user" {
+                    message.userDeliveryState = Self.userDeliveryState(
+                        remoteUserMessageId: remote.id,
+                        responseState: message.deliveryState
+                    ).rawValue
+                }
                 message.modelUsed = remote.computeAttributionLabel
                 message.traceId = remote.traceId
                 message.remoteMessageId = remote.id
@@ -1970,6 +2014,36 @@ final class DirectChatViewModel {
         DMDeliveryState.parse(raw)?.rawValue
     }
 
+    private static func userDeliveryState(remoteUserMessageId: String?, responseState: String?) -> DMUserMessageDeliveryState {
+        let parsedState = DMDeliveryState.parse(responseState)
+        switch parsedState {
+        case .deliveryNatsFailed:
+            return .transportFailed
+        case .agentUnresponsive:
+            return .agentUnresponsive
+        case .failed, .fallbackPresented:
+            return .failed
+        case .responseReceived:
+            return .sent
+        case .computeRunning, .waitingForLiveAgent, .claimedByAgent, .agentRunQueued, .agentRunRunning, .timedOut:
+            return .accepted
+        case .sending, .routing:
+            return .sending
+        case nil:
+            let remoteId = remoteUserMessageId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return remoteId.isEmpty ? .sending : .accepted
+        }
+    }
+
+    private static func isRetryableUserDelivery(_ raw: String?) -> Bool {
+        switch DMUserMessageDeliveryState.parse(raw) {
+        case .failed, .transportFailed, .agentUnresponsive:
+            return true
+        default:
+            return false
+        }
+    }
+
     private static func effectiveDeliveryState(
         content: String,
         deliveryMode: String?,
@@ -2008,7 +2082,7 @@ final class DirectChatViewModel {
 
     private static func isPendingAsyncDeliveryState(_ raw: String?) -> Bool {
         switch DMDeliveryState.parse(raw) {
-        case .waitingForLiveAgent, .computeRunning, .deliveryNatsFailed, .agentUnresponsive:
+        case .waitingForLiveAgent, .computeRunning, .claimedByAgent, .agentRunQueued, .agentRunRunning:
             return true
         default:
             return false
@@ -4573,6 +4647,9 @@ struct DirectChatORCAMessageDTO: Decodable {
     let provenance: String?
     let responseState: String?
     let deliveryState: String?
+    let deliveryError: String?
+    let deliveryFailedHop: String?
+    let deliveryEvidence: String?
     let triageId: String?
     let triageTraceId: String?
     let provider: String?
@@ -4595,6 +4672,11 @@ struct DirectChatORCAMessageDTO: Decodable {
         case deliveryMode = "delivery_mode"
         case responseState = "response_state"
         case deliveryState = "delivery_state"
+        case deliveryError = "delivery_error"
+        case deliveryFailedHop = "delivery_failed_hop"
+        case failedHop = "failed_hop"
+        case deliveryEvidence = "delivery_evidence"
+        case evidence
         case triageId = "triage_id"
         case triageTraceId = "triage_trace_id"
         case surfaceEventProvenance = "surface_event_provenance"
@@ -4605,6 +4687,20 @@ struct DirectChatORCAMessageDTO: Decodable {
 
     private struct Metadata: Decodable {
         let file: String?
+        let deliveryError: String?
+        let deliveryFailedHop: String?
+        let failedHop: String?
+        let deliveryEvidence: String?
+        let evidence: String?
+
+        enum CodingKeys: String, CodingKey {
+            case file
+            case deliveryError = "delivery_error"
+            case deliveryFailedHop = "delivery_failed_hop"
+            case failedHop = "failed_hop"
+            case deliveryEvidence = "delivery_evidence"
+            case evidence
+        }
     }
 
     init(from decoder: Decoder) throws {
@@ -4632,6 +4728,16 @@ struct DirectChatORCAMessageDTO: Decodable {
         replyToId = try container.decodeIfPresent(String.self, forKey: .replyToId)
         isThreadReply = try container.decodeIfPresent(Bool.self, forKey: .isThreadReply) ?? false
         let metadata = try container.decodeIfPresent(Metadata.self, forKey: .metadata)
+        deliveryError = (try? container.decodeIfPresent(String.self, forKey: .deliveryError))
+            ?? metadata?.deliveryError
+        deliveryFailedHop = (try? container.decodeIfPresent(String.self, forKey: .deliveryFailedHop))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .failedHop))
+            ?? metadata?.deliveryFailedHop
+            ?? metadata?.failedHop
+        deliveryEvidence = (try? container.decodeIfPresent(String.self, forKey: .deliveryEvidence))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .evidence))
+            ?? metadata?.deliveryEvidence
+            ?? metadata?.evidence
         fileAttachment = ChatFileAttachment(path: metadata?.file)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
     }

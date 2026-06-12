@@ -321,7 +321,10 @@ enum DMDeliveryState: String, Codable, Sendable {
 
 enum DMUserMessageDeliveryState: String, Codable, Sendable {
     case sending
+    case accepted
     case sent
+    case transportFailed = "transport_failed"
+    case agentUnresponsive = "agent_unresponsive"
     case failed
 
     static func parse(_ raw: String?) -> DMUserMessageDeliveryState? {
@@ -533,6 +536,9 @@ final class DMMessage {
     var provenance: String?
     var deliveryState: String?
     var userDeliveryState: String?
+    var deliveryError: String?
+    var deliveryFailedHop: String?
+    var deliveryEvidence: String?
     var remoteMessageId: String?
     var computeRunId: String?
     var triageId: String?
@@ -559,6 +565,9 @@ final class DMMessage {
         self.provenance = nil
         self.deliveryState = nil
         self.userDeliveryState = nil
+        self.deliveryError = nil
+        self.deliveryFailedHop = nil
+        self.deliveryEvidence = nil
         self.remoteMessageId = nil
         self.computeRunId = nil
         self.triageId = nil

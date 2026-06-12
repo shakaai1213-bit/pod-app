@@ -70,6 +70,9 @@ actor AgentChatService {
         let deliveryMode: String
         let provenance: String
         let responseState: String?
+        let deliveryError: String?
+        let deliveryFailedHop: String?
+        let deliveryEvidence: String?
         let triageId: String?
         let computeRunId: String?
 
@@ -141,6 +144,9 @@ actor AgentChatService {
             let deliveryMode: String?
             let provenance: String?
             let responseState: String?
+            let deliveryError: String?
+            let deliveryFailedHop: String?
+            let deliveryEvidence: String?
             let triageId: String?
             let computeRunId: String?
 
@@ -150,8 +156,34 @@ actor AgentChatService {
                 case traceId = "trace_id"
                 case deliveryMode = "delivery_mode"
                 case responseState = "response_state"
+                case deliveryError = "delivery_error"
+                case deliveryFailedHop = "delivery_failed_hop"
+                case failedHop = "failed_hop"
+                case deliveryEvidence = "delivery_evidence"
+                case evidence
                 case triageId = "triage_id"
                 case computeRunId = "compute_run_id"
+            }
+
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                model = try container.decodeIfPresent(String.self, forKey: .model)
+                backend = try container.decodeIfPresent(String.self, forKey: .backend)
+                tier = try container.decodeIfPresent(String.self, forKey: .tier)
+                tokenCount = try container.decodeIfPresent(Int.self, forKey: .tokenCount)
+                traceId = try container.decodeIfPresent(String.self, forKey: .traceId) ?? ""
+                source = try container.decodeIfPresent(String.self, forKey: .source) ?? "orca.chat.direct"
+                lane = try container.decodeIfPresent(String.self, forKey: .lane) ?? "direct_agent_inbox"
+                deliveryMode = try container.decodeIfPresent(String.self, forKey: .deliveryMode)
+                provenance = try container.decodeIfPresent(String.self, forKey: .provenance)
+                responseState = try container.decodeIfPresent(String.self, forKey: .responseState)
+                deliveryError = try? container.decodeIfPresent(String.self, forKey: .deliveryError)
+                deliveryFailedHop = (try? container.decodeIfPresent(String.self, forKey: .deliveryFailedHop))
+                    ?? (try? container.decodeIfPresent(String.self, forKey: .failedHop))
+                deliveryEvidence = (try? container.decodeIfPresent(String.self, forKey: .deliveryEvidence))
+                    ?? (try? container.decodeIfPresent(String.self, forKey: .evidence))
+                triageId = try container.decodeIfPresent(String.self, forKey: .triageId)
+                computeRunId = try container.decodeIfPresent(String.self, forKey: .computeRunId)
             }
         }
     }
@@ -288,6 +320,9 @@ actor AgentChatService {
                         provenance: parsedProvenance?.rawValue
                             ?? Self.provenance(for: response.metadata.deliveryMode, source: response.metadata.source, lane: response.metadata.lane),
                         responseState: effectiveState?.rawValue ?? response.metadata.responseState,
+                        deliveryError: response.metadata.deliveryError,
+                        deliveryFailedHop: response.metadata.deliveryFailedHop,
+                        deliveryEvidence: response.metadata.deliveryEvidence,
                         triageId: response.metadata.triageId,
                         computeRunId: response.metadata.computeRunId
                     )
@@ -492,6 +527,9 @@ actor AgentChatService {
             deliveryMode: DMDeliveryMode.compute.rawValue,
             provenance: DMResponseProvenance.compute.rawValue,
             responseState: DMDeliveryState.responseReceived.rawValue,
+            deliveryError: nil,
+            deliveryFailedHop: nil,
+            deliveryEvidence: nil,
             triageId: nil,
             computeRunId: nil
         )

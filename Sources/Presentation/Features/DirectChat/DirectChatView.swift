@@ -3582,6 +3582,9 @@ private struct SonarEvidenceDrawer: View {
             }
 
             evidenceRow("Delivery", DMDeliveryState.parse(message.deliveryState)?.displayLabel ?? "Unknown")
+            evidenceRow("Reason", message.deliveryError)
+            evidenceRow("Failed hop", message.deliveryFailedHop)
+            evidenceRow("Evidence", message.deliveryEvidence)
             evidenceRow("Provenance", provenanceLabel)
             evidenceRow("Trace", short(message.traceId))
             evidenceRow("Message", short(message.remoteMessageId))
@@ -3709,6 +3712,9 @@ private struct SonarEvidenceDrawer: View {
         Channel ID: \(channelId ?? "not recorded")
         Ticket ID: \(activeTicketId ?? "not recorded")
         Delivery: \(DMDeliveryState.parse(message.deliveryState)?.displayLabel ?? "unknown")
+        Reason: \(message.deliveryError ?? "not recorded")
+        Failed hop: \(message.deliveryFailedHop ?? "not recorded")
+        Evidence: \(message.deliveryEvidence ?? "not recorded")
         Provenance: \(provenanceLabel)
         Trace: \(message.traceId ?? "not recorded")
         Compute run: \(message.computeRunId ?? "not recorded")
@@ -4047,12 +4053,17 @@ struct DMBubble: View {
                     MessageDeliveryLedger(message: message, agent: agent)
                 }
 
+                if isUser {
+                    userDeliveryChip
+                        .padding(.top, 2)
+                }
+
                 // Retry button for failed user messages
                 if isUser,
-                   DMUserMessageDeliveryState.parse(message.userDeliveryState) == .failed,
+                   isRetryableUserDelivery,
                    let retry = onRetry {
                     HStack(spacing: 8) {
-                        Label("Failed", systemImage: "exclamationmark.triangle.fill")
+                        Label(userDeliveryFailureLabel, systemImage: userDeliveryFailureIcon)
                             .font(.caption2.weight(.semibold))
                             .foregroundColor(AppColors.accentDanger)
                             .padding(.horizontal, 8)
@@ -4131,8 +4142,10 @@ struct DMBubble: View {
             return "Agent Run is running in ORCA..."
         case .waitingForLiveAgent:
             return "Waiting for the live inbox reply..."
-        case .deliveryNatsFailed, .agentUnresponsive:
-            return "Not delivered - agent unreachable"
+        case .deliveryNatsFailed:
+            return "Not delivered - NATS transport failed"
+        case .agentUnresponsive:
+            return "Not delivered - agent unresponsive"
         default:
             return message.isStreaming ? "Routing through ORCA..." : ""
         }
@@ -4148,7 +4161,9 @@ struct DMBubble: View {
             return "Agent Run running."
         case .waitingForLiveAgent:
             return "Live inbox acknowledged."
-        case .deliveryNatsFailed, .agentUnresponsive:
+        case .deliveryNatsFailed:
+            return "Transport failed."
+        case .agentUnresponsive:
             return "Delivery failed."
         default:
             return message.content.isEmpty ? "Routing through ORCA." : "Receiving..."
@@ -4234,10 +4249,79 @@ struct DMBubble: View {
         if deliveryState == .waitingForLiveAgent {
             return "Waiting for \(agent.name)"
         }
-        if deliveryState == .deliveryNatsFailed || deliveryState == .agentUnresponsive {
-            return "not delivered - agent unreachable"
+        if deliveryState == .deliveryNatsFailed {
+            return "Not delivered - NATS failed"
+        }
+        if deliveryState == .agentUnresponsive {
+            return "Agent unresponsive"
         }
         return deliveryState?.displayLabel ?? ""
+    }
+
+    @ViewBuilder
+    private var userDeliveryChip: some View {
+        switch userDeliveryState {
+        case .sending:
+            userDeliveryLabel("Sending", icon: "paperplane", tint: AppColors.textTertiary)
+        case .accepted:
+            userDeliveryLabel("Recorded - awaiting confirmation", icon: "tray.and.arrow.down", tint: AppColors.accentElectric)
+        case .sent:
+            userDeliveryLabel("Confirmed", icon: "checkmark.circle", tint: AppColors.accentSuccess)
+        case .transportFailed:
+            userDeliveryLabel("Transport failed", icon: "antenna.radiowaves.left.and.right.slash", tint: AppColors.accentDanger)
+        case .agentUnresponsive:
+            userDeliveryLabel("Agent unresponsive", icon: "person.crop.circle.badge.exclamationmark", tint: AppColors.accentWarning)
+        case .failed:
+            userDeliveryLabel("Failed", icon: "exclamationmark.triangle.fill", tint: AppColors.accentDanger)
+        case nil:
+            EmptyView()
+        }
+    }
+
+    private var userDeliveryState: DMUserMessageDeliveryState? {
+        DMUserMessageDeliveryState.parse(message.userDeliveryState)
+    }
+
+    private var isRetryableUserDelivery: Bool {
+        switch userDeliveryState {
+        case .failed, .transportFailed, .agentUnresponsive:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private var userDeliveryFailureLabel: String {
+        switch userDeliveryState {
+        case .transportFailed:
+            return "Transport failed"
+        case .agentUnresponsive:
+            return "Agent unresponsive"
+        default:
+            return "Failed"
+        }
+    }
+
+    private var userDeliveryFailureIcon: String {
+        switch userDeliveryState {
+        case .transportFailed:
+            return "antenna.radiowaves.left.and.right.slash"
+        case .agentUnresponsive:
+            return "person.crop.circle.badge.exclamationmark"
+        default:
+            return "exclamationmark.triangle.fill"
+        }
+    }
+
+    private func userDeliveryLabel(_ title: String, icon: String, tint: Color) -> some View {
+        Label(title, systemImage: icon)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(tint.opacity(0.12))
+            .clipShape(Capsule())
+            .accessibilityLabel("User message delivery: \(title)")
     }
 
     private var hasComputeAttribution: Bool {
