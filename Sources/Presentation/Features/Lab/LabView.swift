@@ -578,11 +578,30 @@ struct LabView: View {
                 }
         } body: {
             if buildingExpanded {
-                VStack(spacing: 0) {
-                    ForEach(building) { item in
-                        buildingRow(item)
-                        if item.id != building.last?.id {
-                            Divider().background(AppColors.border)
+                if catalogModel.projectSections.isEmpty {
+                    VStack(spacing: 0) {
+                        ForEach(building) { item in
+                            buildingRow(item)
+                            if item.id != building.last?.id {
+                                Divider().background(AppColors.border)
+                            }
+                        }
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(catalogModel.projectSections) { section in
+                            Text(section.layer.uppercased())
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .foregroundColor(AppColors.textTertiary)
+                                .padding(.horizontal, 12)
+                                .padding(.top, 10)
+                                .padding(.bottom, 2)
+                            ForEach(section.projects) { item in
+                                buildingRow(item)
+                                if item.id != section.projects.last?.id {
+                                    Divider().background(AppColors.border)
+                                }
+                            }
                         }
                     }
                 }
@@ -605,6 +624,14 @@ struct LabView: View {
                         .foregroundColor(AppColors.textSecondary)
                         .clipShape(Capsule())
                     ownerChip(item.owner)
+                    if let layer = item.layer {
+                        Text(layer)
+                            .font(.system(size: 10, weight: .semibold))
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(AppColors.accentElectric.opacity(0.12))
+                            .foregroundColor(AppColors.accentElectric)
+                            .clipShape(Capsule())
+                    }
                     Text(item.shortId)
                         .font(.system(size: 10, design: .monospaced))
                         .padding(.horizontal, 5).padding(.vertical, 2)
@@ -751,6 +778,7 @@ private final class LabCatalogModel {
     private(set) var fishFleet: [LabFish] = []
     private(set) var fishAdjacent: [LabFish] = []
     private(set) var currentlySpinning: [LabSpinningItem] = []
+    private(set) var projectSections: [LabProjectSection] = []
     private(set) var currentlyBuilding: [LabBuildingItem] = []
     private(set) var retiredItems: [LabRetiredItem] = []
     private(set) var isLoading = false
@@ -766,30 +794,30 @@ private final class LabCatalogModel {
         defer { isLoading = false }
 
         do {
-            let response: WikiFileResponse = try await APIClient.shared.get(
-                path: "/api/v1/wiki/file?path=operating-system/LAB-SYSTEMS-INDEX.md"
-            )
-            let parsed = Self.parse(markdown: response.content)
-            stack = parsed.stack
-            fishFleet = parsed.fishFleet
-            fishAdjacent = parsed.fishAdjacent
-            currentlySpinning = parsed.currentlySpinning
-            currentlyBuilding = parsed.currentlyBuilding
-            retiredItems = parsed.retiredItems
-            sourceLabel = "ORCA"
-            if parsed.stack.isEmpty {
-                error = "LAB-SYSTEMS-INDEX parsed empty."
+            let response: LabSectionsResponse = try await APIClient.shared.get(path: "/api/v1/lab/sections")
+            let sections = Self.projectSections(from: response)
+            guard !sections.isEmpty else {
+                throw APIError.message("Lab sections parsed empty.", code: nil)
             }
+            applyStaticContent()
+            projectSections = sections
+            currentlyBuilding = sections.flatMap(\.projects)
+            sourceLabel = "ORCA"
         } catch {
-            stack = []
-            fishFleet = []
-            fishAdjacent = []
-            currentlySpinning = []
-            currentlyBuilding = []
-            retiredItems = []
-            sourceLabel = "ORCA ERROR"
-            self.error = "LAB-SYSTEMS-INDEX unavailable through ORCA."
+            applyStaticContent()
+            sourceLabel = "FALLBACK"
+            self.error = "ORCA Lab sections unavailable."
         }
+    }
+
+    private func applyStaticContent() {
+        stack = LabContent.stack
+        fishFleet = LabContent.fishFleet
+        fishAdjacent = LabContent.fishAdjacent
+        currentlySpinning = LabContent.currentlySpinning
+        projectSections = []
+        currentlyBuilding = LabContent.currentlyBuilding
+        retiredItems = LabContent.retiredItems
     }
 
     private struct ParsedCatalog {
@@ -826,6 +854,22 @@ private final class LabCatalogModel {
             currentlyBuilding: building,
             retiredItems: []
         )
+    }
+
+    private static func projectSections(from response: LabSectionsResponse) -> [LabProjectSection] {
+        response.sections.compactMap { section in
+            let projects = section.projects.map { project in
+                LabBuildingItem(
+                    title: project.name,
+                    stage: project.stage.isEmpty ? project.status : project.stage,
+                    owner: layerCode(section.layer),
+                    shortId: String(project.id.prefix(8)),
+                    layer: section.layer
+                )
+            }
+            guard !projects.isEmpty else { return nil }
+            return LabProjectSection(layer: section.layer, boardId: section.boardId, projects: projects)
+        }
     }
 
     private static func stackLayer(from columns: [String]) -> LabStackLayer? {
@@ -870,7 +914,8 @@ private final class LabCatalogModel {
             title: title,
             stage: stripMarkdown(columns[1]),
             owner: ownerCode(columns[2]),
-            shortId: shortRef(from: columns[0])
+            shortId: shortRef(from: columns[0]),
+            layer: nil
         )
     }
 
@@ -949,6 +994,17 @@ private final class LabCatalogModel {
         return String(first.prefix(3)).uppercased()
     }
 
+    private static func layerCode(_ value: String) -> String {
+        switch value.lowercased() {
+        case "products":
+            return "PRO"
+        case "platform":
+            return "PLT"
+        default:
+            return ownerCode(value)
+        }
+    }
+
     private static func shortRef(from value: String) -> String {
         if let match = value.range(of: #"`([^`]+)`"#, options: .regularExpression) {
             return value[match].replacingOccurrences(of: "`", with: "")
@@ -972,6 +1028,38 @@ private final class LabCatalogModel {
         if id.contains("pod") || id.contains("orca") { return AppColors.accentElectric }
         return status.color
     }
+}
+
+private struct LabProjectSection: Identifiable {
+    let layer: String
+    let boardId: String
+    let projects: [LabBuildingItem]
+
+    var id: String { boardId }
+}
+
+private struct LabSectionsResponse: Decodable {
+    let sections: [LabSectionResponse]
+}
+
+private struct LabSectionResponse: Decodable {
+    let layer: String
+    let boardId: String
+    let projects: [LabProjectResponse]
+
+    enum CodingKeys: String, CodingKey {
+        case layer
+        case boardId = "board_id"
+        case projects
+    }
+}
+
+private struct LabProjectResponse: Decodable {
+    let id: String
+    let name: String
+    let goal: String?
+    let stage: String
+    let status: String
 }
 
 // MARK: - Architecture diagram

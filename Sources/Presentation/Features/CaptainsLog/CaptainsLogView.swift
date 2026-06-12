@@ -471,6 +471,10 @@ struct CaptainsLogView: View {
 
 @Observable
 final class CaptainsLogViewModel {
+    private static let projectId = "7a02b7c9-09be-4958-810f-92c7a2caaabe"
+    private static let noteType = "captains_log"
+    private static let source = "pod.captains_log"
+
     // ItemKind per SPEC-POD-TABS-HANDOFF §5.2: idea / note / question
     enum ItemKind: String, CaseIterable {
         case idea, note, question
@@ -504,7 +508,7 @@ final class CaptainsLogViewModel {
                 let id: String
                 let title: String
                 let body: String
-                let capturedBy: String?
+                let createdBy: String?
                 let lifecycle: String?
                 let dropReason: String?
                 let promotedTo: PromotedTo?
@@ -517,23 +521,21 @@ final class CaptainsLogViewModel {
 
                 enum CodingKeys: String, CodingKey {
                     case id, title, body, lifecycle
-                    case capturedBy  = "captured_by"
+                    case createdBy   = "created_by"
                     case dropReason  = "drop_reason"
                     case promotedTo  = "promoted_to"
                     case createdAt   = "created_at"
                 }
             }
 
-            // Backend returns a plain array. Param is `note_type` (not `type`); also filter by source so only
-            // entries authored via Pod's Captain's Log surface, not other parking_lot notes.
-            let path = "/api/v1/notes?note_type=parking_lot&source=pod.captains_log&limit=50"
+            let path = "/api/v1/projects/\(Self.projectId)/notes?note_type=\(Self.noteType)&limit=50"
             let items: [NoteListItem] = try await APIClient.shared.get(path: path)
 
             entries = items.map { note in
                 CaptainsLogEntry(
                     id: note.id,
                     body: note.body.isEmpty ? note.title : note.body,
-                    capturedBy: (note.capturedBy ?? "tony").capitalized,
+                    capturedBy: (note.createdBy ?? "tony").capitalized,
                     lifecycle: note.lifecycle ?? "new",
                     createdAt: note.createdAt,
                     dropReason: note.dropReason,
@@ -553,14 +555,13 @@ final class CaptainsLogViewModel {
         composeError = nil
         defer { isSubmitting = false }
 
-        // Per SPEC-POD-TABS-HANDOFF §6: parking_lot note with item_kind/lifecycle/capture_source
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
         let title = String(trimmed.prefix(60)) + (trimmed.count > 60 ? "…" : "")
 
         struct CreateBody: Encodable {
             let targetType: String
-            let targetId: String?
-            let noteType: String        // "parking_lot"
+            let targetId: String
+            let noteType: String
             let itemKind: String        // idea/note/question
             let lifecycle: String       // "new"
             let captureSource: String   // "pod"
@@ -584,23 +585,25 @@ final class CaptainsLogViewModel {
         }
 
         let request = CreateBody(
-            targetType: "system",
-            targetId: nil,
-            noteType: "parking_lot",
+            targetType: "project",
+            targetId: Self.projectId,
+            noteType: Self.noteType,
             itemKind: kind.rawValue,
             lifecycle: "new",
             captureSource: "pod",
             title: title,
             body: trimmed,
             tags: ["captains-log", kind.rawValue],
-            source: "pod.captains_log",
+            source: Self.source,
             traceId: "pod-captains-log-\(Int(Date().timeIntervalSince1970))",
             signState: "draft"
         )
 
         do {
-            // Use unscoped /api/v1/notes — the /system/global scoped route drops parking_lot fields
-            let _: OrcaNote = try await APIClient.shared.post(path: "/api/v1/notes", body: request)
+            let _: ProjectNoteDTO = try await APIClient.shared.post(
+                path: "/api/v1/projects/\(Self.projectId)/notes",
+                body: request
+            )
             await load()
             return true
         } catch {
@@ -648,7 +651,7 @@ final class CaptainsLogViewModel {
         }
 
         do {
-            let _: EmptyResponse = try await APIClient.shared.patch(path: "/api/v1/notes/\(entry.id)", body: ParkBody(lifecycle: "parked", source: "pod.captains_log"))
+            let _: EmptyResponse = try await APIClient.shared.patch(path: "/api/v1/notes/\(entry.id)", body: ParkBody(lifecycle: "parked", source: Self.source))
             await load()
         } catch {
             actionError = "Couldn't park note."
@@ -663,22 +666,9 @@ final class CaptainsLogViewModel {
         actionError = nil
         defer { busyEntryIds.remove(entry.id) }
 
-        struct DropBody: Encodable {
-            let lifecycle: String
-            let dropReason: String
-            let source: String
-
-            enum CodingKeys: String, CodingKey {
-                case lifecycle, source
-                case dropReason = "drop_reason"
-            }
-        }
-
         do {
-            let _: EmptyResponse = try await APIClient.shared.patch(
-                path: "/api/v1/notes/\(entry.id)",
-                body: DropBody(lifecycle: "dropped", dropReason: reason, source: "pod.captains_log")
-            )
+            _ = reason
+            try await APIClient.shared.delete(path: "/api/v1/projects/\(Self.projectId)/notes/\(entry.id)")
             await load()
         } catch {
             actionError = "Couldn't drop note."

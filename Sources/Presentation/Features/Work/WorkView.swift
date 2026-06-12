@@ -3,6 +3,19 @@ import SwiftUI
 // MARK: - Work View
 // Per SPEC-POD-TABS-HANDOFF §4 — stacked PROJECTS + TICKETS, no segmented control (v3 decision).
 
+private func boardAccentColor(_ slug: String) -> Color {
+    switch slug {
+    case "products":
+        return AppColors.accentSuccess
+    case "platform":
+        return AppColors.accentElectric
+    case "operations":
+        return AppColors.accentWarning
+    default:
+        return AppColors.textTertiary
+    }
+}
+
 struct WorkView: View {
     @EnvironmentObject private var appState: AppState
     @State private var model = WorkViewModel()
@@ -768,6 +781,17 @@ struct WorkView: View {
         .padding(8)
         .background(AppColors.backgroundPrimary)
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(boardAccentColor(board.slug))
+                .frame(height: 3)
+                .clipShape(UnevenRoundedRectangle(
+                    topLeadingRadius: 8,
+                    bottomLeadingRadius: 0,
+                    bottomTrailingRadius: 0,
+                    topTrailingRadius: 8
+                ))
+        }
         .overlay(
             RoundedRectangle(cornerRadius: 8)
                 .stroke(AppColors.border, lineWidth: 0.5)
@@ -3207,6 +3231,8 @@ private struct WorkBoardsArchitectureView: View {
 private struct WorkBoardDetailView: View {
     let board: WorkBoardSummary
     @State private var model = WorkBoardDetailModel()
+    @State private var selectedProject: ProjectDTO?
+    @State private var projectsViewModel = ORCAProjectsViewModel()
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -3251,16 +3277,21 @@ private struct WorkBoardDetailView: View {
             .task {
                 await model.load(board: board)
             }
+            .sheet(item: $selectedProject) { project in
+                ORCAProjectDetailView(project: project, viewModel: projectsViewModel)
+            }
         }
     }
 
     private var boardHero: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let accent = boardAccentColor(board.slug)
+
+        return VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
                 Text(board.icon)
                     .font(.system(size: 38))
                     .frame(width: 48, height: 48)
-                    .background(AppColors.backgroundTertiary)
+                    .background(accent.opacity(0.14))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(board.displayName.uppercased())
@@ -3287,15 +3318,26 @@ private struct WorkBoardDetailView: View {
 
             Text("Board command window")
                 .font(.system(size: 11, weight: .bold))
-                .foregroundColor(AppColors.accentElectric)
+                .foregroundColor(accent)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(AppColors.accentElectric.opacity(0.12))
+                .background(accent.opacity(0.12))
                 .clipShape(Capsule())
         }
         .padding(16)
         .background(AppColors.backgroundSecondary)
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(accent)
+                .frame(height: 3)
+                .clipShape(UnevenRoundedRectangle(
+                    topLeadingRadius: 8,
+                    bottomLeadingRadius: 0,
+                    bottomTrailingRadius: 0,
+                    topTrailingRadius: 8
+                ))
+        }
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppColors.border, lineWidth: 0.5))
     }
 
@@ -3331,6 +3373,10 @@ private struct WorkBoardDetailView: View {
                     Divider().background(AppColors.border)
                 }
                 projectBreakdownRow(project)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        selectedProject = project
+                    }
             }
         }
     }
@@ -3364,6 +3410,9 @@ private struct WorkBoardDetailView: View {
                 Spacer(minLength: 0)
                 Text(String(project.id.uuidString.replacingOccurrences(of: "-", with: "").prefix(6)))
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundColor(AppColors.textTertiary)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(AppColors.textTertiary)
             }
 

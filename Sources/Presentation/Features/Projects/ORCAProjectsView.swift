@@ -981,7 +981,7 @@ private struct NewProjectSheet: View {
 
 // MARK: - Project Detail View
 
-private struct ORCAProjectDetailView: View {
+struct ORCAProjectDetailView: View {
     let project: ProjectDTO
     @Bindable var viewModel: ORCAProjectsViewModel
 

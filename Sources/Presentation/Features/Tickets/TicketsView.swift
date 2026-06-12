@@ -2454,6 +2454,8 @@ struct TicketDetailSheet: View {
                         .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                     evidenceLinksSection
                         .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                    workspaceArtifactsSection
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                     currentRunSection
                         .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                     executionReadinessSection
@@ -2697,10 +2699,11 @@ struct TicketDetailSheet: View {
             async let approvals: Void = viewModel.loadApprovals(ticketId: ticket.id)
             async let approvalRegistry: Void = viewModel.loadApprovalRegistry()
             async let runs: Void = viewModel.loadAgentRuns(ticketId: ticket.id)
+            async let workspace: Void = viewModel.loadWorkspaceContext(ticketId: ticket.id)
             async let preview: Void = viewModel.loadDispatchPreview(ticketId: ticket.id)
             async let runtime: Void = viewModel.loadRuntimeHealthTags()
             async let queue: Void = viewModel.loadWorkerQueue(workerLane: workerLane)
-            _ = await (comments, notes, approvals, approvalRegistry, runs, preview, runtime, queue)
+            _ = await (comments, notes, approvals, approvalRegistry, runs, workspace, preview, runtime, queue)
         }
         .onChange(of: ticket.status) { _, newStatus in
             editedStatus = newStatus
@@ -2807,7 +2810,8 @@ struct TicketDetailSheet: View {
             TicketEvidenceLink(label: "Comments", detail: "\(viewModel.comments(for: ticket.id).count)", icon: "quote.bubble", path: "/api/v1/tickets/\(urlPath(ticket.id))/comments", color: AppColors.accentElectric),
             TicketEvidenceLink(label: "Approvals", detail: "\(viewModel.approvals(for: ticket.id).count)", icon: "person.crop.circle.badge.exclamationmark", path: "/api/v1/tickets/\(urlPath(ticket.id))/approvals", color: Color.orange),
             TicketEvidenceLink(label: "Notes", detail: "\(viewModel.notes(for: ticket.id).count)", icon: "note.text", path: "/api/v1/notes/tickets/\(urlPath(ticket.id))", color: AppColors.accentAgent),
-            TicketEvidenceLink(label: "Agent Runs", detail: "\(runs.count)", icon: "bolt.badge.clock", path: "/api/v1/tickets/\(urlPath(ticket.id))/agent-runs", color: latestRun?.status.color ?? AppColors.textTertiary)
+            TicketEvidenceLink(label: "Agent Runs", detail: "\(runs.count)", icon: "bolt.badge.clock", path: "/api/v1/tickets/\(urlPath(ticket.id))/agent-runs", color: latestRun?.status.color ?? AppColors.textTertiary),
+            TicketEvidenceLink(label: "Workspace", detail: "\(viewModel.workspaceContext(for: ticket.id)?.files.count ?? 0)", icon: "folder.badge.gearshape", path: "/api/v1/workspaces/tickets/\(urlPath(ticket.id))", color: AppColors.accentSuccess)
         ]
 
         if let traceId = primaryTrace, !traceId.isEmpty {
@@ -2879,6 +2883,135 @@ struct TicketDetailSheet: View {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count > 12 else { return trimmed }
         return "\(trimmed.prefix(6))...\(trimmed.suffix(4))"
+    }
+
+    private var workspaceArtifactsSection: some View {
+        let context = viewModel.workspaceContext(for: ticket.id)
+        let isLoading = viewModel.isLoadingWorkspaceContext(for: ticket.id)
+        let error = viewModel.workspaceContextError(for: ticket.id)
+        let files = context?.files.sorted {
+            ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast)
+        } ?? []
+
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Label("WORKSPACE ARTIFACTS", systemImage: "paperclip")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(AppColors.textTertiary)
+
+                Spacer()
+
+                if let context {
+                    Text("\(context.files.count) files")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundColor(AppColors.textTertiary)
+                }
+
+                Button {
+                    Task { await viewModel.loadWorkspaceContext(ticketId: ticket.id) }
+                } label: {
+                    Image(systemName: isLoading ? "hourglass" : "arrow.clockwise")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(AppColors.accentElectric)
+                }
+                .disabled(isLoading)
+                .accessibilityLabel("Refresh workspace artifacts")
+            }
+
+            if isLoading && context == nil {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                    Text("Loading ticket workspace...")
+                        .font(.caption)
+                        .foregroundColor(AppColors.textTertiary)
+                }
+            } else if let error {
+                Label(error, systemImage: "folder.badge.questionmark")
+                    .font(.caption)
+                    .foregroundColor(AppColors.accentWarning)
+            } else if files.isEmpty {
+                Text(context?.gaps.first ?? "No ticket workspace artifacts yet.")
+                    .font(.caption)
+                    .foregroundColor(AppColors.textTertiary)
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(Array(files.prefix(6))) { file in
+                        workspaceArtifactRow(file)
+                    }
+                }
+            }
+
+            if let policy = context?.storagePolicy, !policy.isEmpty {
+                Text(policy)
+                    .font(.caption2)
+                    .foregroundColor(AppColors.textTertiary)
+                    .lineLimit(2)
+            }
+        }
+        .padding(12)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func workspaceArtifactRow(_ file: TicketWorkspaceFile) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: file.kind == "directory" ? "folder" : "doc.text.magnifyingglass")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(file.safeToPreview ? AppColors.accentSuccess : AppColors.textTertiary)
+                    .frame(width: 16)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(file.displayName)
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(AppColors.textPrimary)
+                        .lineLimit(1)
+
+                    HStack(spacing: 6) {
+                        if let size = file.sizeLabel {
+                            Text(size)
+                        }
+                        if let source = file.source, !source.isEmpty {
+                            Text(source)
+                        }
+                        if let reason = file.reason, !reason.isEmpty {
+                            Text(reason)
+                        }
+                    }
+                    .font(.caption2)
+                    .foregroundColor(AppColors.textTertiary)
+                    .lineLimit(1)
+                }
+
+                Spacer()
+
+                if let apiPath = file.apiPath, let url = backendURL(path: apiPath) {
+                    Link(destination: url) {
+                        Image(systemName: "arrow.up.right.square")
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(AppColors.accentElectric)
+                    }
+                    .accessibilityLabel("Open artifact record")
+                }
+            }
+
+            if file.safeToPreview, let preview = file.preview?.trimmingCharacters(in: .whitespacesAndNewlines), !preview.isEmpty {
+                Text(preview)
+                    .font(.caption2.monospaced())
+                    .foregroundColor(AppColors.textSecondary)
+                    .lineLimit(5)
+                    .textSelection(.enabled)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(AppColors.backgroundPrimary.opacity(0.72))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+        }
+        .padding(10)
+        .background(AppColors.backgroundPrimary.opacity(0.58))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
     private var ticketNotesSection: some View {

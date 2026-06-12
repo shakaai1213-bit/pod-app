@@ -81,6 +81,7 @@ struct LabBuildingItem: Identifiable {
     let stage: String
     let owner: String
     let shortId: String
+    let layer: String?
 }
 
 struct LabWorkflowItem: Identifiable {
@@ -193,19 +194,19 @@ enum LabContent {
     ]
 
     static let currentlyBuilding: [LabBuildingItem] = [
-        LabBuildingItem(title: "Schoolhouse Transition Closeout",         stage: "Active",   owner: "ALO", shortId: "bbc62861"),
-        LabBuildingItem(title: "Pod Tab Redesign (Work + Captain's Log)", stage: "Active",   owner: "MAU", shortId: "spec-tabs"),
-        LabBuildingItem(title: "Board-folds-into-Project ADR",            stage: "Scoping",  owner: "MAU", shortId: "adr-bf"),
-        LabBuildingItem(title: "Project Lifecycle Standard",              stage: "Handoff",  owner: "ALO", shortId: "std-life"),
-        LabBuildingItem(title: "Knowledge Center Index",                  stage: "Active",   owner: "ALO", shortId: "kc-idx"),
-        LabBuildingItem(title: "Pod Agents Tab",                          stage: "Building", owner: "MAU", shortId: "spec-agt"),
-        LabBuildingItem(title: "Pod Lab Tab",                             stage: "Building", owner: "MAU", shortId: "spec-lab"),
-        LabBuildingItem(title: "APPROVAL-TIERS doctrine",                 stage: "Active",   owner: "ALO", shortId: "std-tier"),
-        LabBuildingItem(title: "Weekly Ticket Hygiene Petal",             stage: "Building", owner: "COR", shortId: "petal-h"),
-        LabBuildingItem(title: "M-005 Wiki-ORCA mirror",                  stage: "Active",   owner: "MAU", shortId: "m-005"),
-        LabBuildingItem(title: "Memory Spine",                            stage: "Captured", owner: "ALO", shortId: "mem-spn"),
-        LabBuildingItem(title: "iMessage outbound contract",              stage: "Active",   owner: "ALO", shortId: "cfde783b"),
-        LabBuildingItem(title: "Roster Archive cleanup",                  stage: "Active",   owner: "MAU", shortId: "85103d0c")
+        LabBuildingItem(title: "Schoolhouse Transition Closeout",         stage: "Active",   owner: "ALO", shortId: "bbc62861", layer: nil),
+        LabBuildingItem(title: "Pod Tab Redesign (Work + Captain's Log)", stage: "Active",   owner: "MAU", shortId: "spec-tabs", layer: nil),
+        LabBuildingItem(title: "Board-folds-into-Project ADR",            stage: "Scoping",  owner: "MAU", shortId: "adr-bf", layer: nil),
+        LabBuildingItem(title: "Project Lifecycle Standard",              stage: "Handoff",  owner: "ALO", shortId: "std-life", layer: nil),
+        LabBuildingItem(title: "Knowledge Center Index",                  stage: "Active",   owner: "ALO", shortId: "kc-idx", layer: nil),
+        LabBuildingItem(title: "Pod Agents Tab",                          stage: "Building", owner: "MAU", shortId: "spec-agt", layer: nil),
+        LabBuildingItem(title: "Pod Lab Tab",                             stage: "Building", owner: "MAU", shortId: "spec-lab", layer: nil),
+        LabBuildingItem(title: "APPROVAL-TIERS doctrine",                 stage: "Active",   owner: "ALO", shortId: "std-tier", layer: nil),
+        LabBuildingItem(title: "Weekly Ticket Hygiene Petal",             stage: "Building", owner: "COR", shortId: "petal-h", layer: nil),
+        LabBuildingItem(title: "M-005 Wiki-ORCA mirror",                  stage: "Active",   owner: "MAU", shortId: "m-005", layer: nil),
+        LabBuildingItem(title: "Memory Spine",                            stage: "Captured", owner: "ALO", shortId: "mem-spn", layer: nil),
+        LabBuildingItem(title: "iMessage outbound contract",              stage: "Active",   owner: "ALO", shortId: "cfde783b", layer: nil),
+        LabBuildingItem(title: "Roster Archive cleanup",                  stage: "Active",   owner: "MAU", shortId: "85103d0c", layer: nil)
     ]
 
     // Workflows + Protocols — the procedural backbone (per LAB-SYSTEMS-INDEX §13).

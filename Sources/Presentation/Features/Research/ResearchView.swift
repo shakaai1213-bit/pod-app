@@ -29,6 +29,10 @@ struct ResearchView: View {
             .background(AppColors.backgroundPrimary)
             
             Divider()
+
+            if !viewModel.findings.isEmpty {
+                freshnessHeader
+            }
             
             if viewModel.isLoading {
                 Spacer()
@@ -40,16 +44,7 @@ struct ResearchView: View {
                 Spacer()
             } else if viewModel.findings.isEmpty {
                 Spacer()
-                VStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.largeTitle)
-                        .foregroundColor(AppColors.textTertiary)
-                    Text("No research findings yet")
-                        .foregroundColor(AppColors.textSecondary)
-                    Text("Starfish is working on it...")
-                        .font(.caption)
-                        .foregroundColor(AppColors.textTertiary)
-                }
+                emptyState
                 Spacer()
             } else {
                 List(viewModel.findings) { finding in
@@ -81,10 +76,77 @@ struct ResearchView: View {
         .background(AppColors.backgroundPrimary)
         .navigationTitle("Research")
         .onAppear {
-            Task { await viewModel.loadFindings() }
+            viewModel.startPolling()
+        }
+        .onDisappear {
+            viewModel.stopPolling()
         }
         .refreshable {
-            await viewModel.loadFindings()
+            await viewModel.loadFindings(showLoading: false)
         }
+    }
+
+    private var freshnessHeader: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "clock")
+                .foregroundColor(AppColors.textTertiary)
+            Text(freshnessText)
+                .font(.caption)
+                .foregroundColor(AppColors.textSecondary)
+            Spacer()
+            if viewModel.isLoading {
+                ProgressView()
+                    .controlSize(.small)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(AppColors.backgroundPrimary)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.largeTitle)
+                .foregroundColor(AppColors.textTertiary)
+            Text(emptyStateTitle)
+                .foregroundColor(AppColors.textSecondary)
+                .multilineTextAlignment(.center)
+            if let detail = emptyStateDetail {
+                Text(detail)
+                    .font(.caption)
+                    .foregroundColor(AppColors.textTertiary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .padding(.horizontal, 24)
+    }
+
+    private var freshnessText: String {
+        var parts: [String] = []
+        if let latestFindingAt = viewModel.latestFindingAt {
+            parts.append("Latest finding \(latestFindingAt.formatted(date: .abbreviated, time: .shortened))")
+        }
+        if let lastRefreshedAt = viewModel.lastRefreshedAt {
+            parts.append("refreshed \(lastRefreshedAt.formatted(date: .omitted, time: .shortened))")
+        }
+        return parts.joined(separator: " | ")
+    }
+
+    private var emptyStateTitle: String {
+        if let selectedTopic = viewModel.selectedTopic {
+            return "No research findings for \(selectedTopic)"
+        }
+        return "Research findings coming soon - Starfish not yet active"
+    }
+
+    private var emptyStateDetail: String? {
+        if viewModel.selectedTopic != nil {
+            return "Try another topic or pull to refresh."
+        }
+        if let lastRefreshedAt = viewModel.lastRefreshedAt {
+            return "Last checked \(lastRefreshedAt.formatted(date: .abbreviated, time: .shortened))."
+        }
+        return "No Starfish findings were returned by ORCA."
     }
 }

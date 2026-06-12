@@ -1432,6 +1432,9 @@ final class TicketsViewModel {
     var artifactSummariesByRunId: [String: [AgentRunArtifactSummary]] = [:]
     var artifactSummaryErrorsByRunId: [String: String] = [:]
     var loadingArtifactRunIds: Set<String> = []
+    var workspaceContextsByTicketId: [String: TicketWorkspaceContext] = [:]
+    var workspaceContextErrorsByTicketId: [String: String] = [:]
+    var loadingWorkspaceTicketIds: Set<String> = []
     var computeRunsByTraceId: [String: [ComputeRunRecord]] = [:]
     var ticketSummariesByTicketId: [String: TicketListSummary] = [:]
     var ticketFlowReview: TicketFlowReview?
@@ -3857,6 +3860,18 @@ final class TicketsViewModel {
         loadingArtifactRunIds.contains(runId)
     }
 
+    func workspaceContext(for ticketId: String) -> TicketWorkspaceContext? {
+        workspaceContextsByTicketId[ticketId]
+    }
+
+    func isLoadingWorkspaceContext(for ticketId: String) -> Bool {
+        loadingWorkspaceTicketIds.contains(ticketId)
+    }
+
+    func workspaceContextError(for ticketId: String) -> String? {
+        workspaceContextErrorsByTicketId[ticketId]
+    }
+
     func computeRuns(for traceId: String) -> [ComputeRunRecord] {
         if let traceRuns = tracesById[traceId]?.computeRuns {
             return traceRuns
@@ -3969,6 +3984,23 @@ final class TicketsViewModel {
             artifactSummaryErrorsByRunId[runId] = Self.userFacingMessage(for: apiError)
         } catch {
             artifactSummaryErrorsByRunId[runId] = "Couldn't load artifact summary."
+        }
+    }
+
+    @MainActor
+    func loadWorkspaceContext(ticketId: String) async {
+        guard !loadingWorkspaceTicketIds.contains(ticketId) else { return }
+        loadingWorkspaceTicketIds.insert(ticketId)
+        workspaceContextErrorsByTicketId[ticketId] = nil
+        defer { loadingWorkspaceTicketIds.remove(ticketId) }
+
+        do {
+            let dto: TicketWorkspaceContextDTO = try await api.get(path: "/api/v1/workspaces/tickets/\(ticketId)")
+            workspaceContextsByTicketId[ticketId] = dto.toDomain()
+        } catch let apiError as APIError {
+            workspaceContextErrorsByTicketId[ticketId] = Self.userFacingMessage(for: apiError)
+        } catch {
+            workspaceContextErrorsByTicketId[ticketId] = "Couldn't load ticket workspace."
         }
     }
 
@@ -5519,6 +5551,129 @@ struct TicketCommentDTO: Decodable {
             source: source,
             lane: lane,
             createdAt: createdAt ?? Date.distantPast
+        )
+    }
+}
+
+struct TicketWorkspaceContext: Sendable, Hashable {
+    let workspaceId: String
+    let ticketId: String
+    let ticketTitle: String
+    let mode: String
+    let storagePolicy: String
+    let files: [TicketWorkspaceFile]
+    let gaps: [String]
+    let capabilities: [String: Bool]
+}
+
+struct TicketWorkspaceFile: Identifiable, Sendable, Hashable {
+    let key: String
+    let path: String
+    let artifactId: String?
+    let title: String?
+    let kind: String
+    let exists: Bool?
+    let sizeBytes: Int?
+    let safeToPreview: Bool
+    let preview: String?
+    let reason: String?
+    let source: String?
+    let apiPath: String?
+    let createdAt: Date?
+
+    var id: String { artifactId ?? "\(path)#\(key)" }
+
+    var displayName: String {
+        if let title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return title
+        }
+        let name = URL(fileURLWithPath: path).lastPathComponent
+        return name.isEmpty ? path : name
+    }
+
+    var sizeLabel: String? {
+        guard let sizeBytes else { return nil }
+        if sizeBytes < 1024 {
+            return "\(sizeBytes) B"
+        }
+        if sizeBytes < 1024 * 1024 {
+            return "\(sizeBytes / 1024) KB"
+        }
+        return "\(sizeBytes / (1024 * 1024)) MB"
+    }
+}
+
+private struct TicketWorkspaceContextDTO: Decodable {
+    let workspaceId: String
+    let ticketId: String
+    let ticketTitle: String
+    let mode: String
+    let storagePolicy: String
+    let files: [TicketWorkspaceFileDTO]
+    let gaps: [String]
+    let capabilities: [String: Bool]
+
+    enum CodingKeys: String, CodingKey {
+        case mode, files, gaps, capabilities
+        case workspaceId = "workspace_id"
+        case ticketId = "ticket_id"
+        case ticketTitle = "ticket_title"
+        case storagePolicy = "storage_policy"
+    }
+
+    func toDomain() -> TicketWorkspaceContext {
+        TicketWorkspaceContext(
+            workspaceId: workspaceId,
+            ticketId: ticketId,
+            ticketTitle: ticketTitle,
+            mode: mode,
+            storagePolicy: storagePolicy,
+            files: files.map { $0.toDomain() },
+            gaps: gaps,
+            capabilities: capabilities
+        )
+    }
+}
+
+private struct TicketWorkspaceFileDTO: Decodable {
+    let key: String
+    let path: String
+    let artifactId: String?
+    let title: String?
+    let kind: String
+    let exists: Bool?
+    let sizeBytes: Int?
+    let safeToPreview: Bool
+    let preview: String?
+    let reason: String?
+    let source: String?
+    let apiPath: String?
+    let createdAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case key, path, title, kind, exists, preview, reason, source
+        case artifactId = "artifact_id"
+        case sizeBytes = "size_bytes"
+        case safeToPreview = "safe_to_preview"
+        case apiPath = "api_path"
+        case createdAt = "created_at"
+    }
+
+    func toDomain() -> TicketWorkspaceFile {
+        TicketWorkspaceFile(
+            key: key,
+            path: path,
+            artifactId: artifactId,
+            title: title,
+            kind: kind,
+            exists: exists,
+            sizeBytes: sizeBytes,
+            safeToPreview: safeToPreview,
+            preview: preview,
+            reason: reason,
+            source: source,
+            apiPath: apiPath,
+            createdAt: createdAt
         )
     }
 }
