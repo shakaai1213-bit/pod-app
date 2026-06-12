@@ -1250,6 +1250,12 @@ struct AgentsView: View {
                             .padding(.vertical, 1)
                             .background(Capsule().fill(Color.red))
                     }
+                    if showsDriftWarning(agent) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(AppColors.accentWarning)
+                            .accessibilityLabel("Runtime drift")
+                    }
                 }
                 Text(agent.role)
                     .font(.system(size: 13))
@@ -1269,6 +1275,11 @@ struct AgentsView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .frame(minHeight: 64)
+    }
+
+    private func showsDriftWarning(_ agent: Agent) -> Bool {
+        guard let driftState = agent.driftState?.nilIfBlank else { return false }
+        return driftState != "ok"
     }
 
     // Charter-tinted background, emoji glyph centered. Mapping from TEAM.md (verified).

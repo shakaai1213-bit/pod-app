@@ -16,6 +16,13 @@ struct Agent: Identifiable {
     var isDefaultRoutingEnabled: Bool
     var quarantineState: String?
     var rosterNote: String?
+    var supportRuntime: String?
+    var allowedRuntimes: [String]
+    var runtimeHost: String?
+    var lastAwakeProofAt: Date?
+    var lastSleepProofAt: Date?
+    var driftState: String?
+    var tokenProfile: String?
 
     init(
         id: UUID,
@@ -29,7 +36,14 @@ struct Agent: Identifiable {
         rosterLane: AgentRosterLane? = nil,
         isDefaultRoutingEnabled: Bool? = nil,
         quarantineState: String? = nil,
-        rosterNote: String? = nil
+        rosterNote: String? = nil,
+        supportRuntime: String? = nil,
+        allowedRuntimes: [String] = [],
+        runtimeHost: String? = nil,
+        lastAwakeProofAt: Date? = nil,
+        lastSleepProofAt: Date? = nil,
+        driftState: String? = nil,
+        tokenProfile: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -44,6 +58,13 @@ struct Agent: Identifiable {
         self.isDefaultRoutingEnabled = isDefaultRoutingEnabled ?? (resolvedLane != .dormantArchive)
         self.quarantineState = quarantineState
         self.rosterNote = rosterNote
+        self.supportRuntime = supportRuntime
+        self.allowedRuntimes = allowedRuntimes
+        self.runtimeHost = runtimeHost
+        self.lastAwakeProofAt = lastAwakeProofAt
+        self.lastSleepProofAt = lastSleepProofAt
+        self.driftState = driftState
+        self.tokenProfile = tokenProfile
     }
 }
 

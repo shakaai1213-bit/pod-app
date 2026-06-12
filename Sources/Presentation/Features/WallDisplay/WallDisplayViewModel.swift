@@ -175,7 +175,14 @@ final class WallDisplayViewModel {
             rosterLane: dto.domainRosterLane,
             isDefaultRoutingEnabled: dto.isDefaultRoutingEnabled,
             quarantineState: dto.quarantineState,
-            rosterNote: dto.rosterNote
+            rosterNote: dto.rosterNote,
+            supportRuntime: dto.supportRuntime,
+            allowedRuntimes: dto.allowedRuntimes,
+            runtimeHost: dto.runtimeHost,
+            lastAwakeProofAt: dto.lastAwakeProofAt,
+            lastSleepProofAt: dto.lastSleepProofAt,
+            driftState: dto.driftState,
+            tokenProfile: dto.tokenProfile
         )
     }
 

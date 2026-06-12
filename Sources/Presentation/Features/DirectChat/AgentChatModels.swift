@@ -20,10 +20,53 @@ struct AgentInfo: Identifiable, Hashable, Sendable {
     let isReachable: Bool       // false → row greyed out + tap shows "coming soon"
     let lane: Lane
     let guardrail: String
+    let supportRuntime: String?
+    let allowedRuntimes: [String]
+    let runtimeHost: String?
+    let lastAwakeProofAt: Date?
+    let lastSleepProofAt: Date?
+    let driftState: String?
+    let tokenProfile: String?
 
     struct AgentEndpoint: Hashable, Sendable {
         let baseURL: String     // Compute/OpenClaw-compatible gateway URL
         let authToken: String   // optional gateway auth token
+    }
+
+    init(
+        id: String,
+        name: String,
+        role: String,
+        icon: String,
+        color: String,
+        endpoint: AgentEndpoint,
+        isReachable: Bool,
+        lane: Lane,
+        guardrail: String,
+        supportRuntime: String? = nil,
+        allowedRuntimes: [String] = [],
+        runtimeHost: String? = nil,
+        lastAwakeProofAt: Date? = nil,
+        lastSleepProofAt: Date? = nil,
+        driftState: String? = nil,
+        tokenProfile: String? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.role = role
+        self.icon = icon
+        self.color = color
+        self.endpoint = endpoint
+        self.isReachable = isReachable
+        self.lane = lane
+        self.guardrail = guardrail
+        self.supportRuntime = supportRuntime
+        self.allowedRuntimes = allowedRuntimes
+        self.runtimeHost = runtimeHost
+        self.lastAwakeProofAt = lastAwakeProofAt
+        self.lastSleepProofAt = lastSleepProofAt
+        self.driftState = driftState
+        self.tokenProfile = tokenProfile
     }
 }
 

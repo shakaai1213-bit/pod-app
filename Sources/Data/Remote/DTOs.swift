@@ -235,6 +235,13 @@ struct AgentDTO: Codable, Identifiable {
     let isDefaultRoutingEnabled: Bool?
     let quarantineState: String?
     let rosterNote: String?
+    let supportRuntime: String?
+    let allowedRuntimes: [String]
+    let runtimeHost: String?
+    let lastAwakeProofAt: Date?
+    let lastSleepProofAt: Date?
+    let driftState: String?
+    let tokenProfile: String?
 
     // Optional fields the app uses but backend doesn't expose yet
     let currentTask: String?
@@ -249,6 +256,36 @@ struct AgentDTO: Codable, Identifiable {
         case isDefaultRoutingEnabled = "is_default_routing_enabled"
         case quarantineState = "quarantine_state"
         case rosterNote = "roster_note"
+        case supportRuntime = "support_runtime"
+        case allowedRuntimes = "allowed_runtimes"
+        case runtimeHost = "runtime_host"
+        case lastAwakeProofAt = "last_awake_proof_at"
+        case lastSleepProofAt = "last_sleep_proof_at"
+        case driftState = "drift_state"
+        case tokenProfile = "token_profile"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        status = try container.decode(AgentStatus.self, forKey: .status)
+        currentTask = try container.decodeIfPresent(String.self, forKey: .currentTask)
+        avatarColor = try container.decodeIfPresent(String.self, forKey: .avatarColor)
+        lastSeenAt = try container.decodeIfPresent(Date.self, forKey: .lastSeenAt)
+        isBoardLead = try container.decodeIfPresent(Bool.self, forKey: .isBoardLead)
+        identityProfile = try container.decodeIfPresent(IdentityProfile.self, forKey: .identityProfile)
+        rosterLane = try container.decodeIfPresent(String.self, forKey: .rosterLane)
+        isDefaultRoutingEnabled = try container.decodeIfPresent(Bool.self, forKey: .isDefaultRoutingEnabled)
+        quarantineState = try container.decodeIfPresent(String.self, forKey: .quarantineState)
+        rosterNote = try container.decodeIfPresent(String.self, forKey: .rosterNote)
+        supportRuntime = try container.decodeIfPresent(String.self, forKey: .supportRuntime)
+        allowedRuntimes = try container.decodeIfPresent([String].self, forKey: .allowedRuntimes) ?? []
+        runtimeHost = try container.decodeIfPresent(String.self, forKey: .runtimeHost)
+        lastAwakeProofAt = try container.decodeIfPresent(Date.self, forKey: .lastAwakeProofAt)
+        lastSleepProofAt = try container.decodeIfPresent(Date.self, forKey: .lastSleepProofAt)
+        driftState = try container.decodeIfPresent(String.self, forKey: .driftState)
+        tokenProfile = try container.decodeIfPresent(String.self, forKey: .tokenProfile)
     }
 
     /// Derived role from identity_profile, falling back to name-based defaults

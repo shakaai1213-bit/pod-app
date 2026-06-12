@@ -28,6 +28,7 @@ struct AgentDetailSheet: View {
     @State private var activationContext: AgentActivationContextDTO?
     @State private var isLoadingActivationContext = false
     @State private var activationContextError: String?
+    @State private var isRuntimeExpanded = false
 
     // POD-5 (c797ada1): non-destructive inbox tail, fetched on appear.
     @State private var inboxTail: InboxTailDTO?
@@ -57,6 +58,7 @@ struct AgentDetailSheet: View {
                     rosterPolicySection
                     responsibilitySection
                     activationContextSection
+                    runtimeSection
                     workNotesSection
                     inboxSection                  // POD-5 (c797ada1)
                     statusSection
@@ -621,6 +623,119 @@ struct AgentDetailSheet: View {
             }
             .padding(Theme.md)
             .podCard()
+        }
+    }
+
+    private var runtimeSection: some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            sectionHeader("Runtime")
+
+            DisclosureGroup(isExpanded: $isRuntimeExpanded) {
+                VStack(alignment: .leading, spacing: Theme.sm) {
+                    HStack(spacing: Theme.sm) {
+                        Text("Support")
+                            .podTextStyle(.label, color: AppColors.textTertiary)
+                        Spacer()
+                        runtimeBadge(
+                            runtimeDisplay(agent.supportRuntime),
+                            color: supportRuntimeColor(agent.supportRuntime)
+                        )
+                    }
+
+                    HStack(spacing: Theme.sm) {
+                        Label(agent.runtimeHost?.nilIfBlank ?? "Unknown", systemImage: "server.rack")
+                            .podTextStyle(.body, color: AppColors.textPrimary)
+                        Spacer()
+                    }
+
+                    HStack(spacing: Theme.sm) {
+                        Text("Drift")
+                            .podTextStyle(.label, color: AppColors.textTertiary)
+                        Spacer()
+                        runtimeBadge(
+                            runtimeDisplay(agent.driftState),
+                            color: driftStateColor(agent.driftState)
+                        )
+                    }
+
+                    HStack(spacing: Theme.sm) {
+                        Label(lastAwakeLabel, systemImage: "bolt.circle")
+                            .podTextStyle(.body, color: AppColors.textSecondary)
+                        Spacer()
+                    }
+
+                    if let tokenProfile = agent.tokenProfile?.nilIfBlank {
+                        Text(tokenProfile)
+                            .font(.caption)
+                            .foregroundStyle(AppColors.textTertiary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(.top, Theme.sm)
+            } label: {
+                HStack(spacing: Theme.sm) {
+                    Image(systemName: "cpu")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AppColors.accentElectric)
+                    Text("Runtime")
+                        .podTextStyle(.body, color: AppColors.textPrimary)
+                    Spacer()
+                    if let driftState = agent.driftState?.nilIfBlank, driftState != "ok" {
+                        runtimeBadge(runtimeDisplay(driftState), color: driftStateColor(driftState))
+                    }
+                }
+            }
+            .tint(AppColors.textSecondary)
+            .padding(Theme.md)
+            .podCard()
+        }
+    }
+
+    private var lastAwakeLabel: String {
+        guard let lastAwakeProofAt = agent.lastAwakeProofAt else { return "Never" }
+        return "Active \(lastAwakeProofAt.relativeFormatted)"
+    }
+
+    private func runtimeBadge(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(color.opacity(0.12))
+            .clipShape(Capsule())
+    }
+
+    private func runtimeDisplay(_ rawValue: String?) -> String {
+        rawValue?.nilIfBlank?.replacingOccurrences(of: "_", with: " ") ?? "unknown"
+    }
+
+    private func supportRuntimeColor(_ value: String?) -> Color {
+        switch value?.nilIfBlank {
+        case "codex_support":
+            return AppColors.accentElectric
+        case "claude_judgment":
+            return AppColors.accentAgent
+        case "dormant_archive":
+            return AppColors.textTertiary
+        case "pending":
+            return AppColors.accentCaptain
+        default:
+            return AppColors.textTertiary
+        }
+    }
+
+    private func driftStateColor(_ value: String?) -> Color {
+        switch value?.nilIfBlank {
+        case "ok":
+            return AppColors.accentSuccess
+        case "archive_drift", "protected_violation":
+            return AppColors.accentDanger
+        case "stale_doc", "missing_runtime", "unexpected_live_runtime":
+            return AppColors.accentWarning
+        default:
+            return AppColors.textTertiary
         }
     }
 
@@ -1202,7 +1317,24 @@ private extension Agent {
     var directChatAgentInfo: AgentInfo {
         let normalizedName = AgentRosterPolicy.normalizedName(name)
         if let knownAgent = AgentInfo.find(normalizedName) {
-            return knownAgent
+            return AgentInfo(
+                id: knownAgent.id,
+                name: knownAgent.name,
+                role: knownAgent.role,
+                icon: knownAgent.icon,
+                color: knownAgent.color,
+                endpoint: knownAgent.endpoint,
+                isReachable: knownAgent.isReachable,
+                lane: knownAgent.lane,
+                guardrail: knownAgent.guardrail,
+                supportRuntime: supportRuntime,
+                allowedRuntimes: allowedRuntimes,
+                runtimeHost: runtimeHost,
+                lastAwakeProofAt: lastAwakeProofAt,
+                lastSleepProofAt: lastSleepProofAt,
+                driftState: driftState,
+                tokenProfile: tokenProfile
+            )
         }
 
         return AgentInfo(
@@ -1214,7 +1346,14 @@ private extension Agent {
             endpoint: .init(baseURL: AppConfig.computeURL, authToken: ""),
             isReachable: isDefaultRoutingEnabled,
             lane: directChatLane,
-            guardrail: rosterNote ?? "Keep responses grounded in ORCA direct chat. Do not claim live runtime access or completed actions unless ORCA confirms them."
+            guardrail: rosterNote ?? "Keep responses grounded in ORCA direct chat. Do not claim live runtime access or completed actions unless ORCA confirms them.",
+            supportRuntime: supportRuntime,
+            allowedRuntimes: allowedRuntimes,
+            runtimeHost: runtimeHost,
+            lastAwakeProofAt: lastAwakeProofAt,
+            lastSleepProofAt: lastSleepProofAt,
+            driftState: driftState,
+            tokenProfile: tokenProfile
         )
     }
 
@@ -1429,5 +1568,12 @@ struct ComposeMessageSheet: View {
                 }
             }
         }
+    }
+}
+
+private extension String {
+    var nilIfBlank: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

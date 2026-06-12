@@ -37,7 +37,14 @@ final class AgentRepository {
                     rosterLane: dto.domainRosterLane,
                     isDefaultRoutingEnabled: dto.isDefaultRoutingEnabled,
                     quarantineState: dto.quarantineState,
-                    rosterNote: dto.rosterNote
+                    rosterNote: dto.rosterNote,
+                    supportRuntime: dto.supportRuntime,
+                    allowedRuntimes: dto.allowedRuntimes,
+                    runtimeHost: dto.runtimeHost,
+                    lastAwakeProofAt: dto.lastAwakeProofAt,
+                    lastSleepProofAt: dto.lastSleepProofAt,
+                    driftState: dto.driftState,
+                    tokenProfile: dto.tokenProfile
                 )
             }
             agents = AgentRosterPolicy.filterActive(remote)
@@ -68,7 +75,14 @@ final class AgentRepository {
             rosterLane: dto.domainRosterLane,
             isDefaultRoutingEnabled: dto.isDefaultRoutingEnabled,
             quarantineState: dto.quarantineState,
-            rosterNote: dto.rosterNote
+            rosterNote: dto.rosterNote,
+            supportRuntime: dto.supportRuntime,
+            allowedRuntimes: dto.allowedRuntimes,
+            runtimeHost: dto.runtimeHost,
+            lastAwakeProofAt: dto.lastAwakeProofAt,
+            lastSleepProofAt: dto.lastSleepProofAt,
+            driftState: dto.driftState,
+            tokenProfile: dto.tokenProfile
         )
 
         if let index = agents.firstIndex(where: { $0.id == id }) {

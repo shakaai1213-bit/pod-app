@@ -108,7 +108,18 @@ final class DashboardViewModel {
                     currentTask: dto.currentTask,
                     lastActivity: dto.lastSeenAt ?? Date(),
                     skills: dto.skills,
-                    avatarColor: dto.avatarColor ?? "#3B82F6"
+                    avatarColor: dto.avatarColor ?? "#3B82F6",
+                    rosterLane: dto.domainRosterLane,
+                    isDefaultRoutingEnabled: dto.isDefaultRoutingEnabled,
+                    quarantineState: dto.quarantineState,
+                    rosterNote: dto.rosterNote,
+                    supportRuntime: dto.supportRuntime,
+                    allowedRuntimes: dto.allowedRuntimes,
+                    runtimeHost: dto.runtimeHost,
+                    lastAwakeProofAt: dto.lastAwakeProofAt,
+                    lastSleepProofAt: dto.lastSleepProofAt,
+                    driftState: dto.driftState,
+                    tokenProfile: dto.tokenProfile
                 )
             }
             agents = AgentRosterPolicy.filterActive(mappedAgents)
