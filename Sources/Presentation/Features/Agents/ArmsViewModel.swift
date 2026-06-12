@@ -40,17 +40,27 @@ final class ArmsViewModel {
 
     @MainActor
     func loadArms() async {
-        shipSummaryStateByFamily[.maui] = .loading
-        shipSummaryStateByFamily[.chief] = .loading
-        async let shipSummaryTask: ArmShipSummaryResult = loadShipSummary()
-        let shipSummary = await shipSummaryTask
-        apply(shipSummary: shipSummary)
+        markShipSummaryLoadingIfNeeded()
+        Task { await refreshShipSummary() }
 
-        async let mauiTask: Void = loadMauiArms(shipSummary: shipSummary)
-        async let chiefTask: Void = loadChiefArms(shipSummary: shipSummary)
+        async let mauiTask: Void = loadMauiArms()
+        async let chiefTask: Void = loadChiefArms()
         async let miniTask: Void = loadOrcaMiniStatus()
         async let opsTask: Void = loadArmOps()
         _ = await (mauiTask, chiefTask, miniTask, opsTask)
+    }
+
+    @MainActor
+    private func refreshShipSummary() async {
+        let shipSummary = await loadShipSummary()
+        apply(shipSummary: shipSummary)
+    }
+
+    @MainActor
+    private func markShipSummaryLoadingIfNeeded() {
+        for family in ArmFamily.allCases where shipSummaryStateByFamily[family]?.status != .loaded {
+            shipSummaryStateByFamily[family] = .loading
+        }
     }
 
     @MainActor
@@ -62,6 +72,7 @@ final class ArmsViewModel {
                 latestByArm[ship.arm.lowercased()] = latestByArm[ship.arm.lowercased()] ?? ship
             }
             shipHistoryByArm.merge(latestByArm.mapValues { [$0] }) { current, _ in current }
+            applyLatestShips(latestByArm)
             for family in ArmFamily.allCases {
                 let familyShips = latestByArm.values.filter { ArmFamily.inferred(from: $0.arm) == family }
                 let newestShip = familyShips.map(\.timestamp).max()
@@ -74,6 +85,20 @@ final class ArmsViewModel {
             for family in ArmFamily.allCases {
                 shipSummaryStateByFamily[family] = .unavailable(message: message)
             }
+        }
+    }
+
+    @MainActor
+    private func applyLatestShips(_ latestByArm: [String: ArmShip]) {
+        arms = arms.map { arm in
+            var updated = arm
+            updated.lastShip = latestByArm[arm.name.lowercased()] ?? arm.lastShip
+            return updated
+        }
+        chiefArms = chiefArms.map { arm in
+            var updated = arm
+            updated.lastShip = latestByArm[arm.name.lowercased()] ?? arm.lastShip
+            return updated
         }
     }
 
@@ -105,7 +130,7 @@ final class ArmsViewModel {
     }
 
     @MainActor
-    private func loadMauiArms(shipSummary: ArmShipSummaryResult) async {
+    private func loadMauiArms() async {
         do {
             let response: ArmTagsResponse = try await apiClient.get(path: "/api/v1/jarvis/arm-tags")
             let rosterResponse: ArmRosterResponse? = try? await apiClient.get(path: "/api/v1/jarvis/arm-roster")
@@ -113,17 +138,15 @@ final class ArmsViewModel {
             let routingByName = Dictionary(uniqueKeysWithValues: (rosterResponse?.arms ?? []).map { ($0.name.lowercased(), $0.toRouting()) })
             let directivesResponse: ArmDirectivesResponse? = try? await apiClient.get(path: "/api/v1/jarvis/arm-directives")
             let directivesByName = Dictionary(uniqueKeysWithValues: (directivesResponse?.directives ?? []).map { ($0.name.lowercased(), $0.toDomain()) })
-            var shipsByName: [String: [ArmShip]] = [:]
             let names = Self.rosterNames(
                 response: response,
                 roster: rosterResponse?.arms,
                 family: .maui,
                 fallback: ArmTag.mauiNames
             )
-            shipsByName = shipSummary.latestShipsByName(for: names)
             let liveByName = Dictionary(uniqueKeysWithValues: response.arms.map {
                 let key = $0.name.lowercased()
-                let arm = $0.toDomain(roster: rosterByName[key], routing: routingByName[key], directive: directivesByName[key], fallbackLastShip: shipsByName[key]?.first)
+                let arm = $0.toDomain(roster: rosterByName[key], routing: routingByName[key], directive: directivesByName[key], fallbackLastShip: shipHistoryByArm[key]?.first)
                 return (arm.name.lowercased(), arm)
             })
             arms = names.map { liveByName[$0] ?? ArmTag.placeholder(named: $0, family: .maui, roster: rosterByName[$0], routing: routingByName[$0]) }
@@ -134,7 +157,7 @@ final class ArmsViewModel {
     }
 
     @MainActor
-    private func loadChiefArms(shipSummary: ArmShipSummaryResult) async {
+    private func loadChiefArms() async {
         do {
             let response: ArmStateRegistryResponse = try await apiClient.get(path: "/api/v1/state-registry?prefix=chief_arm.&limit=100")
             let statusByName = Dictionary(uniqueKeysWithValues: response.items.compactMap { item -> (String, StateRegistryTagDTO)? in
@@ -154,13 +177,12 @@ final class ArmsViewModel {
                 family: .chief,
                 fallback: ArmTag.chiefNames
             )
-            let shipsByName = shipSummary.latestShipsByName(for: names)
             chiefArms = names.map { name in
                 statusByName[name]?.toArmTag(
                     name: name,
                     roster: rosterByName[name],
                     directive: directivesByName[name],
-                    fallbackLastShip: shipsByName[name]?.first
+                    fallbackLastShip: shipHistoryByArm[name]?.first
                 ) ?? ArmTag.placeholder(named: name, family: .chief, roster: rosterByName[name], routing: routingByName[name])
             }
         } catch {
@@ -372,7 +394,7 @@ final class ArmsViewModel {
     func shipHistoryState(for arm: ArmTag) -> ArmShipHistoryState {
         let key = arm.name.lowercased()
         if loadingShipArms.contains(key) {
-            return .loading
+            return .loading(ships(for: arm))
         }
         if let error = shipHistoryErrorsByArm[key] {
             return .error(error)
@@ -449,7 +471,10 @@ final class ArmsViewModel {
     }
 
     private func loadShips(forKey key: String, limit: Int) async throws -> [ArmShip] {
-        let response: ArmShipsResponse = try await apiClient.get(path: "/api/v1/jarvis/arm-ships?arm=\(key)&limit=\(limit)")
+        let response: ArmShipsResponse = try await getWithRequestTimeout(
+            path: "/api/v1/jarvis/arm-ships?arm=\(key)&limit=\(limit)",
+            seconds: 4
+        )
         return response.ships.map { $0.toDomain(fallbackArm: key) }
     }
 
@@ -692,7 +717,7 @@ struct ArmTag: Identifiable, Hashable {
     let reviewReportedBy: String?
     let reviewNote: String?
     let reviewEvidenceRef: String?
-    let lastShip: ArmShip?
+    var lastShip: ArmShip?
 
     var displayName: String {
         if let displayNameOverride, !displayNameOverride.isEmpty {
@@ -970,7 +995,7 @@ enum ArmShipSummaryResult {
 }
 
 enum ArmShipHistoryState: Equatable {
-    case loading
+    case loading([ArmShip])
     case loaded([ArmShip])
     case empty
     case error(String)

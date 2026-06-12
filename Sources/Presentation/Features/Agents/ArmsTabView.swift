@@ -605,15 +605,21 @@ struct ArmsTabView: View {
     private func shipHistoryRows(for arm: ArmTag) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             switch viewModel.shipHistoryState(for: arm) {
-            case .loading:
+            case .loading(let cachedShips):
                 HStack(spacing: 8) {
                     ProgressView()
                         .scaleEffect(0.75)
                         .tint(AppColors.accentElectric)
-                    Text("Loading ship history")
+                    Text("Loading detailed ship history")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(AppColors.textSecondary)
                     Spacer(minLength: 0)
+                }
+                if !cachedShips.isEmpty {
+                    shipHistoryMessage("Showing cached summary while detail loads.", color: AppColors.textTertiary, isWarning: false)
+                    ForEach(cachedShips) { ship in
+                        shipHistoryItem(ship)
+                    }
                 }
             case .empty:
                 shipHistoryMessage("No ship history recorded for this arm.", color: AppColors.textTertiary, isWarning: false)

@@ -82,6 +82,9 @@ final class DirectChatViewModel {
     var isLoadingSonarHealth: Bool = false
     var sonarContactsGeneratedAt: Date?
     var agentPresenceById: [String: AgentPresence] = [:]
+    var agentLockerSummaryByAgent: [String: AgentChatService.LockerSummary] = [:]
+    var isLoadingAgentLocker: Bool = false
+    var agentLockerError: String?
 
     // Conversation data from SwiftData
     var conversations: [DMConversation] = []
@@ -771,6 +774,7 @@ final class DirectChatViewModel {
         selectedDeliveryMode = agent.defaultDeliveryMode
         loadMessages(for: agent)
         loadTicketContext(for: agent)
+        Task { await loadAgentLocker(for: agent) }
         applyPendingTicketContinuationIfNeeded(for: agent)
         let conversation = getOrCreateConversation(for: agent)
         if conversation.orcaChannelId == nil, let serverChannelId = orcaChannelIdByAgent[agent.id] {
@@ -818,7 +822,32 @@ final class DirectChatViewModel {
         roomMessages = []
         composedRoomMessage = ""
         roomActionMessage = nil
+        isLoadingAgentLocker = false
+        agentLockerError = nil
         stopRoomAutoRefresh()
+    }
+
+    func loadAgentLocker(for agent: AgentInfo) async {
+        isLoadingAgentLocker = true
+        agentLockerError = nil
+        defer { isLoadingAgentLocker = false }
+
+        do {
+            let service = AgentChatService(agent: agent)
+            let summary = try await service.loadLockerSummary()
+            agentLockerSummaryByAgent[agent.id] = summary
+            if selectedAgent?.id == agent.id, liveChatStatus == nil {
+                liveChatStatus = "Locker loaded · \(summary.readinessText)"
+            }
+        } catch let apiError as APIError {
+            if selectedAgent?.id == agent.id {
+                agentLockerError = apiError.message
+            }
+        } catch {
+            if selectedAgent?.id == agent.id {
+                agentLockerError = "Agent locker unavailable"
+            }
+        }
     }
 
     func refreshCurrentChannel() {

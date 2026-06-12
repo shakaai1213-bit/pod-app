@@ -32,6 +32,30 @@ actor AgentChatService {
         let metadata: ResponseMetadata?
     }
 
+    struct LockerSummary: Sendable, Hashable {
+        let source: String?
+        let sessionStatus: String?
+        let dailyLogRef: String?
+        let dailyLogBytes: Int?
+        let assignedTicketCount: Int
+        let gaps: [String]
+
+        var readinessText: String {
+            var parts: [String] = []
+            if let sessionStatus, !sessionStatus.isEmpty {
+                parts.append(sessionStatus)
+            }
+            parts.append("\(assignedTicketCount) ticket\(assignedTicketCount == 1 ? "" : "s")")
+            if let dailyLogBytes, dailyLogBytes > 0 {
+                parts.append("\(dailyLogBytes) daily bytes")
+            }
+            if !gaps.isEmpty {
+                parts.append("\(gaps.count) gap\(gaps.count == 1 ? "" : "s")")
+            }
+            return parts.joined(separator: " · ")
+        }
+    }
+
     struct ResponseMetadata: Sendable {
         let channelId: String
         let userMessageId: String
@@ -132,6 +156,40 @@ actor AgentChatService {
         }
     }
 
+    private struct AgentLockerResponse: Decodable {
+        let packet: Packet?
+        let session: Session?
+        let memory: Memory?
+        let work: Work?
+        let gaps: [String]?
+
+        struct Packet: Decodable {
+            let source: String?
+        }
+
+        struct Session: Decodable {
+            let status: String?
+        }
+
+        struct Memory: Decodable {
+            let dailyLogRef: String?
+            let dailyLogBytes: Int?
+
+            enum CodingKeys: String, CodingKey {
+                case dailyLogRef = "daily_log_ref"
+                case dailyLogBytes = "daily_log_bytes"
+            }
+        }
+
+        struct Work: Decodable {
+            let assignedTicketCount: Int?
+
+            enum CodingKeys: String, CodingKey {
+                case assignedTicketCount = "assigned_ticket_count"
+            }
+        }
+    }
+
     private struct ORCAChatMessage: Decodable {
         let id: String
         let senderAgentId: String?
@@ -148,6 +206,20 @@ actor AgentChatService {
     }
 
     // MARK: - Send message via ORCA-controlled direct chat
+
+    func loadLockerSummary(limit: Int = 10) async throws -> LockerSummary {
+        let response: AgentLockerResponse = try await APIClient.shared.get(
+            path: "/api/v1/agents/\(agent.id)/locker?limit=\(limit)"
+        )
+        return LockerSummary(
+            source: response.packet?.source,
+            sessionStatus: response.session?.status,
+            dailyLogRef: response.memory?.dailyLogRef,
+            dailyLogBytes: response.memory?.dailyLogBytes,
+            assignedTicketCount: response.work?.assignedTicketCount ?? 0,
+            gaps: response.gaps ?? []
+        )
+    }
 
     /// Sends a message to the ORCA direct-chat endpoint.
     /// Returns an AsyncThrowingStream so the UI can keep its streaming contract,
