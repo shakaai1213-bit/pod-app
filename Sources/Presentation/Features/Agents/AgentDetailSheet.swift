@@ -110,7 +110,7 @@ struct AgentDetailSheet: View {
                 AgentConfigureSheet(agent: agent)
             }
             .sheet(isPresented: $showingSendMessage) {
-                ComposeMessageSheet(recipientName: agent.name)
+                ComposeMessageSheet(agent: agent.directChatAgentInfo)
             }
         }
         .presentationDetents([.large])
@@ -1198,6 +1198,36 @@ private extension Agent {
             .lowercased()
             .addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? name.lowercased()
     }
+
+    var directChatAgentInfo: AgentInfo {
+        let normalizedName = AgentRosterPolicy.normalizedName(name)
+        if let knownAgent = AgentInfo.find(normalizedName) {
+            return knownAgent
+        }
+
+        return AgentInfo(
+            id: normalizedName,
+            name: name,
+            role: role,
+            icon: "person.crop.circle",
+            color: avatarColor?.replacingOccurrences(of: "#", with: "") ?? "3B82F6",
+            endpoint: .init(baseURL: AppConfig.computeURL, authToken: ""),
+            isReachable: isDefaultRoutingEnabled,
+            lane: directChatLane,
+            guardrail: rosterNote ?? "Keep responses grounded in ORCA direct chat. Do not claim live runtime access or completed actions unless ORCA confirms them."
+        )
+    }
+
+    private var directChatLane: AgentInfo.Lane {
+        switch rosterLane {
+        case .activeMain:
+            return .main
+        case .supportRuntime:
+            return .supportRuntime
+        case .dormantArchive, .unknown:
+            return .dormantAdvisor
+        }
+    }
 }
 
 // MARK: - Flow Layout
@@ -1282,9 +1312,11 @@ struct AgentConfigureSheet: View {
 // MARK: - Compose Message Sheet
 
 struct ComposeMessageSheet: View {
-    let recipientName: String
+    let agent: AgentInfo
     @Environment(\.dismiss) private var dismiss
     @State private var messageText: String = ""
+    @State private var isSending = false
+    @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -1292,7 +1324,7 @@ struct ComposeMessageSheet: View {
                 HStack(spacing: Theme.sm) {
                     Text("To:")
                         .podTextStyle(.body, color: AppColors.textSecondary)
-                    Text(recipientName)
+                    Text(agent.name)
                         .podTextStyle(.body, color: AppColors.textPrimary)
                         .fontWeight(.semibold)
                 }
@@ -1300,11 +1332,39 @@ struct ComposeMessageSheet: View {
                 .padding(Theme.md)
                 .background(AppColors.backgroundSecondary)
 
+                if let errorMessage {
+                    HStack(spacing: Theme.sm) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(AppColors.accentDanger)
+                        Text(errorMessage)
+                            .podTextStyle(.caption, color: AppColors.textPrimary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(.horizontal, Theme.md)
+                    .padding(.vertical, Theme.sm)
+                    .background(AppColors.accentDanger.opacity(0.12))
+                }
+
+                if isSending {
+                    HStack(spacing: Theme.sm) {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(AppColors.accentElectric)
+                        Text("Sending...")
+                            .podTextStyle(.caption, color: AppColors.textSecondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, Theme.md)
+                    .padding(.vertical, Theme.sm)
+                    .background(AppColors.backgroundSecondary.opacity(0.7))
+                }
+
                 TextEditor(text: $messageText)
                     .scrollContentBackground(.hidden)
                     .background(AppColors.backgroundPrimary)
                     .foregroundStyle(AppColors.textPrimary)
                     .padding(Theme.md)
+                    .disabled(isSending)
 
                 Spacer()
             }
@@ -1315,15 +1375,57 @@ struct ComposeMessageSheet: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") { dismiss() }
                         .foregroundStyle(AppColors.textSecondary)
+                        .disabled(isSending)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Send") {
-                        // TODO: Send via API
-                        dismiss()
+                    if isSending {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(AppColors.accentElectric)
+                    } else {
+                        Button("Send") {
+                            sendMessage()
+                        }
+                        .fontWeight(.semibold)
+                        .foregroundStyle(AppColors.accentElectric)
+                        .disabled(trimmedMessage.isEmpty)
                     }
-                    .fontWeight(.semibold)
-                    .foregroundStyle(AppColors.accentElectric)
-                    .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+
+    private var trimmedMessage: String {
+        messageText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func sendMessage() {
+        let text = trimmedMessage
+        guard !text.isEmpty, !isSending else { return }
+
+        isSending = true
+        errorMessage = nil
+
+        Task {
+            do {
+                let service = AgentChatService(agent: agent)
+                let stream = await service.send(message: text)
+                for try await _ in stream {}
+
+                await MainActor.run {
+                    messageText = ""
+                    isSending = false
+                    dismiss()
+                }
+            } catch let apiError as APIError {
+                await MainActor.run {
+                    errorMessage = apiError.message
+                    isSending = false
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    isSending = false
                 }
             }
         }
