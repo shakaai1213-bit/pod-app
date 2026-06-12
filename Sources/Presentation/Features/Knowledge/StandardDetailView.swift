@@ -546,6 +546,8 @@ struct AskAgentSheet: View {
     let standard: Standard
     @Binding var prompt: String
     @Environment(\.dismiss) private var dismiss
+    @State private var isSending = false
+    @State private var sendError: String?
 
     var body: some View {
         NavigationStack {
@@ -584,15 +586,26 @@ struct AskAgentSheet: View {
                         .lineLimit(3...6)
                 }
 
+                if let sendError {
+                    Text(sendError)
+                        .font(.caption)
+                        .foregroundColor(AppColors.accentDanger)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
                 Spacer()
 
                 Button {
-                    // TODO: Send to chief-desk channel
-                    dismiss()
+                    sendToAgent()
                 } label: {
                     HStack {
-                        Image(systemName: "paperplane.fill")
-                        Text("Send to Agent")
+                        if isSending {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "paperplane.fill")
+                        }
+                        Text(isSending ? "Sending..." : "Send to Agent")
                     }
                     .font(.subheadline)
                     .fontWeight(.semibold)
@@ -602,7 +615,7 @@ struct AskAgentSheet: View {
                     .background(AppColors.accentAgent)
                     .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
                 }
-                .disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(isSending || prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .padding(Theme.md)
             .background(AppColors.backgroundPrimary)
@@ -618,6 +631,66 @@ struct AskAgentSheet: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+    }
+
+    private func sendToAgent() {
+        let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPrompt.isEmpty, !isSending else { return }
+
+        isSending = true
+        sendError = nil
+
+        Task {
+            do {
+                let repository = ChannelRepository()
+                await repository.loadChannels()
+
+                guard let chiefDesk = repository.channels.first(where: {
+                    $0.name.caseInsensitiveCompare("chief-desk") == .orderedSame
+                }) else {
+                    throw AskAgentSendError.missingChiefDesk
+                }
+
+                _ = try await repository.sendMessage(
+                    channelId: chiefDesk.id,
+                    content: askAgentMessage(question: trimmedPrompt)
+                )
+
+                prompt = ""
+                isSending = false
+                dismiss()
+            } catch {
+                isSending = false
+                sendError = error.localizedDescription
+            }
+        }
+    }
+
+    private func askAgentMessage(question: String) -> String {
+        """
+        @chief Please help with this knowledge standard.
+
+        Standard: \(standard.title)
+        Category: \(standard.category.rawValue)
+        Version: \(standard.version)
+
+        Question:
+        \(question)
+
+        Standard content:
+        \(standard.content)
+        """
+    }
+
+    private enum AskAgentSendError: LocalizedError {
+        case missingChiefDesk
+
+        var errorDescription: String? {
+            switch self {
+            case .missingChiefDesk:
+                return "Could not find the chief-desk channel."
+            }
+        }
     }
 }
 
