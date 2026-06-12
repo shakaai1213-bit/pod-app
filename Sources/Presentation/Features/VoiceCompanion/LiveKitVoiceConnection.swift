@@ -2,10 +2,12 @@ import Foundation
 @preconcurrency import LiveKit
 
 @MainActor
-final class LiveKitVoiceConnection: ObservableObject {
+final class LiveKitVoiceConnection: NSObject, ObservableObject, RoomDelegate, @unchecked Sendable {
     @Published private(set) var state: RealtimeVoiceState = .disconnected
     @Published private(set) var activeRoomName: String?
     @Published private(set) var remoteParticipantCount: Int = 0
+
+    var onTranscript: ((RealtimeTranscriptSegment) -> Void)?
 
     private var room: Room?
     private var participantPollTask: Task<Void, Never>?
@@ -19,6 +21,7 @@ final class LiveKitVoiceConnection: ObservableObject {
 
     func connect(session: OpenClawClient.LiveKitSession) async throws {
         if let room {
+            room.remove(delegate: self)
             await room.disconnect()
         }
         participantPollTask?.cancel()
@@ -26,6 +29,7 @@ final class LiveKitVoiceConnection: ObservableObject {
         remoteParticipantCount = 0
 
         let nextRoom = Room()
+        nextRoom.add(delegate: self)
         room = nextRoom
         activeRoomName = session.roomName
         state = .connecting(session.roomName)
@@ -40,6 +44,8 @@ final class LiveKitVoiceConnection: ObservableObject {
             updateParticipantState(room: nextRoom, roomName: session.roomName)
             startParticipantPolling()
         } catch {
+            nextRoom.remove(delegate: self)
+            await nextRoom.disconnect()
             participantPollTask?.cancel()
             participantPollTask = nil
             room = nil
@@ -53,10 +59,12 @@ final class LiveKitVoiceConnection: ObservableObject {
     func disconnect() async {
         guard let room else {
             activeRoomName = nil
+            remoteParticipantCount = 0
             state = .disconnected
             return
         }
 
+        room.remove(delegate: self)
         await room.disconnect()
         participantPollTask?.cancel()
         participantPollTask = nil
@@ -64,6 +72,35 @@ final class LiveKitVoiceConnection: ObservableObject {
         activeRoomName = nil
         remoteParticipantCount = 0
         state = .disconnected
+    }
+
+    nonisolated func room(_ room: Room, didDisconnectWithError error: LiveKitError?) {
+        Task { @MainActor [weak self] in
+            self?.handleRoomDidDisconnect(room: room, error: error)
+        }
+    }
+
+    nonisolated func room(_ room: Room, participantDidConnect participant: RemoteParticipant) {
+        Task { @MainActor [weak self] in
+            self?.handleParticipantCountDidChange(room: room)
+        }
+    }
+
+    nonisolated func room(_ room: Room, participantDidDisconnect participant: RemoteParticipant) {
+        Task { @MainActor [weak self] in
+            self?.handleParticipantCountDidChange(room: room)
+        }
+    }
+
+    nonisolated func room(
+        _ room: Room,
+        participant: Participant,
+        trackPublication: TrackPublication,
+        didReceiveTranscriptionSegments segments: [TranscriptionSegment]
+    ) {
+        Task { @MainActor [weak self] in
+            self?.handleTranscriptionSegments(segments, from: participant)
+        }
     }
 
     private func startParticipantPolling() {
@@ -81,6 +118,45 @@ final class LiveKitVoiceConnection: ObservableObject {
         remoteParticipantCount = room.remoteParticipants.count
         state = .connected(roomName, remoteParticipantCount: remoteParticipantCount)
     }
+
+    private func handleRoomDidDisconnect(room: Room, error: LiveKitError?) {
+        guard self.room === room else { return }
+
+        room.remove(delegate: self)
+        participantPollTask?.cancel()
+        participantPollTask = nil
+        self.room = nil
+        activeRoomName = nil
+        remoteParticipantCount = 0
+        state = error.map { .failed($0.localizedDescription) } ?? .disconnected
+    }
+
+    private func handleParticipantCountDidChange(room: Room) {
+        guard self.room === room, let roomName = activeRoomName else { return }
+        updateParticipantState(room: room, roomName: roomName)
+    }
+
+    private func handleTranscriptionSegments(_ segments: [TranscriptionSegment], from participant: Participant) {
+        for segment in segments where !segment.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            onTranscript?(
+                RealtimeTranscriptSegment(
+                    segmentID: segment.id,
+                    text: segment.text,
+                    isFinal: segment.isFinal,
+                    isAgent: participant.isAgent,
+                    timestamp: segment.lastReceivedTime
+                )
+            )
+        }
+    }
+}
+
+struct RealtimeTranscriptSegment: Sendable {
+    let segmentID: String
+    let text: String
+    let isFinal: Bool
+    let isAgent: Bool
+    let timestamp: Date
 }
 
 enum RealtimeVoiceState: Equatable {

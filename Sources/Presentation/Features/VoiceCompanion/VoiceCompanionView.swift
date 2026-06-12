@@ -51,6 +51,9 @@ struct VoiceCompanionView: View {
         } message: {
             Text(viewModel.errorMessage ?? "")
         }
+        .onDisappear {
+            Task { await viewModel.teardownRealtimeVoice() }
+        }
     }
 
     // MARK: - Subviews
@@ -114,54 +117,44 @@ struct VoiceCompanionView: View {
     }
 
     private var voiceButtonView: some View {
-        ZStack {
-            // Pulse animation when recording
-            if viewModel.isRecording {
+        Button {
+            Task { await viewModel.toggleRealtimeVoiceFromPrimaryButton() }
+        } label: {
+            ZStack {
+                if viewModel.isRealtimeConnected {
+                    Circle()
+                        .fill(recordingColor.opacity(0.3))
+                        .frame(width: 140, height: 140)
+                        .scaleEffect(viewModel.isRealtimeConnected ? 1.1 : 1.0)
+                        .animation(
+                            .easeInOut(duration: 0.8).repeatForever(autoreverses: true),
+                            value: viewModel.isRealtimeConnected
+                        )
+                }
+
                 Circle()
-                    .fill(recordingColor.opacity(0.3))
-                    .frame(width: 140, height: 140)
-                    .scaleEffect(viewModel.isRecording ? 1.1 : 1.0)
-                    .animation(
-                        .easeInOut(duration: 0.8).repeatForever(autoreverses: true),
-                        value: viewModel.isRecording
-                    )
-            }
-
-            // Main button
-            Circle()
-                .fill(viewModel.isRecording ? recordingColor : accentColor)
-                .frame(width: 120, height: 120)
-                .shadow(color: (viewModel.isRecording ? recordingColor : accentColor).opacity(0.5), radius: 20)
-
-            // Icon
-            Image(systemName: "mic.fill")
-                .font(.system(size: 40))
-                .foregroundColor(.white)
-
-            // Processing overlay
-            if viewModel.isProcessing {
-                Circle()
-                    .fill(Color.black.opacity(0.5))
+                    .fill(viewModel.isRealtimeConnected ? recordingColor : accentColor)
                     .frame(width: 120, height: 120)
+                    .shadow(color: (viewModel.isRealtimeConnected ? recordingColor : accentColor).opacity(0.5), radius: 20)
 
-                ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                    .scaleEffect(1.5)
+                Image(systemName: viewModel.isRealtimeConnected ? "phone.down.fill" : "mic.fill")
+                    .font(.system(size: 40))
+                    .foregroundColor(.white)
+
+                if viewModel.isPreparingRealtimeSession || viewModel.isProcessing {
+                    Circle()
+                        .fill(Color.black.opacity(0.5))
+                        .frame(width: 120, height: 120)
+
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(1.5)
+                }
             }
         }
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in
-                    if !viewModel.isRecording && !viewModel.isProcessing {
-                        Task { await viewModel.startRecording() }
-                    }
-                }
-                .onEnded { _ in
-                    if viewModel.isRecording {
-                        Task { await viewModel.stopRecordingAndProcess() }
-                    }
-                }
-        )
+        .buttonStyle(.plain)
+        .disabled(!viewModel.routeToRealtimePackage || viewModel.isPreparingRealtimeSession || viewModel.isProcessing)
+        .accessibilityLabel(viewModel.isRealtimeConnected ? "Leave LiveKit realtime voice" : "Join LiveKit realtime voice")
     }
 
     private var routingTogglesView: some View {
@@ -230,11 +223,28 @@ struct VoiceCompanionView: View {
 
     private var realtimePackageView: some View {
         VStack(spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "wave.3.right.circle")
+                    .foregroundColor(accentColor)
+                Text("LiveKit realtime room")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.white.opacity(0.82))
+            }
+            .accessibilityElement(children: .combine)
+
             Text(viewModel.realtimeSessionText ?? viewModel.realtimePackageText)
                 .font(.caption)
                 .foregroundColor(.gray)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 20)
+
+            if viewModel.isRealtimeConnected {
+                Text(viewModel.realtimeTranscriptText)
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+            }
 
             if viewModel.isRealtimeConnected && viewModel.realtimeRemoteParticipantCount == 0 {
                 HStack(spacing: 8) {
