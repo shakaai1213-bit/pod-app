@@ -1,5 +1,9 @@
 import SwiftUI
 
+private extension Font {
+    func dynamic() -> Font { self }
+}
+
 private struct TicketTimelineItem: Identifiable {
     enum Kind {
         case comment(TicketComment)
@@ -225,6 +229,7 @@ struct TicketsView: View {
                 filterChip(label: "Open", status: .open)
                 filterChip(label: "Claimed", status: .claimed)
                 filterChip(label: "In Progress", status: .inProgress)
+                filterChip(label: "Blocked", status: .blocked)
                 filterChip(label: "Closed", status: .closed)
                 filterChip(label: "Cancelled", status: .cancelled)
             }
@@ -296,7 +301,7 @@ struct TicketsView: View {
                 .foregroundColor(AppColors.textSecondary)
             Text(viewModel.liveStatusDetail)
                 .font(.caption2)
-                .foregroundColor(AppColors.textTertiary)
+                .foregroundColor(AppColors.textSecondary)
                 .lineLimit(1)
             Spacer(minLength: 0)
         }
@@ -315,7 +320,7 @@ struct TicketsView: View {
                 HStack(spacing: 10) {
                 summaryPill(label: "Review", value: summary.needsHumanCount, color: Color.orange)
                     summaryPill(label: "Keep", value: summary.keepCount, color: AppColors.accentSuccess)
-                    summaryPill(label: "Test", value: summary.staleTestCount, color: AppColors.textTertiary)
+                    summaryPill(label: "Test", value: summary.staleTestCount, color: AppColors.textSecondary)
                     if approvalAttentionCount > 0 {
                         Button {
                             withAnimation(.easeInOut(duration: 0.15)) {
@@ -329,6 +334,9 @@ struct TicketsView: View {
                         .accessibilityLabel("Show tickets waiting for human approval review")
                     }
                     if let flow = viewModel.ticketFlowReview?.counts {
+                        ForEach(viewModel.flowStateSummaryItems()) { item in
+                            summaryPill(label: item.label, value: item.value, color: item.color)
+                        }
                         if flow.dispatchable > 0 {
                             summaryPill(label: "Flow Ready", value: flow.dispatchable, color: AppColors.accentAgent)
                         }
@@ -348,7 +356,7 @@ struct TicketsView: View {
                         summaryPill(label: "Source Link", value: integrity.sourceLinkGapCount, color: AppColors.accentDanger)
                         summaryPill(label: "Triage Link", value: integrity.triageLinkGapCount, color: Color.orange)
                         if integrity.otherGapCount > 0 {
-                            summaryPill(label: "Other Gaps", value: integrity.otherGapCount, color: AppColors.textTertiary)
+                            summaryPill(label: "Other Gaps", value: integrity.otherGapCount, color: AppColors.textSecondary)
                         }
                     }
                     if let backfill = viewModel.workControlBackfillSummary, backfill.needsBackfill > 0 {
@@ -358,7 +366,7 @@ struct TicketsView: View {
                         summaryPill(label: "Dupes", value: summary.duplicateCount, color: AppColors.accentDanger)
                     }
                     if summary.supersededCount > 0 {
-                        summaryPill(label: "Old", value: summary.supersededCount, color: AppColors.textTertiary)
+                        summaryPill(label: "Old", value: summary.supersededCount, color: AppColors.textSecondary)
                     }
                     if let reprocess = viewModel.backlogReprocessDryRun {
                         summaryPill(label: "Reprocess", value: reprocess.total, color: AppColors.accentElectric)
@@ -436,7 +444,7 @@ struct TicketsView: View {
                     if let message = viewModel.groomingActionMessage {
                         Text(message)
                             .font(.caption2)
-                            .foregroundColor(AppColors.textTertiary)
+                            .foregroundColor(AppColors.textSecondary)
                             .lineLimit(2)
                     } else if let reprocess = viewModel.backlogReprocessDryRun {
                         let actions = reprocess.reviewActionCounts
@@ -446,7 +454,7 @@ struct TicketsView: View {
                             .joined(separator: ", ")
                         Text("Reprocess dry-run is comments-first and non-mutating\(actions.isEmpty ? "." : ": \(actions).")")
                             .font(.caption2)
-                            .foregroundColor(AppColors.textTertiary)
+                            .foregroundColor(AppColors.textSecondary)
                             .lineLimit(2)
                     } else if let integrity = viewModel.workControlIntegritySummary, integrity.issues > 0 {
                         let topIssues = integrity.countsByField
@@ -456,7 +464,7 @@ struct TicketsView: View {
                             .joined(separator: ", ")
                         Text("Source links missing on \(integrity.sourceLinkGapCount) tickets; triage links missing on \(integrity.triageLinkGapCount)\(topIssues.isEmpty ? "." : ". Top gaps: \(topIssues).")")
                             .font(.caption2)
-                            .foregroundColor(AppColors.textTertiary)
+                            .foregroundColor(AppColors.textSecondary)
                             .lineLimit(2)
                     } else if let backfill = viewModel.workControlBackfillSummary, backfill.needsBackfill > 0 {
                         let topMissing = backfill.countsByMissingField
@@ -1568,7 +1576,7 @@ struct TicketRowView: View {
                 // short_id chip — mirrors Project card chip per Tony 2026-05-23
                 Text(String(ticket.id.replacingOccurrences(of: "-", with: "").prefix(8)))
                     .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(AppColors.textTertiary)
+                    .foregroundColor(AppColors.textSecondary)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 2)
                     .background(Color(hexString: "0e0e10"))
@@ -1584,11 +1592,14 @@ struct TicketRowView: View {
                     .fontWeight(.medium)
                     .foregroundColor(AppColors.textPrimary)
                     .lineLimit(2)
+                    .minimumScaleFactor(0.85)
 
                 Spacer()
 
-                // Status badge
-                statusBadge
+                HStack(spacing: 5) {
+                    statusBadge
+                    flowStateBadge
+                }
             }
 
             operationalBadges
@@ -1599,8 +1610,9 @@ struct TicketRowView: View {
             if let latest = viewModel.latestTicketActivity(for: ticket) {
                 Label(latest, systemImage: "text.bubble")
                     .font(.caption2)
-                    .foregroundColor(AppColors.textTertiary)
+                    .foregroundColor(AppColors.textSecondary)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.85)
             }
 
             // Bottom row: assignee + date + type
@@ -1612,24 +1624,28 @@ struct TicketRowView: View {
                 } else if ticket.assigneeAgentId != nil {
                     Label("Agent", systemImage: "cpu")
                         .font(.caption)
-                        .foregroundColor(AppColors.textTertiary)
+                        .foregroundColor(AppColors.textSecondary)
                 }
 
                 if let type = ticket.ticketType {
                     Text(type.replacingOccurrences(of: "_", with: " ").capitalized)
                         .font(.caption)
-                        .foregroundColor(AppColors.textTertiary)
+                        .foregroundColor(AppColors.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
                 }
 
                 Spacer()
 
                 Text(ticket.createdAt.relativeTimeString)
                     .font(.caption2)
-                    .foregroundColor(AppColors.textTertiary)
+                    .foregroundColor(AppColors.textSecondary)
             }
         }
         .padding(.vertical, 12)
         .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(ticket.title), \(ticket.priority.label), owned by \(accessibilityOwner)")
         .contextMenu {
             ForEach(TicketStatus.allCases, id: \.self) { status in
                 if status != ticket.status && !status.isTerminal {
@@ -1706,6 +1722,26 @@ struct TicketRowView: View {
         .clipShape(Capsule())
     }
 
+    @ViewBuilder
+    private var flowStateBadge: some View {
+        if let signal = viewModel.flowStateBadgeSignal(for: ticket) {
+            HStack(spacing: 4) {
+                Text("Flow")
+                    .font(.system(size: 11, weight: .bold, design: .default).dynamic())
+                Image(systemName: signal.icon)
+                    .font(.system(size: 9, weight: .semibold))
+                Text(signal.label)
+                    .font(.system(size: 11, weight: .medium, design: .default).dynamic())
+            }
+            .foregroundColor(signal.color)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(signal.color.opacity(0.12))
+            .clipShape(Capsule())
+            .accessibilityLabel("Flow state \(signal.label)")
+        }
+    }
+
     private var operationalBadges: some View {
         let badges = badgeItems
         return HStack(spacing: 6) {
@@ -1745,7 +1781,7 @@ struct TicketRowView: View {
                 if debts.count > 3 {
                     Text("+\(debts.count - 3)")
                         .font(.caption2)
-                        .foregroundColor(AppColors.textTertiary)
+                        .foregroundColor(AppColors.textSecondary)
                 }
                 Spacer(minLength: 0)
             }
@@ -1767,6 +1803,9 @@ struct TicketRowView: View {
         let grooming = viewModel.groomingItem(for: ticket.id)
         let summary = viewModel.evidenceSummary(for: ticket)
         var items: [(String, String, Color)] = []
+        for badge in viewModel.actionableFlowSignalBadges(for: ticket) {
+            items.append((badge.label, badge.icon, badge.color))
+        }
         if ticket.approvalState == "waiting_for_human"
             || summary.latestRunStatus == .waitingForHuman
             || summary.blockers.contains("waiting_for_human") {
@@ -1817,6 +1856,10 @@ struct TicketRowView: View {
             items.append(("Pod Bug", "ladybug.fill", AppColors.accentElectric))
         }
         return Array(items.prefix(3))
+    }
+
+    private var accessibilityOwner: String {
+        ticket.assigneeAgentName ?? ticket.assigneeAgentId ?? "Unassigned"
     }
 
     private func routePacketBool(_ packet: [String: AgentRunJSONValue]?, keys: [String]) -> Bool? {
@@ -2348,6 +2391,24 @@ struct TicketDetailSheet: View {
                         .foregroundColor(editedStatus.color)
                     }
                     .buttonStyle(.plain)
+
+                    if let flowSignal = viewModel.flowStateBadgeSignal(for: ticket) {
+                        HStack(spacing: 6) {
+                            Text("Flow")
+                                .font(.system(size: 12, weight: .bold, design: .default).dynamic())
+                            Image(systemName: flowSignal.icon)
+                                .font(.caption.weight(.semibold))
+                            Text(flowSignal.label)
+                                .font(.system(size: 12, weight: .semibold, design: .default).dynamic())
+                            Spacer()
+                        }
+                        .foregroundColor(flowSignal.color)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(flowSignal.color.opacity(0.12))
+                        .clipShape(Capsule())
+                        .accessibilityLabel("Flow state \(flowSignal.label)")
+                    }
 
                     Menu {
                         ForEach(TicketPriority.allCases, id: \.self) { priority in
@@ -3027,7 +3088,7 @@ struct TicketDetailSheet: View {
             VStack(spacing: 6) {
                 workOrderRow(label: "Intent", value: workOrderIntent, icon: "scope")
                 workOrderRow(label: "Next", value: summary.nextAction ?? computedNextAction(summary: summary), icon: "arrow.forward.circle")
-                workOrderRow(label: "Owner", value: context.owner, icon: "person.crop.circle")
+                workOrderRow(label: "Owner", value: viewModel.operatingOwnerLabel(for: ticket), icon: "person.crop.circle")
                 workOrderRow(label: "Approval", value: approval.isEmpty ? "Not required" : approval, icon: needsApproval ? "person.crop.circle.badge.exclamationmark" : "checkmark.shield")
                 workOrderRow(label: "Done", value: workOrderDoneMeans, icon: "flag.checkered")
                 workOrderRow(label: "Scope", value: criteriaCount > 0 ? "\(criteriaCount) acceptance item\(criteriaCount == 1 ? "" : "s")" : "Needs acceptance criteria", icon: criteriaCount > 0 ? "checklist.checked" : "doc.badge.ellipsis")

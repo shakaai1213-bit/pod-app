@@ -120,6 +120,7 @@ struct ProjectsView: View {
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, Theme.xs)
                         }
+                        .accessibilityLabel("View all \(viewModel.sortedMyTasks.count) tasks")
                     }
                 }
                 .podCard()

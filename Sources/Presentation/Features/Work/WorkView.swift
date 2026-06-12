@@ -191,7 +191,7 @@ struct WorkView: View {
                 ) { Task { await model.loadProjects() } }
                 healthChip(
                     title: "Tickets",
-                    count: model.openTicketCount,
+                    count: model.activeTicketCount,
                     error: model.ticketsError,
                     isLoading: model.isLoadingTickets
                 ) { Task { await model.loadTickets() } }
@@ -932,7 +932,7 @@ struct WorkView: View {
                     .foregroundColor(AppColors.textTertiary)
                     .kerning(0.5)
                 Spacer()
-                Text("\(model.openTicketCount) open")
+                Text("\(model.activeTicketCount) active")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(AppColors.accentElectric)
             }
@@ -953,7 +953,7 @@ struct WorkView: View {
                 } else if let err = model.ticketsError {
                     errorBanner(message: err) { Task { await model.loadTickets() } }
                 } else if model.filteredTickets.isEmpty {
-                    emptyState(icon: "ticket", text: "No open tickets in this view.")
+                    emptyState(icon: "ticket", text: "No active tickets in this view.")
                 } else {
                     ForEach(Array(model.filteredTickets.prefix(3).enumerated()), id: \.element.id) { idx, ticket in
                         VStack(spacing: 0) {
@@ -1225,8 +1225,8 @@ struct WorkView: View {
 
             Spacer(minLength: 4)
 
-            // Owner · priority meta (owner is resolved agent name per ticket 7d4c89a7)
-            Text("\(ticket.ownerShort) · \(ticket.priority)")
+            // Owner · status · priority meta (owner is resolved agent name per ticket 7d4c89a7)
+            Text("\(ticket.ownerShort) · \(ticket.status.replacingOccurrences(of: "_", with: " ")) · \(ticket.priority)")
                 .font(.system(size: 11))
                 .foregroundColor(AppColors.textTertiary)
                 .lineLimit(1)
@@ -1435,7 +1435,7 @@ final class WorkViewModel {
 
     // MARK: Tickets
     var tickets: [WorkTicketRow] = []
-    var openTicketCount = 0
+    var activeTicketCount = 0
     var isLoadingTickets = false
     var ticketsError: String?
     var activeFilter: TicketFilter = .all
@@ -1710,7 +1710,7 @@ final class WorkViewModel {
             }
             // Per ticket 7d4c89a7 (UUID→name resolution): fetch tickets AND agents in parallel,
             // resolve assigneeAgentId UUIDs to names client-side.
-            async let ticketsAsync: WorkListResponse<TicketListItem> = APIClient.shared.get(path: "/api/v1/tickets?status=open&limit=200")
+            async let ticketsAsync: WorkListResponse<TicketListItem> = APIClient.shared.get(path: "/api/v1/tickets?limit=200")
             async let agentsAsync: WorkListResponse<AgentNameOnly> = APIClient.shared.get(path: "/api/v1/agents?limit=200")
 
             let ticketResponse = try await ticketsAsync
@@ -1719,7 +1719,7 @@ final class WorkViewModel {
             let agentList = agentResponse?.items ?? []
             let agentNames: [String: String] = Dictionary(uniqueKeysWithValues: agentList.map { ($0.id, $0.name) })
 
-            openTicketCount = raw.count
+            activeTicketCount = raw.count
 
             // Priority sort order
             let order: [String: Int] = ["urgent": 0, "high": 1, "medium": 2, "low": 3]
@@ -1737,6 +1737,7 @@ final class WorkViewModel {
                     return WorkTicketRow(
                         id: t.id,
                         title: t.title,
+                        status: t.status,
                         priority: t.priority,
                         ownerShort: ownerLabel,
                         assigneeId: t.assigneeAgentId,
@@ -2036,6 +2037,7 @@ private struct WorkTicketFlowItemDTO: Decodable {
     let flowState: String?
     let nextAction: String?
     let ownerAgent: String?
+    let ownerLane: String?
     let supportLane: String?
     let workerLane: String?
     let recommendedRuntime: String?
@@ -2048,6 +2050,9 @@ private struct WorkTicketFlowItemDTO: Decodable {
     let dispatchable: Bool?
     let noiseReview: Bool?
     let protected: Bool?
+    let staleFlag: Bool?
+    let noiseFlag: Bool?
+    let backlogFlag: Bool?
     let blockers: [String]?
     let reasons: [String]?
     let updatedAt: Date?
@@ -2058,6 +2063,7 @@ private struct WorkTicketFlowItemDTO: Decodable {
         case flowState = "flow_state"
         case nextAction = "next_action"
         case ownerAgent = "owner_agent"
+        case ownerLane = "owner_lane"
         case supportLane = "support_lane"
         case workerLane = "worker_lane"
         case recommendedRuntime = "recommended_runtime"
@@ -2068,6 +2074,9 @@ private struct WorkTicketFlowItemDTO: Decodable {
         case approvalGate = "approval_gate"
         case autonomyLevel = "autonomy_level"
         case noiseReview = "noise_review"
+        case staleFlag = "stale_flag"
+        case noiseFlag = "noise_flag"
+        case backlogFlag = "backlog_flag"
         case updatedAt = "updated_at"
     }
 
@@ -2080,6 +2089,7 @@ private struct WorkTicketFlowItemDTO: Decodable {
             flowState: flowState ?? "unknown",
             nextAction: nextAction ?? "Review",
             ownerAgent: ownerAgent ?? "unassigned",
+            ownerLane: ownerLane,
             supportLane: supportLane,
             workerLane: workerLane,
             recommendedRuntime: recommendedRuntime,
@@ -2092,6 +2102,9 @@ private struct WorkTicketFlowItemDTO: Decodable {
             dispatchable: dispatchable ?? false,
             noiseReview: noiseReview ?? false,
             protected: protected ?? false,
+            staleFlag: staleFlag ?? false,
+            noiseFlag: noiseFlag ?? false,
+            backlogFlag: backlogFlag ?? false,
             blockers: blockers ?? [],
             reasons: reasons ?? [],
             updatedAt: updatedAt ?? .distantPast
@@ -2395,6 +2408,7 @@ struct SchoolhouseSuggestion: Decodable, Identifiable, Hashable {
 struct WorkTicketRow: Identifiable {
     let id: String
     let title: String
+    let status: String
     var priority: String
     let ownerShort: String   // resolved agent name (lowercased) or 6-char UUID prefix
     let assigneeId: String?

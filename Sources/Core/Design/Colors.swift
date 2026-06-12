@@ -51,7 +51,7 @@ struct AppColors {
 
     static let textPrimary   = Color(hexString: "F8FAFC")
     static let textSecondary = Color(hexString: "94A3B8")
-    static let textTertiary  = Color(hexString: "475569")
+    static let textTertiary  = Color(hexString: "9A9AA1")
     static let textMuted      = Color(hexString: "2D3748")
 
     // MARK: - Borders

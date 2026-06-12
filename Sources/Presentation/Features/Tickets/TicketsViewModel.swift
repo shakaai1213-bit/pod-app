@@ -797,6 +797,7 @@ enum TicketStatus: String, Sendable, CaseIterable {
     case open
     case claimed
     case inProgress = "in_progress"
+    case blocked
     case closed
     case cancelled
 
@@ -805,6 +806,7 @@ enum TicketStatus: String, Sendable, CaseIterable {
         case .open:       return "Open"
         case .claimed:    return "Claimed"
         case .inProgress: return "In Progress"
+        case .blocked:    return "Blocked"
         case .closed:     return "Closed"
         case .cancelled:  return "Cancelled"
         }
@@ -815,6 +817,7 @@ enum TicketStatus: String, Sendable, CaseIterable {
         case .open:       return AppColors.accentElectric
         case .claimed:    return AppColors.accentAgent
         case .inProgress: return AppColors.accentAgent
+        case .blocked:    return Color.orange
         case .closed:     return AppColors.accentSuccess
         case .cancelled:  return AppColors.textTertiary
         }
@@ -825,6 +828,7 @@ enum TicketStatus: String, Sendable, CaseIterable {
         case .open:       return "circle"
         case .claimed:    return "hand.raised.fill"
         case .inProgress: return "arrow.clockwise.circle.fill"
+        case .blocked:    return "hand.raised.fill"
         case .closed:     return "checkmark.circle.fill"
         case .cancelled:  return "xmark.circle.fill"
         }
@@ -947,6 +951,14 @@ struct TicketListSignal: Sendable, Hashable {
     let label: String
     let detail: String
     let icon: String
+    let color: Color
+}
+
+struct TicketFlowCountDisplay: Identifiable, Sendable, Hashable {
+    var id: String { key }
+    let key: String
+    let label: String
+    let value: Int
     let color: Color
 }
 
@@ -1079,6 +1091,7 @@ struct TicketFlowItem: Identifiable, Sendable, Hashable {
     let flowState: String
     let nextAction: String
     let ownerAgent: String
+    let ownerLane: String?
     let supportLane: String?
     let workerLane: String?
     let recommendedRuntime: String?
@@ -1091,6 +1104,9 @@ struct TicketFlowItem: Identifiable, Sendable, Hashable {
     let dispatchable: Bool
     let noiseReview: Bool
     let protected: Bool
+    let staleFlag: Bool
+    let noiseFlag: Bool
+    let backlogFlag: Bool
     let blockers: [String]
     let reasons: [String]
     let updatedAt: Date
@@ -1146,6 +1162,7 @@ private struct TicketFlowItemDTO: Decodable {
     let flowState: String?
     let nextAction: String?
     let ownerAgent: String?
+    let ownerLane: String?
     let supportLane: String?
     let workerLane: String?
     let recommendedRuntime: String?
@@ -1158,6 +1175,9 @@ private struct TicketFlowItemDTO: Decodable {
     let dispatchable: Bool?
     let noiseReview: Bool?
     let protected: Bool?
+    let staleFlag: Bool?
+    let noiseFlag: Bool?
+    let backlogFlag: Bool?
     let blockers: [String]?
     let reasons: [String]?
     let updatedAt: Date?
@@ -1168,6 +1188,7 @@ private struct TicketFlowItemDTO: Decodable {
         case flowState = "flow_state"
         case nextAction = "next_action"
         case ownerAgent = "owner_agent"
+        case ownerLane = "owner_lane"
         case supportLane = "support_lane"
         case workerLane = "worker_lane"
         case recommendedRuntime = "recommended_runtime"
@@ -1178,6 +1199,9 @@ private struct TicketFlowItemDTO: Decodable {
         case approvalGate = "approval_gate"
         case autonomyLevel = "autonomy_level"
         case noiseReview = "noise_review"
+        case staleFlag = "stale_flag"
+        case noiseFlag = "noise_flag"
+        case backlogFlag = "backlog_flag"
         case updatedAt = "updated_at"
     }
 
@@ -1190,6 +1214,7 @@ private struct TicketFlowItemDTO: Decodable {
             flowState: flowState ?? "unknown",
             nextAction: nextAction ?? "Review",
             ownerAgent: ownerAgent ?? "unassigned",
+            ownerLane: ownerLane,
             supportLane: supportLane,
             workerLane: workerLane,
             recommendedRuntime: recommendedRuntime,
@@ -1202,6 +1227,9 @@ private struct TicketFlowItemDTO: Decodable {
             dispatchable: dispatchable ?? false,
             noiseReview: noiseReview ?? false,
             protected: protected ?? false,
+            staleFlag: staleFlag ?? false,
+            noiseFlag: noiseFlag ?? false,
+            backlogFlag: backlogFlag ?? false,
             blockers: blockers ?? [],
             reasons: reasons ?? [],
             updatedAt: updatedAt ?? .distantPast
@@ -2160,6 +2188,76 @@ final class TicketsViewModel {
             toolPolicy: SchoolhouseTicketDispatchService.toolPolicy(for: ticket),
             computeTag: SchoolhouseTicketDispatchService.normalizeComputeTag(ticket.computeTag)
         )
+    }
+
+    func ticketFlow(for ticket: Ticket) -> TicketFlowItem? {
+        ticketFlowByTicketId[ticket.id]
+    }
+
+    func shouldShowFlowStateBadge(for ticket: Ticket) -> Bool {
+        guard let flow = ticketFlow(for: ticket) else { return false }
+        return flow.flowState.caseInsensitiveCompare(ticket.status.rawValue) != .orderedSame
+    }
+
+    func flowStateBadgeSignal(for ticket: Ticket) -> TicketListSignal? {
+        guard shouldShowFlowStateBadge(for: ticket), let flow = ticketFlow(for: ticket) else { return nil }
+        return TicketListSignal(
+            label: Self.flowStateLabel(flow.flowState),
+            detail: flow.flowState,
+            icon: Self.flowStateIcon(flow.flowState, protected: flow.protected),
+            color: Self.flowStateColor(flow.flowState, protected: flow.protected)
+        )
+    }
+
+    func flowStateSummaryItems(limit: Int = 5) -> [TicketFlowCountDisplay] {
+        guard let counts = ticketFlowReview?.counts.byFlowState else { return [] }
+        return counts
+            .filter { $0.value > 0 }
+            .sorted {
+                if $0.value == $1.value { return $0.key < $1.key }
+                return $0.value > $1.value
+            }
+            .prefix(limit)
+            .map { key, value in
+                TicketFlowCountDisplay(
+                    key: key,
+                    label: Self.flowStateLabel(key),
+                    value: value,
+                    color: Self.flowStateColor(key, protected: false)
+                )
+            }
+    }
+
+    func actionableFlowSignalBadges(for ticket: Ticket) -> [TicketListSignal] {
+        guard !ticket.status.isTerminal, let flow = ticketFlow(for: ticket) else { return [] }
+        var badges: [TicketListSignal] = []
+        if flow.staleFlag {
+            badges.append(TicketListSignal(
+                label: "Stale",
+                detail: "stale_flag",
+                icon: "clock.badge.exclamationmark",
+                color: AppColors.accentWarning
+            ))
+        }
+        if flow.noiseFlag || flow.noiseReview {
+            badges.append(TicketListSignal(
+                label: "Noise",
+                detail: "noise_flag",
+                icon: "speaker.slash",
+                color: AppColors.textTertiary
+            ))
+        }
+        return badges
+    }
+
+    func operatingOwnerLabel(for ticket: Ticket) -> String {
+        guard let flow = ticketFlow(for: ticket) else {
+            let context = actionContext(for: ticket)
+            return "Owner: \(context.owner) (\(context.workerLane))"
+        }
+        let owner = flow.ownerAgent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "unassigned" : flow.ownerAgent
+        let lane = flow.ownerLane ?? flow.supportLane ?? flow.workerLane ?? actionContext(for: ticket).workerLane
+        return "Owner: \(owner) (\(lane))"
     }
 
     func ticketListSignal(for ticket: Ticket) -> TicketListSignal {

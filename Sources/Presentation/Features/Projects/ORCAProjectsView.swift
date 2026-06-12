@@ -391,7 +391,7 @@ struct ORCAProjectsView: View {
                         .font(.system(size: 10, weight: .medium))
                 }
                 Text(label)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.caption.weight(.medium))
             }
             .foregroundStyle(isSelected ? .white : color)
             .padding(.horizontal, 12)
@@ -615,8 +615,8 @@ private struct ORCAKanbanColumn: View {
                 .podTextStyle(.label, color: AppColors.textSecondary)
 
             Text("\(projects.count)")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(AppColors.textTertiary)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(AppColors.textSecondary)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
                 .background(AppColors.backgroundTertiary)
@@ -639,10 +639,10 @@ private struct ORCAKanbanColumn: View {
                     VStack(spacing: 4) {
                         Image(systemName: "tray")
                             .font(.system(size: 20))
-                            .foregroundStyle(AppColors.textTertiary.opacity(0.6))
+                            .foregroundStyle(AppColors.textSecondary)
                         Text("No projects")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(AppColors.textTertiary.opacity(0.6))
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(AppColors.textSecondary)
                     }
                 )
         }
@@ -673,17 +673,19 @@ private struct ORCAProjectCard: View {
 
             // TITLE
             Text(project.name)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(AppColors.textPrimary)
                 .lineLimit(2)
+                .minimumScaleFactor(0.85)
                 .multilineTextAlignment(.leading)
 
             // DESCRIPTION (NEW — every card; description first, fall back to goal)
             if let body = descriptionLine, !body.isEmpty {
                 Text(body)
-                    .font(.system(size: 13))
+                    .font(.caption)
                     .foregroundStyle(AppColors.textSecondary)
                     .lineLimit(2)
+                    .minimumScaleFactor(0.85)
                     .multilineTextAlignment(.leading)
             }
 
@@ -695,8 +697,8 @@ private struct ORCAProjectCard: View {
                     }
                     if let projected = project.projectedCost {
                         Text("$\(Int(projected))")
-                            .font(.system(size: 11))
-                            .foregroundStyle(AppColors.textTertiary)
+                            .font(.caption2)
+                            .foregroundStyle(AppColors.textSecondary)
                     }
                     Spacer(minLength: 0)
                 }
@@ -706,6 +708,8 @@ private struct ORCAProjectCard: View {
         .padding(.vertical, 10)
         .background(AppColors.backgroundTertiary)
         .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilitySummary)
     }
 
     // First line of description, else goal
@@ -740,8 +744,9 @@ private struct ORCAProjectCard: View {
                 Image(systemName: projectStageIcon(stage))
                     .font(.system(size: 9, weight: .medium))
                 Text(projectStageDisplayName(stage).uppercased())
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.caption2.weight(.bold))
                     .kerning(0.3)
+                    .minimumScaleFactor(0.85)
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 6)
@@ -757,7 +762,7 @@ private struct ORCAProjectCard: View {
                 .fill(priorityColor)
                 .frame(width: 6, height: 6)
             Text("P\(project.priority)")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.caption2.weight(.semibold))
         }
         .foregroundStyle(priorityColor)
         .padding(.horizontal, 6)
@@ -771,7 +776,7 @@ private struct ORCAProjectCard: View {
             Image(systemName: "person.circle.fill")
                 .font(.system(size: 10))
             Text(agentShortId)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.caption2.weight(.semibold))
         }
         .foregroundStyle(AppColors.accentAgent)
     }
@@ -784,8 +789,8 @@ private struct ORCAProjectCard: View {
     // Last-activity Δ (uses updatedAt)
     private var activityDelta: some View {
         Text(relativeShort(project.updatedAt))
-            .font(.system(size: 10, weight: .medium))
-            .foregroundStyle(AppColors.textTertiary)
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(AppColors.textSecondary)
     }
 
     private func relativeShort(_ date: Date) -> String {
@@ -803,7 +808,7 @@ private struct ORCAProjectCard: View {
         case 2: return Color(hexString: "F97316")  // orange
         case 3: return AppColors.accentWarning
         case 4: return Color(hexString: "3B82F6")  // blue
-        default: return AppColors.textTertiary
+        default: return AppColors.textSecondary
         }
     }
 
@@ -825,9 +830,34 @@ private struct ORCAProjectCard: View {
             Image(systemName: isOverdue ? "calendar.badge.exclamationmark" : "calendar")
                 .font(.system(size: 10))
             Text(formatter.string(from: date))
-                .font(.system(size: 11))
+                .font(.caption2)
         }
         .foregroundStyle(color)
+    }
+
+    private var accessibilitySummary: String {
+        "\(project.name), \(accessibilityStage), owned by \(accessibilityOwner), \(accessibilityProgress)% done, \(accessibilityTicketCount) tickets"
+    }
+
+    private var accessibilityStage: String {
+        guard let stage = project.stage, !normalizedProjectStage(stage).isEmpty else { return "No Stage" }
+        return projectStageDisplayName(stage)
+    }
+
+    private var accessibilityOwner: String {
+        guard let assignedTo = project.assignedTo else { return "Unassigned" }
+        return String(assignedTo.uuidString.prefix(8)).lowercased()
+    }
+
+    private var accessibilityProgress: Int {
+        let status = project.status.lowercased()
+        if project.completedAt != nil || status == "done" || status == "completed" { return 100 }
+        if project.startedAt != nil || status == "in-progress" || status == "in_progress" { return 50 }
+        return 0
+    }
+
+    private var accessibilityTicketCount: Int {
+        0
     }
 }
 
@@ -1989,6 +2019,8 @@ private struct ProjectRoadmapProjectRow: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .minimumScaleFactor(0.85)
 
                 HStack(spacing: Theme.xs) {
                     Text("P\(project.priority)")
@@ -2002,20 +2034,23 @@ private struct ProjectRoadmapProjectRow: View {
                     }
                 }
                 .font(.caption2)
-                .foregroundStyle(AppColors.textTertiary)
+                .foregroundStyle(AppColors.textSecondary)
                 .lineLimit(1)
+                .minimumScaleFactor(0.85)
             }
 
             Spacer(minLength: Theme.xs)
 
             Text(relativeShort(project.updatedAt))
                 .font(.caption2.weight(.medium))
-                .foregroundStyle(AppColors.textTertiary)
+                .foregroundStyle(AppColors.textSecondary)
                 .lineLimit(1)
         }
         .padding(Theme.sm)
         .background(AppColors.backgroundTertiary)
         .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilitySummary)
     }
 
     private var priorityColor: Color {
@@ -2024,8 +2059,29 @@ private struct ProjectRoadmapProjectRow: View {
         case 2: return Color(hexString: "F97316")
         case 3: return AppColors.accentWarning
         case 4: return Color(hexString: "3B82F6")
-        default: return AppColors.textTertiary
+        default: return AppColors.textSecondary
         }
+    }
+
+    private var accessibilitySummary: String {
+        "\(project.name), \(accessibilityStage), owned by \(accessibilityOwner), \(accessibilityProgress)% done, 0 tickets"
+    }
+
+    private var accessibilityStage: String {
+        guard let stage = project.stage, !normalizedProjectStage(stage).isEmpty else { return "No Stage" }
+        return projectStageDisplayName(stage)
+    }
+
+    private var accessibilityOwner: String {
+        guard let assignedTo = project.assignedTo else { return "Unassigned" }
+        return String(assignedTo.uuidString.prefix(8)).lowercased()
+    }
+
+    private var accessibilityProgress: Int {
+        let status = project.status.lowercased()
+        if project.completedAt != nil || status == "done" || status == "completed" { return 100 }
+        if project.startedAt != nil || status == "in-progress" || status == "in_progress" { return 50 }
+        return 0
     }
 
     private func relativeShort(_ date: Date) -> String {
@@ -2072,8 +2128,9 @@ private struct ProjectTableRow: View {
 
                 Text(subtitle)
                     .font(.caption2)
-                    .foregroundStyle(AppColors.textTertiary)
+                    .foregroundStyle(AppColors.textSecondary)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.85)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -2087,12 +2144,14 @@ private struct ProjectTableRow: View {
 
             Text(relativeShort(project.updatedAt))
                 .font(.caption2.weight(.medium))
-                .foregroundStyle(AppColors.textTertiary)
+                .foregroundStyle(AppColors.textSecondary)
                 .frame(width: 48, alignment: .trailing)
         }
         .padding(.horizontal, Theme.sm)
         .padding(.vertical, Theme.xs)
         .background(AppColors.backgroundTertiary)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilitySummary)
     }
 
     private var subtitle: String {
@@ -2114,12 +2173,12 @@ private struct ProjectTableRow: View {
             Text(isNoStage ? "No Stage" : projectStageDisplayName(stage))
                 .font(.system(size: 9, weight: .bold))
                 .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                .minimumScaleFactor(0.85)
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 6)
         .padding(.vertical, 3)
-        .background(isNoStage ? AppColors.textTertiary : projectStageColor(stage))
+        .background(isNoStage ? AppColors.textSecondary : projectStageColor(stage))
         .clipShape(Capsule())
     }
 
@@ -2129,8 +2188,29 @@ private struct ProjectTableRow: View {
         case 2: return Color(hexString: "F97316")
         case 3: return AppColors.accentWarning
         case 4: return Color(hexString: "3B82F6")
-        default: return AppColors.textTertiary
+        default: return AppColors.textSecondary
         }
+    }
+
+    private var accessibilitySummary: String {
+        "\(project.name), \(accessibilityStage), owned by \(accessibilityOwner), \(accessibilityProgress)% done, 0 tickets"
+    }
+
+    private var accessibilityStage: String {
+        guard let stage = project.stage, !normalizedProjectStage(stage).isEmpty else { return "No Stage" }
+        return projectStageDisplayName(stage)
+    }
+
+    private var accessibilityOwner: String {
+        guard let assignedTo = project.assignedTo else { return "Unassigned" }
+        return String(assignedTo.uuidString.prefix(8)).lowercased()
+    }
+
+    private var accessibilityProgress: Int {
+        let status = project.status.lowercased()
+        if project.completedAt != nil || status == "done" || status == "completed" { return 100 }
+        if project.startedAt != nil || status == "in-progress" || status == "in_progress" { return 50 }
+        return 0
     }
 
     private func relativeShort(_ date: Date) -> String {

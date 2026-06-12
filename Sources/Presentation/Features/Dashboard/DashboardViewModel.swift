@@ -453,6 +453,7 @@ private struct DashboardTicketFlowItemDTO: Decodable {
     let flowState: String?
     let nextAction: String?
     let ownerAgent: String?
+    let ownerLane: String?
     let supportLane: String?
     let workerLane: String?
     let recommendedRuntime: String?
@@ -465,6 +466,9 @@ private struct DashboardTicketFlowItemDTO: Decodable {
     let dispatchable: Bool?
     let noiseReview: Bool?
     let protected: Bool?
+    let staleFlag: Bool?
+    let noiseFlag: Bool?
+    let backlogFlag: Bool?
     let blockers: [String]?
     let reasons: [String]?
     let updatedAt: Date?
@@ -475,6 +479,7 @@ private struct DashboardTicketFlowItemDTO: Decodable {
         case flowState = "flow_state"
         case nextAction = "next_action"
         case ownerAgent = "owner_agent"
+        case ownerLane = "owner_lane"
         case supportLane = "support_lane"
         case workerLane = "worker_lane"
         case recommendedRuntime = "recommended_runtime"
@@ -485,6 +490,9 @@ private struct DashboardTicketFlowItemDTO: Decodable {
         case approvalGate = "approval_gate"
         case autonomyLevel = "autonomy_level"
         case noiseReview = "noise_review"
+        case staleFlag = "stale_flag"
+        case noiseFlag = "noise_flag"
+        case backlogFlag = "backlog_flag"
         case updatedAt = "updated_at"
     }
 
@@ -497,6 +505,7 @@ private struct DashboardTicketFlowItemDTO: Decodable {
             flowState: flowState ?? "unknown",
             nextAction: nextAction ?? "Review",
             ownerAgent: ownerAgent ?? "unassigned",
+            ownerLane: ownerLane,
             supportLane: supportLane,
             workerLane: workerLane,
             recommendedRuntime: recommendedRuntime,
@@ -509,6 +518,9 @@ private struct DashboardTicketFlowItemDTO: Decodable {
             dispatchable: dispatchable ?? false,
             noiseReview: noiseReview ?? false,
             protected: protected ?? false,
+            staleFlag: staleFlag ?? false,
+            noiseFlag: noiseFlag ?? false,
+            backlogFlag: backlogFlag ?? false,
             blockers: blockers ?? [],
             reasons: reasons ?? [],
             updatedAt: updatedAt ?? .distantPast

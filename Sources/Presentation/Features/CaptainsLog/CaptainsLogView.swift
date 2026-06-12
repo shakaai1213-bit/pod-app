@@ -42,11 +42,13 @@ struct CaptainsLogView: View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Captain's Log")
-                    .font(.system(size: 28, weight: .bold))
+                    .font(.title.weight(.bold))
                     .foregroundColor(AppColors.textPrimary)
                 Text("Your running notes. The team reads; Aloha digests.")
-                    .font(.system(size: 14))
+                    .font(.subheadline)
                     .foregroundColor(AppColors.textSecondary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
             }
             Spacer()
             // + button — expands inline compose row
@@ -127,8 +129,8 @@ struct CaptainsLogView: View {
                     .foregroundColor(AppColors.accentElectric.opacity(0.6))
             }
             Text("Add a note…")
-                .font(.system(size: 13))
-                .foregroundColor(AppColors.textTertiary)
+                .font(.footnote)
+                .foregroundColor(AppColors.textSecondary)
             Spacer()
         }
         .frame(minHeight: 44)
@@ -153,7 +155,7 @@ struct CaptainsLogView: View {
                         composeKind = kind
                     } label: {
                         Text(kind.label)
-                            .font(.system(size: 11, weight: composeKind == kind ? .semibold : .regular))
+                            .font(.caption2.weight(composeKind == kind ? .semibold : .regular))
                             .foregroundColor(composeKind == kind ? .white : AppColors.textSecondary)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
@@ -173,13 +175,13 @@ struct CaptainsLogView: View {
             ZStack(alignment: .topLeading) {
                 if composeText.isEmpty {
                     Text("What's on your mind?")
-                        .font(.system(size: 14))
-                        .foregroundColor(AppColors.textTertiary)
+                        .font(.subheadline)
+                        .foregroundColor(AppColors.textSecondary)
                         .padding(.top, 8)
                         .padding(.leading, 4)
                 }
                 TextEditor(text: $composeText)
-                    .font(.system(size: 14))
+                    .font(.subheadline)
                     .foregroundColor(AppColors.textPrimary)
                     .scrollContentBackground(.hidden)
                     .background(Color.clear)
@@ -199,9 +201,9 @@ struct CaptainsLogView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundColor(AppColors.accentDanger)
-                        .font(.system(size: 11))
+                        .font(.caption2)
                     Text(composeErr)
-                        .font(.system(size: 12))
+                        .font(.caption)
                         .foregroundColor(AppColors.accentDanger)
                 }
             }
@@ -216,7 +218,7 @@ struct CaptainsLogView: View {
                         model.composeError = nil
                     }
                 }
-                .font(.system(size: 13))
+                .font(.footnote)
                 .foregroundColor(AppColors.textSecondary)
 
                 Spacer()
@@ -248,7 +250,7 @@ struct CaptainsLogView: View {
                                 .tint(.white)
                         }
                         Text(model.isSubmitting ? "Saving…" : "Save")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.footnote.weight(.semibold))
                             .foregroundColor(.white)
                     }
                     .padding(.horizontal, 14)
@@ -270,14 +272,14 @@ struct CaptainsLogView: View {
             // Meta row
             HStack(spacing: 0) {
                 Text(entry.capturedBy)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.footnote.weight(.semibold))
                     .foregroundColor(AppColors.textPrimary)
                 Text(" · ")
-                    .foregroundColor(AppColors.textTertiary)
-                    .font(.system(size: 12))
+                    .foregroundColor(AppColors.textSecondary)
+                    .font(.caption)
                 Text(entry.createdAt.relativeAgo)
-                    .font(.system(size: 12))
-                    .foregroundColor(AppColors.textTertiary)
+                    .font(.caption)
+                    .foregroundColor(AppColors.textSecondary)
                 Spacer()
                 // Undigested dot
                 if entry.lifecycle == "new" {
@@ -287,7 +289,7 @@ struct CaptainsLogView: View {
 
             // Body
             Text(entry.body)
-                .font(.system(size: 13))
+                .font(.footnote)
                 .foregroundColor(Color(hexString: "cfcfd4"))
                 .lineSpacing(6)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -297,6 +299,8 @@ struct CaptainsLogView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(entry.capturedBy) \(entry.createdAt.relativeAgo): \(entry.body). \(entry.lifecycleAccessibilityStatus).")
     }
 
     private var undigestedDot: some View {
@@ -351,7 +355,7 @@ struct CaptainsLogView: View {
                                 .font(.system(size: 10))
                         }
                     }
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.caption.weight(.semibold))
                     .foregroundColor(.white)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
@@ -359,27 +363,28 @@ struct CaptainsLogView: View {
                     .clipShape(Capsule())
                 }
                 .disabled(model.busyEntryIds.contains(entry.id))
+                .accessibilityLabel("Promote this note — opens menu")
 
                 Text("awaiting Aloha digest")
-                    .font(.system(size: 11))
-                    .foregroundColor(AppColors.textTertiary)
+                    .font(.caption2)
+                    .foregroundColor(AppColors.textSecondary)
             }
         case "parked":
             HStack(spacing: 4) {
                 Image(systemName: "pause.fill")
-                    .font(.system(size: 11))
+                    .font(.caption2)
                 Text("parked")
-                    .font(.system(size: 12))
+                    .font(.caption)
             }
-            .foregroundColor(AppColors.textTertiary)
+            .foregroundColor(AppColors.textSecondary)
             .italic()
         case "promoted":
             if let promotedId = entry.promotedToId {
                 HStack(spacing: 4) {
                     Image(systemName: "arrow.right")
-                        .font(.system(size: 11))
+                        .font(.caption2)
                     Text("promoted to ticket \(String(promotedId.prefix(8)))")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.caption.weight(.medium))
                         .foregroundColor(AppColors.accentElectric)
                         .underline()
                 }
@@ -387,26 +392,26 @@ struct CaptainsLogView: View {
         case "dropped":
             HStack(spacing: 4) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 11))
+                    .font(.caption2)
                 Text("dropped" + (entry.dropReason.map { " — \($0)" } ?? ""))
-                    .font(.system(size: 12))
+                    .font(.caption)
             }
-            .foregroundColor(AppColors.textTertiary)
+            .foregroundColor(AppColors.textSecondary)
             .italic()
         case "digested-no-action":
             HStack(spacing: 4) {
                 Image(systemName: "checkmark")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.caption2.weight(.semibold))
                 Text("digested by Aloha — no action")
-                    .font(.system(size: 12))
+                    .font(.caption)
             }
             .foregroundColor(AppColors.accentSuccess)
         case "digested-action":
             HStack(spacing: 4) {
                 Image(systemName: "checkmark")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.caption2.weight(.semibold))
                 Text("digested by Aloha")
-                    .font(.system(size: 12))
+                    .font(.caption)
             }
             .foregroundColor(AppColors.accentSuccess)
         default:
@@ -439,11 +444,11 @@ struct CaptainsLogView: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundColor(AppColors.accentDanger)
             Text(message)
-                .font(.system(size: 13))
+                .font(.footnote)
                 .foregroundColor(AppColors.textSecondary)
             Spacer()
             Button("Retry", action: retry)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.footnote.weight(.semibold))
                 .foregroundColor(AppColors.accentElectric)
         }
         .padding(14)
@@ -453,10 +458,10 @@ struct CaptainsLogView: View {
         HStack(spacing: 10) {
             Image(systemName: "square.and.pencil")
                 .font(.system(size: 16))
-                .foregroundColor(AppColors.textTertiary)
+                .foregroundColor(AppColors.textSecondary)
             Text("Nothing here yet. Tap + to capture a note.")
-                .font(.system(size: 13))
-                .foregroundColor(AppColors.textTertiary)
+                .font(.footnote)
+                .foregroundColor(AppColors.textSecondary)
         }
         .padding(14)
     }
@@ -693,6 +698,27 @@ struct CaptainsLogEntry: Identifiable {
     let promotedToId: String?
 }
 
+private extension CaptainsLogEntry {
+    var lifecycleAccessibilityStatus: String {
+        switch lifecycle {
+        case "new":
+            return "awaiting Aloha digest"
+        case "parked":
+            return "parked"
+        case "promoted":
+            return promotedToId.map { "promoted to ticket \(String($0.prefix(8)))" } ?? "promoted"
+        case "dropped":
+            return "dropped" + (dropReason.map { " — \($0)" } ?? "")
+        case "digested-no-action":
+            return "digested by Aloha, no action"
+        case "digested-action":
+            return "digested by Aloha"
+        default:
+            return lifecycle.replacingOccurrences(of: "-", with: " ")
+        }
+    }
+}
+
 private struct DropReasonSheet: View {
     let entry: CaptainsLogEntry
     let onDrop: (String) -> Void
@@ -703,11 +729,11 @@ private struct DropReasonSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Drop note")
-                .font(.system(size: 18, weight: .semibold))
+                .font(.headline)
                 .foregroundColor(AppColors.textPrimary)
 
             TextField("Reason", text: $reason, axis: .vertical)
-                .font(.system(size: 14))
+                .font(.subheadline)
                 .textFieldStyle(.roundedBorder)
 
             HStack {
