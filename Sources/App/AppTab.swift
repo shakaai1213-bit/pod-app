@@ -29,7 +29,7 @@ enum AppTab: String, CaseIterable, Hashable {
         case .chat:        return "Sonar"
         case .work:        return "Work"
         case .crew:        return "Crew"
-        case .knowledge:   return "Knowledge"
+        case .knowledge:   return "Library"
         case .lab:         return "Lab"
         case .runtime:     return "Runtime"
         case .system:      return "System"

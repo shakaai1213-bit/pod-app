@@ -102,7 +102,7 @@ struct KnowledgeView: View {
                 // FAB
                 fabButton
             }
-            .navigationTitle("Knowledge")
+            .navigationTitle("Library")
             .navigationBarTitleDisplayMode(.large)
             .toolbarBackground(AppColors.backgroundPrimary, for: .navigationBar)
             .navigationDestination(item: $selectedStandard) { standard in

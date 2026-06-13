@@ -33,7 +33,7 @@ struct AgentDetailSheet: View {
     @State private var lockerCockpitError: String?
     @State private var lockerFeedbackText = ""
     @State private var lockerFeedbackRating: String? = nil
-    @State private var lockerFeedbackPanel: String = "cockpit"
+    @State private var lockerFeedbackPanel: String = "playground"
     @State private var lockerFeedbackAttachSnapshot: Bool = false
     @State private var isPostingLockerFeedback = false
     @State private var lockerFeedbackMessage: String?
@@ -577,7 +577,7 @@ struct AgentDetailSheet: View {
                     VStack(alignment: .leading, spacing: Theme.sm) {
                         cockpitTopBand(cockpit)
 
-                        Picker("Cockpit", selection: $selectedCockpitTab) {
+                        Picker("Playground", selection: $selectedCockpitTab) {
                             ForEach(AgentCockpitTab.allCases) { tab in
                                 Text(tab.rawValue).tag(tab)
                             }
@@ -877,7 +877,7 @@ struct AgentDetailSheet: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(AppColors.textTertiary)
                     Picker("Panel", selection: $lockerFeedbackPanel) {
-                        ForEach(["cockpit", "planner", "inbox", "memory", "research", "feedback", "library", "escalation"], id: \.self) { panel in
+                        ForEach(["playground", "planner", "inbox", "memory", "research", "feedback", "library", "escalation"], id: \.self) { panel in
                             Text(panel.capitalized).tag(panel)
                         }
                     }
@@ -1931,7 +1931,7 @@ struct AgentDetailSheet: View {
             await MainActor.run {
                 self.lockerFeedbackText = ""
                 self.lockerFeedbackRating = nil
-                self.lockerFeedbackPanel = "cockpit"
+                self.lockerFeedbackPanel = "playground"
                 self.lockerFeedbackAttachSnapshot = false
                 self.lockerFeedbackMessage = "Feedback saved"
                 self.isPostingLockerFeedback = false
@@ -2046,7 +2046,7 @@ private struct AgentLockerActionResultDTO: Decodable {
 }
 
 private enum AgentCockpitTab: String, CaseIterable, Identifiable {
-    case cockpit = "Cockpit"
+    case cockpit = "Playground"
     case planner = "Planner"
     case inbox = "Inbox"
     case memory = "Memory"
