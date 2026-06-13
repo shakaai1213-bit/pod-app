@@ -365,6 +365,456 @@ struct InboxTailDTO: Codable, Hashable {
     }
 }
 
+// MARK: - Agent Locker Cockpit
+
+struct AgentLockerCockpitDTO: Decodable, Hashable {
+    let schema: String?
+    let source: String?
+    let generatedAt: String?
+    let startHere: StartHere
+    let planner: Planner
+    let orcaTasks: OrcaTasks
+    let inbox: Inbox
+    let heartbeat: Heartbeat
+    let lockerMemory: LockerMemory
+    let researchRail: ResearchRail
+    let dashboards: [Dashboard]
+    let feedback: Feedback
+    let gaps: [String]
+    let wakeMarkdown: String?
+
+    enum CodingKeys: String, CodingKey {
+        case schema, source, planner, inbox, dashboards, feedback, gaps, heartbeat
+        case generatedAt = "generated_at"
+        case startHere = "start_here"
+        case orcaTasks = "orca_tasks"
+        case lockerMemory = "locker_memory"
+        case researchRail = "research_rail"
+        case wakeMarkdown = "wake_markdown"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schema = try container.decodeIfPresent(String.self, forKey: .schema)
+        source = try container.decodeIfPresent(String.self, forKey: .source)
+        generatedAt = try container.decodeIfPresent(String.self, forKey: .generatedAt)
+        startHere = try container.decodeIfPresent(StartHere.self, forKey: .startHere) ?? StartHere()
+        planner = try container.decodeIfPresent(Planner.self, forKey: .planner) ?? Planner()
+        orcaTasks = try container.decodeIfPresent(OrcaTasks.self, forKey: .orcaTasks) ?? OrcaTasks()
+        inbox = try container.decodeIfPresent(Inbox.self, forKey: .inbox) ?? Inbox()
+        heartbeat = try container.decodeIfPresent(Heartbeat.self, forKey: .heartbeat) ?? Heartbeat()
+        lockerMemory = try container.decodeIfPresent(LockerMemory.self, forKey: .lockerMemory) ?? LockerMemory()
+        researchRail = try container.decodeIfPresent(ResearchRail.self, forKey: .researchRail) ?? ResearchRail()
+        dashboards = try container.decodeIfPresent([Dashboard].self, forKey: .dashboards) ?? []
+        feedback = try container.decodeIfPresent(Feedback.self, forKey: .feedback) ?? Feedback()
+        gaps = try container.decodeIfPresent([String].self, forKey: .gaps) ?? []
+        wakeMarkdown = try container.decodeIfPresent(String.self, forKey: .wakeMarkdown)
+    }
+
+    struct StartHere: Decodable, Hashable {
+        let headline: String?
+        let priority: String?
+        let reason: String?
+        let primaryAction: String?
+        let blockedBy: String?
+        let sourceRefs: [String: String?]
+
+        enum CodingKeys: String, CodingKey {
+            case headline, priority, reason
+            case primaryAction = "primary_action"
+            case blockedBy = "blocked_by"
+            case sourceRefs = "source_refs"
+        }
+
+        init(headline: String? = nil, priority: String? = nil, reason: String? = nil, primaryAction: String? = nil, blockedBy: String? = nil, sourceRefs: [String: String?] = [:]) {
+            self.headline = headline
+            self.priority = priority
+            self.reason = reason
+            self.primaryAction = primaryAction
+            self.blockedBy = blockedBy
+            self.sourceRefs = sourceRefs
+        }
+    }
+
+    struct Planner: Decodable, Hashable {
+        let counts: Counts
+        let lanes: Lanes
+        let emptyReasons: [String: String?]
+
+        enum CodingKeys: String, CodingKey {
+            case counts, lanes
+            case emptyReasons = "empty_reasons"
+        }
+
+        init(counts: Counts = Counts(), lanes: Lanes = Lanes(), emptyReasons: [String: String?] = [:]) {
+            self.counts = counts
+            self.lanes = lanes
+            self.emptyReasons = emptyReasons
+        }
+
+        struct Counts: Decodable, Hashable {
+            let now: Int
+            let next: Int
+            let blocked: Int
+            let waiting: Int
+            let review: Int
+            let fyi: Int
+
+            enum CodingKeys: String, CodingKey {
+                case now, next, blocked, waiting, review, fyi
+            }
+
+            init(now: Int = 0, next: Int = 0, blocked: Int = 0, waiting: Int = 0, review: Int = 0, fyi: Int = 0) {
+                self.now = now
+                self.next = next
+                self.blocked = blocked
+                self.waiting = waiting
+                self.review = review
+                self.fyi = fyi
+            }
+
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                now = try container.decodeIfPresent(Int.self, forKey: .now) ?? 0
+                next = try container.decodeIfPresent(Int.self, forKey: .next) ?? 0
+                blocked = try container.decodeIfPresent(Int.self, forKey: .blocked) ?? 0
+                waiting = try container.decodeIfPresent(Int.self, forKey: .waiting) ?? 0
+                review = try container.decodeIfPresent(Int.self, forKey: .review) ?? 0
+                fyi = try container.decodeIfPresent(Int.self, forKey: .fyi) ?? 0
+            }
+        }
+
+        struct Lanes: Decodable, Hashable {
+            let now: [WorkItem]
+            let next: [WorkItem]
+            let blocked: [WorkItem]
+            let waiting: [WorkItem]
+            let review: [WorkItem]
+            let fyi: [WorkItem]
+
+            init(now: [WorkItem] = [], next: [WorkItem] = [], blocked: [WorkItem] = [], waiting: [WorkItem] = [], review: [WorkItem] = [], fyi: [WorkItem] = []) {
+                self.now = now
+                self.next = next
+                self.blocked = blocked
+                self.waiting = waiting
+                self.review = review
+                self.fyi = fyi
+            }
+        }
+    }
+
+    struct WorkItem: Decodable, Hashable, Identifiable {
+        let id: String?
+        let title: String?
+        let priority: String?
+        let state: String?
+        let status: String?
+        let lane: String?
+        let owner: String?
+        let nextAction: String?
+        let source: String?
+        let whyShown: String?
+        let blockedOn: String?
+        let updatedAt: String?
+        let ticketId: String?
+        let reviewStatus: String?
+        let summary: String?
+
+        var stableId: String { id ?? title ?? summary ?? "item" }
+        var displayTitle: String { title ?? summary ?? id ?? "Untitled item" }
+        var displayState: String? { state ?? status ?? reviewStatus }
+
+        enum CodingKeys: String, CodingKey {
+            case id, title, priority, state, status, lane, owner, source, summary
+            case nextAction = "next_action"
+            case whyShown = "why_shown"
+            case blockedOn = "blocked_on"
+            case updatedAt = "updated_at"
+            case ticketId = "ticket_id"
+            case reviewStatus = "review_status"
+        }
+    }
+
+    struct OrcaTasks: Decodable, Hashable {
+        let assigned: [WorkItem]
+        let activeRuns: [WorkItem]
+        let reviewRequiredRuns: [WorkItem]
+        let claimable: [WorkItem]
+        let mentioned: [WorkItem]
+        let stale: [WorkItem]
+        let evidenceClose: [WorkItem]
+        let emptyReasons: [String: String?]
+
+        enum CodingKeys: String, CodingKey {
+            case assigned, claimable, mentioned, stale
+            case activeRuns = "active_runs"
+            case reviewRequiredRuns = "review_required_runs"
+            case evidenceClose = "evidence_close"
+            case emptyReasons = "empty_reasons"
+        }
+
+        init(assigned: [WorkItem] = [], activeRuns: [WorkItem] = [], reviewRequiredRuns: [WorkItem] = [], claimable: [WorkItem] = [], mentioned: [WorkItem] = [], stale: [WorkItem] = [], evidenceClose: [WorkItem] = [], emptyReasons: [String: String?] = [:]) {
+            self.assigned = assigned
+            self.activeRuns = activeRuns
+            self.reviewRequiredRuns = reviewRequiredRuns
+            self.claimable = claimable
+            self.mentioned = mentioned
+            self.stale = stale
+            self.evidenceClose = evidenceClose
+            self.emptyReasons = emptyReasons
+        }
+    }
+
+    struct Inbox: Decodable, Hashable {
+        let actionCount: Int
+        let staleCount: Int
+        let bodyGapCount: Int
+        let gap: String?
+        let emptyReason: String?
+        let threads: [Thread]
+
+        enum CodingKeys: String, CodingKey {
+            case gap, threads
+            case emptyReason = "empty_reason"
+            case actionCount = "action_count"
+            case staleCount = "stale_count"
+            case bodyGapCount = "body_gap_count"
+        }
+
+        init(actionCount: Int = 0, staleCount: Int = 0, bodyGapCount: Int = 0, gap: String? = nil, emptyReason: String? = nil, threads: [Thread] = []) {
+            self.actionCount = actionCount
+            self.staleCount = staleCount
+            self.bodyGapCount = bodyGapCount
+            self.gap = gap
+            self.emptyReason = emptyReason
+            self.threads = threads
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            actionCount = try container.decodeIfPresent(Int.self, forKey: .actionCount) ?? 0
+            staleCount = try container.decodeIfPresent(Int.self, forKey: .staleCount) ?? 0
+            bodyGapCount = try container.decodeIfPresent(Int.self, forKey: .bodyGapCount) ?? 0
+            gap = try container.decodeIfPresent(String.self, forKey: .gap)
+            emptyReason = try container.decodeIfPresent(String.self, forKey: .emptyReason)
+            threads = try container.decodeIfPresent([Thread].self, forKey: .threads) ?? []
+        }
+
+        struct Thread: Decodable, Hashable, Identifiable {
+            let id: String?
+            let sender: String?
+            let timestamp: String?
+            let classification: String?
+            let source: String?
+            let preview: String?
+            let body: String?
+            let bodyAvailable: Bool?
+            let bodyUnavailableReason: String?
+            let stale: Bool?
+            let handled: Bool?
+            let replyLane: String?
+            let sourceRefs: [String: String?]
+
+            var stableId: String { id ?? preview ?? "thread" }
+            var safeBody: String? { body ?? preview }
+
+            enum CodingKeys: String, CodingKey {
+                case id, sender, timestamp, classification, source, preview, body, stale, handled
+                case bodyAvailable = "body_available"
+                case bodyUnavailableReason = "body_unavailable_reason"
+                case replyLane = "reply_lane"
+                case sourceRefs = "source_refs"
+            }
+        }
+    }
+
+    struct Heartbeat: Decodable, Hashable {
+        let status: String?
+        let currentSessionId: String?
+        let lastHeartbeatAt: String?
+        let awakeAt: String?
+        let sleepAt: String?
+        let currentWork: String?
+        let blocker: String?
+        let nextCheckpoint: String?
+        let staleThreshold: String?
+        let lastSleepProof: String?
+
+        enum CodingKeys: String, CodingKey {
+            case status, blocker
+            case currentSessionId = "current_session_id"
+            case lastHeartbeatAt = "last_heartbeat_at"
+            case awakeAt = "awake_at"
+            case sleepAt = "sleep_at"
+            case currentWork = "current_work"
+            case nextCheckpoint = "next_checkpoint"
+            case staleThreshold = "stale_threshold"
+            case lastSleepProof = "last_sleep_proof"
+        }
+
+        init(status: String? = nil, currentSessionId: String? = nil, lastHeartbeatAt: String? = nil, awakeAt: String? = nil, sleepAt: String? = nil, currentWork: String? = nil, blocker: String? = nil, nextCheckpoint: String? = nil, staleThreshold: String? = nil, lastSleepProof: String? = nil) {
+            self.status = status
+            self.currentSessionId = currentSessionId
+            self.lastHeartbeatAt = lastHeartbeatAt
+            self.awakeAt = awakeAt
+            self.sleepAt = sleepAt
+            self.currentWork = currentWork
+            self.blocker = blocker
+            self.nextCheckpoint = nextCheckpoint
+            self.staleThreshold = staleThreshold
+            self.lastSleepProof = lastSleepProof
+        }
+    }
+
+    struct LockerMemory: Decodable, Hashable {
+        let dailyLogRef: String?
+        let dailyLogBytes: Int?
+        let dailyMemoryLoaded: Bool?
+        let lastSessionSummary: String?
+        let openLoops: [String]
+        let commitments: [String]
+        let compactionSummary: String?
+        let unresolvedBlockers: [String]
+        let memoryCandidates: [WorkItem]
+        let emptyReason: String?
+
+        enum CodingKeys: String, CodingKey {
+            case commitments
+            case dailyLogRef = "daily_log_ref"
+            case dailyLogBytes = "daily_log_bytes"
+            case dailyMemoryLoaded = "daily_memory_loaded"
+            case lastSessionSummary = "last_session_summary"
+            case openLoops = "open_loops"
+            case compactionSummary = "compaction_summary"
+            case unresolvedBlockers = "unresolved_blockers"
+            case memoryCandidates = "memory_candidates"
+            case emptyReason = "empty_reason"
+        }
+
+        init(dailyLogRef: String? = nil, dailyLogBytes: Int? = nil, dailyMemoryLoaded: Bool? = nil, lastSessionSummary: String? = nil, openLoops: [String] = [], commitments: [String] = [], compactionSummary: String? = nil, unresolvedBlockers: [String] = [], memoryCandidates: [WorkItem] = [], emptyReason: String? = nil) {
+            self.dailyLogRef = dailyLogRef
+            self.dailyLogBytes = dailyLogBytes
+            self.dailyMemoryLoaded = dailyMemoryLoaded
+            self.lastSessionSummary = lastSessionSummary
+            self.openLoops = openLoops
+            self.commitments = commitments
+            self.compactionSummary = compactionSummary
+            self.unresolvedBlockers = unresolvedBlockers
+            self.memoryCandidates = memoryCandidates
+            self.emptyReason = emptyReason
+        }
+    }
+
+    struct Dashboard: Decodable, Hashable, Identifiable {
+        let id: String
+        let title: String?
+        let visibility: String?
+        let status: String?
+        let summary: String?
+        let previewAvailable: Bool?
+        let cards: [String]
+        let actions: [String]
+
+        enum CodingKeys: String, CodingKey {
+            case id, title, visibility, status, summary, cards, actions
+            case previewAvailable = "preview_available"
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decode(String.self, forKey: .id)
+            title = try container.decodeIfPresent(String.self, forKey: .title)
+            visibility = try container.decodeIfPresent(String.self, forKey: .visibility)
+            status = try container.decodeIfPresent(String.self, forKey: .status)
+            summary = try container.decodeIfPresent(String.self, forKey: .summary)
+            previewAvailable = try container.decodeIfPresent(Bool.self, forKey: .previewAvailable)
+            cards = (try? container.decodeIfPresent([String].self, forKey: .cards)) ?? []
+            actions = (try? container.decodeIfPresent([String].self, forKey: .actions)) ?? []
+        }
+    }
+
+    struct ResearchRail: Decodable, Hashable {
+        let activeRequests: [WorkItem]
+        let activePackets: [WorkItem]
+        let awaitingReview: [WorkItem]
+        let reviewedRelevant: [WorkItem]
+        let counts: Counts
+        let source: String?
+        let requestEndpoint: String?
+        let packetEndpoint: String?
+        let emptyReason: String?
+
+        enum CodingKeys: String, CodingKey {
+            case counts, source
+            case activeRequests = "active_requests"
+            case activePackets = "active_packets"
+            case awaitingReview = "awaiting_review"
+            case reviewedRelevant = "reviewed_relevant"
+            case requestEndpoint = "request_endpoint"
+            case packetEndpoint = "packet_endpoint"
+            case emptyReason = "empty_reason"
+        }
+
+        init(activeRequests: [WorkItem] = [], activePackets: [WorkItem] = [], awaitingReview: [WorkItem] = [], reviewedRelevant: [WorkItem] = [], counts: Counts = Counts(), source: String? = nil, requestEndpoint: String? = nil, packetEndpoint: String? = nil, emptyReason: String? = nil) {
+            self.activeRequests = activeRequests
+            self.activePackets = activePackets
+            self.awaitingReview = awaitingReview
+            self.reviewedRelevant = reviewedRelevant
+            self.counts = counts
+            self.source = source
+            self.requestEndpoint = requestEndpoint
+            self.packetEndpoint = packetEndpoint
+            self.emptyReason = emptyReason
+        }
+
+        struct Counts: Decodable, Hashable {
+            let activeRequests: Int
+            let activePackets: Int
+            let awaitingReview: Int
+            let reviewedRelevant: Int
+
+            enum CodingKeys: String, CodingKey {
+                case activeRequests = "active_requests"
+                case activePackets = "active_packets"
+                case awaitingReview = "awaiting_review"
+                case reviewedRelevant = "reviewed_relevant"
+            }
+
+            init(activeRequests: Int = 0, activePackets: Int = 0, awaitingReview: Int = 0, reviewedRelevant: Int = 0) {
+                self.activeRequests = activeRequests
+                self.activePackets = activePackets
+                self.awaitingReview = awaitingReview
+                self.reviewedRelevant = reviewedRelevant
+            }
+
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                activeRequests = try container.decodeIfPresent(Int.self, forKey: .activeRequests) ?? 0
+                activePackets = try container.decodeIfPresent(Int.self, forKey: .activePackets) ?? 0
+                awaitingReview = try container.decodeIfPresent(Int.self, forKey: .awaitingReview) ?? 0
+                reviewedRelevant = try container.decodeIfPresent(Int.self, forKey: .reviewedRelevant) ?? 0
+            }
+        }
+    }
+
+    struct Feedback: Decodable, Hashable {
+        let endpoint: String?
+        let status: String?
+        let snapshotPolicy: String?
+
+        enum CodingKeys: String, CodingKey {
+            case endpoint, status
+            case snapshotPolicy = "snapshot_policy"
+        }
+
+        init(endpoint: String? = nil, status: String? = nil, snapshotPolicy: String? = nil) {
+            self.endpoint = endpoint
+            self.status = status
+            self.snapshotPolicy = snapshotPolicy
+        }
+    }
+}
+
 // MARK: - Agent Activation Context
 
 struct AgentActivationContextDTO: Codable, Hashable {

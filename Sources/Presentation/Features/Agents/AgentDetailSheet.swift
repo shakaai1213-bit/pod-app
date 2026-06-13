@@ -28,6 +28,13 @@ struct AgentDetailSheet: View {
     @State private var activationContext: AgentActivationContextDTO?
     @State private var isLoadingActivationContext = false
     @State private var activationContextError: String?
+    @State private var lockerCockpit: AgentLockerCockpitDTO?
+    @State private var isLoadingLockerCockpit = false
+    @State private var lockerCockpitError: String?
+    @State private var lockerFeedbackText = ""
+    @State private var isPostingLockerFeedback = false
+    @State private var lockerFeedbackMessage: String?
+    @State private var selectedCockpitTab: AgentCockpitTab = .cockpit
     @State private var isRuntimeExpanded = false
 
     // POD-5 (c797ada1): non-destructive inbox tail, fetched on appear.
@@ -56,6 +63,7 @@ struct AgentDetailSheet: View {
                 VStack(spacing: Theme.lg) {
                     headerSection
                     rosterPolicySection
+                    lockerCockpitSection
                     responsibilitySection
                     activationContextSection
                     runtimeSection
@@ -71,6 +79,7 @@ struct AgentDetailSheet: View {
                 .task {
                     await loadInboxTail()
                     await loadResponsibility()
+                    await loadLockerCockpit()
                     await loadActivationContext()
                     await loadWorkNotes()
                 }
@@ -542,6 +551,430 @@ struct AgentDetailSheet: View {
         !workNoteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private var canPostLockerFeedback: Bool {
+        !lockerFeedbackText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var lockerCockpitSection: some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            sectionHeader("Locker Cockpit", count: lockerCockpit?.planner.counts.now)
+
+            VStack(alignment: .leading, spacing: Theme.sm) {
+                if isLoadingLockerCockpit && lockerCockpit == nil {
+                    HStack(spacing: Theme.sm) {
+                        ProgressView().controlSize(.small)
+                        Text("Loading cockpit…")
+                            .podTextStyle(.body, color: AppColors.textTertiary)
+                        Spacer()
+                    }
+                } else if let cockpit = lockerCockpit {
+                    VStack(alignment: .leading, spacing: Theme.sm) {
+                        cockpitTopBand(cockpit)
+
+                        Picker("Cockpit", selection: $selectedCockpitTab) {
+                            ForEach(AgentCockpitTab.allCases) { tab in
+                                Text(tab.rawValue).tag(tab)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+
+                        switch selectedCockpitTab {
+                        case .cockpit:
+                            cockpitOverviewTab(cockpit)
+                        case .planner:
+                            cockpitPlannerTab(cockpit)
+                        case .inbox:
+                            cockpitInboxTab(cockpit)
+                        case .memory:
+                            cockpitMemoryTab(cockpit)
+                        case .research:
+                            cockpitResearchTab(cockpit)
+                        case .feedback:
+                            cockpitFeedbackTab(cockpit)
+                        }
+
+                        if let source = cockpit.source {
+                            Text(source)
+                                .podTextStyle(.label, color: AppColors.textTertiary)
+                        }
+                    }
+                } else {
+                    Text(lockerCockpitError ?? "Locker cockpit unavailable")
+                        .podTextStyle(.body, color: AppColors.textTertiary)
+                }
+            }
+            .padding(Theme.md)
+            .podCard()
+        }
+    }
+
+    private func cockpitTopBand(_ cockpit: AgentLockerCockpitDTO) -> some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack(alignment: .top, spacing: Theme.sm) {
+                Image(systemName: cockpit.heartbeat.status == "awake" ? "waveform.path.ecg" : "moon.zzz.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(cockpit.heartbeat.status == "awake" ? AppColors.accentSuccess : AppColors.textTertiary)
+
+                VStack(alignment: .leading, spacing: Theme.xxs) {
+                    Text(agent.role)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppColors.textTertiary)
+                    Text(runtimeDisplay(agent.supportRuntime))
+                        .podTextStyle(.caption, color: AppColors.textSecondary)
+                    Text(agent.runtimeHost?.nilIfBlank ?? "Runtime host unknown")
+                        .podTextStyle(.caption, color: AppColors.textTertiary)
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: Theme.xxs) {
+                    Text(cockpit.heartbeat.status?.replacingOccurrences(of: "_", with: " ") ?? "unknown")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(cockpit.heartbeat.status == "awake" ? AppColors.accentSuccess : AppColors.textTertiary)
+                    Text("\(cockpitAttentionCount(cockpit)) needs attention")
+                        .podTextStyle(.label, color: AppColors.textTertiary)
+                }
+            }
+
+            HStack(spacing: Theme.sm) {
+                activationMetric("Now", value: "\(cockpit.planner.counts.now)", icon: "bolt.fill", color: cockpit.planner.counts.now > 0 ? AppColors.accentWarning : AppColors.accentSuccess)
+                activationMetric("Blocked", value: "\(cockpit.planner.counts.blocked)", icon: "lock.fill", color: cockpit.planner.counts.blocked > 0 ? AppColors.accentWarning : AppColors.textTertiary)
+                activationMetric("Inbox", value: "\(cockpit.inbox.actionCount)", icon: "tray.full.fill", color: cockpit.inbox.actionCount > 0 ? AppColors.accentElectric : AppColors.textTertiary)
+            }
+        }
+    }
+
+    private func cockpitOverviewTab(_ cockpit: AgentLockerCockpitDTO) -> some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack(alignment: .top, spacing: Theme.sm) {
+                Image(systemName: "viewfinder.circle.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(priorityColor(cockpit.startHere.priority))
+
+                VStack(alignment: .leading, spacing: Theme.xxs) {
+                    Text(cockpit.startHere.headline ?? "No urgent action")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(AppColors.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    cockpitText(cockpit.startHere.reason, fallback: "No priority reason returned.")
+                    cockpitText(cockpit.startHere.primaryAction, fallback: "No primary action returned.")
+
+                    if let blockedBy = cockpit.startHere.blockedBy, !blockedBy.isEmpty {
+                        Label(blockedBy, systemImage: "lock.fill")
+                            .font(.caption)
+                            .foregroundStyle(AppColors.accentWarning)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+
+            if !cockpit.dashboards.isEmpty {
+                cockpitDashboardList(cockpit.dashboards)
+            }
+        }
+    }
+
+    private func cockpitPlannerTab(_ cockpit: AgentLockerCockpitDTO) -> some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            cockpitLane("Now", items: cockpit.planner.lanes.now, emptyReason: cockpit.planner.emptyReasons["now"] ?? nil)
+            cockpitLane("Next", items: cockpit.planner.lanes.next, emptyReason: cockpit.planner.emptyReasons["next"] ?? nil)
+            cockpitLane("Blocked", items: cockpit.planner.lanes.blocked, emptyReason: cockpit.planner.emptyReasons["blocked"] ?? nil)
+            cockpitLane("Review", items: cockpit.planner.lanes.review, emptyReason: cockpit.planner.emptyReasons["review"] ?? nil)
+            cockpitLane("Assigned ORCA Tasks", items: cockpit.orcaTasks.assigned, emptyReason: cockpit.orcaTasks.emptyReasons["assigned"] ?? nil)
+            cockpitLane("Active Runs", items: cockpit.orcaTasks.activeRuns, emptyReason: cockpit.orcaTasks.emptyReasons["active_runs"] ?? nil)
+        }
+    }
+
+    private func cockpitInboxTab(_ cockpit: AgentLockerCockpitDTO) -> some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack(spacing: Theme.sm) {
+                Label("\(cockpit.inbox.actionCount) action", systemImage: "tray.full.fill")
+                    .font(.caption)
+                    .foregroundStyle(AppColors.textSecondary)
+                Label("\(cockpit.inbox.bodyGapCount) body gaps", systemImage: cockpit.inbox.bodyGapCount > 0 ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(cockpit.inbox.bodyGapCount > 0 ? AppColors.accentWarning : AppColors.accentSuccess)
+                Spacer()
+            }
+
+            if cockpit.inbox.threads.isEmpty {
+                cockpitEmptyText(cockpit.inbox.emptyReason ?? cockpit.inbox.gap ?? "No inbox threads returned.")
+            } else {
+                ForEach(Array(cockpit.inbox.threads.enumerated()), id: \.offset) { _, thread in
+                    cockpitThreadRow(thread)
+                }
+            }
+        }
+    }
+
+    private func cockpitMemoryTab(_ cockpit: AgentLockerCockpitDTO) -> some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            cockpitMetadataRow("Session", value: cockpit.heartbeat.currentSessionId)
+            cockpitMetadataRow("Awake", value: cockpit.heartbeat.awakeAt)
+            cockpitMetadataRow("Heartbeat", value: cockpit.heartbeat.lastHeartbeatAt)
+            cockpitMetadataRow("Sleep", value: cockpit.heartbeat.lastSleepProof ?? cockpit.heartbeat.sleepAt)
+            cockpitMetadataRow("Current work", value: cockpit.heartbeat.currentWork)
+            cockpitMetadataRow("Next checkpoint", value: cockpit.heartbeat.nextCheckpoint)
+            cockpitMetadataRow("Blocker", value: cockpit.heartbeat.blocker)
+
+            Divider().background(AppColors.border)
+
+            cockpitText(cockpit.lockerMemory.lastSessionSummary, fallback: cockpit.lockerMemory.emptyReason ?? "No last session summary returned.")
+            cockpitMetadataRow("Daily log", value: cockpit.lockerMemory.dailyLogRef)
+            cockpitStringList("Open Loops", items: cockpit.lockerMemory.openLoops)
+            cockpitStringList("Commitments", items: cockpit.lockerMemory.commitments)
+            cockpitStringList("Unresolved Blockers", items: cockpit.lockerMemory.unresolvedBlockers)
+        }
+    }
+
+    private func cockpitResearchTab(_ cockpit: AgentLockerCockpitDTO) -> some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack(spacing: Theme.sm) {
+                activationMetric("Requests", value: "\(cockpit.researchRail.counts.activeRequests)", icon: "doc.badge.plus", color: cockpit.researchRail.counts.activeRequests > 0 ? AppColors.accentElectric : AppColors.textTertiary)
+                activationMetric("Review", value: "\(cockpit.researchRail.counts.awaitingReview)", icon: "checklist.checked", color: cockpit.researchRail.counts.awaitingReview > 0 ? AppColors.accentWarning : AppColors.accentSuccess)
+                activationMetric("Reviewed", value: "\(cockpit.researchRail.counts.reviewedRelevant)", icon: "doc.text.magnifyingglass", color: AppColors.accentAgent)
+            }
+
+            cockpitLane("Research Requests", items: cockpit.researchRail.activeRequests, emptyReason: cockpit.researchRail.emptyReason)
+            cockpitLane("Active Packets", items: cockpit.researchRail.activePackets, emptyReason: "No in-progress research packets returned.")
+            cockpitLane("Awaiting Review", items: cockpit.researchRail.awaitingReview, emptyReason: "No Research Rail packets are waiting on this agent.")
+            cockpitLane("Reviewed Relevant", items: cockpit.researchRail.reviewedRelevant, emptyReason: "No reviewed packets returned for this agent.")
+
+            if let source = cockpit.researchRail.source {
+                Text(source)
+                    .podTextStyle(.label, color: AppColors.textTertiary)
+            }
+        }
+    }
+
+    private func cockpitFeedbackTab(_ cockpit: AgentLockerCockpitDTO) -> some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            if cockpit.feedback.endpoint == nil {
+                cockpitEmptyText("Feedback endpoint was not returned by ORCA.")
+            } else {
+                TextEditor(text: $lockerFeedbackText)
+                    .frame(minHeight: 88)
+                    .scrollContentBackground(.hidden)
+                    .background(AppColors.backgroundPrimary)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .padding(Theme.sm)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.radiusSmall)
+                            .strokeBorder(AppColors.border, lineWidth: 1)
+                    )
+
+                HStack(spacing: Theme.sm) {
+                    Button {
+                        Task { await postLockerFeedback() }
+                    } label: {
+                        HStack(spacing: Theme.xs) {
+                            if isPostingLockerFeedback {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Image(systemName: "bubble.left.and.bubble.right.fill")
+                                    .font(.system(size: 13, weight: .semibold))
+                            }
+                            Text("Send Feedback")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                        .padding(.horizontal, Theme.md)
+                        .padding(.vertical, Theme.xs)
+                        .foregroundStyle(.white)
+                        .background(canPostLockerFeedback ? AppColors.accentElectric : AppColors.textMuted)
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canPostLockerFeedback || isPostingLockerFeedback)
+
+                    if let lockerFeedbackMessage {
+                        Text(lockerFeedbackMessage)
+                            .podTextStyle(.caption, color: lockerFeedbackMessage == "Feedback saved" ? AppColors.accentSuccess : AppColors.accentDanger)
+                            .lineLimit(2)
+                    }
+
+                    Spacer()
+                }
+            }
+        }
+    }
+
+    private func cockpitAttentionCount(_ cockpit: AgentLockerCockpitDTO) -> Int {
+        cockpit.planner.counts.now + cockpit.planner.counts.blocked + cockpit.planner.counts.review + cockpit.inbox.actionCount
+    }
+
+    private func cockpitDashboardList(_ dashboards: [AgentLockerCockpitDTO.Dashboard]) -> some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            Text("Dashboards")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppColors.textTertiary)
+
+            ForEach(dashboards) { dashboard in
+                VStack(alignment: .leading, spacing: Theme.xxs) {
+                    HStack(spacing: Theme.xs) {
+                        Image(systemName: dashboard.visibility == "protected" ? "lock.shield.fill" : "rectangle.3.group.fill")
+                            .font(.caption)
+                            .foregroundStyle(dashboard.visibility == "protected" ? AppColors.accentWarning : AppColors.accentAgent)
+                        Text(dashboard.title ?? dashboard.id)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppColors.textPrimary)
+                        if let status = dashboard.status {
+                            Text(status.replacingOccurrences(of: "_", with: " "))
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(AppColors.textTertiary)
+                        }
+                        Spacer()
+                    }
+
+                    cockpitText(dashboard.summary, fallback: "Dashboard registered without a preview summary.")
+                }
+                .padding(Theme.sm)
+                .background(AppColors.backgroundTertiary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+            }
+        }
+    }
+
+    private func cockpitLane(_ title: String, items: [AgentLockerCockpitDTO.WorkItem], emptyReason: String?) -> some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppColors.textTertiary)
+
+            if items.isEmpty {
+                cockpitEmptyText(emptyReason ?? "No \(title.lowercased()) items returned.")
+            } else {
+                ForEach(Array(items.prefix(5).enumerated()), id: \.offset) { _, item in
+                    cockpitWorkItemRow(item)
+                }
+            }
+        }
+    }
+
+    private func cockpitWorkItemRow(_ item: AgentLockerCockpitDTO.WorkItem) -> some View {
+        VStack(alignment: .leading, spacing: Theme.xxs) {
+            HStack(alignment: .firstTextBaseline, spacing: Theme.xs) {
+                Text(item.displayTitle)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                if let priority = item.priority, !priority.isEmpty {
+                    Text(priority)
+                        .podTextStyle(.label, color: priorityColor(priority))
+                }
+            }
+
+            cockpitText(item.nextAction ?? item.whyShown, fallback: "No next action returned.")
+
+            HStack(spacing: Theme.xs) {
+                if let state = item.displayState, !state.isEmpty {
+                    workNoteChip(state.replacingOccurrences(of: "_", with: " "), icon: "circle.dashed")
+                }
+                if let source = item.source, !source.isEmpty {
+                    workNoteChip(source, icon: "link")
+                }
+                if let blockedOn = item.blockedOn, !blockedOn.isEmpty {
+                    workNoteChip(blockedOn, icon: "lock.fill")
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.sm)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+    }
+
+    private func cockpitThreadRow(_ thread: AgentLockerCockpitDTO.Inbox.Thread) -> some View {
+        VStack(alignment: .leading, spacing: Theme.xxs) {
+            HStack(spacing: Theme.xs) {
+                Text(thread.sender ?? "Unknown sender")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.textPrimary)
+                Spacer()
+                if let classification = thread.classification {
+                    Text(classification.replacingOccurrences(of: "_", with: " "))
+                        .podTextStyle(.label, color: AppColors.textTertiary)
+                }
+            }
+
+            cockpitText(thread.safeBody, fallback: thread.bodyUnavailableReason ?? "Body unavailable; no safe preview returned.")
+
+            if thread.bodyAvailable == false, let reason = thread.bodyUnavailableReason {
+                Label(reason, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(AppColors.accentWarning)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: Theme.xs) {
+                if let source = thread.source {
+                    workNoteChip(source, icon: "tray.full")
+                }
+                if let timestamp = thread.timestamp {
+                    workNoteChip(timestamp, icon: "clock")
+                }
+                if thread.stale == true {
+                    workNoteChip("stale", icon: "timer")
+                }
+            }
+
+            if !thread.sourceRefs.isEmpty {
+                Text(thread.sourceRefs.compactMap { key, value in value.map { "\(key): \($0)" } }.joined(separator: "  "))
+                    .podTextStyle(.label, color: AppColors.textTertiary)
+                    .lineLimit(2)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.sm)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+    }
+
+    private func cockpitMetadataRow(_ label: String, value: String?) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.xs) {
+            Text(label)
+                .podTextStyle(.label, color: AppColors.textTertiary)
+                .frame(width: 104, alignment: .leading)
+            Text(value?.nilIfBlank ?? "Not returned")
+                .podTextStyle(.caption, color: value?.nilIfBlank == nil ? AppColors.textTertiary : AppColors.textSecondary)
+                .lineLimit(2)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func cockpitStringList(_ title: String, items: [String]) -> some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppColors.textTertiary)
+            if items.isEmpty {
+                cockpitEmptyText("No \(title.lowercased()) returned.")
+            } else {
+                ForEach(items.prefix(4), id: \.self) { item in
+                    Text(item)
+                        .podTextStyle(.caption, color: AppColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    private func cockpitText(_ text: String?, fallback: String) -> some View {
+        Text(text?.nilIfBlank ?? fallback)
+            .podTextStyle(.caption, color: text?.nilIfBlank == nil ? AppColors.textTertiary : AppColors.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func cockpitEmptyText(_ text: String) -> some View {
+        Text(text)
+            .podTextStyle(.caption, color: AppColors.textTertiary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Theme.sm)
+            .background(AppColors.backgroundTertiary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+    }
+
     private var activationContextSection: some View {
         VStack(alignment: .leading, spacing: Theme.xs) {
             sectionHeader("Activation Context", count: activationContext?.packet.contextVersion)
@@ -755,6 +1188,21 @@ struct AgentDetailSheet: View {
         .padding(Theme.sm)
         .background(AppColors.backgroundTertiary)
         .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+    }
+
+    private func priorityColor(_ priority: String?) -> Color {
+        switch priority?.lowercased() {
+        case "urgent", "critical":
+            return AppColors.accentDanger
+        case "high":
+            return AppColors.accentWarning
+        case "medium":
+            return AppColors.accentElectric
+        case "low":
+            return AppColors.textTertiary
+        default:
+            return AppColors.accentAgent
+        }
     }
 
     private func activationIntelligenceSection(_ context: AgentActivationContextDTO) -> some View {
@@ -1076,6 +1524,27 @@ struct AgentDetailSheet: View {
         }
     }
 
+    private func loadLockerCockpit() async {
+        await MainActor.run {
+            isLoadingLockerCockpit = true
+            lockerCockpitError = nil
+        }
+        do {
+            let dto: AgentLockerCockpitDTO = try await APIClient.shared.request(
+                .agentLockerCockpit(name: agent.apiPathComponent, limit: 10)
+            )
+            await MainActor.run {
+                self.lockerCockpit = dto
+                self.isLoadingLockerCockpit = false
+            }
+        } catch {
+            await MainActor.run {
+                self.isLoadingLockerCockpit = false
+                self.lockerCockpitError = "Locker cockpit unavailable"
+            }
+        }
+    }
+
     private func postWorkNote() async {
         let note = workNoteText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !note.isEmpty else { return }
@@ -1111,6 +1580,43 @@ struct AgentDetailSheet: View {
             await MainActor.run {
                 self.workNoteError = "Couldn't save note"
                 self.isPostingWorkNote = false
+            }
+        }
+    }
+
+    private func postLockerFeedback() async {
+        let note = lockerFeedbackText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !note.isEmpty else { return }
+        await MainActor.run {
+            isPostingLockerFeedback = true
+            lockerFeedbackMessage = nil
+        }
+
+        do {
+            let body = AgentLockerFeedbackCreateBody(
+                rating: "other",
+                note: note,
+                snapshot: [
+                    "agent": AgentRosterPolicy.normalizedName(agent.name),
+                    "section": "locker_cockpit",
+                    "source": "pod"
+                ],
+                traceId: "pod-locker-feedback-\(agent.name.lowercased())-\(Int(Date().timeIntervalSince1970))",
+                source: "pod.agent_locker_cockpit"
+            )
+            let _: AgentLockerActionResultDTO = try await APIClient.shared.post(
+                path: "/api/v1/agents/\(agent.apiPathComponent)/locker-feedback",
+                body: body
+            )
+            await MainActor.run {
+                self.lockerFeedbackText = ""
+                self.lockerFeedbackMessage = "Feedback saved"
+                self.isPostingLockerFeedback = false
+            }
+        } catch {
+            await MainActor.run {
+                self.lockerFeedbackMessage = "Couldn't save feedback"
+                self.isPostingLockerFeedback = false
             }
         }
     }
@@ -1189,6 +1695,39 @@ private struct AgentWorkNoteCreateBody: Encodable {
         case traceId = "trace_id"
         case signState = "sign_state"
     }
+}
+
+private struct AgentLockerFeedbackCreateBody: Encodable {
+    let rating: String
+    let note: String
+    let snapshot: [String: String]
+    let traceId: String
+    let source: String
+
+    enum CodingKeys: String, CodingKey {
+        case rating, note, snapshot, source
+        case traceId = "trace_id"
+    }
+}
+
+private struct AgentLockerActionResultDTO: Decodable {
+    let ok: Bool
+    let action: String
+    let agent: String
+    let id: String?
+    let status: String?
+    let detail: String?
+}
+
+private enum AgentCockpitTab: String, CaseIterable, Identifiable {
+    case cockpit = "Cockpit"
+    case planner = "Planner"
+    case inbox = "Inbox"
+    case memory = "Memory"
+    case research = "Research"
+    case feedback = "Feedback"
+
+    var id: String { rawValue }
 }
 
 private struct AgentResponsibilityDetailDTO: Decodable {
