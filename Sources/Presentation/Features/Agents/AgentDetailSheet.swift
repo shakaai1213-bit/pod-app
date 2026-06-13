@@ -35,6 +35,9 @@ struct AgentDetailSheet: View {
     @State private var isPostingLockerFeedback = false
     @State private var lockerFeedbackMessage: String?
     @State private var selectedCockpitTab: AgentCockpitTab = .cockpit
+    @State private var memoryCandidateNote = ""
+    @State private var isPostingMemoryCandidate = false
+    @State private var memoryCandidateMessage: String?
     @State private var isRuntimeExpanded = false
 
     // POD-5 (c797ada1): non-destructive inbox tail, fetched on appear.
@@ -591,6 +594,10 @@ struct AgentDetailSheet: View {
                             cockpitResearchTab(cockpit)
                         case .feedback:
                             cockpitFeedbackTab(cockpit)
+                        case .library:
+                            cockpitLibraryTab(cockpit)
+                        case .escalation:
+                            cockpitEscalationTab(cockpit)
                         }
 
                         if let source = cockpit.source {
@@ -1584,6 +1591,182 @@ struct AgentDetailSheet: View {
         }
     }
 
+    private func cockpitLibraryTab(_ cockpit: AgentLockerCockpitDTO) -> some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            let lib = cockpit.library
+            if lib.documents.isEmpty && lib.doctrineBundle == nil {
+                cockpitEmptyText("No library documents returned by ORCA.")
+            } else {
+                if let label = lib.label {
+                    Text(label)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppColors.textTertiary)
+                }
+                if let bundle = lib.doctrineBundle {
+                    HStack(spacing: Theme.xs) {
+                        Image(systemName: "book.closed.fill")
+                            .font(.caption)
+                            .foregroundStyle(AppColors.accentAgent)
+                        Text(bundle)
+                            .font(.caption)
+                            .foregroundStyle(AppColors.textSecondary)
+                            .lineLimit(2)
+                    }
+                    .padding(.bottom, Theme.xxs)
+                }
+                ForEach(lib.documents) { doc in
+                    HStack(spacing: Theme.xs) {
+                        Image(systemName: doc.exists ? "doc.fill" : "doc.badge.ellipsis")
+                            .font(.caption)
+                            .foregroundStyle(doc.exists ? AppColors.accentSuccess : AppColors.textMuted)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(doc.key)
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(AppColors.textPrimary)
+                                .lineLimit(1)
+                            if let path = doc.path {
+                                Text(path)
+                                    .font(.caption2)
+                                    .foregroundStyle(AppColors.textMuted)
+                                    .lineLimit(1)
+                            }
+                            if let reason = doc.reason {
+                                Text(reason)
+                                    .font(.caption2)
+                                    .foregroundStyle(AppColors.textTertiary)
+                                    .lineLimit(1)
+                            }
+                        }
+                        Spacer()
+                        if doc.safeToPreview == false {
+                            Image(systemName: "lock.fill")
+                                .font(.caption2)
+                                .foregroundStyle(AppColors.textMuted)
+                        }
+                    }
+                    .padding(.vertical, Theme.xxs)
+                }
+                if let source = lib.source {
+                    Text(source)
+                        .podTextStyle(.label, color: AppColors.textMuted)
+                        .padding(.top, Theme.xxs)
+                }
+            }
+        }
+    }
+
+    private func cockpitEscalationTab(_ cockpit: AgentLockerCockpitDTO) -> some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            let esc = cockpit.escalation
+            if esc.actions.isEmpty {
+                cockpitEmptyText("No escalation actions returned by ORCA.")
+            } else {
+                Text("Escalation Actions")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.textTertiary)
+
+                ForEach(esc.actions) { action in
+                    HStack(spacing: Theme.xs) {
+                        Image(systemName: action.mode == "non_protected_only" ? "arrow.up.message.fill" : "bolt.shield.fill")
+                            .font(.caption)
+                            .foregroundStyle(AppColors.accentWarning)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(action.label)
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(AppColors.textPrimary)
+                            if let mode = action.mode {
+                                Text(mode.replacingOccurrences(of: "_", with: " "))
+                                    .font(.caption2)
+                                    .foregroundStyle(AppColors.textTertiary)
+                            }
+                        }
+                        Spacer()
+                    }
+                    .padding(.vertical, Theme.xxs)
+                }
+            }
+
+            Divider().padding(.vertical, Theme.xxs)
+
+            Text("Promote to Memory Candidate")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppColors.textTertiary)
+
+            TextEditor(text: $memoryCandidateNote)
+                .frame(minHeight: 72)
+                .scrollContentBackground(.hidden)
+                .background(AppColors.backgroundPrimary)
+                .foregroundStyle(AppColors.textPrimary)
+                .padding(Theme.sm)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.radiusSmall)
+                        .strokeBorder(AppColors.border, lineWidth: 1)
+                )
+
+            HStack(spacing: Theme.sm) {
+                Button {
+                    Task { await postMemoryCandidate(cockpit: cockpit) }
+                } label: {
+                    HStack(spacing: Theme.xs) {
+                        if isPostingMemoryCandidate {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Image(systemName: "brain.head.profile")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                        Text("Promote")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .padding(.horizontal, Theme.md)
+                    .padding(.vertical, Theme.xs)
+                    .foregroundStyle(.white)
+                    .background(!memoryCandidateNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? AppColors.accentElectric : AppColors.textMuted)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+                }
+                .buttonStyle(.plain)
+                .disabled(memoryCandidateNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isPostingMemoryCandidate)
+
+                if let memoryCandidateMessage {
+                    Text(memoryCandidateMessage)
+                        .podTextStyle(.caption, color: memoryCandidateMessage == "Candidate saved" ? AppColors.accentSuccess : AppColors.accentDanger)
+                        .lineLimit(2)
+                }
+                Spacer()
+            }
+        }
+    }
+
+    private func postMemoryCandidate(cockpit: AgentLockerCockpitDTO) async {
+        let note = memoryCandidateNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !note.isEmpty else { return }
+        await MainActor.run {
+            isPostingMemoryCandidate = true
+            memoryCandidateMessage = nil
+        }
+        do {
+            struct MemoryCandidateBody: Encodable {
+                let note: String
+                let source: String
+                let tags: [String]
+            }
+            let body = MemoryCandidateBody(note: note, source: "pod_cockpit_escalation", tags: [])
+            let _: AgentLockerActionResultDTO = try await APIClient.shared.post(
+                path: "/api/v1/agents/\(agent.apiPathComponent)/locker-actions/memory-candidate",
+                body: body
+            )
+            await MainActor.run {
+                self.memoryCandidateNote = ""
+                self.memoryCandidateMessage = "Candidate saved"
+                self.isPostingMemoryCandidate = false
+            }
+        } catch {
+            await MainActor.run {
+                self.memoryCandidateMessage = "Couldn't save candidate"
+                self.isPostingMemoryCandidate = false
+            }
+        }
+    }
+
     private func postLockerFeedback() async {
         let note = lockerFeedbackText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !note.isEmpty else { return }
@@ -1726,6 +1909,8 @@ private enum AgentCockpitTab: String, CaseIterable, Identifiable {
     case memory = "Memory"
     case research = "Research"
     case feedback = "Feedback"
+    case library = "Library"
+    case escalation = "Escalation"
 
     var id: String { rawValue }
 }

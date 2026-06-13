@@ -378,13 +378,15 @@ struct AgentLockerCockpitDTO: Decodable, Hashable {
     let heartbeat: Heartbeat
     let lockerMemory: LockerMemory
     let researchRail: ResearchRail
+    let library: Library
+    let escalation: Escalation
     let dashboards: [Dashboard]
     let feedback: Feedback
     let gaps: [String]
     let wakeMarkdown: String?
 
     enum CodingKeys: String, CodingKey {
-        case schema, source, planner, inbox, dashboards, feedback, gaps, heartbeat
+        case schema, source, planner, inbox, dashboards, feedback, gaps, heartbeat, library, escalation
         case generatedAt = "generated_at"
         case startHere = "start_here"
         case orcaTasks = "orca_tasks"
@@ -405,6 +407,8 @@ struct AgentLockerCockpitDTO: Decodable, Hashable {
         heartbeat = try container.decodeIfPresent(Heartbeat.self, forKey: .heartbeat) ?? Heartbeat()
         lockerMemory = try container.decodeIfPresent(LockerMemory.self, forKey: .lockerMemory) ?? LockerMemory()
         researchRail = try container.decodeIfPresent(ResearchRail.self, forKey: .researchRail) ?? ResearchRail()
+        library = try container.decodeIfPresent(Library.self, forKey: .library) ?? Library()
+        escalation = try container.decodeIfPresent(Escalation.self, forKey: .escalation) ?? Escalation()
         dashboards = try container.decodeIfPresent([Dashboard].self, forKey: .dashboards) ?? []
         feedback = try container.decodeIfPresent(Feedback.self, forKey: .feedback) ?? Feedback()
         gaps = try container.decodeIfPresent([String].self, forKey: .gaps) ?? []
@@ -811,6 +815,87 @@ struct AgentLockerCockpitDTO: Decodable, Hashable {
             self.endpoint = endpoint
             self.status = status
             self.snapshotPolicy = snapshotPolicy
+        }
+    }
+
+    struct LibraryDoc: Decodable, Hashable, Identifiable {
+        var id: String { key }
+        let key: String
+        let path: String?
+        let exists: Bool
+        let safeToPreview: Bool?
+        let reason: String?
+
+        enum CodingKeys: String, CodingKey {
+            case key, path, exists, reason
+            case safeToPreview = "safe_to_preview"
+        }
+
+        init(key: String = "", path: String? = nil, exists: Bool = false, safeToPreview: Bool? = nil, reason: String? = nil) {
+            self.key = key
+            self.path = path
+            self.exists = exists
+            self.safeToPreview = safeToPreview
+            self.reason = reason
+        }
+    }
+
+    struct Library: Decodable, Hashable {
+        let label: String?
+        let documents: [LibraryDoc]
+        let doctrineBundle: String?
+        let source: String?
+
+        enum CodingKeys: String, CodingKey {
+            case label, documents, source
+            case doctrineBundle = "doctrine_bundle"
+        }
+
+        init(label: String? = nil, documents: [LibraryDoc] = [], doctrineBundle: String? = nil, source: String? = nil) {
+            self.label = label
+            self.documents = documents
+            self.doctrineBundle = doctrineBundle
+            self.source = source
+        }
+    }
+
+    struct EscalationAction: Decodable, Hashable, Identifiable {
+        var id: String { label }
+        let label: String
+        let endpoint: String?
+        let mode: String?
+
+        init(label: String = "", endpoint: String? = nil, mode: String? = nil) {
+            self.label = label
+            self.endpoint = endpoint
+            self.mode = mode
+        }
+    }
+
+    struct Escalation: Decodable, Hashable {
+        let actions: [EscalationAction]
+        let mode: String?
+
+        init(actions: [EscalationAction] = [], mode: String? = nil) {
+            self.actions = actions
+            self.mode = mode
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            mode = try container.decodeIfPresent(String.self, forKey: .mode)
+            // Handle both legacy [String] and new [{label,endpoint,mode}] formats
+            if let structured = try? container.decodeIfPresent([EscalationAction].self, forKey: .actions) {
+                actions = structured ?? []
+            } else if let strings = try? container.decodeIfPresent([String].self, forKey: .actions) {
+                actions = (strings ?? []).map { EscalationAction(label: $0, endpoint: nil, mode: nil) }
+            } else {
+                actions = []
+            }
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case actions, mode
         }
     }
 }
