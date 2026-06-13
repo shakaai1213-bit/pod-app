@@ -4,9 +4,7 @@ actor OpenClawClient {
     private let baseURL: String
     private let authToken: String
 
-    init(baseURL: String = "http://shakas-mac-mini.tail82d30d.ts.net:8000",
-         // SEC-007 remediation 2026-05-08: default sourced from OrcaSecrets.swift
-         // (gitignored) instead of hardcoded literal.
+    init(baseURL: String = AppConfig.backendURL,
          authToken: String = OrcaSecrets.bearerToken) {
         self.baseURL = baseURL
         self.authToken = authToken
