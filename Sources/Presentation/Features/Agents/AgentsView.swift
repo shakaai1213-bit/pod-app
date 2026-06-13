@@ -1,7 +1,7 @@
 import SwiftUI
 import Observation
 
-// MARK: - Agents View (Cockpit, per SPEC-POD-AGENTS-TAB-2026-05-23)
+// MARK: - Agents View (Classroom, per SPEC-POD-AGENTS-TAB-2026-05-23)
 // Slice 1: section frames + headers + design tokens wired. Data + actions in subsequent slices.
 
 @Observable
@@ -1622,11 +1622,11 @@ private enum AgentFocusDefaults {
             agentId: "maui",
             stretch: ["speed of build", "architectural taste", "Codex orchestration mastery"],
             roadmap: AgentRoadmap(
-                d30: "Pod cockpit V1 LIVE",
+                d30: "Pod classroom V1 LIVE",
                 d60: "Memory Spine V2 + Project Automation v1.0",
                 d90: "Voice surface Phase 1 + Jarvis Arms autonomous"
             ),
-            research: ["AI coding agent orchestration patterns", "mobile cockpit UX", "SwiftUI compose performance"],
+            research: ["AI coding agent orchestration patterns", "mobile classroom UX", "SwiftUI compose performance"],
             fish: AgentFocusFish(name: "Starfish", icon: "⭐", feed: .unknown)
         ),
         staticCard(

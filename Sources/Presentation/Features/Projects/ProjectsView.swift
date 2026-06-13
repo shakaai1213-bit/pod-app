@@ -75,7 +75,7 @@ struct ProjectsView: View {
                     .podTextStyle(.label, color: AppColors.accentWarning)
                 Spacer()
             }
-            Text(viewModel.errorMessage ?? "Use Work > Projects for the ORCA-backed project cockpit. This legacy board view does not show mock data when ORCA is unavailable.")
+            Text(viewModel.errorMessage ?? "Use Work > Projects for the ORCA-backed project classroom. This legacy board view does not show mock data when ORCA is unavailable.")
                 .podTextStyle(.caption, color: AppColors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

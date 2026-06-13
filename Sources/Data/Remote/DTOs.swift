@@ -365,9 +365,9 @@ struct InboxTailDTO: Codable, Hashable {
     }
 }
 
-// MARK: - Agent Locker Cockpit
+// MARK: - Agent Locker
 
-struct AgentLockerCockpitDTO: Decodable, Hashable {
+struct AgentLockerDTO: Decodable, Hashable {
     let schema: String?
     let source: String?
     let generatedAt: String?

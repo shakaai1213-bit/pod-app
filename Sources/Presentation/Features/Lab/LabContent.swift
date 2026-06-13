@@ -132,7 +132,7 @@ enum LabContent {
         LabStackLayer(
             id: "pod",
             title: "Pod",
-            oneLine: "Tony's iPad/iPhone cockpit · SwiftUI · 7 tabs",
+            oneLine: "Tony's iPad/iPhone classroom · SwiftUI · 7 tabs",
             status: .building,
             owner: "MAU",
             icon: "ipad.landscape",

@@ -21,7 +21,7 @@ struct DashboardView: View {
     @AppStorage("orca_display_name") private var displayName: String = "Captain"
 
     // MARK: - Body
-    // L3 cockpit — no scroll on iPhone portrait (SPEC-POD-LAYOUT-REVAMP-2026-W22 §1)
+    // L3 classroom — no scroll on iPhone portrait (SPEC-POD-LAYOUT-REVAMP-2026-W22 §1)
     // Four sections only: Sign queue · Agent strip · Briefing line · Top flow card
     // Overflow (metrics, startup truth, live state, needs attention) → Runtime tab
 
@@ -45,10 +45,10 @@ struct DashboardView: View {
                     CockpitSignQueueSection()
 
                     // 6. Compact briefing + doctrine velocity line
-                    cockpitBriefingLine
+                    classroomBriefingLine
 
                     // 7. Top flow card — one blocker, tap → Work
-                    cockpitFlowCard
+                    classroomFlowCard
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, Theme.md)
@@ -467,9 +467,9 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - Cockpit Briefing Line (compact — combines briefing + doctrine)
+    // MARK: - Classroom Briefing Line (compact — combines briefing + doctrine)
 
-    private var cockpitBriefingLine: some View {
+    private var classroomBriefingLine: some View {
         HStack(spacing: Theme.sm) {
             // Briefing tap → full sheet
             Button { selectedBriefingSheet = .briefing } label: {
@@ -532,9 +532,9 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - Cockpit Flow Card (top blocker — tap → Work)
+    // MARK: - Classroom Flow Card (top blocker — tap → Work)
 
-    private var cockpitFlowCard: some View {
+    private var classroomFlowCard: some View {
         Button { openWorkFlowFilter(nil) } label: {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .firstTextBaseline) {
@@ -555,21 +555,21 @@ struct DashboardView: View {
 
                 if let review = viewModel.ticketFlowReview {
                     HStack(spacing: 8) {
-                        cockpitFlowChip(
+                        classroomFlowChip(
                             label: "Dispatch",
                             value: review.counts.dispatchable,
                             icon: "bolt.fill",
                             color: AppColors.accentSuccess,
                             key: "dispatchable"
                         )
-                        cockpitFlowChip(
+                        classroomFlowChip(
                             label: "Noise",
                             value: review.counts.noiseReview,
                             icon: "exclamationmark.bubble.fill",
                             color: AppColors.accentWarning,
                             key: "noise_review"
                         )
-                        cockpitFlowChip(
+                        classroomFlowChip(
                             label: "Protected",
                             value: review.counts.protected,
                             icon: "lock.shield.fill",
@@ -595,7 +595,7 @@ struct DashboardView: View {
         .buttonStyle(.plain)
     }
 
-    private func cockpitFlowChip(label: String, value: Int, icon: String, color: Color, key: String) -> some View {
+    private func classroomFlowChip(label: String, value: Int, icon: String, color: Color, key: String) -> some View {
         Button { openWorkFlowFilter(key) } label: {
             VStack(spacing: 4) {
                 HStack(spacing: 4) {
@@ -1275,13 +1275,16 @@ struct DashboardView: View {
     private var dashboardPresenceRollupStrip: some View {
         if let rollup = viewModel.presenceRollup {
             HStack(spacing: 7) {
-                Text("team:")
+                Text("live:")
                     .font(.system(size: 11, weight: .bold))
                     .foregroundColor(AppColors.textTertiary)
 
                 presenceCount("active", rollup.active, color: AppColors.accentSuccess)
                 presenceCount("idle", rollup.idle, color: AppColors.accentWarning)
                 presenceCount("offline", rollup.offline, color: AppColors.textTertiary)
+                if viewModel.archivedAgentsCount > 0 {
+                    presenceCount("archived", viewModel.archivedAgentsCount, color: AppColors.textMuted)
+                }
 
                 Spacer(minLength: 0)
             }

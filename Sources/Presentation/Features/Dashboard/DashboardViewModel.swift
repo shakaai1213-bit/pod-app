@@ -17,6 +17,7 @@ final class DashboardViewModel {
     var chiefProtectionTags: [StateTagDTO] = []
     var startupStatus: DashboardStartupStatusResponse?
     var presenceRollup: DashboardPresenceRollup?
+    var archivedAgentsCount: Int = 0
     var ticketFlowReview: TicketFlowReview?
     var ticketFlowLastUpdated: Date?
     var ticketFlowErrorMessage: String?
@@ -123,9 +124,12 @@ final class DashboardViewModel {
                 )
             }
             agents = AgentRosterPolicy.filterActive(mappedAgents)
+            archivedAgentsCount = AgentRosterPolicy.filterDormant(mappedAgents).count
+            presenceRollup = Self.presenceRollup(from: agents)
         } catch {
             loadErrors.append("Agents: \(error.localizedDescription)")
             // No fallback — show empty or error state
+            archivedAgentsCount = 0
         }
 
         // Fetch projects
@@ -186,9 +190,9 @@ final class DashboardViewModel {
 
         do {
             let response: DashboardSonarHealthDTO = try await apiClient.get(path: "/api/v1/sonar/health")
-            presenceRollup = response.presenceRollup
+            presenceRollup = Self.presenceRollup(from: agents) ?? response.presenceRollup
         } catch {
-            presenceRollup = nil
+            presenceRollup = Self.presenceRollup(from: agents)
         }
 
         do {
@@ -280,6 +284,26 @@ final class DashboardViewModel {
         case .error:   return .error
         case .provisioning: return .provisioning
         }
+    }
+
+    private static func presenceRollup(from agents: [Agent]) -> DashboardPresenceRollup? {
+        guard !agents.isEmpty else { return nil }
+        var active = 0
+        var idle = 0
+        var offline = 0
+
+        for agent in agents {
+            switch agent.status {
+            case .online, .busy:
+                active += 1
+            case .idle, .provisioning:
+                idle += 1
+            case .offline, .error:
+                offline += 1
+            }
+        }
+
+        return DashboardPresenceRollup(active: active, idle: idle, offline: offline)
     }
 
 }

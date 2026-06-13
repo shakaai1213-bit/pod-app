@@ -55,8 +55,8 @@ final class DirectChatViewModel {
     var approvalActionMessage: String?
     var isSavingMemoryCandidate: Bool = false
     var memoryCandidateMessage: String?
-    var isRefreshingWorkCockpit: Bool = false
-    var workCockpitLastRefreshAt: Date?
+    var isRefreshingWorkClassroom: Bool = false
+    var workClassroomLastRefreshAt: Date?
     var workspaceContext: DirectChatWorkspaceContext?
     var isLoadingWorkspaceContext: Bool = false
     var workspaceContextError: String?
@@ -1337,8 +1337,8 @@ final class DirectChatViewModel {
         approvalActionMessage = nil
         isSavingMemoryCandidate = false
         memoryCandidateMessage = nil
-        isRefreshingWorkCockpit = false
-        workCockpitLastRefreshAt = nil
+        isRefreshingWorkClassroom = false
+        workClassroomLastRefreshAt = nil
         workspaceContext = nil
         isLoadingWorkspaceContext = false
         workspaceContextError = nil
@@ -2723,22 +2723,22 @@ final class DirectChatViewModel {
         for run in runs.prefix(3) {
             await loadArtifactSummaries(runId: run.id)
         }
-        workCockpitLastRefreshAt = Date()
+        workClassroomLastRefreshAt = Date()
     }
 
-    func refreshWorkCockpitFromChat() {
-        guard let ticketId = activeTicketId, !isRefreshingWorkCockpit else { return }
-        isRefreshingWorkCockpit = true
+    func refreshWorkClassroomFromChat() {
+        guard let ticketId = activeTicketId, !isRefreshingWorkClassroom else { return }
+        isRefreshingWorkClassroom = true
         Task {
-            defer { isRefreshingWorkCockpit = false }
+            defer { isRefreshingWorkClassroom = false }
             artifactSummariesByRunId = [:]
             artifactSummaryErrorsByRunId = [:]
             await loadAttachedTicketContinuity(ticketId: ticketId)
-            workCockpitLastRefreshAt = Date()
+            workClassroomLastRefreshAt = Date()
         }
     }
 
-    var workCockpitReadinessPercent: Int {
+    var workClassroomReadinessPercent: Int {
         guard activeTicketId != nil else { return 0 }
         var score = 20
         if activeTicketContinuity != nil { score += 20 }
@@ -2747,13 +2747,13 @@ final class DirectChatViewModel {
         if !ticketApprovals.isEmpty || !isLoadingTicketApprovals { score += 10 }
         if !artifactSummariesByRunId.values.flatMap({ $0 }).isEmpty { score += 10 }
         if workspaceContext != nil { score += 10 }
-        if workCockpitLastRefreshAt != nil { score += 10 }
+        if workClassroomLastRefreshAt != nil { score += 10 }
         return min(score, 100)
     }
 
-    var workCockpitRefreshLabel: String {
-        guard let workCockpitLastRefreshAt else { return "Not refreshed yet" }
-        let age = max(0, Int(Date().timeIntervalSince(workCockpitLastRefreshAt)))
+    var workClassroomRefreshLabel: String {
+        guard let workClassroomLastRefreshAt else { return "Not refreshed yet" }
+        let age = max(0, Int(Date().timeIntervalSince(workClassroomLastRefreshAt)))
         if age < 10 { return "Just refreshed" }
         if age < 60 { return "Refreshed \(age)s ago" }
         if age < 3600 { return "Refreshed \(age / 60)m ago" }
@@ -2781,7 +2781,7 @@ final class DirectChatViewModel {
         return "\(ticketLiveEventCount) stream event\(ticketLiveEventCount == 1 ? "" : "s") · last \(action) \(ageText)"
     }
 
-    var workCockpitGapLabels: [String] {
+    var workClassroomGapLabels: [String] {
         guard activeTicketId != nil else { return [] }
         var gaps: [String] = []
         if activeTicketContinuity == nil {
@@ -2913,7 +2913,7 @@ final class DirectChatViewModel {
             defer { resolvingApprovalIds.remove(approval.id) }
             let body = DirectChatApprovalResolutionBody(
                 status: approved ? "approved" : "rejected",
-                reason: approved ? "Approved from Pod chat work cockpit." : "Rejected from Pod chat work cockpit.",
+                reason: approved ? "Approved from Pod chat classroom." : "Rejected from Pod chat classroom.",
                 traceId: Self.makeTraceId(prefix: approved ? "pod-chat-approval-approved" : "pod-chat-approval-rejected"),
                 source: "pod.chat.approval_resolution",
                 lane: "human_approval_resolution"
@@ -3048,7 +3048,7 @@ final class DirectChatViewModel {
         Task {
             defer { executingWorkspaceToolRunIds.remove(request.runId) }
             let body = DirectChatWorkspaceToolExecuteBody(
-                approvalNote: "Approved from Pod chat workspace cockpit.",
+                approvalNote: "Approved from Pod chat classroom.",
                 source: "pod.chat.tool_execute"
             )
             do {

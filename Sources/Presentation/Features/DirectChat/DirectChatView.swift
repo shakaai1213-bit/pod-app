@@ -2243,7 +2243,7 @@ struct ConversationView: View {
             if isContextExpanded {
                 ticketContextBar
                 ticketContinuityBar
-                workCockpitPanel
+                workClassroomPanel
                 routeDecisionBar
             }
         }
@@ -2357,7 +2357,7 @@ struct ConversationView: View {
     private var contextSummaryDetail: String {
         if viewModel.activeTicketId != nil {
             let run = viewModel.activeTicketContinuity?.latestRunLabel
-            let readiness = "\(viewModel.workCockpitReadinessPercent)% ready"
+            let readiness = "\(viewModel.workClassroomReadinessPercent)% ready"
             return [run, readiness, viewModel.ticketLiveSummaryLabel]
                 .compactMap { $0 }
                 .joined(separator: " · ")
@@ -2399,7 +2399,7 @@ struct ConversationView: View {
     }
 
     @ViewBuilder
-    private var workCockpitPanel: some View {
+    private var workClassroomPanel: some View {
         if viewModel.activeTicketId != nil {
             VStack(alignment: .leading, spacing: 8) {
                 // L6: toolbar overflow fix — status labels + Refresh inline;
@@ -2412,14 +2412,14 @@ struct ConversationView: View {
 
                     Spacer(minLength: 0)
 
-                    Label("\(viewModel.workCockpitReadinessPercent)%", systemImage: "gauge.with.dots.needle.67percent")
+                    Label("\(viewModel.workClassroomReadinessPercent)%", systemImage: "gauge.with.dots.needle.67percent")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(readinessColor)
 
                     Button {
-                        viewModel.refreshWorkCockpitFromChat()
+                        viewModel.refreshWorkClassroomFromChat()
                     } label: {
-                        Image(systemName: viewModel.isRefreshingWorkCockpit ? "hourglass" : "arrow.clockwise")
+                        Image(systemName: viewModel.isRefreshingWorkClassroom ? "hourglass" : "arrow.clockwise")
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(AppColors.accentElectric)
                             .frame(width: 28, height: 28)
@@ -2427,8 +2427,8 @@ struct ConversationView: View {
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
-                    .disabled(viewModel.isRefreshingWorkCockpit)
-                    .accessibilityLabel(viewModel.isRefreshingWorkCockpit ? "Refreshing cockpit" : "Refresh cockpit")
+                    .disabled(viewModel.isRefreshingWorkClassroom)
+                    .accessibilityLabel(viewModel.isRefreshingWorkClassroom ? "Refreshing classroom" : "Refresh classroom")
 
                     // Overflow menu — Approval / Memory / Artifact / Tool
                     Menu {
@@ -2480,11 +2480,11 @@ struct ConversationView: View {
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Cockpit actions")
+                    .accessibilityLabel("Classroom actions")
                 }
 
                 HStack(spacing: 8) {
-                    Text(viewModel.workCockpitRefreshLabel)
+                    Text(viewModel.workClassroomRefreshLabel)
                     Text(viewModel.ticketLiveSummaryLabel)
                     if let ticketId = viewModel.activeTicketId {
                         Text("Ticket \(String(ticketId.prefix(8)))")
@@ -2509,7 +2509,7 @@ struct ConversationView: View {
                 traceTimeline
                 artifactRows
                 workspaceRows
-                cockpitGapRows
+                classroomGapRows
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 9)
@@ -2553,8 +2553,8 @@ struct ConversationView: View {
     }
 
     @ViewBuilder
-    private var cockpitGapRows: some View {
-        let gaps = viewModel.workCockpitGapLabels
+    private var classroomGapRows: some View {
+        let gaps = viewModel.workClassroomGapLabels
         if !gaps.isEmpty {
             VStack(alignment: .leading, spacing: 5) {
                 Label("Readiness gaps", systemImage: "list.bullet.clipboard")
@@ -2571,7 +2571,7 @@ struct ConversationView: View {
     }
 
     private var readinessColor: Color {
-        let percent = viewModel.workCockpitReadinessPercent
+        let percent = viewModel.workClassroomReadinessPercent
         if percent >= 80 { return AppColors.accentSuccess }
         if percent >= 55 { return AppColors.accentAgent }
         return AppColors.accentWarning
@@ -2999,7 +2999,7 @@ struct ConversationView: View {
                             .foregroundStyle(AppColors.textTertiary)
                             .lineLimit(1)
 
-                        agentRunCockpit(for: continuity)
+                        agentRunClassroom(for: continuity)
                     } else if viewModel.isLoadingTicketContinuity {
                         HStack(spacing: Theme.xs) {
                             ProgressView()
@@ -3043,7 +3043,7 @@ struct ConversationView: View {
         }
     }
 
-    private func agentRunCockpit(for continuity: DirectChatTicketContinuity) -> some View {
+    private func agentRunClassroom(for continuity: DirectChatTicketContinuity) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Label("\(continuity.sortedRuns.count) runs", systemImage: "bolt.badge.clock")
