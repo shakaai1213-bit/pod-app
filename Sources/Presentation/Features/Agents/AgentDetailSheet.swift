@@ -32,6 +32,9 @@ struct AgentDetailSheet: View {
     @State private var isLoadingLockerCockpit = false
     @State private var lockerCockpitError: String?
     @State private var lockerFeedbackText = ""
+    @State private var lockerFeedbackRating: String? = nil
+    @State private var lockerFeedbackPanel: String = "cockpit"
+    @State private var lockerFeedbackAttachSnapshot: Bool = false
     @State private var isPostingLockerFeedback = false
     @State private var lockerFeedbackMessage: String?
     @State private var selectedCockpitTab: AgentCockpitTab = .cockpit
@@ -742,10 +745,10 @@ struct AgentDetailSheet: View {
                 activationMetric("Reviewed", value: "\(cockpit.researchRail.counts.reviewedRelevant)", icon: "doc.text.magnifyingglass", color: AppColors.accentAgent)
             }
 
-            cockpitLane("Research Requests", items: cockpit.researchRail.activeRequests, emptyReason: cockpit.researchRail.emptyReason)
-            cockpitLane("Active Packets", items: cockpit.researchRail.activePackets, emptyReason: "No in-progress research packets returned.")
-            cockpitLane("Awaiting Review", items: cockpit.researchRail.awaitingReview, emptyReason: "No Research Rail packets are waiting on this agent.")
-            cockpitLane("Reviewed Relevant", items: cockpit.researchRail.reviewedRelevant, emptyReason: "No reviewed packets returned for this agent.")
+            cockpitResearchLane("Research Requests", packets: cockpit.researchRail.activeRequests, emptyReason: cockpit.researchRail.emptyReason)
+            cockpitResearchLane("Active Packets", packets: cockpit.researchRail.activePackets, emptyReason: "No in-progress research packets returned.")
+            cockpitResearchLane("Awaiting Review", packets: cockpit.researchRail.awaitingReview, emptyReason: "No Research Rail packets are waiting on this agent.")
+            cockpitResearchLane("Reviewed Relevant", packets: cockpit.researchRail.reviewedRelevant, emptyReason: "No reviewed packets returned for this agent.")
 
             if let source = cockpit.researchRail.source {
                 Text(source)
@@ -754,13 +757,137 @@ struct AgentDetailSheet: View {
         }
     }
 
-    private func cockpitFeedbackTab(_ cockpit: AgentLockerCockpitDTO) -> some View {
+    private func cockpitResearchLane(_ title: String, packets: [AgentLockerCockpitDTO.ResearchPacket], emptyReason: String?) -> some View {
         VStack(alignment: .leading, spacing: Theme.xs) {
+            HStack(spacing: Theme.xs) {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.textTertiary)
+                if !packets.isEmpty {
+                    Text("\(packets.count)")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(AppColors.accentElectric)
+                        .clipShape(Capsule())
+                }
+            }
+            if packets.isEmpty {
+                Text(emptyReason ?? "No items.")
+                    .podTextStyle(.caption, color: AppColors.textMuted)
+                    .padding(.vertical, Theme.xxs)
+            } else {
+                ForEach(packets, id: \.stableId) { packet in
+                    VStack(alignment: .leading, spacing: Theme.xxs) {
+                        Text(packet.title ?? "Untitled request")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(AppColors.textPrimary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                        HStack(spacing: Theme.xs) {
+                            if let domain = packet.domain, !domain.isEmpty {
+                                Text(domain)
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(AppColors.accentAgent)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1)
+                                    .background(AppColors.accentAgent.opacity(0.12))
+                                    .clipShape(Capsule())
+                            }
+                            if let status = packet.status, !status.isEmpty {
+                                let sColor = researchStatusColor(status)
+                                Text(status.replacingOccurrences(of: "_", with: " "))
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(sColor)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1)
+                                    .background(sColor.opacity(0.12))
+                                    .clipShape(Capsule())
+                            }
+                        }
+                        if let req = packet.requestedBy, let asgn = packet.assignedTo {
+                            Text("\(req) → \(asgn)")
+                                .podTextStyle(.label, color: AppColors.textTertiary)
+                        } else if let req = packet.requestedBy {
+                            Text("Requested by \(req)")
+                                .podTextStyle(.label, color: AppColors.textTertiary)
+                        }
+                        if let next = packet.nextAction, !next.isEmpty {
+                            Text(next)
+                                .podTextStyle(.label, color: AppColors.textSecondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    .padding(Theme.xs)
+                    .background(AppColors.backgroundSecondary)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+                }
+            }
+        }
+    }
+
+    private func researchStatusColor(_ status: String) -> Color {
+        switch status.lowercased() {
+        case "assigned": return AppColors.accentElectric
+        case "in_progress", "active": return AppColors.accentWarning
+        case "awaiting_review", "review": return AppColors.accentElectric
+        case "reviewed", "complete", "done": return AppColors.accentSuccess
+        case "blocked", "failed": return AppColors.accentDanger
+        default: return AppColors.textTertiary
+        }
+    }
+
+    private func cockpitFeedbackTab(_ cockpit: AgentLockerCockpitDTO) -> some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
             if cockpit.feedback.endpoint == nil {
                 cockpitEmptyText("Feedback endpoint was not returned by ORCA.")
             } else {
+                // Rating chips
+                VStack(alignment: .leading, spacing: Theme.xs) {
+                    Text("How useful was this wake?")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppColors.textTertiary)
+                    let ratings = cockpit.feedback.ratings.isEmpty
+                        ? ["useful", "missing_context", "wrong_priority", "confusing", "unsafe_preview", "other"]
+                        : cockpit.feedback.ratings
+                    AgentDetailFlowLayout(spacing: Theme.xs) {
+                        ForEach(ratings, id: \.self) { rating in
+                            let isSelected = lockerFeedbackRating == rating
+                            Button {
+                                lockerFeedbackRating = isSelected ? nil : rating
+                            } label: {
+                                Text(rating.replacingOccurrences(of: "_", with: " "))
+                                    .font(.caption.weight(isSelected ? .semibold : .regular))
+                                    .foregroundStyle(isSelected ? .white : AppColors.textSecondary)
+                                    .padding(.horizontal, Theme.sm)
+                                    .padding(.vertical, Theme.xxs)
+                                    .background(isSelected ? AppColors.accentElectric : AppColors.backgroundSecondary)
+                                    .clipShape(Capsule())
+                                    .overlay(Capsule().strokeBorder(isSelected ? Color.clear : AppColors.border, lineWidth: 1))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                // Panel selector
+                VStack(alignment: .leading, spacing: Theme.xxs) {
+                    Text("Which panel?")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppColors.textTertiary)
+                    Picker("Panel", selection: $lockerFeedbackPanel) {
+                        ForEach(["cockpit", "planner", "inbox", "memory", "research", "feedback", "library", "escalation"], id: \.self) { panel in
+                            Text(panel.capitalized).tag(panel)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .tint(AppColors.accentElectric)
+                }
+
+                // Free text
                 TextEditor(text: $lockerFeedbackText)
-                    .frame(minHeight: 88)
+                    .frame(minHeight: 72)
                     .scrollContentBackground(.hidden)
                     .background(AppColors.backgroundPrimary)
                     .foregroundStyle(AppColors.textPrimary)
@@ -770,6 +897,15 @@ struct AgentDetailSheet: View {
                             .strokeBorder(AppColors.border, lineWidth: 1)
                     )
 
+                // Snapshot toggle
+                Toggle(isOn: $lockerFeedbackAttachSnapshot) {
+                    Text("Attach redacted cockpit snapshot")
+                        .font(.caption)
+                        .foregroundStyle(AppColors.textSecondary)
+                }
+                .toggleStyle(SwitchToggleStyle(tint: AppColors.accentElectric))
+
+                // Send button
                 HStack(spacing: Theme.sm) {
                     Button {
                         Task { await postLockerFeedback() }
@@ -787,18 +923,17 @@ struct AgentDetailSheet: View {
                         .padding(.horizontal, Theme.md)
                         .padding(.vertical, Theme.xs)
                         .foregroundStyle(.white)
-                        .background(canPostLockerFeedback ? AppColors.accentElectric : AppColors.textMuted)
+                        .background(lockerFeedbackRating != nil ? AppColors.accentElectric : AppColors.textMuted)
                         .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
                     }
                     .buttonStyle(.plain)
-                    .disabled(!canPostLockerFeedback || isPostingLockerFeedback)
+                    .disabled(lockerFeedbackRating == nil || isPostingLockerFeedback)
 
                     if let lockerFeedbackMessage {
                         Text(lockerFeedbackMessage)
                             .podTextStyle(.caption, color: lockerFeedbackMessage == "Feedback saved" ? AppColors.accentSuccess : AppColors.accentDanger)
                             .lineLimit(2)
                     }
-
                     Spacer()
                 }
             }
@@ -1769,7 +1904,7 @@ struct AgentDetailSheet: View {
 
     private func postLockerFeedback() async {
         let note = lockerFeedbackText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !note.isEmpty else { return }
+        let rating = lockerFeedbackRating ?? "other"
         await MainActor.run {
             isPostingLockerFeedback = true
             lockerFeedbackMessage = nil
@@ -1777,11 +1912,13 @@ struct AgentDetailSheet: View {
 
         do {
             let body = AgentLockerFeedbackCreateBody(
-                rating: "other",
+                rating: rating,
                 note: note,
+                panel: lockerFeedbackPanel,
+                attachSnapshot: lockerFeedbackAttachSnapshot,
                 snapshot: [
                     "agent": AgentRosterPolicy.normalizedName(agent.name),
-                    "section": "locker_cockpit",
+                    "section": lockerFeedbackPanel,
                     "source": "pod"
                 ],
                 traceId: "pod-locker-feedback-\(agent.name.lowercased())-\(Int(Date().timeIntervalSince1970))",
@@ -1793,6 +1930,9 @@ struct AgentDetailSheet: View {
             )
             await MainActor.run {
                 self.lockerFeedbackText = ""
+                self.lockerFeedbackRating = nil
+                self.lockerFeedbackPanel = "cockpit"
+                self.lockerFeedbackAttachSnapshot = false
                 self.lockerFeedbackMessage = "Feedback saved"
                 self.isPostingLockerFeedback = false
             }
@@ -1883,12 +2023,15 @@ private struct AgentWorkNoteCreateBody: Encodable {
 private struct AgentLockerFeedbackCreateBody: Encodable {
     let rating: String
     let note: String
+    let panel: String
+    let attachSnapshot: Bool
     let snapshot: [String: String]
     let traceId: String
     let source: String
 
     enum CodingKeys: String, CodingKey {
-        case rating, note, snapshot, source
+        case rating, note, panel, snapshot, source
+        case attachSnapshot = "attach_snapshot"
         case traceId = "trace_id"
     }
 }

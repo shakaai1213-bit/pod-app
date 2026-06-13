@@ -737,11 +737,38 @@ struct AgentLockerCockpitDTO: Decodable, Hashable {
         }
     }
 
+    struct ResearchPacket: Decodable, Hashable {
+        let id: String?
+        let researchId: String?
+        let title: String?
+        let summary: String?
+        let status: String?
+        let reviewState: String?
+        let domain: String?
+        let requestedBy: String?
+        let assignedTo: String?
+        let updatedAt: String?
+        let source: String?
+        let nextAction: String?
+
+        var stableId: String { id ?? researchId ?? title ?? "packet" }
+
+        enum CodingKeys: String, CodingKey {
+            case id, title, summary, status, source, domain
+            case researchId = "research_id"
+            case reviewState = "review_state"
+            case requestedBy = "requested_by"
+            case assignedTo = "assigned_to"
+            case updatedAt = "updated_at"
+            case nextAction = "next_action"
+        }
+    }
+
     struct ResearchRail: Decodable, Hashable {
-        let activeRequests: [WorkItem]
-        let activePackets: [WorkItem]
-        let awaitingReview: [WorkItem]
-        let reviewedRelevant: [WorkItem]
+        let activeRequests: [ResearchPacket]
+        let activePackets: [ResearchPacket]
+        let awaitingReview: [ResearchPacket]
+        let reviewedRelevant: [ResearchPacket]
         let counts: Counts
         let source: String?
         let requestEndpoint: String?
@@ -759,7 +786,7 @@ struct AgentLockerCockpitDTO: Decodable, Hashable {
             case emptyReason = "empty_reason"
         }
 
-        init(activeRequests: [WorkItem] = [], activePackets: [WorkItem] = [], awaitingReview: [WorkItem] = [], reviewedRelevant: [WorkItem] = [], counts: Counts = Counts(), source: String? = nil, requestEndpoint: String? = nil, packetEndpoint: String? = nil, emptyReason: String? = nil) {
+        init(activeRequests: [ResearchPacket] = [], activePackets: [ResearchPacket] = [], awaitingReview: [ResearchPacket] = [], reviewedRelevant: [ResearchPacket] = [], counts: Counts = Counts(), source: String? = nil, requestEndpoint: String? = nil, packetEndpoint: String? = nil, emptyReason: String? = nil) {
             self.activeRequests = activeRequests
             self.activePackets = activePackets
             self.awaitingReview = awaitingReview
@@ -805,16 +832,26 @@ struct AgentLockerCockpitDTO: Decodable, Hashable {
         let endpoint: String?
         let status: String?
         let snapshotPolicy: String?
+        let ratings: [String]
 
         enum CodingKeys: String, CodingKey {
-            case endpoint, status
+            case endpoint, status, ratings
             case snapshotPolicy = "snapshot_policy"
         }
 
-        init(endpoint: String? = nil, status: String? = nil, snapshotPolicy: String? = nil) {
+        init(endpoint: String? = nil, status: String? = nil, snapshotPolicy: String? = nil, ratings: [String] = []) {
             self.endpoint = endpoint
             self.status = status
             self.snapshotPolicy = snapshotPolicy
+            self.ratings = ratings
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            endpoint = try c.decodeIfPresent(String.self, forKey: .endpoint)
+            status = try c.decodeIfPresent(String.self, forKey: .status)
+            snapshotPolicy = try c.decodeIfPresent(String.self, forKey: .snapshotPolicy)
+            ratings = try c.decodeIfPresent([String].self, forKey: .ratings) ?? []
         }
     }
 
