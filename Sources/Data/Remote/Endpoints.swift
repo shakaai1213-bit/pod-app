@@ -28,6 +28,10 @@ enum Endpoint {
 
     case agents
     case agentStatus(agentId: String)
+    case agentInboxTail(name: String, limit: Int)   // POD-5 (c797ada1): non-destructive inbox tail
+    case agentActivationContext(name: String, limit: Int)
+    case agentLocker(name: String, limit: Int)
+    case leadPlate(leadId: String)
 
     // MARK: - Health
 
@@ -41,6 +45,10 @@ enum Endpoint {
     case updateProject(UUID)
     case listProjectTasks(projectId: UUID)
     case createProjectTask(projectId: UUID, title: String, priority: Int?, status: String?)
+
+    // MARK: - Memory
+
+    case memoryCandidateReviewExport
 }
 
 // MARK: - Endpoint Configuration
@@ -74,6 +82,18 @@ extension Endpoint {
         case .agentStatus(let agentId):
             return "\(Endpoint.basePath)/agents/\(agentId)/status"
 
+        case .agentInboxTail(let name, let limit):
+            return "\(Endpoint.basePath)/agents/\(name)/inbox-tail?limit=\(limit)"
+
+        case .agentActivationContext(let name, let limit):
+            return "\(Endpoint.basePath)/agents/\(name)/activation-context?limit=\(limit)"
+
+        case .agentLocker(let name, let limit):
+            return "\(Endpoint.basePath)/agents/\(name)/locker-cockpit?limit=\(limit)"
+
+        case .leadPlate(let leadId):
+            return "\(Endpoint.basePath)/leads/\(leadId)/plate"
+
         case .health:
             return "\(Endpoint.basePath)/health"
 
@@ -96,12 +116,15 @@ extension Endpoint {
 
         case .createProjectTask(let projectId, _, _, _):
             return "\(Endpoint.basePath)/projects/\(projectId)/tasks"
+
+        case .memoryCandidateReviewExport:
+            return "\(Endpoint.basePath)/memory/candidates/review-export"
         }
     }
 
     var method: HTTPMethod {
         switch self {
-        case .sendMessage, .createProject, .createProjectTask:
+        case .sendMessage, .createProject, .createProjectTask, .memoryCandidateReviewExport:
             return .post
         case .updateProject:
             return .patch

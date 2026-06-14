@@ -16,6 +16,7 @@ struct ProjectsView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Theme.lg) {
+                    legacyTruthBanner
                     myTasksSection
                     boardGroupsSection
                     allBoardsSection
@@ -27,6 +28,7 @@ struct ProjectsView: View {
             .refreshable {
                 await viewModel.loadBoards()
                 await viewModel.loadMyTasks()
+                await viewModel.loadTeamMembers()
             }
             .searchable(
                 text: Binding(
@@ -53,13 +55,35 @@ struct ProjectsView: View {
                 NewTaskSheet(viewModel: viewModel)
             }
             .sheet(isPresented: $showingMyTasks) {
-                MyTasksFullView(tasks: viewModel.sortedMyTasks, members: ProjectsViewModel.mockMembers)
+                MyTasksFullView(tasks: viewModel.sortedMyTasks, members: viewModel.teamMembers)
             }
             .task {
                 await viewModel.loadBoards()
                 await viewModel.loadMyTasks()
+                await viewModel.loadTeamMembers()
             }
         }
+    }
+
+    private var legacyTruthBanner: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AppColors.accentWarning)
+                Text("LEGACY PROJECTS")
+                    .podTextStyle(.label, color: AppColors.accentWarning)
+                Spacer()
+            }
+            Text(viewModel.errorMessage ?? "Use Work > Projects for the ORCA-backed project classroom. This legacy board view does not show mock data when ORCA is unavailable.")
+                .podTextStyle(.caption, color: AppColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .background(AppColors.accentWarning.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppColors.accentWarning.opacity(0.2), lineWidth: 0.5))
+        .padding(.top, Theme.sm)
     }
 
     // MARK: - My Tasks Section
@@ -82,7 +106,7 @@ struct ProjectsView: View {
             } else {
                 VStack(spacing: Theme.xs) {
                     ForEach(viewModel.sortedMyTasks.prefix(5)) { task in
-                        MyTaskRow(task: task, members: ProjectsViewModel.mockMembers) {
+                        MyTaskRow(task: task, members: viewModel.teamMembers) {
                             contextMenuTask = task
                         }
                     }
@@ -96,6 +120,7 @@ struct ProjectsView: View {
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, Theme.xs)
                         }
+                        .accessibilityLabel("View all \(viewModel.sortedMyTasks.count) tasks")
                     }
                 }
                 .podCard()
@@ -477,6 +502,11 @@ private struct NewTaskSheet: View {
     @State private var title = ""
     @State private var description = ""
     @State private var selectedBoard: Board?
+    @State private var showsDeadline = false
+    @State private var dueAt = Date()
+    @State private var dueAtSourceKind = MilestoneDueAtSourceKind.tony
+    @State private var dueAtExternalSource = ""
+    @State private var dueAtSourceMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -491,6 +521,14 @@ private struct NewTaskSheet: View {
                         Text(board.name).tag(board as Board?)
                     }
                 }
+
+                MilestoneDeadlineSection(
+                    isExpanded: $showsDeadline,
+                    dueAt: $dueAt,
+                    sourceKind: $dueAtSourceKind,
+                    externalSource: $dueAtExternalSource,
+                    validationMessage: dueAtSourceMessage
+                )
             }
             .navigationTitle("New Task")
             .navigationBarTitleDisplayMode(.inline)
@@ -501,8 +539,22 @@ private struct NewTaskSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
                         guard let board = selectedBoard, !title.isEmpty else { return }
+                        let source = showsDeadline
+                            ? TicketsViewModel.dueAtSource(kind: dueAtSourceKind, externalSource: dueAtExternalSource)
+                            : nil
+                        guard !showsDeadline || source != nil else {
+                            dueAtSourceMessage = "Deadline/date requires Tony or external:<source> attribution."
+                            return
+                        }
+                        dueAtSourceMessage = nil
                         Task {
-                            await viewModel.createTask(boardId: board.id, title: title, description: description)
+                            await viewModel.createTask(
+                                boardId: board.id,
+                                title: title,
+                                description: description,
+                                dueAt: showsDeadline ? dueAt : nil,
+                                dueAtSource: source
+                            )
                             dismiss()
                         }
                     } label: {

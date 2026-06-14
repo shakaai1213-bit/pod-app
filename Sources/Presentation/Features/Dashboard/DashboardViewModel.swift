@@ -12,25 +12,45 @@ final class DashboardViewModel {
     var projects: [Project] = []
     var activities: [ActivityItem] = []
     var attentionItems: [AttentionItem] = []
+    var tickets: [TicketDTO] = []
+    var stateTags: [StateTagDTO] = []
+    var chiefProtectionTags: [StateTagDTO] = []
+    var startupStatus: DashboardStartupStatusResponse?
+    var presenceRollup: DashboardPresenceRollup?
+    var archivedAgentsCount: Int = 0
+    var ticketFlowReview: TicketFlowReview?
+    var ticketFlowLastUpdated: Date?
+    var ticketFlowErrorMessage: String?
+    var staleStateTagCount: Int = 0
+    var stateRegistryReviewExport: StateRegistryReviewExportResult?
+    var stateRegistryReviewExportMessage: String?
+    var isExportingStateRegistryReview = false
     var isLoading: Bool = false
     var error: String?
 
     // MARK: - Metrics
 
     var activeProjectsCount: Int {
-        projects.filter { $0.status.rawValue != "done" && $0.status.rawValue != "archived" }.count
+        projects.filter { $0.status == .active || $0.status == .inProgress || $0.status == .review }.count
     }
 
     var inProgressCount: Int {
-        projects.filter { $0.status.rawValue == "in-progress" }.count
+        tickets.filter { ticket in
+            let status = ticket.status.lowercased()
+            return status == "in_progress" || status == "in-progress"
+        }.count
     }
 
     var agentsOnlineCount: Int {
         agents.filter { $0.status != .offline }.count
     }
 
-    var needsReviewCount: Int {
-        projects.filter { $0.status.rawValue == "review" }.count
+    var openTicketsCount: Int {
+        tickets.filter { !["closed", "cancelled"].contains($0.status.lowercased()) }.count
+    }
+
+    var startupDebtCount: Int {
+        startupStatus?.components.filter(\.isDebt).count ?? 0
     }
 
     // MARK: - Private
@@ -52,14 +72,35 @@ final class DashboardViewModel {
     // MARK: - Load
 
     @MainActor
+    func exportStateRegistryReview() async {
+        guard !isExportingStateRegistryReview else { return }
+        isExportingStateRegistryReview = true
+        stateRegistryReviewExport = nil
+        stateRegistryReviewExportMessage = nil
+        defer { isExportingStateRegistryReview = false }
+
+        do {
+            let result: StateRegistryReviewExportResult = try await apiClient.post(
+                path: "/api/v1/state-registry/review/export",
+                body: DashboardEmptyRequestBody()
+            )
+            stateRegistryReviewExport = result
+            stateRegistryReviewExportMessage = result.message
+        } catch {
+            stateRegistryReviewExportMessage = "Couldn't export State Registry review packet."
+        }
+    }
+
+    @MainActor
     func loadDashboard() async {
         isLoading = true
         error = nil
+        var loadErrors: [String] = []
 
         // Fetch agents
         do {
             let response: PaginatedResponse<AgentDTO> = try await apiClient.get(path: Endpoint.agents.path)
-            agents = response.items.map { dto in
+            let mappedAgents = response.items.map { dto in
                 Agent(
                     id: UUID(uuidString: dto.id) ?? UUID(),
                     name: dto.name,
@@ -68,18 +109,33 @@ final class DashboardViewModel {
                     currentTask: dto.currentTask,
                     lastActivity: dto.lastSeenAt ?? Date(),
                     skills: dto.skills,
-                    avatarColor: dto.avatarColor ?? "#3B82F6"
+                    avatarColor: dto.avatarColor ?? "#3B82F6",
+                    rosterLane: dto.domainRosterLane,
+                    isDefaultRoutingEnabled: dto.isDefaultRoutingEnabled,
+                    quarantineState: dto.quarantineState,
+                    rosterNote: dto.rosterNote,
+                    supportRuntime: dto.supportRuntime,
+                    allowedRuntimes: dto.allowedRuntimes,
+                    runtimeHost: dto.runtimeHost,
+                    lastAwakeProofAt: dto.lastAwakeProofAt,
+                    lastSleepProofAt: dto.lastSleepProofAt,
+                    driftState: dto.driftState,
+                    tokenProfile: dto.tokenProfile
                 )
             }
+            agents = AgentRosterPolicy.filterActive(mappedAgents)
+            archivedAgentsCount = AgentRosterPolicy.filterDormant(mappedAgents).count
+            presenceRollup = Self.presenceRollup(from: agents)
         } catch {
-            self.error = error.localizedDescription
+            loadErrors.append("Agents: \(error.localizedDescription)")
             // No fallback — show empty or error state
+            archivedAgentsCount = 0
         }
 
         // Fetch projects
         do {
-            let response: PaginatedResponse<ProjectDTO> = try await apiClient.get(path: Endpoint.listProjects().path)
-            projects = response.items.map { dto in
+            let response = try await ProjectRepository().listProjects()
+            projects = response.map { dto in
                 Project(
                     id: dto.id,
                     name: dto.name,
@@ -94,19 +150,124 @@ final class DashboardViewModel {
                 )
             }
         } catch {
+            loadErrors.append("Projects: \(error.localizedDescription)")
             // Non-fatal: keep existing projects
         }
 
-        // Don't fall back to mock data — show real data or empty
+        do {
+            let response: [TicketDTO] = try await apiClient.get(path: "/api/v1/tickets")
+            tickets = response
+            attentionItems = response
+                .filter { ticket in
+                    let status = ticket.status.lowercased()
+                    let priority = ticket.priority.lowercased()
+                    return !["closed", "cancelled"].contains(status)
+                        && ["high", "urgent"].contains(priority)
+                }
+                .prefix(5)
+                .map { ticket in
+                    AttentionItem(
+                        type: ticket.priority.lowercased() == "urgent" ? .agentError : .blockedTask,
+                        title: ticket.title,
+                        severity: ticket.priority.lowercased() == "urgent" ? .critical : .warning,
+                        actor: "\(ticket.priority.uppercased()) · \(ticket.status.replacingOccurrences(of: "_", with: " "))"
+                    )
+                }
+        } catch {
+            loadErrors.append("Tickets: \(error.localizedDescription)")
+            tickets = []
+            attentionItems = []
+        }
 
+        await loadTicketFlowReview()
+
+        do {
+            startupStatus = try await apiClient.get(path: "/api/v1/startup/status")
+        } catch {
+            loadErrors.append("Startup: \(error.localizedDescription)")
+            startupStatus = nil
+        }
+
+        do {
+            let response: DashboardSonarHealthDTO = try await apiClient.get(path: "/api/v1/sonar/health")
+            presenceRollup = Self.presenceRollup(from: agents) ?? response.presenceRollup
+        } catch {
+            presenceRollup = Self.presenceRollup(from: agents)
+        }
+
+        do {
+            let response: StateRegistryResponse = try await apiClient.get(
+                path: "/api/v1/state-registry?prefix=agent.&limit=8"
+            )
+            let workerResponse: StateRegistryResponse = try await apiClient.get(
+                path: "/api/v1/state-registry?prefix=worker.&limit=4"
+            )
+            let ticketResponse: StateRegistryResponse = try await apiClient.get(
+                path: "/api/v1/state-registry?prefix=ticket.&limit=6"
+            )
+            let memoryResponse: StateRegistryResponse = try await apiClient.get(
+                path: "/api/v1/state-registry?prefix=memory.&limit=8"
+            )
+            stateTags = response.items + workerResponse.items + ticketResponse.items + memoryResponse.items
+            staleStateTagCount = response.summary.stale + workerResponse.summary.stale + ticketResponse.summary.stale + memoryResponse.summary.stale
+        } catch {
+            loadErrors.append("State: \(error.localizedDescription)")
+            stateTags = []
+            staleStateTagCount = 0
+        }
+
+        do {
+            let verifiedCards: StateRegistryResponse = try await apiClient.get(
+                path: "/api/v1/state-registry?prefix=surface.pod.chief&limit=10"
+            )
+            let botMap: StateRegistryResponse = try await apiClient.get(
+                path: "/api/v1/state-registry?prefix=agent.chief.fund&limit=10"
+            )
+            chiefProtectionTags = verifiedCards.items + botMap.items
+        } catch {
+            loadErrors.append("Chief/Fund: \(error.localizedDescription)")
+            chiefProtectionTags = []
+        }
+
+        if !loadErrors.isEmpty {
+            error = loadErrors.joined(separator: " · ")
+        }
         isLoading = false
+    }
+
+    @MainActor
+    func startFlowReviewPolling() async {
+        await loadTicketFlowReview()
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 60_000_000_000)
+            if Task.isCancelled { break }
+            await loadTicketFlowReview()
+        }
+    }
+
+    @MainActor
+    func loadTicketFlowReview(limit: Int = 200) async {
+        do {
+            let dto: DashboardTicketFlowReviewDTO = try await apiClient.get(
+                path: "/api/v1/tickets/flow-review?limit=\(limit)&include_closed=false"
+            )
+            ticketFlowReview = dto.toDomain()
+            ticketFlowLastUpdated = Date()
+            ticketFlowErrorMessage = nil
+        } catch {
+            ticketFlowReview = nil
+            ticketFlowErrorMessage = "Flow review unavailable."
+        }
     }
 
     // MARK: - Status Mappers
 
     private func mapProjectStatus(_ status: String) -> ProjectStatus {
         switch status.lowercased() {
-        case "done", "completed", "archived": return .completed
+        case "in-progress", "in_progress": return .inProgress
+        case "review", "needs_review", "needs-review": return .review
+        case "archived": return .archived
+        case "done", "completed", "closed": return .completed
         case "paused", "blocked": return .paused
         default: return .active
         }
@@ -116,6 +277,7 @@ final class DashboardViewModel {
     private func mapAgentStatus(_ status: AgentStatus) -> AgentState {
         switch status {
         case .online:  return .online
+        case .active:  return .online   // backend "active" = working right now
         case .busy:    return .busy
         case .idle:    return .idle
         case .offline: return .offline
@@ -124,165 +286,279 @@ final class DashboardViewModel {
         }
     }
 
-    // MARK: - Mock Data
+    private static func presenceRollup(from agents: [Agent]) -> DashboardPresenceRollup? {
+        guard !agents.isEmpty else { return nil }
+        var active = 0
+        var idle = 0
+        var offline = 0
 
-    private static var mockAgents: [Agent] {
-        [
-            Agent(
-                id: UUID(),
-                name: "Kai",
-                role: "Code Architect",
-                status: .online,
-                currentTask: "Reviewing PR #42",
-                lastActivity: Date().addingTimeInterval(-120),
-                skills: ["swift", "architecture", "swiftui"],
-                avatarColor: "#3B82F6"
-            ),
-            Agent(
-                id: UUID(),
-                name: "Nova",
-                role: "Research Analyst",
-                status: .busy,
-                currentTask: "Gathering market data",
-                lastActivity: Date().addingTimeInterval(-300),
-                skills: ["research", "analysis"],
-                avatarColor: "#A855F7"
-            ),
-            Agent(
-                id: UUID(),
-                name: "Orca",
-                role: "DevOps Engineer",
-                status: .online,
-                currentTask: nil,
-                lastActivity: Date().addingTimeInterval(-60),
-                skills: ["kubernetes", "docker", "ci-cd"],
-                avatarColor: "#22C55E"
-            ),
-            Agent(
-                id: UUID(),
-                name: "Pulse",
-                role: "QA Specialist",
-                status: .idle,
-                currentTask: nil,
-                lastActivity: Date().addingTimeInterval(-3600),
-                skills: ["testing", "automation"],
-                avatarColor: "#F59E0B"
-            ),
-            Agent(
-                id: UUID(),
-                name: "Beacon",
-                role: "Documentation",
-                status: .error,
-                currentTask: "Indexing knowledge base",
-                lastActivity: Date().addingTimeInterval(-7200),
-                skills: ["docs", "markdown"],
-                avatarColor: "#EF4444"
-            ),
-        ]
+        for agent in agents {
+            switch agent.status {
+            case .online, .busy:
+                active += 1
+            case .idle, .provisioning:
+                idle += 1
+            case .offline, .error:
+                offline += 1
+            }
+        }
+
+        return DashboardPresenceRollup(active: active, idle: idle, offline: offline)
     }
 
-    private static var mockProjects: [Project] {
-        [
-            Project(
-                id: UUID(),
-                name: "Auth System",
-                description: "Implement token refresh and SSO",
-                boardGroupId: UUID(),
-                status: .active,
-                stage: .dev,
-                createdAt: Date().addingTimeInterval(-86400 * 7),
-                updatedAt: Date().addingTimeInterval(-3600),
-                taskCount: 8,
-                completedTaskCount: 3
-            ),
-            Project(
-                id: UUID(),
-                name: "Dashboard UI",
-                description: "Mission control dashboard",
-                boardGroupId: UUID(),
-                status: .active,
-                stage: .verify,
-                createdAt: Date().addingTimeInterval(-86400 * 3),
-                updatedAt: Date().addingTimeInterval(-7200),
-                taskCount: 12,
-                completedTaskCount: 8
-            ),
-            Project(
-                id: UUID(),
-                name: "API Integration",
-                description: "Connect to ORCA MC backend",
-                boardGroupId: UUID(),
-                status: .completed,
-                stage: .done,
-                createdAt: Date().addingTimeInterval(-86400 * 14),
-                updatedAt: Date().addingTimeInterval(-86400),
-                taskCount: 5,
-                completedTaskCount: 5
-            ),
-        ]
+}
+
+private struct DashboardTicketFlowReviewDTO: Decodable {
+    let counts: DashboardTicketFlowCountsDTO
+    let items: [DashboardTicketFlowItemDTO]
+
+    func toDomain() -> TicketFlowReview {
+        TicketFlowReview(
+            counts: counts.toDomain(),
+            items: items.map { $0.toDomain() }
+        )
+    }
+}
+
+struct DashboardPresenceRollup: Hashable {
+    let active: Int
+    let idle: Int
+    let offline: Int
+
+    var total: Int { active + idle + offline }
+}
+
+private struct DashboardSonarHealthDTO: Decodable {
+    let presenceRollup: DashboardPresenceRollup?
+
+    private struct CheckDTO: Decodable {
+        let key: String
+        let label: String?
+        let count: Int?
+        let detail: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case key
+            case label
+            case count
+            case detail
+        }
     }
 
-    private static var mockActivities: [ActivityItem] {
-        let now = Date()
-        return [
-            ActivityItem(
-                type: .taskCompleted,
-                description: "Completed sprint planning board setup",
-                timestamp: now.addingTimeInterval(-300),
-                actor: "Kai",
-                isAgent: true
-            ),
-            ActivityItem(
-                type: .messageSent,
-                description: "Posted weekly status update in #general",
-                timestamp: now.addingTimeInterval(-900),
-                actor: "Nova",
-                isAgent: true
-            ),
-            ActivityItem(
-                type: .agentMilestone,
-                description: "Orca deployed v2.3.1 to staging",
-                timestamp: now.addingTimeInterval(-1800),
-                actor: "Orca",
-                isAgent: true
-            ),
-            ActivityItem(
-                type: .taskCreated,
-                description: "Created task: Implement auth token refresh",
-                timestamp: now.addingTimeInterval(-3600),
-                actor: "Shaka",
-                isAgent: false
-            ),
-            ActivityItem(
-                type: .fileUploaded,
-                description: "Uploaded architecture_diagram_v3.pdf",
-                timestamp: now.addingTimeInterval(-7200),
-                actor: "Pulse",
-                isAgent: true
-            ),
-        ]
+    private struct DynamicCodingKey: CodingKey {
+        let stringValue: String
+        let intValue: Int? = nil
+
+        init?(stringValue: String) {
+            self.stringValue = stringValue
+        }
+
+        init?(intValue: Int) {
+            return nil
+        }
     }
 
-    private static var mockAttentionItems: [AttentionItem] {
-        [
-            AttentionItem(
-                type: .blockedTask,
-                title: "Auth token refresh blocked",
-                severity: .warning,
-                actor: "Waiting on backend API changes"
-            ),
-            AttentionItem(
-                type: .pendingApproval,
-                title: "PR #41 pending review",
-                severity: .warning,
-                actor: "From Kai · 3h ago"
-            ),
-            AttentionItem(
-                type: .agentError,
-                title: "Beacon encountered an error",
-                severity: .critical,
-                actor: "Knowledge base indexing failed"
-            ),
-        ]
+    private enum CodingKeys: String, CodingKey {
+        case presence
+        case presenceCounts = "presence_counts"
+        case presenceRollup = "presence_rollup"
+        case presenceSummary = "presence_summary"
+        case counts
+        case checks
+        case active
+        case idle
+        case offline
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        if let direct = Self.decodeRollup(from: container) {
+            presenceRollup = direct
+            return
+        }
+
+        for key in [CodingKeys.presence, .presenceCounts, .presenceRollup, .presenceSummary, .counts] {
+            if let object = try? container.decode([String: AgentRunJSONValue].self, forKey: key),
+               let rollup = Self.rollup(from: object) {
+                presenceRollup = rollup
+                return
+            }
+        }
+
+        if let checks = try? container.decode([CheckDTO].self, forKey: .checks) {
+            presenceRollup = Self.rollup(from: checks)
+            return
+        }
+
+        presenceRollup = nil
+    }
+
+    private static func decodeRollup(from container: KeyedDecodingContainer<CodingKeys>) -> DashboardPresenceRollup? {
+        let active = (try? container.decodeIfPresent(Int.self, forKey: .active)) ?? 0
+        let idle = (try? container.decodeIfPresent(Int.self, forKey: .idle)) ?? 0
+        let offline = (try? container.decodeIfPresent(Int.self, forKey: .offline)) ?? 0
+        guard active + idle + offline > 0 else { return nil }
+        return DashboardPresenceRollup(active: active, idle: idle, offline: offline)
+    }
+
+    private static func rollup(from object: [String: AgentRunJSONValue]) -> DashboardPresenceRollup? {
+        let active = intValue(object["active"])
+            ?? intValue(object["online"])
+            ?? intValue(object["live"])
+            ?? 0
+        let idle = intValue(object["idle"])
+            ?? intValue(object["away"])
+            ?? intValue(object["quiet"])
+            ?? 0
+        let offline = intValue(object["offline"])
+            ?? intValue(object["down"])
+            ?? 0
+        guard active + idle + offline > 0 else { return nil }
+        return DashboardPresenceRollup(active: active, idle: idle, offline: offline)
+    }
+
+    private static func rollup(from checks: [CheckDTO]) -> DashboardPresenceRollup? {
+        var active = 0
+        var idle = 0
+        var offline = 0
+
+        for check in checks {
+            let haystack = "\(check.key) \(check.label ?? "") \(check.detail ?? "")".lowercased()
+            guard let count = check.count else { continue }
+            if haystack.contains("active") || haystack.contains("online") || haystack.contains("live") {
+                active += count
+            } else if haystack.contains("idle") || haystack.contains("away") || haystack.contains("quiet") {
+                idle += count
+            } else if haystack.contains("offline") || haystack.contains("down") {
+                offline += count
+            }
+        }
+
+        guard active + idle + offline > 0 else { return nil }
+        return DashboardPresenceRollup(active: active, idle: idle, offline: offline)
+    }
+
+    private static func intValue(_ value: AgentRunJSONValue?) -> Int? {
+        switch value {
+        case .int(let value): return value
+        case .double(let value): return Int(value)
+        case .string(let value): return Int(value)
+        case .bool(let value): return value ? 1 : 0
+        case .object, .array, .null, nil: return nil
+        }
+    }
+}
+
+private struct DashboardTicketFlowCountsDTO: Decodable {
+    let total: Int?
+    let dispatchable: Int?
+    let noiseReview: Int?
+    let protected: Int?
+    let byFlowState: [String: Int]?
+    let byOwnerAgent: [String: Int]?
+    let bySupportLane: [String: Int]?
+
+    enum CodingKeys: String, CodingKey {
+        case total, dispatchable, protected
+        case noiseReview = "noise_review"
+        case byFlowState = "by_flow_state"
+        case byOwnerAgent = "by_owner_agent"
+        case bySupportLane = "by_support_lane"
+    }
+
+    func toDomain() -> TicketFlowCounts {
+        TicketFlowCounts(
+            total: total ?? 0,
+            dispatchable: dispatchable ?? 0,
+            noiseReview: noiseReview ?? 0,
+            protected: protected ?? 0,
+            byFlowState: byFlowState ?? [:],
+            byOwnerAgent: byOwnerAgent ?? [:],
+            bySupportLane: bySupportLane ?? [:]
+        )
+    }
+}
+
+private struct DashboardTicketFlowItemDTO: Decodable {
+    let ticketId: String
+    let title: String?
+    let status: String?
+    let priority: String?
+    let flowState: String?
+    let nextAction: String?
+    let ownerAgent: String?
+    let ownerLane: String?
+    let supportLane: String?
+    let workerLane: String?
+    let recommendedRuntime: String?
+    let recommendedSurface: String?
+    let runtimeReason: String?
+    let handoffSubject: String?
+    let approvalState: String?
+    let approvalGate: String?
+    let autonomyLevel: String?
+    let dispatchable: Bool?
+    let noiseReview: Bool?
+    let protected: Bool?
+    let staleFlag: Bool?
+    let noiseFlag: Bool?
+    let backlogFlag: Bool?
+    let blockers: [String]?
+    let reasons: [String]?
+    let updatedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case title, status, priority, dispatchable, protected, blockers, reasons
+        case ticketId = "ticket_id"
+        case flowState = "flow_state"
+        case nextAction = "next_action"
+        case ownerAgent = "owner_agent"
+        case ownerLane = "owner_lane"
+        case supportLane = "support_lane"
+        case workerLane = "worker_lane"
+        case recommendedRuntime = "recommended_runtime"
+        case recommendedSurface = "recommended_surface"
+        case runtimeReason = "runtime_reason"
+        case handoffSubject = "handoff_subject"
+        case approvalState = "approval_state"
+        case approvalGate = "approval_gate"
+        case autonomyLevel = "autonomy_level"
+        case noiseReview = "noise_review"
+        case staleFlag = "stale_flag"
+        case noiseFlag = "noise_flag"
+        case backlogFlag = "backlog_flag"
+        case updatedAt = "updated_at"
+    }
+
+    func toDomain() -> TicketFlowItem {
+        TicketFlowItem(
+            ticketId: ticketId,
+            title: title ?? "Untitled ticket",
+            status: status ?? "unknown",
+            priority: priority ?? "normal",
+            flowState: flowState ?? "unknown",
+            nextAction: nextAction ?? "Review",
+            ownerAgent: ownerAgent ?? "unassigned",
+            ownerLane: ownerLane,
+            supportLane: supportLane,
+            workerLane: workerLane,
+            recommendedRuntime: recommendedRuntime,
+            recommendedSurface: recommendedSurface,
+            runtimeReason: runtimeReason,
+            handoffSubject: handoffSubject,
+            approvalState: approvalState ?? "not_required",
+            approvalGate: approvalGate,
+            autonomyLevel: autonomyLevel ?? "owner-review",
+            dispatchable: dispatchable ?? false,
+            noiseReview: noiseReview ?? false,
+            protected: protected ?? false,
+            staleFlag: staleFlag ?? false,
+            noiseFlag: noiseFlag ?? false,
+            backlogFlag: backlogFlag ?? false,
+            blockers: blockers ?? [],
+            reasons: reasons ?? [],
+            updatedAt: updatedAt ?? .distantPast
+        )
     }
 }

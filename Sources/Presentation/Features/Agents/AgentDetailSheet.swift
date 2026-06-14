@@ -9,6 +9,7 @@ struct AgentDetailSheet: View {
     var onStatusChanged: ((AgentState) -> Void)?
     var onPause: (() -> Void)?
     var onRestart: (() -> Void)?
+    var onStartChat: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @State private var selectedStatus: AgentState
@@ -16,19 +17,49 @@ struct AgentDetailSheet: View {
     @State private var showingRestartConfirmation = false
     @State private var showingConfigureSheet = false
     @State private var showingSendMessage = false
+    @State private var workNoteText = ""
+    @State private var workNotes: [AgentWorkNoteDTO] = []
+    @State private var isLoadingWorkNotes = false
+    @State private var isPostingWorkNote = false
+    @State private var workNoteError: String?
+    @State private var responsibility: AgentResponsibilityDetailDTO?
+    @State private var isLoadingResponsibility = false
+    @State private var responsibilityError: String?
+    @State private var activationContext: AgentActivationContextDTO?
+    @State private var isLoadingActivationContext = false
+    @State private var activationContextError: String?
+    @State private var lockerData: AgentLockerDTO?
+    @State private var isLoadingLocker = false
+    @State private var lockerError: String?
+    @State private var lockerFeedbackText = ""
+    @State private var lockerFeedbackRating: String? = nil
+    @State private var lockerFeedbackPanel: String = "classroom"
+    @State private var lockerFeedbackAttachSnapshot: Bool = false
+    @State private var isPostingLockerFeedback = false
+    @State private var lockerFeedbackMessage: String?
+    @State private var selectedLockerTab: AgentLockerTab = .classroom
+    @State private var memoryCandidateNote = ""
+    @State private var isPostingMemoryCandidate = false
+    @State private var memoryCandidateMessage: String?
+    @State private var isRuntimeExpanded = false
+
+    // POD-5 (c797ada1): non-destructive inbox tail, fetched on appear.
+    @State private var inboxTail: InboxTailDTO?
 
     init(
         agent: Agent,
         onViewLogs: (() -> Void)? = nil,
         onStatusChanged: ((AgentState) -> Void)? = nil,
         onPause: (() -> Void)? = nil,
-        onRestart: (() -> Void)? = nil
+        onRestart: (() -> Void)? = nil,
+        onStartChat: (() -> Void)? = nil
     ) {
         self.agent = agent
         self.onViewLogs = onViewLogs
         self.onStatusChanged = onStatusChanged
         self.onPause = onPause
         self.onRestart = onRestart
+        self.onStartChat = onStartChat
         _selectedStatus = State(initialValue: agent.status)
     }
 
@@ -37,14 +68,27 @@ struct AgentDetailSheet: View {
             ScrollView {
                 VStack(spacing: Theme.lg) {
                     headerSection
+                    rosterPolicySection
+                    lockerSection
+                    responsibilitySection
+                    activationContextSection
+                    runtimeSection
+                    workNotesSection
+                    inboxSection                  // POD-5 (c797ada1)
                     statusSection
                     currentTaskSection
                     skillsSection
-                    recentActivitySection
                     actionsSection
                 }
                 .padding(.horizontal, Theme.md)
                 .padding(.bottom, Theme.xxl)
+                .task {
+                    await loadInboxTail()
+                    await loadResponsibility()
+                    await loadLocker()
+                    await loadActivationContext()
+                    await loadWorkNotes()
+                }
             }
             .background(AppColors.backgroundPrimary)
             .navigationTitle(agent.name)
@@ -83,7 +127,7 @@ struct AgentDetailSheet: View {
                 AgentConfigureSheet(agent: agent)
             }
             .sheet(isPresented: $showingSendMessage) {
-                ComposeMessageSheet(recipientName: agent.name)
+                ComposeMessageSheet(agent: agent.directChatAgentInfo)
             }
         }
         .presentationDetents([.large])
@@ -148,6 +192,8 @@ struct AgentDetailSheet: View {
             }
             .podCard()
         }
+        .disabled(AgentRosterPolicy.isDormantOrArchived(agent))
+        .opacity(AgentRosterPolicy.isDormantOrArchived(agent) ? 0.55 : 1)
     }
 
     private func statusRow(_ status: AgentState) -> some View {
@@ -240,65 +286,31 @@ struct AgentDetailSheet: View {
         }
     }
 
-    // MARK: - Recent Activity Section
-
-    private var recentActivitySection: some View {
-        VStack(alignment: .leading, spacing: Theme.xs) {
-            sectionHeader("Recent Activity", count: 10)
-
-            VStack(spacing: 0) {
-                ForEach(Array(Self.mockActivity(for: agent).enumerated()), id: \.offset) { index, item in
-                    activityTimelineItem(item)
-
-                    if index < 9 {
-                        Divider()
-                            .background(AppColors.border)
-                            .padding(.leading, 44)
-                    }
-                }
-            }
-            .podCard()
-        }
-    }
-
-    private func activityTimelineItem(_ item: AgentActivityItem) -> some View {
-        HStack(alignment: .top, spacing: Theme.sm) {
-            // Timeline dot
-            ZStack {
-                Circle()
-                    .fill(item.type.color.opacity(0.2))
-                    .frame(width: 28, height: 28)
-
-                Image(systemName: item.type.icon)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(item.type.color)
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.description)
-                    .podTextStyle(.body, color: AppColors.textPrimary)
-                    .lineLimit(2)
-
-                Text(item.timestamp.relativeFormatted)
-                    .podTextStyle(.caption, color: AppColors.textTertiary)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(Theme.md)
-    }
-
     // MARK: - Actions Section
 
     private var actionsSection: some View {
         VStack(spacing: Theme.sm) {
             // Primary actions
-            actionButton(
-                icon: "bubble.left.fill",
-                label: "Send Message",
-                color: AppColors.accentElectric
-            ) {
-                showingSendMessage = true
+            if AgentRosterPolicy.isDormantOrArchived(agent) {
+                HStack(spacing: Theme.sm) {
+                    Image(systemName: "archivebox.fill")
+                        .foregroundStyle(AppColors.accentWarning)
+                    Text("Archived agents are inspectable here, but new chat and runtime control are routed through active owners.")
+                        .podTextStyle(.caption, color: AppColors.textSecondary)
+                    Spacer()
+                }
+                .padding(Theme.md)
+                .background(AppColors.accentWarning.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+            } else {
+                actionButton(
+                    icon: "bubble.left.fill",
+                    label: "Chat",
+                    color: AppColors.accentElectric
+                ) {
+                    dismiss()
+                    onStartChat?()
+                }
             }
 
             actionButton(
@@ -313,34 +325,1155 @@ struct AgentDetailSheet: View {
                 .background(AppColors.border)
 
             // Status control actions
-            HStack(spacing: Theme.sm) {
-                actionButton(
-                    icon: "pause.circle.fill",
-                    label: "Pause Agent",
-                    color: AppColors.accentWarning,
-                    isDestructive: true
-                ) {
-                    showingPauseConfirmation = true
+            if !AgentRosterPolicy.isDormantOrArchived(agent) {
+                HStack(spacing: Theme.sm) {
+                    actionButton(
+                        icon: "pause.circle.fill",
+                        label: "Pause Agent",
+                        color: AppColors.accentWarning,
+                        isDestructive: true
+                    ) {
+                        showingPauseConfirmation = true
+                    }
+
+                    actionButton(
+                        icon: "arrow.clockwise.circle.fill",
+                        label: "Restart Agent",
+                        color: AppColors.accentDanger,
+                        isDestructive: true
+                    ) {
+                        showingRestartConfirmation = true
+                    }
                 }
 
                 actionButton(
-                    icon: "arrow.clockwise.circle.fill",
-                    label: "Restart Agent",
-                    color: AppColors.accentDanger,
-                    isDestructive: true
+                    icon: "gearshape.fill",
+                    label: "Configure",
+                    color: AppColors.textSecondary
                 ) {
-                    showingRestartConfirmation = true
+                    showingConfigureSheet = true
                 }
-            }
-
-            actionButton(
-                icon: "gearshape.fill",
-                label: "Configure",
-                color: AppColors.textSecondary
-            ) {
-                showingConfigureSheet = true
             }
         }
+    }
+
+    private var rosterPolicySection: some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            sectionHeader("Roster")
+
+            VStack(alignment: .leading, spacing: Theme.sm) {
+                HStack(spacing: Theme.xs) {
+                    Label(agent.rosterLane.label, systemImage: AgentRosterPolicy.isDormantOrArchived(agent) ? "archivebox.fill" : "person.crop.circle.badge.checkmark")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AgentRosterPolicy.isDormantOrArchived(agent) ? AppColors.accentWarning : AppColors.accentSuccess)
+
+                    Spacer()
+
+                    Text(agent.isDefaultRoutingEnabled ? "Routing on" : "Routing off")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(agent.isDefaultRoutingEnabled ? AppColors.accentSuccess : AppColors.accentWarning)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background((agent.isDefaultRoutingEnabled ? AppColors.accentSuccess : AppColors.accentWarning).opacity(0.12))
+                        .clipShape(Capsule())
+                }
+
+                if let state = agent.quarantineState, !state.isEmpty {
+                    Text(state.replacingOccurrences(of: "_", with: " ").capitalized)
+                        .podTextStyle(.caption, color: AppColors.textTertiary)
+                }
+
+                if let note = agent.rosterNote, !note.isEmpty {
+                    Text(note)
+                        .podTextStyle(.body, color: AppColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(Theme.md)
+            .podCard()
+        }
+    }
+
+    private var workNotesSection: some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            sectionHeader("Work Notes", count: workNotes.count)
+
+            VStack(alignment: .leading, spacing: Theme.sm) {
+                TextEditor(text: $workNoteText)
+                    .frame(minHeight: 88)
+                    .scrollContentBackground(.hidden)
+                    .background(AppColors.backgroundPrimary)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .padding(Theme.sm)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.radiusSmall)
+                            .strokeBorder(AppColors.border, lineWidth: 1)
+                    )
+
+                if let workNoteError {
+                    Text(workNoteError)
+                        .podTextStyle(.caption, color: AppColors.accentDanger)
+                }
+
+                Button {
+                    Task { await postWorkNote() }
+                } label: {
+                    HStack(spacing: Theme.xs) {
+                        if isPostingWorkNote {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Image(systemName: "square.and.pencil")
+                                .font(.system(size: 14, weight: .semibold))
+                        }
+                        Text("Add Note")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, Theme.sm)
+                    .foregroundStyle(.white)
+                    .background(canPostWorkNote ? AppColors.accentElectric : AppColors.textMuted)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+                }
+                .buttonStyle(.plain)
+                .disabled(!canPostWorkNote || isPostingWorkNote)
+
+                if isLoadingWorkNotes && workNotes.isEmpty {
+                    HStack(spacing: Theme.sm) {
+                        ProgressView().controlSize(.small)
+                        Text("Loading notes…")
+                            .podTextStyle(.body, color: AppColors.textTertiary)
+                        Spacer()
+                    }
+                    .padding(.vertical, Theme.xs)
+                } else if workNotes.isEmpty {
+                    Text("No work notes")
+                        .podTextStyle(.body, color: AppColors.textTertiary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, Theme.xs)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(Array(workNotes.prefix(5).enumerated()), id: \.element.id) { index, note in
+                            workNoteRow(note)
+                            if index < min(workNotes.count, 5) - 1 {
+                                Divider().background(AppColors.border)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(Theme.md)
+            .podCard()
+        }
+    }
+
+    private var responsibilitySection: some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            sectionHeader("Direction")
+
+            VStack(alignment: .leading, spacing: Theme.sm) {
+                if isLoadingResponsibility && responsibility == nil {
+                    HStack(spacing: Theme.sm) {
+                        ProgressView().controlSize(.small)
+                        Text("Loading ORCA direction…")
+                            .podTextStyle(.body, color: AppColors.textTertiary)
+                        Spacer()
+                    }
+                } else if let responsibility {
+                    VStack(alignment: .leading, spacing: Theme.xs) {
+                        HStack(spacing: Theme.xs) {
+                            Label(responsibility.profile.title ?? agent.role, systemImage: "signpost.right.fill")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(AppColors.accentElectric)
+                            Spacer()
+                            if let worker = responsibility.profile.defaultWorkerLane, !worker.isEmpty {
+                                Text("Worker: \(worker)")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(AppColors.accentAgent)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 3)
+                                    .background(AppColors.accentAgent.opacity(0.12))
+                                    .clipShape(Capsule())
+                            }
+                        }
+
+                        if let summary = responsibility.profile.summary, !summary.isEmpty {
+                            Text(summary)
+                                .podTextStyle(.body, color: AppColors.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        if !responsibility.profile.owns.isEmpty {
+                            AgentDetailFlowLayout(spacing: Theme.xs) {
+                                ForEach(responsibility.profile.owns.prefix(8), id: \.self) { domain in
+                                    Text(domain.replacingOccurrences(of: "_", with: " "))
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(AppColors.textPrimary)
+                                        .padding(.horizontal, Theme.sm)
+                                        .padding(.vertical, Theme.xxs)
+                                        .background(AppColors.backgroundTertiary)
+                                        .clipShape(Capsule())
+                                }
+                            }
+                        }
+
+                        if !responsibility.domains.isEmpty {
+                            VStack(alignment: .leading, spacing: Theme.xs) {
+                                Text("Domain routes")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(AppColors.textTertiary)
+
+                                ForEach(responsibility.sortedDomainRoutes.prefix(5)) { route in
+                                    AgentResponsibilityRouteRow(route: route)
+                                }
+                            }
+                            .padding(.top, Theme.xs)
+                        }
+
+                        if !responsibility.profile.protectedDomains.isEmpty {
+                            Label("Protected: \(responsibility.profile.protectedDomains.joined(separator: ", "))", systemImage: "lock.shield.fill")
+                                .font(.caption)
+                                .foregroundStyle(AppColors.accentWarning)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        if let note = responsibility.profile.approvalNotes.first, !note.isEmpty {
+                            Text(note)
+                                .podTextStyle(.caption, color: AppColors.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                } else {
+                    Text(responsibilityError ?? "No ORCA direction profile")
+                        .podTextStyle(.body, color: AppColors.textTertiary)
+                }
+            }
+            .padding(Theme.md)
+            .podCard()
+        }
+    }
+
+    private var canPostWorkNote: Bool {
+        !workNoteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var canPostLockerFeedback: Bool {
+        !lockerFeedbackText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var lockerSection: some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            sectionHeader("Locker", count: lockerData?.planner.counts.now)
+
+            VStack(alignment: .leading, spacing: Theme.sm) {
+                if isLoadingLocker && lockerData == nil {
+                    HStack(spacing: Theme.sm) {
+                        ProgressView().controlSize(.small)
+                        Text("Loading locker…")
+                            .podTextStyle(.body, color: AppColors.textTertiary)
+                        Spacer()
+                    }
+                } else if let locker = lockerData {
+                    VStack(alignment: .leading, spacing: Theme.sm) {
+                        lockerTopBand(locker)
+
+                        Picker("Classroom", selection: $selectedLockerTab) {
+                            ForEach(AgentLockerTab.allCases) { tab in
+                                Text(tab.rawValue).tag(tab)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+
+                        switch selectedLockerTab {
+                        case .classroom:
+                            lockerClassroomTab(locker)
+                        case .planner:
+                            lockerPlannerTab(locker)
+                        case .inbox:
+                            lockerInboxTab(locker)
+                        case .memory:
+                            lockerMemoryTab(locker)
+                        case .research:
+                            lockerResearchTab(locker)
+                        case .feedback:
+                            lockerFeedbackTabView(locker)
+                        case .library:
+                            lockerLibraryTab(locker)
+                        case .escalation:
+                            lockerEscalationTab(locker)
+                        }
+
+                        if let source = locker.source {
+                            Text(source)
+                                .podTextStyle(.label, color: AppColors.textTertiary)
+                        }
+                    }
+                } else {
+                    Text(lockerError ?? "Locker unavailable")
+                        .podTextStyle(.body, color: AppColors.textTertiary)
+                }
+            }
+            .padding(Theme.md)
+            .podCard()
+        }
+    }
+
+    private func lockerTopBand(_ locker: AgentLockerDTO) -> some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack(alignment: .top, spacing: Theme.sm) {
+                Image(systemName: locker.heartbeat.status == "awake" ? "waveform.path.ecg" : "moon.zzz.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(locker.heartbeat.status == "awake" ? AppColors.accentSuccess : AppColors.textTertiary)
+
+                VStack(alignment: .leading, spacing: Theme.xxs) {
+                    Text(agent.role)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppColors.textTertiary)
+                    Text(runtimeDisplay(agent.supportRuntime))
+                        .podTextStyle(.caption, color: AppColors.textSecondary)
+                    Text(agent.runtimeHost?.nilIfBlank ?? "Runtime host unknown")
+                        .podTextStyle(.caption, color: AppColors.textTertiary)
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: Theme.xxs) {
+                    Text(locker.heartbeat.status?.replacingOccurrences(of: "_", with: " ") ?? "unknown")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(locker.heartbeat.status == "awake" ? AppColors.accentSuccess : AppColors.textTertiary)
+                    Text("\(lockerAttentionCount(locker)) needs attention")
+                        .podTextStyle(.label, color: AppColors.textTertiary)
+                }
+            }
+
+            HStack(spacing: Theme.sm) {
+                activationMetric("Now", value: "\(locker.planner.counts.now)", icon: "bolt.fill", color: locker.planner.counts.now > 0 ? AppColors.accentWarning : AppColors.accentSuccess)
+                activationMetric("Blocked", value: "\(locker.planner.counts.blocked)", icon: "lock.fill", color: locker.planner.counts.blocked > 0 ? AppColors.accentWarning : AppColors.textTertiary)
+                activationMetric("Inbox", value: "\(locker.inbox.actionCount)", icon: "tray.full.fill", color: locker.inbox.actionCount > 0 ? AppColors.accentElectric : AppColors.textTertiary)
+            }
+        }
+    }
+
+    private func lockerClassroomTab(_ locker: AgentLockerDTO) -> some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack(alignment: .top, spacing: Theme.sm) {
+                Image(systemName: "viewfinder.circle.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(priorityColor(locker.startHere.priority))
+
+                VStack(alignment: .leading, spacing: Theme.xxs) {
+                    Text(locker.startHere.headline ?? "No urgent action")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(AppColors.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    lockerText(locker.startHere.reason, fallback: "No priority reason returned.")
+                    lockerText(locker.startHere.primaryAction, fallback: "No primary action returned.")
+
+                    if let blockedBy = locker.startHere.blockedBy, !blockedBy.isEmpty {
+                        Label(blockedBy, systemImage: "lock.fill")
+                            .font(.caption)
+                            .foregroundStyle(AppColors.accentWarning)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+
+            if !locker.dashboards.isEmpty {
+                lockerDashboardList(locker.dashboards)
+            }
+        }
+    }
+
+    private func lockerPlannerTab(_ locker: AgentLockerDTO) -> some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            lockerLane("Now", items: locker.planner.lanes.now, emptyReason: locker.planner.emptyReasons["now"] ?? nil)
+            lockerLane("Next", items: locker.planner.lanes.next, emptyReason: locker.planner.emptyReasons["next"] ?? nil)
+            lockerLane("Blocked", items: locker.planner.lanes.blocked, emptyReason: locker.planner.emptyReasons["blocked"] ?? nil)
+            lockerLane("Review", items: locker.planner.lanes.review, emptyReason: locker.planner.emptyReasons["review"] ?? nil)
+            lockerLane("Assigned ORCA Tasks", items: locker.orcaTasks.assigned, emptyReason: locker.orcaTasks.emptyReasons["assigned"] ?? nil)
+            lockerLane("Active Runs", items: locker.orcaTasks.activeRuns, emptyReason: locker.orcaTasks.emptyReasons["active_runs"] ?? nil)
+        }
+    }
+
+    private func lockerInboxTab(_ locker: AgentLockerDTO) -> some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack(spacing: Theme.sm) {
+                Label("\(locker.inbox.actionCount) action", systemImage: "tray.full.fill")
+                    .font(.caption)
+                    .foregroundStyle(AppColors.textSecondary)
+                Label("\(locker.inbox.bodyGapCount) body gaps", systemImage: locker.inbox.bodyGapCount > 0 ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(locker.inbox.bodyGapCount > 0 ? AppColors.accentWarning : AppColors.accentSuccess)
+                Spacer()
+            }
+
+            if locker.inbox.threads.isEmpty {
+                lockerEmptyText(locker.inbox.emptyReason ?? locker.inbox.gap ?? "No inbox threads returned.")
+            } else {
+                ForEach(Array(locker.inbox.threads.enumerated()), id: \.offset) { _, thread in
+                    lockerThreadRow(thread)
+                }
+            }
+        }
+    }
+
+    private func lockerMemoryTab(_ locker: AgentLockerDTO) -> some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            lockerMetadataRow("Session", value: locker.heartbeat.currentSessionId)
+            lockerMetadataRow("Awake", value: locker.heartbeat.awakeAt)
+            lockerMetadataRow("Heartbeat", value: locker.heartbeat.lastHeartbeatAt)
+            lockerMetadataRow("Sleep", value: locker.heartbeat.lastSleepProof ?? locker.heartbeat.sleepAt)
+            lockerMetadataRow("Current work", value: locker.heartbeat.currentWork)
+            lockerMetadataRow("Next checkpoint", value: locker.heartbeat.nextCheckpoint)
+            lockerMetadataRow("Blocker", value: locker.heartbeat.blocker)
+
+            Divider().background(AppColors.border)
+
+            lockerText(locker.lockerMemory.lastSessionSummary, fallback: locker.lockerMemory.emptyReason ?? "No last session summary returned.")
+            lockerMetadataRow("Daily log", value: locker.lockerMemory.dailyLogRef)
+            lockerStringList("Open Loops", items: locker.lockerMemory.openLoops)
+            lockerStringList("Commitments", items: locker.lockerMemory.commitments)
+            lockerStringList("Unresolved Blockers", items: locker.lockerMemory.unresolvedBlockers)
+        }
+    }
+
+    private func lockerResearchTab(_ locker: AgentLockerDTO) -> some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack(spacing: Theme.sm) {
+                activationMetric("Requests", value: "\(locker.researchRail.counts.activeRequests)", icon: "doc.badge.plus", color: locker.researchRail.counts.activeRequests > 0 ? AppColors.accentElectric : AppColors.textTertiary)
+                activationMetric("Review", value: "\(locker.researchRail.counts.awaitingReview)", icon: "checklist.checked", color: locker.researchRail.counts.awaitingReview > 0 ? AppColors.accentWarning : AppColors.accentSuccess)
+                activationMetric("Reviewed", value: "\(locker.researchRail.counts.reviewedRelevant)", icon: "doc.text.magnifyingglass", color: AppColors.accentAgent)
+            }
+
+            lockerResearchLane("Research Requests", packets: locker.researchRail.activeRequests, emptyReason: locker.researchRail.emptyReason)
+            lockerResearchLane("Active Packets", packets: locker.researchRail.activePackets, emptyReason: "No in-progress research packets returned.")
+            lockerResearchLane("Awaiting Review", packets: locker.researchRail.awaitingReview, emptyReason: "No Research Rail packets are waiting on this agent.")
+            lockerResearchLane("Reviewed Relevant", packets: locker.researchRail.reviewedRelevant, emptyReason: "No reviewed packets returned for this agent.")
+
+            if let source = locker.researchRail.source {
+                Text(source)
+                    .podTextStyle(.label, color: AppColors.textTertiary)
+            }
+        }
+    }
+
+    private func lockerResearchLane(_ title: String, packets: [AgentLockerDTO.ResearchPacket], emptyReason: String?) -> some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            HStack(spacing: Theme.xs) {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.textTertiary)
+                if !packets.isEmpty {
+                    Text("\(packets.count)")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(AppColors.accentElectric)
+                        .clipShape(Capsule())
+                }
+            }
+            if packets.isEmpty {
+                Text(emptyReason ?? "No items.")
+                    .podTextStyle(.caption, color: AppColors.textMuted)
+                    .padding(.vertical, Theme.xxs)
+            } else {
+                ForEach(packets, id: \.stableId) { packet in
+                    VStack(alignment: .leading, spacing: Theme.xxs) {
+                        Text(packet.title ?? "Untitled request")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(AppColors.textPrimary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                        HStack(spacing: Theme.xs) {
+                            if let domain = packet.domain, !domain.isEmpty {
+                                Text(domain)
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(AppColors.accentAgent)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1)
+                                    .background(AppColors.accentAgent.opacity(0.12))
+                                    .clipShape(Capsule())
+                            }
+                            if let status = packet.status, !status.isEmpty {
+                                let sColor = researchStatusColor(status)
+                                Text(status.replacingOccurrences(of: "_", with: " "))
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(sColor)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1)
+                                    .background(sColor.opacity(0.12))
+                                    .clipShape(Capsule())
+                            }
+                        }
+                        if let req = packet.requestedBy, let asgn = packet.assignedTo {
+                            Text("\(req) → \(asgn)")
+                                .podTextStyle(.label, color: AppColors.textTertiary)
+                        } else if let req = packet.requestedBy {
+                            Text("Requested by \(req)")
+                                .podTextStyle(.label, color: AppColors.textTertiary)
+                        }
+                        if let next = packet.nextAction, !next.isEmpty {
+                            Text(next)
+                                .podTextStyle(.label, color: AppColors.textSecondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    .padding(Theme.xs)
+                    .background(AppColors.backgroundSecondary)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+                }
+            }
+        }
+    }
+
+    private func researchStatusColor(_ status: String) -> Color {
+        switch status.lowercased() {
+        case "assigned": return AppColors.accentElectric
+        case "in_progress", "active": return AppColors.accentWarning
+        case "awaiting_review", "review": return AppColors.accentElectric
+        case "reviewed", "complete", "done": return AppColors.accentSuccess
+        case "blocked", "failed": return AppColors.accentDanger
+        default: return AppColors.textTertiary
+        }
+    }
+
+    private func lockerFeedbackTabView(_ locker: AgentLockerDTO) -> some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            if locker.feedback.endpoint == nil {
+                lockerEmptyText("Feedback endpoint was not returned by ORCA.")
+            } else {
+                // Rating chips
+                VStack(alignment: .leading, spacing: Theme.xs) {
+                    Text("How useful was this wake?")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppColors.textTertiary)
+                    let ratings = locker.feedback.ratings.isEmpty
+                        ? ["useful", "missing_context", "wrong_priority", "confusing", "unsafe_preview", "other"]
+                        : locker.feedback.ratings
+                    AgentDetailFlowLayout(spacing: Theme.xs) {
+                        ForEach(ratings, id: \.self) { rating in
+                            let isSelected = lockerFeedbackRating == rating
+                            Button {
+                                lockerFeedbackRating = isSelected ? nil : rating
+                            } label: {
+                                Text(rating.replacingOccurrences(of: "_", with: " "))
+                                    .font(.caption.weight(isSelected ? .semibold : .regular))
+                                    .foregroundStyle(isSelected ? .white : AppColors.textSecondary)
+                                    .padding(.horizontal, Theme.sm)
+                                    .padding(.vertical, Theme.xxs)
+                                    .background(isSelected ? AppColors.accentElectric : AppColors.backgroundSecondary)
+                                    .clipShape(Capsule())
+                                    .overlay(Capsule().strokeBorder(isSelected ? Color.clear : AppColors.border, lineWidth: 1))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                // Panel selector
+                VStack(alignment: .leading, spacing: Theme.xxs) {
+                    Text("Which panel?")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppColors.textTertiary)
+                    Picker("Panel", selection: $lockerFeedbackPanel) {
+                        ForEach(["classroom", "planner", "inbox", "memory", "research", "feedback", "library", "escalation"], id: \.self) { panel in
+                            Text(panel.capitalized).tag(panel)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .tint(AppColors.accentElectric)
+                }
+
+                // Free text
+                TextEditor(text: $lockerFeedbackText)
+                    .frame(minHeight: 72)
+                    .scrollContentBackground(.hidden)
+                    .background(AppColors.backgroundPrimary)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .padding(Theme.sm)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.radiusSmall)
+                            .strokeBorder(AppColors.border, lineWidth: 1)
+                    )
+
+                // Snapshot toggle
+                Toggle(isOn: $lockerFeedbackAttachSnapshot) {
+                    Text("Attach redacted locker snapshot")
+                        .font(.caption)
+                        .foregroundStyle(AppColors.textSecondary)
+                }
+                .toggleStyle(SwitchToggleStyle(tint: AppColors.accentElectric))
+
+                // Send button
+                HStack(spacing: Theme.sm) {
+                    Button {
+                        Task { await postLockerFeedback() }
+                    } label: {
+                        HStack(spacing: Theme.xs) {
+                            if isPostingLockerFeedback {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Image(systemName: "bubble.left.and.bubble.right.fill")
+                                    .font(.system(size: 13, weight: .semibold))
+                            }
+                            Text("Send Feedback")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                        .padding(.horizontal, Theme.md)
+                        .padding(.vertical, Theme.xs)
+                        .foregroundStyle(.white)
+                        .background(lockerFeedbackRating != nil ? AppColors.accentElectric : AppColors.textMuted)
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(lockerFeedbackRating == nil || isPostingLockerFeedback)
+
+                    if let lockerFeedbackMessage {
+                        Text(lockerFeedbackMessage)
+                            .podTextStyle(.caption, color: lockerFeedbackMessage == "Feedback saved" ? AppColors.accentSuccess : AppColors.accentDanger)
+                            .lineLimit(2)
+                    }
+                    Spacer()
+                }
+            }
+        }
+    }
+
+    private func lockerAttentionCount(_ locker: AgentLockerDTO) -> Int {
+        locker.planner.counts.now + locker.planner.counts.blocked + locker.planner.counts.review + locker.inbox.actionCount
+    }
+
+    private func lockerDashboardList(_ dashboards: [AgentLockerDTO.Dashboard]) -> some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            Text("Dashboards")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppColors.textTertiary)
+
+            ForEach(dashboards) { dashboard in
+                VStack(alignment: .leading, spacing: Theme.xxs) {
+                    HStack(spacing: Theme.xs) {
+                        Image(systemName: dashboard.visibility == "protected" ? "lock.shield.fill" : "rectangle.3.group.fill")
+                            .font(.caption)
+                            .foregroundStyle(dashboard.visibility == "protected" ? AppColors.accentWarning : AppColors.accentAgent)
+                        Text(dashboard.title ?? dashboard.id)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppColors.textPrimary)
+                        if let status = dashboard.status {
+                            Text(status.replacingOccurrences(of: "_", with: " "))
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(AppColors.textTertiary)
+                        }
+                        Spacer()
+                    }
+
+                    lockerText(dashboard.summary, fallback: "Dashboard registered without a preview summary.")
+                }
+                .padding(Theme.sm)
+                .background(AppColors.backgroundTertiary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+            }
+        }
+    }
+
+    private func lockerLane(_ title: String, items: [AgentLockerDTO.WorkItem], emptyReason: String?) -> some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppColors.textTertiary)
+
+            if items.isEmpty {
+                lockerEmptyText(emptyReason ?? "No \(title.lowercased()) items returned.")
+            } else {
+                ForEach(Array(items.prefix(5).enumerated()), id: \.offset) { _, item in
+                    lockerWorkItemRow(item)
+                }
+            }
+        }
+    }
+
+    private func lockerWorkItemRow(_ item: AgentLockerDTO.WorkItem) -> some View {
+        VStack(alignment: .leading, spacing: Theme.xxs) {
+            HStack(alignment: .firstTextBaseline, spacing: Theme.xs) {
+                Text(item.displayTitle)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                if let priority = item.priority, !priority.isEmpty {
+                    Text(priority)
+                        .podTextStyle(.label, color: priorityColor(priority))
+                }
+            }
+
+            lockerText(item.nextAction ?? item.whyShown, fallback: "No next action returned.")
+
+            HStack(spacing: Theme.xs) {
+                if let state = item.displayState, !state.isEmpty {
+                    workNoteChip(state.replacingOccurrences(of: "_", with: " "), icon: "circle.dashed")
+                }
+                if let source = item.source, !source.isEmpty {
+                    workNoteChip(source, icon: "link")
+                }
+                if let blockedOn = item.blockedOn, !blockedOn.isEmpty {
+                    workNoteChip(blockedOn, icon: "lock.fill")
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.sm)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+    }
+
+    private func lockerThreadRow(_ thread: AgentLockerDTO.Inbox.Thread) -> some View {
+        VStack(alignment: .leading, spacing: Theme.xxs) {
+            HStack(spacing: Theme.xs) {
+                Text(thread.sender ?? "Unknown sender")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.textPrimary)
+                Spacer()
+                if let classification = thread.classification {
+                    Text(classification.replacingOccurrences(of: "_", with: " "))
+                        .podTextStyle(.label, color: AppColors.textTertiary)
+                }
+            }
+
+            lockerText(thread.safeBody, fallback: thread.bodyUnavailableReason ?? "Body unavailable; no safe preview returned.")
+
+            if thread.bodyAvailable == false, let reason = thread.bodyUnavailableReason {
+                Label(reason, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(AppColors.accentWarning)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: Theme.xs) {
+                if let source = thread.source {
+                    workNoteChip(source, icon: "tray.full")
+                }
+                if let timestamp = thread.timestamp {
+                    workNoteChip(timestamp, icon: "clock")
+                }
+                if thread.stale == true {
+                    workNoteChip("stale", icon: "timer")
+                }
+            }
+
+            if !thread.sourceRefs.isEmpty {
+                Text(thread.sourceRefs.compactMap { key, value in value.map { "\(key): \($0)" } }.joined(separator: "  "))
+                    .podTextStyle(.label, color: AppColors.textTertiary)
+                    .lineLimit(2)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.sm)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+    }
+
+    private func lockerMetadataRow(_ label: String, value: String?) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.xs) {
+            Text(label)
+                .podTextStyle(.label, color: AppColors.textTertiary)
+                .frame(width: 104, alignment: .leading)
+            Text(value?.nilIfBlank ?? "Not returned")
+                .podTextStyle(.caption, color: value?.nilIfBlank == nil ? AppColors.textTertiary : AppColors.textSecondary)
+                .lineLimit(2)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func lockerStringList(_ title: String, items: [String]) -> some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppColors.textTertiary)
+            if items.isEmpty {
+                lockerEmptyText("No \(title.lowercased()) returned.")
+            } else {
+                ForEach(items.prefix(4), id: \.self) { item in
+                    Text(item)
+                        .podTextStyle(.caption, color: AppColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    private func lockerText(_ text: String?, fallback: String) -> some View {
+        Text(text?.nilIfBlank ?? fallback)
+            .podTextStyle(.caption, color: text?.nilIfBlank == nil ? AppColors.textTertiary : AppColors.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func lockerEmptyText(_ text: String) -> some View {
+        Text(text)
+            .podTextStyle(.caption, color: AppColors.textTertiary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Theme.sm)
+            .background(AppColors.backgroundTertiary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+    }
+
+    private var activationContextSection: some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            sectionHeader("Activation Context", count: activationContext?.packet.contextVersion)
+
+            VStack(alignment: .leading, spacing: Theme.sm) {
+                if isLoadingActivationContext && activationContext == nil {
+                    HStack(spacing: Theme.sm) {
+                        ProgressView().controlSize(.small)
+                        Text("Loading wake packet…")
+                            .podTextStyle(.body, color: AppColors.textTertiary)
+                        Spacer()
+                    }
+                } else if let context = activationContext {
+                    VStack(alignment: .leading, spacing: Theme.sm) {
+                        HStack(spacing: Theme.sm) {
+                            activationMetric(
+                                "Tickets",
+                                value: "\(context.work.assignedTicketCount)",
+                                icon: "ticket.fill",
+                                color: AppColors.accentElectric
+                            )
+                            activationMetric(
+                                "Review",
+                                value: "\(context.reviewQueues.agentReviewRequiredCount)/\(context.reviewQueues.globalReviewRequiredCount)",
+                                icon: "checklist.checked",
+                                color: context.reviewQueues.globalReviewRequiredCount > 0 ? AppColors.accentWarning : AppColors.accentSuccess
+                            )
+                            activationMetric(
+                                "Notes",
+                                value: "\(context.notes.recentWorkNotes.count)",
+                                icon: "note.text",
+                                color: AppColors.accentAgent
+                            )
+                        }
+
+                        activationList(
+                            title: "Start Docs",
+                            icon: "doc.text.magnifyingglass",
+                            items: context.startHere.docs,
+                            limit: 3
+                        )
+
+                        activationList(
+                            title: "Manual Checks",
+                            icon: "list.bullet.clipboard",
+                            items: context.startHere.manualChecks,
+                            limit: 3
+                        )
+
+                        if context.packet.computePolicy != nil || context.startHere.intelligenceEndpoints?.isEmpty == false {
+                            activationIntelligenceSection(context)
+                        }
+
+                        if !context.guardrails.isEmpty {
+                            VStack(alignment: .leading, spacing: Theme.xs) {
+                                Text("Guardrails")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(AppColors.textTertiary)
+
+                                ForEach(Array(context.guardrails.prefix(4)), id: \.self) { guardrail in
+                                    Label(guardrail, systemImage: "lock.shield.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(AppColors.textSecondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                            .padding(.top, Theme.xs)
+                        }
+
+                        if let source = context.packet.source {
+                            Text(source)
+                                .podTextStyle(.label, color: AppColors.textTertiary)
+                        }
+                    }
+                } else {
+                    Text(activationContextError ?? "Activation context unavailable")
+                        .podTextStyle(.body, color: AppColors.textTertiary)
+                }
+            }
+            .padding(Theme.md)
+            .podCard()
+        }
+    }
+
+    private var runtimeSection: some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            sectionHeader("Runtime")
+
+            DisclosureGroup(isExpanded: $isRuntimeExpanded) {
+                VStack(alignment: .leading, spacing: Theme.sm) {
+                    HStack(spacing: Theme.sm) {
+                        Text("Support")
+                            .podTextStyle(.label, color: AppColors.textTertiary)
+                        Spacer()
+                        runtimeBadge(
+                            runtimeDisplay(agent.supportRuntime),
+                            color: supportRuntimeColor(agent.supportRuntime)
+                        )
+                    }
+
+                    HStack(spacing: Theme.sm) {
+                        Label(agent.runtimeHost?.nilIfBlank ?? "Unknown", systemImage: "server.rack")
+                            .podTextStyle(.body, color: AppColors.textPrimary)
+                        Spacer()
+                    }
+
+                    HStack(spacing: Theme.sm) {
+                        Text("Drift")
+                            .podTextStyle(.label, color: AppColors.textTertiary)
+                        Spacer()
+                        runtimeBadge(
+                            runtimeDisplay(agent.driftState),
+                            color: driftStateColor(agent.driftState)
+                        )
+                    }
+
+                    HStack(spacing: Theme.sm) {
+                        Label(lastAwakeLabel, systemImage: "bolt.circle")
+                            .podTextStyle(.body, color: AppColors.textSecondary)
+                        Spacer()
+                    }
+
+                    if let tokenProfile = agent.tokenProfile?.nilIfBlank {
+                        Text(tokenProfile)
+                            .font(.caption)
+                            .foregroundStyle(AppColors.textTertiary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(.top, Theme.sm)
+            } label: {
+                HStack(spacing: Theme.sm) {
+                    Image(systemName: "cpu")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AppColors.accentElectric)
+                    Text("Runtime")
+                        .podTextStyle(.body, color: AppColors.textPrimary)
+                    Spacer()
+                    if let driftState = agent.driftState?.nilIfBlank, driftState != "ok" {
+                        runtimeBadge(runtimeDisplay(driftState), color: driftStateColor(driftState))
+                    }
+                }
+            }
+            .tint(AppColors.textSecondary)
+            .padding(Theme.md)
+            .podCard()
+        }
+    }
+
+    private var lastAwakeLabel: String {
+        guard let lastAwakeProofAt = agent.lastAwakeProofAt else { return "Never" }
+        return "Active \(lastAwakeProofAt.relativeFormatted)"
+    }
+
+    private func runtimeBadge(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(color.opacity(0.12))
+            .clipShape(Capsule())
+    }
+
+    private func runtimeDisplay(_ rawValue: String?) -> String {
+        rawValue?.nilIfBlank?.replacingOccurrences(of: "_", with: " ") ?? "unknown"
+    }
+
+    private func supportRuntimeColor(_ value: String?) -> Color {
+        switch value?.nilIfBlank {
+        case "codex_support":
+            return AppColors.accentElectric
+        case "claude_judgment":
+            return AppColors.accentAgent
+        case "dormant_archive":
+            return AppColors.textTertiary
+        case "pending":
+            return AppColors.accentCaptain
+        default:
+            return AppColors.textTertiary
+        }
+    }
+
+    private func driftStateColor(_ value: String?) -> Color {
+        switch value?.nilIfBlank {
+        case "ok":
+            return AppColors.accentSuccess
+        case "archive_drift", "protected_violation":
+            return AppColors.accentDanger
+        case "stale_doc", "missing_runtime", "unexpected_live_runtime":
+            return AppColors.accentWarning
+        default:
+            return AppColors.textTertiary
+        }
+    }
+
+    private func activationMetric(_ label: String, value: String, icon: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: Theme.xxs) {
+            Label(label, systemImage: icon)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(AppColors.textTertiary)
+                .lineLimit(1)
+
+            Text(value)
+                .font(.system(size: 20, weight: .bold))
+                .foregroundStyle(color)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.sm)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+    }
+
+    private func priorityColor(_ priority: String?) -> Color {
+        switch priority?.lowercased() {
+        case "urgent", "critical":
+            return AppColors.accentDanger
+        case "high":
+            return AppColors.accentWarning
+        case "medium":
+            return AppColors.accentElectric
+        case "low":
+            return AppColors.textTertiary
+        default:
+            return AppColors.accentAgent
+        }
+    }
+
+    private func activationIntelligenceSection(_ context: AgentActivationContextDTO) -> some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            Label("Compute & Intelligence", systemImage: "cpu.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppColors.textTertiary)
+
+            if let policy = context.packet.computePolicy {
+                VStack(alignment: .leading, spacing: 3) {
+                    activationMetadataRow("Default tag", value: policy.defaultTag)
+                    activationMetadataRow("Path", value: policy.workflowComputePath ?? policy.path ?? policy.daemonComputePath)
+                    activationMetadataRow("Intel", value: policy.intelligencePath)
+                    activationMetadataRow("Policy", value: policy.source ?? policy.caller ?? policy.lane)
+                }
+                .padding(Theme.sm)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(AppColors.backgroundTertiary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+            }
+
+            if let endpoints = context.startHere.intelligenceEndpoints, !endpoints.isEmpty {
+                AgentDetailFlowLayout(spacing: Theme.xs) {
+                    ForEach(Array(endpoints.prefix(6))) { endpoint in
+                        Text(endpoint.displayName)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(AppColors.accentAgent)
+                            .lineLimit(1)
+                            .padding(.horizontal, Theme.sm)
+                            .padding(.vertical, Theme.xxs)
+                            .background(AppColors.accentAgent.opacity(0.12))
+                            .clipShape(Capsule())
+                    }
+                }
+            }
+        }
+        .padding(.top, Theme.xs)
+    }
+
+    private func activationMetadataRow(_ label: String, value: String?) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.xs) {
+            Text(label)
+                .podTextStyle(.label, color: AppColors.textTertiary)
+                .frame(width: 72, alignment: .leading)
+
+            Text(activationMetadataValue(value))
+                .podTextStyle(.caption, color: value?.isEmpty == false ? AppColors.textSecondary : AppColors.textTertiary)
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func activationMetadataValue(_ value: String?) -> String {
+        guard let value, !value.isEmpty else { return "Not listed" }
+        return value
+    }
+
+    private func activationList(title: String, icon: String, items: [String], limit: Int) -> some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            Label(title, systemImage: icon)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppColors.textTertiary)
+
+            if items.isEmpty {
+                Text("None listed")
+                    .podTextStyle(.caption, color: AppColors.textTertiary)
+            } else {
+                ForEach(Array(items.prefix(limit)), id: \.self) { item in
+                    Text(item)
+                        .podTextStyle(.caption, color: AppColors.textSecondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    private func workNoteRow(_ note: AgentWorkNoteDTO) -> some View {
+        VStack(alignment: .leading, spacing: Theme.xxs) {
+            HStack(spacing: Theme.xs) {
+                Text(note.source ?? "orca.notes.agent")
+                    .podTextStyle(.label, color: AppColors.textTertiary)
+                Spacer()
+                Text(note.createdAt.formatted(date: .abbreviated, time: .shortened))
+                    .podTextStyle(.label, color: AppColors.textTertiary)
+            }
+
+            Text(note.title)
+                .podTextStyle(.caption, color: AppColors.textPrimary)
+                .fontWeight(.semibold)
+
+            Text(note.message)
+                .podTextStyle(.body, color: AppColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if note.signState?.isEmpty == false || note.owner?.isEmpty == false || note.reviewer?.isEmpty == false || note.traceId?.isEmpty == false {
+                HStack(spacing: Theme.xs) {
+                    if let signState = note.signState, !signState.isEmpty {
+                        workNoteChip(signState.replacingOccurrences(of: "_", with: " "), icon: "signature")
+                    }
+
+                    if let owner = note.owner, !owner.isEmpty {
+                        workNoteChip(owner, icon: "person.crop.circle")
+                    }
+
+                    if let reviewer = note.reviewer, !reviewer.isEmpty {
+                        workNoteChip(reviewer, icon: "person.crop.circle.badge.checkmark")
+                    }
+
+                    if let traceId = note.traceId, !traceId.isEmpty {
+                        workNoteChip(traceId, icon: "point.3.connected.trianglepath.dotted")
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, Theme.sm)
+    }
+
+    private func workNoteChip(_ text: String, icon: String) -> some View {
+        Label(text, systemImage: icon)
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(AppColors.textSecondary)
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(AppColors.backgroundTertiary)
+            .clipShape(Capsule())
     }
 
     private func actionButton(
@@ -379,6 +1512,438 @@ struct AgentDetailSheet: View {
         .buttonStyle(.plain)
     }
 
+    // MARK: - Inbox Section (POD-5 / M-042 W21)
+    //
+    // Renders the agent's NATS inbox tail via the live backend contract
+    // (GET /api/v1/agents/{name}/inbox-tail?limit=N — M-036 + M-042 backend).
+    // Fetched once on appear via .task; non-destructive read.
+
+    private var inboxSection: some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            sectionHeader("Inbox", count: inboxTail?.unreadEntries)
+
+            if let tail = inboxTail {
+                VStack(spacing: 0) {
+                    if tail.recent.isEmpty {
+                        Text(tail.exists ? "No messages" : "Inbox not yet present")
+                            .podTextStyle(.body, color: AppColors.textTertiary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(Theme.md)
+                    } else {
+                        let rows = Array(tail.recent.reversed().prefix(5))
+                        ForEach(Array(rows.enumerated()), id: \.element.id) { idx, entry in
+                            inboxEntryRow(entry)
+                            if idx < rows.count - 1 {
+                                Divider().background(AppColors.border)
+                            }
+                        }
+                    }
+                }
+                .podCard()
+            } else {
+                HStack(spacing: Theme.sm) {
+                    ProgressView().controlSize(.small)
+                    Text("Loading inbox…")
+                        .podTextStyle(.body, color: AppColors.textTertiary)
+                    Spacer()
+                }
+                .padding(Theme.md)
+                .podCard()
+            }
+        }
+    }
+
+    private func inboxEntryRow(_ entry: InboxTailEntryDTO) -> some View {
+        HStack(alignment: .top, spacing: Theme.sm) {
+            Circle()
+                .fill(entry.isUnread ? AppColors.accentElectric : Color.clear)
+                .frame(width: 8, height: 8)
+                .padding(.top, 6)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack {
+                    Text(entry.from)
+                        .podTextStyle(.label, color: AppColors.textPrimary)
+                    Spacer()
+                    Text(entry.type)
+                        .podTextStyle(.label, color: AppColors.textTertiary)
+                }
+                Text(entry.displayTitle)
+                    .podTextStyle(.body, color: AppColors.textSecondary)
+                    .lineLimit(2)
+                if let fileName = entry.fileDisplayName {
+                    HStack(spacing: 6) {
+                        Image(systemName: "doc.text")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(AppColors.accentElectric)
+                        Text(fileName)
+                            .podTextStyle(.caption, color: AppColors.accentElectric)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    .accessibilityLabel("File drop \(fileName)")
+                }
+            }
+        }
+        .padding(Theme.md)
+    }
+
+    // MARK: - Data Loading
+
+    private func loadInboxTail() async {
+        let name = agent.name.lowercased()
+        do {
+            let dto: InboxTailDTO = try await APIClient.shared.request(
+                .agentInboxTail(name: name, limit: 20)
+            )
+            await MainActor.run { self.inboxTail = dto }
+        } catch {
+            // Soft-fail (mirrors AgentsViewModel.loadInboxTail): inbox may not
+            // be present yet or backend unreachable. UI shows the
+            // "Inbox not yet present" / loading branch — no user-surfaced error.
+        }
+    }
+
+    private func loadWorkNotes() async {
+        await MainActor.run {
+            isLoadingWorkNotes = true
+            workNoteError = nil
+        }
+        do {
+            let notes: [AgentWorkNoteDTO] = try await APIClient.shared.get(
+                path: "/api/v1/notes/agents/\(agent.apiPathComponent)?limit=20"
+            )
+            await MainActor.run {
+                self.workNotes = notes
+                self.isLoadingWorkNotes = false
+            }
+        } catch {
+            await MainActor.run {
+                self.isLoadingWorkNotes = false
+                self.workNoteError = "Notes unavailable"
+            }
+        }
+    }
+
+    private func loadResponsibility() async {
+        await MainActor.run {
+            isLoadingResponsibility = true
+            responsibilityError = nil
+        }
+        do {
+            let dto: AgentResponsibilityDetailDTO = try await APIClient.shared.get(
+                path: "/api/v1/agent-responsibilities/agents/\(agent.apiPathComponent)"
+            )
+            await MainActor.run {
+                self.responsibility = dto
+                self.isLoadingResponsibility = false
+            }
+        } catch {
+            await MainActor.run {
+                self.isLoadingResponsibility = false
+                self.responsibilityError = "ORCA direction unavailable"
+            }
+        }
+    }
+
+    private func loadActivationContext() async {
+        await MainActor.run {
+            isLoadingActivationContext = true
+            activationContextError = nil
+        }
+        do {
+            let dto: AgentActivationContextDTO = try await APIClient.shared.request(
+                .agentActivationContext(name: agent.apiPathComponent, limit: 10)
+            )
+            await MainActor.run {
+                self.activationContext = dto
+                self.isLoadingActivationContext = false
+            }
+        } catch {
+            await MainActor.run {
+                self.isLoadingActivationContext = false
+                self.activationContextError = "Activation context unavailable"
+            }
+        }
+    }
+
+    private func loadLocker() async {
+        await MainActor.run {
+            isLoadingLocker = true
+            lockerError = nil
+        }
+        do {
+            let dto: AgentLockerDTO = try await APIClient.shared.request(
+                .agentLocker(name: agent.apiPathComponent, limit: 10)
+            )
+            await MainActor.run {
+                self.lockerData = dto
+                self.isLoadingLocker = false
+            }
+        } catch {
+            await MainActor.run {
+                self.isLoadingLocker = false
+                self.lockerError = "Locker unavailable"
+            }
+        }
+    }
+
+    private func postWorkNote() async {
+        let note = workNoteText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !note.isEmpty else { return }
+        await MainActor.run {
+            isPostingWorkNote = true
+            workNoteError = nil
+        }
+
+        do {
+            let body = AgentWorkNoteCreateBody(
+                targetType: "agent",
+                targetId: nil,
+                noteType: "work_note",
+                title: "Pod work note",
+                body: note,
+                tags: ["pod", "agent-work-note", AgentRosterPolicy.normalizedName(agent.name)],
+                traceId: "pod-agent-note-\(agent.name.lowercased())-\(Int(Date().timeIntervalSince1970))",
+                source: "pod.agents.work_note",
+                owner: AgentRosterPolicy.normalizedName(agent.name),
+                reviewer: "aloha",
+                signState: "draft"
+            )
+            let created: AgentWorkNoteDTO = try await APIClient.shared.post(
+                path: "/api/v1/notes/agents/\(agent.apiPathComponent)",
+                body: body
+            )
+            await MainActor.run {
+                self.workNotes.insert(created, at: 0)
+                self.workNoteText = ""
+                self.isPostingWorkNote = false
+            }
+        } catch {
+            await MainActor.run {
+                self.workNoteError = "Couldn't save note"
+                self.isPostingWorkNote = false
+            }
+        }
+    }
+
+    private func lockerLibraryTab(_ locker: AgentLockerDTO) -> some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            let lib = locker.library
+            if lib.documents.isEmpty && lib.doctrineBundle == nil {
+                lockerEmptyText("No library documents returned by ORCA.")
+            } else {
+                if let label = lib.label {
+                    Text(label)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppColors.textTertiary)
+                }
+                if let bundle = lib.doctrineBundle {
+                    HStack(spacing: Theme.xs) {
+                        Image(systemName: "book.closed.fill")
+                            .font(.caption)
+                            .foregroundStyle(AppColors.accentAgent)
+                        Text(bundle)
+                            .font(.caption)
+                            .foregroundStyle(AppColors.textSecondary)
+                            .lineLimit(2)
+                    }
+                    .padding(.bottom, Theme.xxs)
+                }
+                ForEach(lib.documents) { doc in
+                    HStack(spacing: Theme.xs) {
+                        Image(systemName: doc.exists ? "doc.fill" : "doc.badge.ellipsis")
+                            .font(.caption)
+                            .foregroundStyle(doc.exists ? AppColors.accentSuccess : AppColors.textMuted)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(doc.key)
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(AppColors.textPrimary)
+                                .lineLimit(1)
+                            if let path = doc.path {
+                                Text(path)
+                                    .font(.caption2)
+                                    .foregroundStyle(AppColors.textMuted)
+                                    .lineLimit(1)
+                            }
+                            if let reason = doc.reason {
+                                Text(reason)
+                                    .font(.caption2)
+                                    .foregroundStyle(AppColors.textTertiary)
+                                    .lineLimit(1)
+                            }
+                        }
+                        Spacer()
+                        if doc.safeToPreview == false {
+                            Image(systemName: "lock.fill")
+                                .font(.caption2)
+                                .foregroundStyle(AppColors.textMuted)
+                        }
+                    }
+                    .padding(.vertical, Theme.xxs)
+                }
+                if let source = lib.source {
+                    Text(source)
+                        .podTextStyle(.label, color: AppColors.textMuted)
+                        .padding(.top, Theme.xxs)
+                }
+            }
+        }
+    }
+
+    private func lockerEscalationTab(_ locker: AgentLockerDTO) -> some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            let esc = locker.escalation
+            if esc.actions.isEmpty {
+                lockerEmptyText("No escalation actions returned by ORCA.")
+            } else {
+                Text("Escalation Actions")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.textTertiary)
+
+                ForEach(esc.actions) { action in
+                    HStack(spacing: Theme.xs) {
+                        Image(systemName: action.mode == "non_protected_only" ? "arrow.up.message.fill" : "bolt.shield.fill")
+                            .font(.caption)
+                            .foregroundStyle(AppColors.accentWarning)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(action.label)
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(AppColors.textPrimary)
+                            if let mode = action.mode {
+                                Text(mode.replacingOccurrences(of: "_", with: " "))
+                                    .font(.caption2)
+                                    .foregroundStyle(AppColors.textTertiary)
+                            }
+                        }
+                        Spacer()
+                    }
+                    .padding(.vertical, Theme.xxs)
+                }
+            }
+
+            Divider().padding(.vertical, Theme.xxs)
+
+            Text("Promote to Memory Candidate")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppColors.textTertiary)
+
+            TextEditor(text: $memoryCandidateNote)
+                .frame(minHeight: 72)
+                .scrollContentBackground(.hidden)
+                .background(AppColors.backgroundPrimary)
+                .foregroundStyle(AppColors.textPrimary)
+                .padding(Theme.sm)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.radiusSmall)
+                        .strokeBorder(AppColors.border, lineWidth: 1)
+                )
+
+            HStack(spacing: Theme.sm) {
+                Button {
+                    Task { await postMemoryCandidate(locker: locker) }
+                } label: {
+                    HStack(spacing: Theme.xs) {
+                        if isPostingMemoryCandidate {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Image(systemName: "brain.head.profile")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                        Text("Promote")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .padding(.horizontal, Theme.md)
+                    .padding(.vertical, Theme.xs)
+                    .foregroundStyle(.white)
+                    .background(!memoryCandidateNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? AppColors.accentElectric : AppColors.textMuted)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+                }
+                .buttonStyle(.plain)
+                .disabled(memoryCandidateNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isPostingMemoryCandidate)
+
+                if let memoryCandidateMessage {
+                    Text(memoryCandidateMessage)
+                        .podTextStyle(.caption, color: memoryCandidateMessage == "Candidate saved" ? AppColors.accentSuccess : AppColors.accentDanger)
+                        .lineLimit(2)
+                }
+                Spacer()
+            }
+        }
+    }
+
+    private func postMemoryCandidate(locker: AgentLockerDTO) async {
+        let note = memoryCandidateNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !note.isEmpty else { return }
+        await MainActor.run {
+            isPostingMemoryCandidate = true
+            memoryCandidateMessage = nil
+        }
+        do {
+            struct MemoryCandidateBody: Encodable {
+                let note: String
+                let source: String
+                let tags: [String]
+            }
+            let body = MemoryCandidateBody(note: note, source: "pod_locker_escalation", tags: [])
+            let _: AgentLockerActionResultDTO = try await APIClient.shared.post(
+                path: "/api/v1/agents/\(agent.apiPathComponent)/locker-actions/memory-candidate",
+                body: body
+            )
+            await MainActor.run {
+                self.memoryCandidateNote = ""
+                self.memoryCandidateMessage = "Candidate saved"
+                self.isPostingMemoryCandidate = false
+            }
+        } catch {
+            await MainActor.run {
+                self.memoryCandidateMessage = "Couldn't save candidate"
+                self.isPostingMemoryCandidate = false
+            }
+        }
+    }
+
+    private func postLockerFeedback() async {
+        let note = lockerFeedbackText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rating = lockerFeedbackRating ?? "other"
+        await MainActor.run {
+            isPostingLockerFeedback = true
+            lockerFeedbackMessage = nil
+        }
+
+        do {
+            let body = AgentLockerFeedbackCreateBody(
+                rating: rating,
+                note: note,
+                panel: lockerFeedbackPanel,
+                attachSnapshot: lockerFeedbackAttachSnapshot,
+                snapshot: [
+                    "agent": AgentRosterPolicy.normalizedName(agent.name),
+                    "section": lockerFeedbackPanel,
+                    "source": "pod"
+                ],
+                traceId: "pod-locker-feedback-\(agent.name.lowercased())-\(Int(Date().timeIntervalSince1970))",
+                source: "pod.agent_locker"
+            )
+            let _: AgentLockerActionResultDTO = try await APIClient.shared.post(
+                path: "/api/v1/agents/\(agent.apiPathComponent)/locker-feedback",
+                body: body
+            )
+            await MainActor.run {
+                self.lockerFeedbackText = ""
+                self.lockerFeedbackRating = nil
+                self.lockerFeedbackPanel = "classroom"
+                self.lockerFeedbackAttachSnapshot = false
+                self.lockerFeedbackMessage = "Feedback saved"
+                self.isPostingLockerFeedback = false
+            }
+        } catch {
+            await MainActor.run {
+                self.lockerFeedbackMessage = "Couldn't save feedback"
+                self.isPostingLockerFeedback = false
+            }
+        }
+    }
+
     // MARK: - Section Header
 
     private func sectionHeader(_ title: String, count: Int? = nil) -> some View {
@@ -398,61 +1963,275 @@ struct AgentDetailSheet: View {
         }
     }
 
-    // MARK: - Mock Activity
+}
 
-    private static func mockActivity(for agent: Agent) -> [AgentActivityItem] {
-        let now = Date()
-        return [
-            AgentActivityItem(type: .taskStarted, description: "Started working on PR #42 review", timestamp: now.addingTimeInterval(-120)),
-            AgentActivityItem(type: .message, description: "Posted update in #projects channel", timestamp: now.addingTimeInterval(-600)),
-            AgentActivityItem(type: .taskCompleted, description: "Completed code review for module auth", timestamp: now.addingTimeInterval(-1200)),
-            AgentActivityItem(type: .fileCreated, description: "Created architecture_diagram.md", timestamp: now.addingTimeInterval(-1800)),
-            AgentActivityItem(type: .error, description: "Connection timeout to staging — retried successfully", timestamp: now.addingTimeInterval(-2400)),
-            AgentActivityItem(type: .taskStarted, description: "Began sprint planning research", timestamp: now.addingTimeInterval(-3600)),
-            AgentActivityItem(type: .message, description: "Responded to @shaka in #general", timestamp: now.addingTimeInterval(-5400)),
-            AgentActivityItem(type: .deployment, description: "Deployed v2.3.1 to staging environment", timestamp: now.addingTimeInterval(-7200)),
-            AgentActivityItem(type: .taskCompleted, description: "Finished database migration script", timestamp: now.addingTimeInterval(-10800)),
-            AgentActivityItem(type: .fileCreated, description: "Updated API documentation for /v1/agents", timestamp: now.addingTimeInterval(-14400)),
-        ]
+private struct AgentWorkNoteDTO: Identifiable, Decodable {
+    let id: String
+    let targetType: String
+    let targetId: String?
+    let noteType: String
+    let title: String
+    let body: String
+    let tags: [String]?
+    let createdBy: String?
+    let traceId: String?
+    let source: String?
+    let owner: String?
+    let reviewer: String?
+    let signState: String?
+    let createdAt: Date
+    let updatedAt: Date
+
+    var message: String { body }
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, body, tags, source, owner, reviewer
+        case targetType = "target_type"
+        case targetId = "target_id"
+        case noteType = "note_type"
+        case createdBy = "created_by"
+        case traceId = "trace_id"
+        case signState = "sign_state"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
     }
 }
 
-// MARK: - Agent Activity Item
+private struct AgentWorkNoteCreateBody: Encodable {
+    let targetType: String
+    let targetId: String?
+    let noteType: String
+    let title: String
+    let body: String
+    let tags: [String]
+    let traceId: String
+    let source: String
+    let owner: String
+    let reviewer: String
+    let signState: String
 
-struct AgentActivityItem: Identifiable {
-    let id = UUID()
-    let type: ActivityEventType
-    let description: String
-    let timestamp: Date
+    enum CodingKeys: String, CodingKey {
+        case title, body, tags, source, owner, reviewer
+        case targetType = "target_type"
+        case targetId = "target_id"
+        case noteType = "note_type"
+        case traceId = "trace_id"
+        case signState = "sign_state"
+    }
 }
 
-enum ActivityEventType {
-    case taskStarted
-    case taskCompleted
-    case message
-    case fileCreated
-    case deployment
-    case error
+private struct AgentLockerFeedbackCreateBody: Encodable {
+    let rating: String
+    let note: String
+    let panel: String
+    let attachSnapshot: Bool
+    let snapshot: [String: String]
+    let traceId: String
+    let source: String
 
-    var icon: String {
-        switch self {
-        case .taskStarted:  return "play.circle.fill"
-        case .taskCompleted: return "checkmark.circle.fill"
-        case .message:    return "bubble.left.fill"
-        case .fileCreated: return "doc.fill"
-        case .deployment:  return "arrow.up.circle.fill"
-        case .error:       return "exclamationmark.triangle.fill"
+    enum CodingKeys: String, CodingKey {
+        case rating, note, panel, snapshot, source
+        case attachSnapshot = "attach_snapshot"
+        case traceId = "trace_id"
+    }
+}
+
+private struct AgentLockerActionResultDTO: Decodable {
+    let ok: Bool
+    let action: String
+    let agent: String
+    let id: String?
+    let status: String?
+    let detail: String?
+}
+
+private enum AgentLockerTab: String, CaseIterable, Identifiable {
+    case classroom = "Classroom"
+    case planner = "Planner"
+    case inbox = "Inbox"
+    case memory = "Memory"
+    case research = "Research"
+    case feedback = "Feedback"
+    case library = "Library"
+    case escalation = "Escalation"
+
+    var id: String { rawValue }
+}
+
+private struct AgentResponsibilityDetailDTO: Decodable {
+    let agent: String
+    let profile: AgentResponsibilityProfileDTO
+    let domains: [String: AgentResponsibilityDomainDTO]
+
+    var sortedDomainRoutes: [AgentResponsibilityRoute] {
+        domains
+            .map {
+                AgentResponsibilityRoute(
+                    domain: $0.key,
+                    primary: $0.value.primary,
+                    fallback: $0.value.fallback,
+                    scope: $0.value.scope,
+                    note: $0.value.note
+                )
+            }
+            .sorted { $0.domain.localizedCaseInsensitiveCompare($1.domain) == .orderedAscending }
+    }
+}
+
+private struct AgentResponsibilityRoute: Identifiable, Hashable {
+    let domain: String
+    let primary: String?
+    let fallback: String?
+    let scope: String?
+    let note: String?
+
+    var id: String { domain }
+}
+
+private struct AgentResponsibilityRouteRow: View {
+    let route: AgentResponsibilityRoute
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: Theme.xs) {
+                Text(route.domain.replacingOccurrences(of: "_", with: " "))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.textPrimary)
+                    .lineLimit(1)
+
+                Spacer(minLength: Theme.xs)
+
+                if let primary = route.primary, !primary.isEmpty {
+                    Text(primary)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(AppColors.accentElectric)
+                        .lineLimit(1)
+                }
+            }
+
+            if let scope = route.scope, !scope.isEmpty {
+                Text(scope)
+                    .podTextStyle(.caption, color: AppColors.textSecondary)
+                    .lineLimit(2)
+            }
+
+            HStack(spacing: Theme.xs) {
+                if let fallback = route.fallback, !fallback.isEmpty {
+                    Label(fallback, systemImage: "arrow.triangle.2.circlepath")
+                }
+                if let note = route.note, !note.isEmpty {
+                    Label(note, systemImage: "info.circle")
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(AppColors.textTertiary)
+            .lineLimit(1)
         }
+        .padding(Theme.xs)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+    }
+}
+
+private struct AgentResponsibilityProfileDTO: Decodable {
+    let rosterLane: String?
+    let defaultRoutingEnabled: Bool?
+    let title: String?
+    let summary: String?
+    let owns: [String]
+    let defaultWorkerLane: String?
+    let protectedDomains: [String]
+    let approvalNotes: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case rosterLane = "roster_lane"
+        case defaultRoutingEnabled = "default_routing_enabled"
+        case title
+        case summary
+        case owns
+        case defaultWorkerLane = "default_worker_lane"
+        case protectedDomains = "protected_domains"
+        case approvalNotes = "approval_notes"
     }
 
-    var color: Color {
-        switch self {
-        case .taskStarted:  return AppColors.accentElectric
-        case .taskCompleted: return AppColors.accentSuccess
-        case .message:      return AppColors.accentAgent
-        case .fileCreated:   return AppColors.textSecondary
-        case .deployment:   return AppColors.accentCaptain
-        case .error:         return AppColors.accentDanger
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        rosterLane = try container.decodeIfPresent(String.self, forKey: .rosterLane)
+        defaultRoutingEnabled = try container.decodeIfPresent(Bool.self, forKey: .defaultRoutingEnabled)
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        summary = try container.decodeIfPresent(String.self, forKey: .summary)
+        owns = try container.decodeIfPresent([String].self, forKey: .owns) ?? []
+        defaultWorkerLane = try container.decodeIfPresent(String.self, forKey: .defaultWorkerLane)
+        protectedDomains = try container.decodeIfPresent([String].self, forKey: .protectedDomains) ?? []
+        approvalNotes = try container.decodeIfPresent([String].self, forKey: .approvalNotes) ?? []
+    }
+}
+
+private struct AgentResponsibilityDomainDTO: Decodable {
+    let primary: String?
+    let fallback: String?
+    let scope: String?
+    let note: String?
+}
+
+private extension Agent {
+    var apiPathComponent: String {
+        name
+            .lowercased()
+            .addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? name.lowercased()
+    }
+
+    var directChatAgentInfo: AgentInfo {
+        let normalizedName = AgentRosterPolicy.normalizedName(name)
+        if let knownAgent = AgentInfo.find(normalizedName) {
+            return AgentInfo(
+                id: knownAgent.id,
+                name: knownAgent.name,
+                role: knownAgent.role,
+                icon: knownAgent.icon,
+                color: knownAgent.color,
+                endpoint: knownAgent.endpoint,
+                isReachable: knownAgent.isReachable,
+                lane: knownAgent.lane,
+                guardrail: knownAgent.guardrail,
+                supportRuntime: supportRuntime,
+                allowedRuntimes: allowedRuntimes,
+                runtimeHost: runtimeHost,
+                lastAwakeProofAt: lastAwakeProofAt,
+                lastSleepProofAt: lastSleepProofAt,
+                driftState: driftState,
+                tokenProfile: tokenProfile
+            )
+        }
+
+        return AgentInfo(
+            id: normalizedName,
+            name: name,
+            role: role,
+            icon: "person.crop.circle",
+            color: avatarColor?.replacingOccurrences(of: "#", with: "") ?? "3B82F6",
+            endpoint: .init(baseURL: AppConfig.computeURL, authToken: ""),
+            isReachable: isDefaultRoutingEnabled,
+            lane: directChatLane,
+            guardrail: rosterNote ?? "Keep responses grounded in ORCA direct chat. Do not claim live runtime access or completed actions unless ORCA confirms them.",
+            supportRuntime: supportRuntime,
+            allowedRuntimes: allowedRuntimes,
+            runtimeHost: runtimeHost,
+            lastAwakeProofAt: lastAwakeProofAt,
+            lastSleepProofAt: lastSleepProofAt,
+            driftState: driftState,
+            tokenProfile: tokenProfile
+        )
+    }
+
+    private var directChatLane: AgentInfo.Lane {
+        switch rosterLane {
+        case .activeMain:
+            return .main
+        case .supportRuntime:
+            return .supportRuntime
+        case .dormantArchive, .unknown:
+            return .dormantAdvisor
         }
     }
 }
@@ -539,9 +2318,11 @@ struct AgentConfigureSheet: View {
 // MARK: - Compose Message Sheet
 
 struct ComposeMessageSheet: View {
-    let recipientName: String
+    let agent: AgentInfo
     @Environment(\.dismiss) private var dismiss
     @State private var messageText: String = ""
+    @State private var isSending = false
+    @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -549,7 +2330,7 @@ struct ComposeMessageSheet: View {
                 HStack(spacing: Theme.sm) {
                     Text("To:")
                         .podTextStyle(.body, color: AppColors.textSecondary)
-                    Text(recipientName)
+                    Text(agent.name)
                         .podTextStyle(.body, color: AppColors.textPrimary)
                         .fontWeight(.semibold)
                 }
@@ -557,11 +2338,39 @@ struct ComposeMessageSheet: View {
                 .padding(Theme.md)
                 .background(AppColors.backgroundSecondary)
 
+                if let errorMessage {
+                    HStack(spacing: Theme.sm) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(AppColors.accentDanger)
+                        Text(errorMessage)
+                            .podTextStyle(.caption, color: AppColors.textPrimary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(.horizontal, Theme.md)
+                    .padding(.vertical, Theme.sm)
+                    .background(AppColors.accentDanger.opacity(0.12))
+                }
+
+                if isSending {
+                    HStack(spacing: Theme.sm) {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(AppColors.accentElectric)
+                        Text("Sending...")
+                            .podTextStyle(.caption, color: AppColors.textSecondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, Theme.md)
+                    .padding(.vertical, Theme.sm)
+                    .background(AppColors.backgroundSecondary.opacity(0.7))
+                }
+
                 TextEditor(text: $messageText)
                     .scrollContentBackground(.hidden)
                     .background(AppColors.backgroundPrimary)
                     .foregroundStyle(AppColors.textPrimary)
                     .padding(Theme.md)
+                    .disabled(isSending)
 
                 Spacer()
             }
@@ -572,17 +2381,66 @@ struct ComposeMessageSheet: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") { dismiss() }
                         .foregroundStyle(AppColors.textSecondary)
+                        .disabled(isSending)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Send") {
-                        // TODO: Send via API
-                        dismiss()
+                    if isSending {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(AppColors.accentElectric)
+                    } else {
+                        Button("Send") {
+                            sendMessage()
+                        }
+                        .fontWeight(.semibold)
+                        .foregroundStyle(AppColors.accentElectric)
+                        .disabled(trimmedMessage.isEmpty)
                     }
-                    .fontWeight(.semibold)
-                    .foregroundStyle(AppColors.accentElectric)
-                    .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
+    }
+
+    private var trimmedMessage: String {
+        messageText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func sendMessage() {
+        let text = trimmedMessage
+        guard !text.isEmpty, !isSending else { return }
+
+        isSending = true
+        errorMessage = nil
+
+        Task {
+            do {
+                let service = AgentChatService(agent: agent)
+                let stream = await service.send(message: text)
+                for try await _ in stream {}
+
+                await MainActor.run {
+                    messageText = ""
+                    isSending = false
+                    dismiss()
+                }
+            } catch let apiError as APIError {
+                await MainActor.run {
+                    errorMessage = apiError.message
+                    isSending = false
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    isSending = false
+                }
+            }
+        }
+    }
+}
+
+private extension String {
+    var nilIfBlank: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

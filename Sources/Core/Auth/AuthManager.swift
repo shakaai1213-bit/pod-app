@@ -489,6 +489,11 @@ final class AuthManager {
         print("[AuthManager] Switched to user: \(userId.uuidString.prefix(8))...")
     }
 
+    /// Returns the active user's raw access token string, for bridging into APIClient.
+    func getActiveAccessToken() async -> String? {
+        try? await tokenManager.getActiveToken().map { $0.token.accessToken }
+    }
+
     // MARK: - Validate Session
 
     /// Checks if the current session is valid. Auto-refreshes if needed.

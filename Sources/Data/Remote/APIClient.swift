@@ -6,6 +6,12 @@ struct AuthResponse: Codable {
     let token: String
     let userId: String?
     let expiresAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case token
+        case userId = "user_id"
+        case expiresAt = "expires_at"
+    }
 }
 
 struct APIError: Error {
@@ -29,8 +35,7 @@ struct EmptyResponse: Codable {}
 actor APIClient {
     static let shared = APIClient()
 
-    // Physical device OR Simulator: use Tailscale URL (works from both)
-    private let baseURL = "http://100.76.196.40:8000"
+    private let baseURL = AppConfig.backendURL
     private let session: URLSession
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
@@ -44,8 +49,9 @@ actor APIClient {
         self.session = URLSession(configuration: config)
 
         self.decoder = JSONDecoder()
-        self.decoder.dateDecodingStrategy = .iso8601
-        self.decoder.keyDecodingStrategy = .convertFromSnakeCase
+        self.decoder.dateDecodingStrategy = .custom { decoder in
+            try Self.decodeORCADate(from: decoder)
+        }
 
         self.encoder = JSONEncoder()
         self.encoder.dateEncodingStrategy = .iso8601
@@ -56,6 +62,10 @@ actor APIClient {
 
     func setToken(_ token: String?) {
         self.authToken = token
+    }
+
+    func currentToken() -> String? {
+        authToken ?? UserDefaults.standard.string(forKey: "orca_auth_token")
     }
 
     /// Atomically sets the token and verifies it by fetching agents.
@@ -153,6 +163,23 @@ actor APIClient {
         return try await perform(request)
     }
 
+    /// POST without injecting Authorization/X-Api-Key headers. Used by
+    /// the SIWA exchange flow (`/auth/apple/callback`) which is the very
+    /// call that mints the bearer token, so it must run unauthenticated.
+    func unauthenticatedPost<T: Decodable>(path: String, body: some Encodable) async throws -> T {
+        let components = URLComponents(string: "\(baseURL)\(path)")
+        guard let url = components?.url else {
+            throw APIError(code: 0, message: "Invalid URL")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try encoder.encode(AnyEncodable(body))
+
+        return try await perform(request)
+    }
+
     func put<T: Decodable>(path: String, body: some Encodable) async throws -> T {
         let request = try buildRequest(path: path, method: "PUT", body: AnyEncodable(body))
         return try await perform(request)
@@ -183,6 +210,39 @@ actor APIClient {
             let body = String(data: data.prefix(500), encoding: .utf8) ?? "<\(data.count) bytes>"
             throw APIError(code: 0, message: "Decoding failed: \(error) | Response: \(body)")
         }
+    }
+
+    private static func decodeORCADate(from decoder: Decoder) throws -> Date {
+        let container = try decoder.singleValueContainer()
+        let value = try container.decode(String.self)
+
+        let isoWithTimezone = ISO8601DateFormatter()
+        isoWithTimezone.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = isoWithTimezone.date(from: value) {
+            return date
+        }
+
+        let isoWithoutFraction = ISO8601DateFormatter()
+        isoWithoutFraction.formatOptions = [.withInternetDateTime]
+        if let date = isoWithoutFraction.date(from: value) {
+            return date
+        }
+
+        for format in ["yyyy-MM-dd'T'HH:mm:ss.SSSSSS", "yyyy-MM-dd'T'HH:mm:ss.SSS", "yyyy-MM-dd'T'HH:mm:ss"] {
+            let formatter = DateFormatter()
+            formatter.calendar = Calendar(identifier: .iso8601)
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = TimeZone(secondsFromGMT: 0)
+            formatter.dateFormat = format
+            if let date = formatter.date(from: value) {
+                return date
+            }
+        }
+
+        throw DecodingError.dataCorruptedError(
+            in: container,
+            debugDescription: "Invalid ORCA date: \(value)"
+        )
     }
 }
 

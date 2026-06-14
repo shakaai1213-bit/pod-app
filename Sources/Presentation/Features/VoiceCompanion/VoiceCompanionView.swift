@@ -36,8 +36,7 @@ struct VoiceCompanionView: View {
                 // Voice button
                 voiceButtonView
 
-                // Routing toggles
-                routingTogglesView
+                realtimePackageView
             }
             .padding(.bottom, 20)
         }
@@ -48,6 +47,9 @@ struct VoiceCompanionView: View {
             Button("OK") { viewModel.dismissError() }
         } message: {
             Text(viewModel.errorMessage ?? "")
+        }
+        .onDisappear {
+            Task { await viewModel.teardownRealtimeVoice() }
         }
     }
 
@@ -112,54 +114,44 @@ struct VoiceCompanionView: View {
     }
 
     private var voiceButtonView: some View {
-        ZStack {
-            // Pulse animation when recording
-            if viewModel.isRecording {
+        Button {
+            Task { await viewModel.toggleRealtimeVoiceFromPrimaryButton() }
+        } label: {
+            ZStack {
+                if viewModel.isRealtimeConnected {
+                    Circle()
+                        .fill(recordingColor.opacity(0.3))
+                        .frame(width: 140, height: 140)
+                        .scaleEffect(viewModel.isRealtimeConnected ? 1.1 : 1.0)
+                        .animation(
+                            .easeInOut(duration: 0.8).repeatForever(autoreverses: true),
+                            value: viewModel.isRealtimeConnected
+                        )
+                }
+
                 Circle()
-                    .fill(recordingColor.opacity(0.3))
-                    .frame(width: 140, height: 140)
-                    .scaleEffect(viewModel.isRecording ? 1.1 : 1.0)
-                    .animation(
-                        .easeInOut(duration: 0.8).repeatForever(autoreverses: true),
-                        value: viewModel.isRecording
-                    )
-            }
-
-            // Main button
-            Circle()
-                .fill(viewModel.isRecording ? recordingColor : accentColor)
-                .frame(width: 120, height: 120)
-                .shadow(color: (viewModel.isRecording ? recordingColor : accentColor).opacity(0.5), radius: 20)
-
-            // Icon
-            Image(systemName: "mic.fill")
-                .font(.system(size: 40))
-                .foregroundColor(.white)
-
-            // Processing overlay
-            if viewModel.isProcessing {
-                Circle()
-                    .fill(Color.black.opacity(0.5))
+                    .fill(viewModel.isRealtimeConnected ? recordingColor : accentColor)
                     .frame(width: 120, height: 120)
+                    .shadow(color: (viewModel.isRealtimeConnected ? recordingColor : accentColor).opacity(0.5), radius: 20)
 
-                ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                    .scaleEffect(1.5)
+                Image(systemName: viewModel.isRealtimeConnected ? "phone.down.fill" : "mic.fill")
+                    .font(.system(size: 40))
+                    .foregroundColor(.white)
+
+                if viewModel.isPreparingRealtimeSession || viewModel.isProcessing {
+                    Circle()
+                        .fill(Color.black.opacity(0.5))
+                        .frame(width: 120, height: 120)
+
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(1.5)
+                }
             }
         }
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in
-                    if !viewModel.isRecording && !viewModel.isProcessing {
-                        Task { await viewModel.startRecording() }
-                    }
-                }
-                .onEnded { _ in
-                    if viewModel.isRecording {
-                        Task { await viewModel.stopRecordingAndProcess() }
-                    }
-                }
-        )
+        .buttonStyle(.plain)
+        .disabled(viewModel.isPreparingRealtimeSession || viewModel.isProcessing)
+        .accessibilityLabel(viewModel.isRealtimeConnected ? "Leave LiveKit realtime voice" : "Join LiveKit realtime voice")
     }
 
     private var routingTogglesView: some View {
@@ -203,8 +195,103 @@ struct VoiceCompanionView: View {
                         .fill(viewModel.routeToOpenClaw ? accentColor.opacity(0.2) : Color.gray.opacity(0.1))
                 )
             }
+
+            Button {
+                viewModel.routeToRealtimePackage.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(viewModel.routeToRealtimePackage ? accentColor : Color.gray.opacity(0.5))
+                        .frame(width: 8, height: 8)
+                    Text("LiveKit")
+                        .font(.caption)
+                        .foregroundColor(viewModel.routeToRealtimePackage ? .white : .gray)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(viewModel.routeToRealtimePackage ? accentColor.opacity(0.2) : Color.gray.opacity(0.1))
+                )
+            }
         }
         .padding(.top, 20)
+    }
+
+    private var realtimePackageView: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "wave.3.right.circle")
+                    .foregroundColor(accentColor)
+                Text("LiveKit realtime room")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.white.opacity(0.82))
+            }
+            .accessibilityElement(children: .combine)
+
+            Text(viewModel.realtimeSessionText ?? viewModel.realtimePackageText)
+                .font(.caption)
+                .foregroundColor(.gray)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 20)
+
+            if viewModel.isRealtimeConnected {
+                Text(viewModel.realtimeTranscriptText)
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+            }
+
+            if viewModel.isRealtimeConnected && viewModel.realtimeRemoteParticipantCount == 0 {
+                HStack(spacing: 8) {
+                    Image(systemName: "person.crop.circle.badge.questionmark")
+                        .foregroundColor(.orange)
+                    Text("You are in the room. Aloha is offline until the voice worker is started.")
+                        .font(.caption.weight(.medium))
+                        .foregroundColor(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(Color.orange.opacity(0.12))
+                )
+                .padding(.horizontal, 20)
+            }
+
+            Button {
+                Task {
+                    if viewModel.isRealtimeConnected {
+                        await viewModel.leaveRealtimeVoice()
+                    } else {
+                        await viewModel.joinRealtimeVoice()
+                    }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    if viewModel.isPreparingRealtimeSession {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(0.8)
+                    } else {
+                        Image(systemName: viewModel.isRealtimeConnected ? "phone.down.circle" : "wave.3.right.circle")
+                    }
+                    Text(viewModel.isRealtimeConnected ? "Leave Voice Room" : "Join Voice Room")
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundColor(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(accentColor.opacity(viewModel.routeToRealtimePackage ? 0.35 : 0.12))
+                )
+            }
+            .disabled(viewModel.isPreparingRealtimeSession)
+        }
+        .padding(.top, 12)
     }
 }
 
@@ -233,4 +320,3 @@ struct MessageBubble: View {
         }
     }
 }
-

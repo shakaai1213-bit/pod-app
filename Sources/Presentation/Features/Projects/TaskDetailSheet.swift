@@ -25,8 +25,6 @@ struct TaskDetailSheet: View {
     @State private var newTagText = ""
     @State private var activityLog: [ActivityEntry] = []
 
-    private let members = ProjectsViewModel.mockMembers
-
     init(task: ProjectTask, viewModel: ProjectsViewModel, onUpdate: @escaping (ProjectTask) -> Void) {
         self.task = task
         self.viewModel = viewModel
@@ -40,7 +38,7 @@ struct TaskDetailSheet: View {
         _editedDueDate = State(initialValue: task.dueDate)
         _editedTags = State(initialValue: task.tags)
         _editedAssigneeId = State(initialValue: task.assigneeId)
-        _activityLog = State(initialValue: Self.mockActivity(for: task))
+        _activityLog = State(initialValue: Self.activity(from: task))
     }
 
     // MARK: - Body
@@ -77,7 +75,7 @@ struct TaskDetailSheet: View {
             }
             .sheet(isPresented: $showingAssigneePicker) {
                 AssigneePickerSheet(
-                    members: members,
+                    members: viewModel.teamMembers,
                     selectedId: $editedAssigneeId
                 )
             }
@@ -518,7 +516,7 @@ struct TaskDetailSheet: View {
     // MARK: - Helpers
 
     private var assigneeName: String {
-        members.first { $0.id == editedAssigneeId }?.name ?? ""
+        viewModel.teamMembers.first { $0.id == editedAssigneeId }?.name ?? ""
     }
 
     private var dueDateText: String {
@@ -583,26 +581,21 @@ struct TaskDetailSheet: View {
         }
     }
 
-    private static func mockActivity(for task: ProjectTask) -> [ActivityEntry] {
-        [
+    private static func activity(from task: ProjectTask) -> [ActivityEntry] {
+        let timestamp = task.dueDate ?? Date()
+        return [
             ActivityEntry(
                 id: UUID(),
-                message: "Task created",
-                timestamp: task.dueDate?.addingTimeInterval(-86400 * 3) ?? Date().addingTimeInterval(-86400 * 3),
-                color: AppColors.textTertiary
+                message: "Current ORCA status: \(task.status.displayName)",
+                timestamp: timestamp,
+                color: task.status == .done ? AppColors.accentSuccess : AppColors.accentElectric
             ),
             ActivityEntry(
                 id: UUID(),
-                message: "Assigned to \(ProjectsViewModel.mockMembers.first?.name ?? "Unknown")",
-                timestamp: task.dueDate?.addingTimeInterval(-86400 * 2) ?? Date().addingTimeInterval(-86400 * 2),
-                color: AppColors.accentElectric
-            ),
-            ActivityEntry(
-                id: UUID(),
-                message: "Priority changed to \(task.priority.displayName)",
-                timestamp: task.dueDate?.addingTimeInterval(-86400) ?? Date().addingTimeInterval(-86400),
+                message: "Current ORCA priority: \(task.priority.displayName)",
+                timestamp: timestamp,
                 color: AppColors.accentWarning
-            ),
+            )
         ]
     }
 }

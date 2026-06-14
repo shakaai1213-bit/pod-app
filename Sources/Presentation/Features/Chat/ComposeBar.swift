@@ -438,38 +438,42 @@ struct ComposeBarView: View {
     // MARK: - Agent Loading
 
     private func loadAgents() async {
-        // Nova is always available as an on-demand assistant
-        let nova = MentionCandidate(id: "nova", name: "Nova", icon: "sparkle")
-
         do {
             let response: PaginatedResponse<AgentDTO> = try await APIClient.shared.get(path: "/api/v1/agents")
-            var candidates = response.items.map { dto in
+            let candidates = response.items
+                .filter { $0.domainRosterLane == .activeMain || $0.domainRosterLane == .supportRuntime }
+                .sorted {
+                    $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+                }
+                .map { dto in
                 MentionCandidate(
                     id: dto.id,
                     name: dto.name.prefix(1).uppercased() + dto.name.dropFirst(),
                     icon: iconForAgent(dto.name)
                 )
             }
-            // Prepend Nova if not already in the list
-            if !candidates.contains(where: { $0.name.lowercased() == "nova" }) {
-                candidates.insert(nova, at: 0)
-            }
             agents = candidates
         } catch {
-            // Fall back to just Nova
-            agents = [nova]
+            // Fall back to active/support team members.
+            agents = [
+                MentionCandidate(id: "maui",  name: "Maui",  icon: "wrench.and.screwdriver"),
+                MentionCandidate(id: "aloha",  name: "Aloha",  icon: "doc.text"),
+                MentionCandidate(id: "chief",  name: "Chief",  icon: "chart.line.uptrend.xyaxis"),
+                MentionCandidate(id: "rooster", name: "Rooster", icon: "shield"),
+                MentionCandidate(id: "coral", name: "Coral", icon: "circle.hexagongrid"),
+                MentionCandidate(id: "reef", name: "Reef", icon: "waveform.path.ecg")
+            ]
         }
     }
 
     private func iconForAgent(_ name: String) -> String {
         switch name.lowercased() {
-        case "nova":    return "sparkle"
         case "maui":    return "wrench.and.screwdriver"
         case "aloha":   return "doc.text"
-        case "aurora":  return "sparkles"
-        case "shaka":   return "person.circle"
         case "chief":   return "chart.line.uptrend.xyaxis"
         case "rooster": return "shield"
+        case "coral":   return "circle.hexagongrid"
+        case "reef":    return "waveform.path.ecg"
         default:        return "cpu"
         }
     }

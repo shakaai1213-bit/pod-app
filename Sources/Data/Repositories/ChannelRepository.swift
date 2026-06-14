@@ -64,15 +64,12 @@ final class ChannelRepository {
         await withTaskGroup(of: Message.self) { group in
             for dto in dtos {
                 group.addTask {
-                    let authorName = await UserNameCache.shared.displayName(
-                        userId: dto.authorId,
-                        agentId: dto.agentId
-                    )
                     return Message(
                         id: UUID(uuidString: dto.id) ?? UUID(),
                         channelId: channelId,
                         authorId: UUID(uuidString: dto.authorId) ?? UUID(),
-                        authorName: authorName,
+                        authorName: dto.authorName,
+                        authorRole: dto.isAgent ? .agent : .human,
                         isAgent: dto.isAgent,
                         agentId: dto.agentId,
                         content: dto.content,
@@ -84,7 +81,9 @@ final class ChannelRepository {
                                 userIds: r.userIds,
                                 isReactedByMe: false
                             )
-                        } ?? []
+                        } ?? [],
+                        replyTo: dto.replyToId.flatMap { UUID(uuidString: $0) },
+                        fileAttachment: dto.fileAttachment
                     )
                 }
             }
@@ -119,7 +118,8 @@ final class ChannelRepository {
             content: dto.content,
             timestamp: dto.timestamp,
             reactions: [],
-            replyTo: dto.replyToId.flatMap { UUID(uuidString: $0) }
+            replyTo: dto.replyToId.flatMap { UUID(uuidString: $0) },
+            fileAttachment: dto.fileAttachment
         )
 
         await cache.syncMessages([message], for: channelId)
@@ -153,14 +153,13 @@ final class ChannelRepository {
     // MARK: - Mapping
 
     private func mapChannelType(_ dtoType: DTOChatChannelType) -> ChatChannelType {
-        // API returns type: "public" / "group" — use channel name to determine type
-        // The channel.name field contains "general", "projects", "alerts", etc.
         switch dtoType {
         case .general:   return .general
         case .project:   return .projects
         case .agent:     return .agents
         case .research:  return .research
         case .alerts:    return .alerts
+        case .direct:    return .direct
         }
     }
 
@@ -171,6 +170,7 @@ final class ChannelRepository {
         case "agents", "agent": return .agents
         case "research":  return .research
         case "alerts", "alert": return .alerts
+        case "direct", "dm": return .direct
         default:          return .general
         }
     }
@@ -182,6 +182,7 @@ final class ChannelRepository {
         case .agents:    return .agent
         case .research:  return .research
         case .alerts:    return .alerts
+        case .direct:    return .direct
         }
     }
 }

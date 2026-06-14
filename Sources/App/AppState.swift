@@ -1,6 +1,16 @@
 import Foundation
 import SwiftUI
 
+enum AppConfig {
+    #if targetEnvironment(simulator)
+    static let backendURL = "http://127.0.0.1:19002"
+    static let computeURL = "http://127.0.0.1:8890"
+    #else
+    static let backendURL = "http://100.76.196.40:8000"
+    static let computeURL = "http://100.76.196.40:8890"
+    #endif
+}
+
 @MainActor
 final class AppState: ObservableObject {
     // MARK: - Published State
@@ -18,6 +28,10 @@ final class AppState: ObservableObject {
     @Published var showApprovalSheet = false
     @Published var pendingApprovalId: UUID?
     @Published var pendingNotification: NotificationAction?
+    @Published var pendingDirectChatAgentId: String?
+    @Published var pendingDirectChatTicketId: String?
+    @Published var pendingDirectChatTicketTitle: String?
+    @Published var pendingDirectChatChannelId: String?
 
     // MARK: - Auth Manager (Keychain-backed)
 
@@ -25,12 +39,13 @@ final class AppState: ObservableObject {
 
     // MARK: - Backend URL
 
-    // Simulator can still use the local proxy when available, but must authenticate honestly.
-    #if targetEnvironment(simulator)
-    static let backendURL = "http://192.168.4.243:19002"
-    #else
-    static let backendURL = "http://100.76.196.40:8000"
-    #endif
+    static let backendURL = AppConfig.backendURL
+
+    static func localBearerTokenFallback() -> String? {
+        let token = OrcaSecrets.bearerToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty, !token.contains("REPLACE_ME") else { return nil }
+        return token
+    }
 
     // MARK: - Initialization
 
@@ -58,19 +73,30 @@ final class AppState: ObservableObject {
     func attemptAutoLogin() async {
         let success = await authManager.attemptAutoLogin()
         if success, let user = authManager.currentUser {
+            // Bridge the Keychain token into APIClient so all ViewModels can make authenticated requests
+            if let token = await authManager.getActiveAccessToken() {
+                await APIClient.shared.setToken(token)
+                UserDefaults.standard.set(token, forKey: "orca_auth_token")
+            }
             currentUser = TeamMember(id: user.id, name: user.name, avatarColor: "#6B46C1")
             isAuthenticated = true
             await fetchCurrentUser()
+            await prepareNotifications()
             print("[AppState] Auto-login successful")
         } else {
-            print("[AppState] Auto-login skipped or failed")
+            if let localToken = Self.localBearerTokenFallback() {
+                print("[AppState] Keychain auto-login failed; trying local ORCA token fallback")
+                await authenticate(token: localToken)
+            } else {
+                print("[AppState] Auto-login skipped or failed")
+            }
         }
     }
 
     // MARK: - Authentication
 
     func authenticate(token: String) async {
-        print("[AppState] authenticate() called with token: \(token.prefix(8))...")
+        print("[AppState] authenticate() called")
         authDiagnostics.removeAll()
         appendDiagnostic("Starting auth against \(Self.backendURL)")
         appendDiagnostic("Token length: \(token.count)")
@@ -84,7 +110,7 @@ final class AppState: ObservableObject {
     /// Actual auth logic — called inside the timeout wrapper.
     /// All state mutations are @MainActor by virtue of the class being @MainActor.
     private func performAuth(token: String) async {
-        print("[AppState] performAuth: START token=\(token.prefix(8))... backendURL=\(Self.backendURL)")
+        print("[AppState] performAuth: START backendURL=\(Self.backendURL)")
         appendDiagnostic("Checking backend reachability")
 
         // Retry reachability check with internet test for iOS Simulator
@@ -158,6 +184,7 @@ final class AppState: ObservableObject {
                     print("[AppState] Keychain store failed (non-fatal): \(error)")
                 }
                 await fetchCurrentUser()
+                await prepareNotifications()
             }
             appendDiagnostic("Auth flow completed")
             print("[AppState] performAuth: DONE — isAuthenticated=\(isAuthenticated)")
@@ -231,7 +258,7 @@ final class AppState: ObservableObject {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue(token, forHTTPHeaderField: "X-Api-Key")
         request.timeoutInterval = 15
-        print("[AppState] verifyTokenDirectly: GET \(url.absoluteString) Bearer=\(token.prefix(8))...")
+        print("[AppState] verifyTokenDirectly: GET \(url.absoluteString)")
 
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -250,6 +277,21 @@ final class AppState: ObservableObject {
             appendDiagnostic("Token verification error: \(error.localizedDescription)")
             return false
         }
+    }
+
+    private func prepareNotifications() async {
+        let service = PushNotificationService.shared
+        let granted: Bool
+        if service.isAuthorized {
+            granted = true
+        } else {
+            granted = await service.requestAuthorization()
+        }
+        guard granted else {
+            print("[AppState] Notifications not authorized")
+            return
+        }
+        service.registerForRemoteNotifications()
     }
 
     private func appendDiagnostic(_ message: String) {
@@ -294,9 +336,9 @@ final class AppState: ObservableObject {
         switch state {
         case .dashboard: selectedTab = .dashboard
         case .chat: selectedTab = .chat
-        case .projects: selectedTab = .projects
+        case .projects: selectedTab = .work
         case .knowledge: selectedTab = .knowledge
-        case .agents: selectedTab = .agents
+        case .agents: selectedTab = .crew  // agents folded into Crew (L1 revamp)
         case .settings: selectedTab = .dashboard
         }
         navigationState = state
@@ -306,13 +348,17 @@ final class AppState: ObservableObject {
         selectedTab = tab
         switch tab {
         case .dashboard: navigationState = .dashboard
+        case .runtime: navigationState = .dashboard
+        case .system: navigationState = .dashboard
         case .chat: navigationState = .chat(channelId: nil)
-        case .projects: navigationState = .projects(taskId: nil)
+        case .work: navigationState = .projects(taskId: nil)
+        case .captainsLog: navigationState = .dashboard  // legacy alias
+        case .lab: navigationState = .dashboard
+        case .crew: navigationState = .agents(agentId: nil)  // Crew = merged Agents+Arms
+        case .arms: navigationState = .agents(agentId: nil)  // legacy alias
         case .knowledge: navigationState = .knowledge(standardId: nil)
-        case .agents: navigationState = .agents(agentId: nil)
-        case .tickets: break
-        case .voice: break
-        case .trading: break
+        case .agents: navigationState = .agents(agentId: nil)  // legacy alias
+        case .maker: navigationState = .dashboard
         }
     }
 
@@ -322,7 +368,7 @@ final class AppState: ObservableObject {
             selectedTab = .chat
             navigationState = .chat(channelId: channelId)
         case .taskAssigned(let taskId, _):
-            selectedTab = .projects
+            selectedTab = .work
             navigationState = .projects(taskId: taskId)
         case .approvalRequested(let approvalId, _):
             selectedTab = .dashboard
@@ -330,7 +376,7 @@ final class AppState: ObservableObject {
             showApprovalSheet = true
             navigationState = .dashboard
         case .agentError(agentId: let agentId, error: _):
-            selectedTab = .agents
+            selectedTab = .crew  // agents folded into Crew (L1 revamp)
             navigationState = .agents(agentId: agentId)
         case .unknown:
             break

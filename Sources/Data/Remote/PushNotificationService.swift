@@ -10,12 +10,8 @@ final class PushNotificationService {
     var deviceToken: String?
     var pendingNotifications: [PendingNotification] = []
 
-    #if targetEnvironment(simulator)
-    private let baseURL = URL(string: "http://127.0.0.1:19002")!
-    #else
-    private let baseURL = URL(string: "http://100.76.196.40:8000")!
-    #endif
-    private let authToken = "ebe9a0fdfaf9b7674f4e2b9d0149f881d46111730b780d9e508ad94023c03051"
+    private let baseURL = URL(string: AppConfig.backendURL)!
+    private let apiClient = APIClient.shared
 
     private init() {
         Task { await checkAuthorizationStatus() }
@@ -65,11 +61,20 @@ final class PushNotificationService {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        guard let authToken = await apiClient.currentToken(), !authToken.isEmpty else {
+            print("[PushNotificationService] Skipping APNS registration: no active ORCA session token")
+            return
+        }
         request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        request.setValue(authToken, forHTTPHeaderField: "X-Api-Key")
 
+        let deviceName = await MainActor.run { UIDevice.current.name }
         let payload: [String: String] = [
             "device_token": token,
-            "platform": "apns"
+            "platform": "apns",
+            "device_name": deviceName,
+            "app_bundle_id": Bundle.main.bundleIdentifier ?? "com.orcamc.pod",
+            "app_version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
         ]
 
         do {
@@ -78,6 +83,8 @@ final class PushNotificationService {
             if let http = response as? HTTPURLResponse {
                 if http.statusCode == 200 || http.statusCode == 201 {
                     print("[PushNotificationService] Token registered successfully")
+                } else if http.statusCode == 404 {
+                    print("[PushNotificationService] Push registration endpoint unavailable on this ORCA backend")
                 } else {
                     print("[PushNotificationService] Token registration failed: \(http.statusCode)")
                 }
@@ -95,7 +102,12 @@ final class PushNotificationService {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        guard let authToken = await apiClient.currentToken(), !authToken.isEmpty else {
+            print("[PushNotificationService] Skipping APNS unregister: no active ORCA session token")
+            return
+        }
         request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        request.setValue(authToken, forHTTPHeaderField: "X-Api-Key")
 
         let payload: [String: String] = [
             "device_token": token,
@@ -105,9 +117,13 @@ final class PushNotificationService {
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: payload)
             let (_, response) = try await URLSession.shared.data(for: request)
-            if let http = response as? HTTPURLResponse, http.statusCode == 200 {
-                await MainActor.run { self.deviceToken = nil }
-                print("[PushNotificationService] Token unregistered")
+            if let http = response as? HTTPURLResponse {
+                if http.statusCode == 200 {
+                    await MainActor.run { self.deviceToken = nil }
+                    print("[PushNotificationService] Token unregistered")
+                } else if http.statusCode == 404 {
+                    print("[PushNotificationService] Push unregister endpoint unavailable on this ORCA backend")
+                }
             }
         } catch {
             print("[PushNotificationService] Token unregister error: \(error.localizedDescription)")
@@ -215,6 +231,11 @@ final class PushNotificationService {
     func syncBadgeCount() async {
         let unreadCount = pendingNotifications.filter { !$0.isRead }.count
         await updateBadgeCount(unreadCount)
+    }
+
+    func syncSonarBadge(unreadRooms: Int, mentionRooms: Int, attentionRooms: Int) async {
+        let count = max(0, unreadRooms + mentionRooms + attentionRooms)
+        await updateBadgeCount(count)
     }
 
     // MARK: - Notification Categories (Rich Actions)

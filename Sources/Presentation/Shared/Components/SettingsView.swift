@@ -54,6 +54,15 @@ struct AgentPreference: Identifiable, Hashable {
     var enabled: Bool
 }
 
+struct PrivacyControl: Identifiable {
+    let id: String
+    let title: String
+    let detail: String
+    let icon: String
+    let color: Color
+    var enabled: Bool
+}
+
 // MARK: - ViewModel
 
 @Observable
@@ -89,12 +98,51 @@ final class SettingsViewModel {
 
     // MARK: Agent Preferences
     var agents: [AgentPreference] = [
-        AgentPreference(id: "maui",      name: "Maui",      enabled: true),
-        AgentPreference(id: "researcher", name: "Researcher", enabled: true),
-        AgentPreference(id: "builder",   name: "Builder",   enabled: true),
-        AgentPreference(id: "analyst",   name: "Analyst",   enabled: false),
-        AgentPreference(id: "sentinel",  name: "Sentinel",  enabled: true),
+        AgentPreference(id: "aloha",       name: "Aloha",       enabled: true),
+        AgentPreference(id: "maui",        name: "Maui",        enabled: true),
+        AgentPreference(id: "chief",       name: "Chief",       enabled: true),
+        AgentPreference(id: "rooster",     name: "Rooster",     enabled: true),
+        AgentPreference(id: "coral",       name: "Coral",       enabled: true),
+        AgentPreference(id: "reef",        name: "Reef",        enabled: true),
     ]
+
+    // MARK: Privacy & Agent Controls
+    var privacyControls: [PrivacyControl] = [
+        PrivacyControl(
+            id: "workspace_only",
+            title: "Workspace-only file access",
+            detail: "Agents may use ORCA workspace files, ticket artifacts, and approved uploads.",
+            icon: "folder.badge.gearshape",
+            color: AppColors.accentElectric,
+            enabled: true
+        ),
+        PrivacyControl(
+            id: "personal_device_block",
+            title: "Block personal device data",
+            detail: "Photos, contacts, messages, health data, and personal iCloud content stay outside Pod.",
+            icon: "iphone.slash",
+            color: AppColors.accentSuccess,
+            enabled: true
+        ),
+        PrivacyControl(
+            id: "tool_approval",
+            title: "Require approval for tools",
+            detail: "Writes, generated artifacts, dispatch, and external actions require a visible review step.",
+            icon: "checkmark.seal",
+            color: AppColors.accentWarning,
+            enabled: true
+        ),
+        PrivacyControl(
+            id: "no_synthetic_replies",
+            title: "No synthetic live-agent replies",
+            detail: "Chat may show acknowledgements and waiting states, but not invented agent answers.",
+            icon: "bubble.left.and.exclamationmark.bubble.right",
+            color: AppColors.accentAgent,
+            enabled: true
+        ),
+    ]
+    var autoIndexUploads: Bool = false
+    var shareDiagnosticsWithORCA: Bool = false
 
     // MARK: About
     var appVersion: String {
@@ -156,17 +204,16 @@ struct SettingsView: View {
     @State private var viewModel = SettingsViewModel()
     @State private var showingProfileEditor = false
     @State private var showingAgentPicker = false
-    @State private var showingWallDisplayLauncher = false
 
     var body: some View {
         NavigationStack {
             List {
-                wallDisplaySection
                 profileSection
                 appearanceSection
                 notificationsSection
                 organizationSection
                 agentPreferencesSection
+                privacySection
                 aboutSection
                 aboutOrcaSection
                 if viewModel.showDebugSection {
@@ -176,47 +223,6 @@ struct SettingsView: View {
             .listStyle(.insetGrouped)
             .navigationTitle("Settings")
             .preferredColorScheme(colorScheme)
-            .sheet(isPresented: $showingWallDisplayLauncher) {
-                WallDisplayLauncherView()
-            }
-        }
-    }
-
-    // MARK: - Wall Display Section
-
-    private var wallDisplaySection: some View {
-        Section {
-            Button {
-                showingWallDisplayLauncher = true
-            } label: {
-                HStack(spacing: Theme.sm) {
-                    Image(systemName: "rectangle.on.rectangle.angled")
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundStyle(AppColors.accentElectric)
-                        .frame(width: 32, height: 32)
-                        .background(AppColors.accentElectric.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Ambient Wall Display")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(AppColors.textPrimary)
-                        Text("Full-screen team status for iPad")
-                            .font(.system(size: 12))
-                            .foregroundStyle(AppColors.textSecondary)
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(AppColors.textTertiary)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-        } header: {
-            Text("iPad Display")
         }
     }
 
@@ -364,6 +370,49 @@ struct SettingsView: View {
             Text("Dashboard Agents")
         } footer: {
             Text("Select which agents appear on your Dashboard.")
+        }
+    }
+
+    // MARK: - Privacy Section
+
+    private var privacySection: some View {
+        Section {
+            ForEach($viewModel.privacyControls) { $control in
+                Toggle(isOn: $control.enabled) {
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: control.icon)
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(control.color)
+                            .frame(width: 24)
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(control.title)
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(AppColors.textPrimary)
+                            Text(control.detail)
+                                .font(.caption)
+                                .foregroundStyle(AppColors.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .padding(.vertical, 3)
+                }
+                .tint(control.color)
+            }
+
+            Toggle(isOn: $viewModel.autoIndexUploads) {
+                Label("Auto-index uploads into memory", systemImage: "doc.text.magnifyingglass")
+            }
+            .tint(AppColors.accentElectric)
+
+            Toggle(isOn: $viewModel.shareDiagnosticsWithORCA) {
+                Label("Share diagnostics with ORCA", systemImage: "waveform.path.ecg")
+            }
+            .tint(AppColors.accentElectric)
+        } header: {
+            Text("Privacy & Agent Controls")
+        } footer: {
+            Text("Pod should route work through ORCA. Agents do not receive personal iPhone data unless a future explicit permission lane is added.")
         }
     }
 

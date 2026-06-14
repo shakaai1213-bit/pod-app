@@ -33,16 +33,27 @@ final class AgentRepository {
                     currentTask: dto.currentTask,
                     lastActivity: dto.lastSeenAt ?? Date(),
                     skills: dto.skills,
-                    avatarColor: dto.avatarColor ?? "#3B82F6"
+                    avatarColor: dto.avatarColor ?? "#3B82F6",
+                    rosterLane: dto.domainRosterLane,
+                    isDefaultRoutingEnabled: dto.isDefaultRoutingEnabled,
+                    quarantineState: dto.quarantineState,
+                    rosterNote: dto.rosterNote,
+                    supportRuntime: dto.supportRuntime,
+                    allowedRuntimes: dto.allowedRuntimes,
+                    runtimeHost: dto.runtimeHost,
+                    lastAwakeProofAt: dto.lastAwakeProofAt,
+                    lastSleepProofAt: dto.lastSleepProofAt,
+                    driftState: dto.driftState,
+                    tokenProfile: dto.tokenProfile
                 )
             }
-            agents = remote
-            await cache.syncAgents(remote)
+            agents = AgentRosterPolicy.filterActive(remote)
+            await cache.syncAgents(agents)
         } catch {
             lastError = error
             // Fall back to cache
             let cached = cache.fetchCachedAgents()
-            agents = cached.map { $0.toAgent() }
+            agents = AgentRosterPolicy.filterActive(cached.map { $0.toAgent() })
         }
     }
 
@@ -55,20 +66,33 @@ final class AgentRepository {
         let agent = Agent(
             id: UUID(uuidString: dto.id) ?? id,
             name: dto.name,
-            role: dto.role ?? "Agent",
+            role: dto.role,
             status: mapStatus(dto.status),
             currentTask: dto.currentTask,
             lastActivity: dto.lastSeenAt ?? Date(),
-            skills: dto.skills ?? [],
-            avatarColor: dto.avatarColor ?? "#3B82F6"
+            skills: dto.skills,
+            avatarColor: dto.avatarColor ?? "#3B82F6",
+            rosterLane: dto.domainRosterLane,
+            isDefaultRoutingEnabled: dto.isDefaultRoutingEnabled,
+            quarantineState: dto.quarantineState,
+            rosterNote: dto.rosterNote,
+            supportRuntime: dto.supportRuntime,
+            allowedRuntimes: dto.allowedRuntimes,
+            runtimeHost: dto.runtimeHost,
+            lastAwakeProofAt: dto.lastAwakeProofAt,
+            lastSleepProofAt: dto.lastSleepProofAt,
+            driftState: dto.driftState,
+            tokenProfile: dto.tokenProfile
         )
 
         if let index = agents.firstIndex(where: { $0.id == id }) {
             agents[index] = agent
-        } else {
+        } else if AgentRosterPolicy.isActiveOrSupport(agent) {
             agents.append(agent)
         }
-        await cache.syncAgents([agent])
+        if AgentRosterPolicy.isActiveOrSupport(agent) {
+            await cache.syncAgents([agent])
+        }
     }
 
     // MARK: - Queries
@@ -87,6 +111,7 @@ final class AgentRepository {
     private func mapStatus(_ dtoStatus: AgentStatus) -> AgentState {
         switch dtoStatus {
         case .online:  return .online
+        case .active:  return .online   // backend "active" = working right now
         case .busy:    return .busy
         case .idle:    return .idle
         case .offline: return .offline

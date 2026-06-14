@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pod — Work Tab Mockup</title>
+<style>
+  :root{
+    --bg:#0a0a0c; --card:#161618; --card2:#1d1d20; --line:#2a2a2e;
+    --txt:#ecedef; --dim:#8b8b91; --faint:#5f5f66;
+    --green:#34c759; --amber:#ff9f0a; --red:#ff453a; --blue:#0a84ff; --violet:#bf5af2;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,"SF Pro Text",Helvetica,Arial,sans-serif;}
+  body{background:#000;display:flex;justify-content:center;padding:28px;}
+  .ipad{width:920px;background:var(--bg);border-radius:26px;overflow:hidden;
+        border:1px solid #222;box-shadow:0 0 60px rgba(0,0,0,.8);}
+  .statusbar{display:flex;justify-content:space-between;padding:10px 22px;font-size:13px;color:var(--txt);}
+  .scroll{padding:6px 22px 0;}
+  /* header */
+  .hdr{padding:8px 2px 16px;}
+  .hdr h1{font-size:30px;font-weight:700;color:var(--txt);}
+  .hdr .sub{font-size:13px;color:var(--dim);margin-top:3px;}
+  /* section */
+  .sec{margin-bottom:20px;}
+  .sec-head{display:flex;align-items:center;justify-content:space-between;margin:6px 2px 9px;}
+  .sec-title{font-size:12px;font-weight:700;letter-spacing:1.4px;color:var(--dim);}
+  .sec-act{font-size:12px;color:var(--blue);}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;}
+  /* parking lot */
+  .qadd{display:flex;align-items:center;gap:10px;padding:13px 15px;border-bottom:1px solid var(--line);background:var(--card2);}
+  .qadd .plus{width:22px;height:22px;border-radius:50%;background:var(--blue);color:#fff;
+        font-size:16px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
+  .qadd .ph{flex:1;color:var(--faint);font-size:14px;}
+  .qadd .kind{font-size:12px;color:var(--dim);border:1px solid var(--line);border-radius:7px;padding:4px 9px;}
+  .row{display:flex;align-items:center;gap:11px;padding:13px 15px;border-bottom:1px solid var(--line);}
+  .row:last-child{border-bottom:none;}
+  .badge{font-size:10px;font-weight:700;letter-spacing:.5px;padding:3px 7px;border-radius:5px;flex:0 0 auto;text-transform:uppercase;}
+  .b-idea{background:rgba(10,132,255,.16);color:#5fa9ff;}
+  .b-question{background:rgba(191,90,242,.16);color:#cf8bf5;}
+  .b-note{background:rgba(255,159,10,.15);color:#ffb84d;}
+  .item-main{flex:1;min-width:0;}
+  .item-title{font-size:14px;color:var(--txt);}
+  .item-meta{font-size:11px;color:var(--faint);margin-top:3px;}
+  .acts{display:flex;gap:6px;flex:0 0 auto;}
+  .btn{font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid var(--line);color:var(--dim);}
+  .btn.promote{background:var(--blue);color:#fff;border-color:var(--blue);}
+  .parked{font-size:11px;color:var(--faint);font-style:italic;flex:0 0 auto;}
+  /* projects */
+  .prow{display:flex;align-items:center;gap:12px;padding:13px 15px;border-bottom:1px solid var(--line);}
+  .prow:last-child{border-bottom:none;}
+  .pid{font-family:"SF Mono",Menlo,monospace;font-size:11px;color:var(--faint);
+       background:#0e0e10;border:1px solid var(--line);border-radius:5px;padding:3px 6px;flex:0 0 auto;}
+  .pname{flex:1;font-size:14px;color:var(--txt);min-width:0;}
+  .pill{font-size:10px;font-weight:600;padding:3px 8px;border-radius:10px;flex:0 0 auto;}
+  .p-live{background:rgba(52,199,89,.16);color:#5cd97a;}
+  .p-blueprint{background:rgba(139,139,145,.18);color:#a8a8af;}
+  .owner{font-size:12px;color:var(--dim);width:52px;flex:0 0 auto;}
+  .bar{width:90px;height:6px;border-radius:3px;background:#26262a;flex:0 0 auto;overflow:hidden;}
+  .bar > i{display:block;height:100%;background:var(--green);}
+  .tix{font-size:11px;color:var(--faint);width:48px;text-align:right;flex:0 0 auto;}
+  /* tickets */
+  .trow{display:flex;align-items:center;gap:11px;padding:11px 15px;border-bottom:1px solid var(--line);}
+  .tdot{width:7px;height:7px;border-radius:50%;flex:0 0 auto;}
+  .ttitle{flex:1;font-size:13px;color:var(--txt);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .tmeta{font-size:11px;color:var(--faint);flex:0 0 auto;}
+  .viewall{padding:11px 15px;font-size:12px;color:var(--blue);text-align:center;}
+  .filterbar{display:flex;gap:7px;padding:11px 15px;border-bottom:1px solid var(--line);background:var(--card2);}
+  .chip{font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid var(--line);color:var(--dim);}
+  .chip.on{background:var(--txt);color:#000;border-color:var(--txt);}
+  /* nav */
+  .nav{display:flex;justify-content:space-around;padding:11px 0 16px;border-top:1px solid var(--line);background:#0d0d0f;margin-top:8px;}
+  .nav div{font-size:11px;color:var(--faint);text-align:center;}
+  .nav div.on{color:var(--blue);}
+  .nav .ico{font-size:18px;display:block;margin-bottom:3px;}
+  .flow{font-size:11px;color:var(--faint);text-align:center;padding:2px 0 10px;letter-spacing:.3px;}
+</style>
+</head>
+<body>
+<div class="ipad">
+  <div class="statusbar"><span>11:38 AM&nbsp;&nbsp;Fri May 22</span><span>Wi-Fi&nbsp;&nbsp;100%</span></div>
+  <div class="scroll">
+    <div class="hdr">
+      <h1>Work</h1>
+      <div class="sub">Where work starts, gets triaged, and gets done — one surface.</div>
+    </div>
+    <div class="flow">PARKING LOT&nbsp; → &nbsp;triage&nbsp; → &nbsp;PROJECTS&nbsp; → &nbsp;TICKETS</div>
+
+    <!-- PARKING LOT -->
+    <div class="sec">
+      <div class="sec-head"><span class="sec-title">PARKING LOT</span><span class="sec-act">triage queue · 3 new</span></div>
+      <div class="card">
+        <div class="qadd">
+          <span class="plus">+</span>
+          <span class="ph">Capture an idea, note, or question…</span>
+          <span class="kind">kind: idea ▾</span>
+        </div>
+        <div class="row">
+          <span class="badge b-idea">idea</span>
+          <div class="item-main">
+            <div class="item-title">Voice capture for daily logs — talk, don't type</div>
+            <div class="item-meta">tony · via Pod · 2h ago · new</div>
+          </div>
+          <div class="acts">
+            <span class="btn promote">Promote ▾</span><span class="btn">Park</span><span class="btn">Drop</span>
+          </div>
+        </div>
+        <div class="row">
+          <span class="badge b-question">question</span>
+          <div class="item-main">
+            <div class="item-title">Should Mermaid run a nightly bounded pass?</div>
+            <div class="item-meta">maui · via NATS · 1d ago · new</div>
+          </div>
+          <div class="acts">
+            <span class="btn promote">Promote ▾</span><span class="btn">Park</span><span class="btn">Drop</span>
+          </div>
+        </div>
+        <div class="row">
+          <span class="badge b-note">note</span>
+          <div class="item-main">
+            <div class="item-title">Pod chat felt slow on cellular — worth a look</div>
+            <div class="item-meta">tony · via iMessage · 3d ago · parked by aloha</div>
+          </div>
+          <span class="parked">▸ parked</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROJECTS -->
+    <div class="sec">
+      <div class="sec-head"><span class="sec-title">PROJECTS</span><span class="sec-act">+ New project</span></div>
+      <div class="card">
+        <div class="prow">
+          <span class="pid">bbc62861</span>
+          <span class="pname">Schoolhouse Transition Closeout</span>
+          <span class="pill p-blueprint">blueprint</span>
+          <span class="owner">Aloha</span>
+          <span class="bar"><i style="width:15%"></i></span>
+          <span class="tix">12 tix</span>
+        </div>
+        <div class="prow">
+          <span class="pid">07c8c25e</span>
+          <span class="pname">ORCA Control Plane</span>
+          <span class="pill p-live">live</span>
+          <span class="owner">Maui</span>
+          <span class="bar"><i style="width:62%"></i></span>
+          <span class="tix">8 tix</span>
+        </div>
+        <div class="prow">
+          <span class="pid">c912019e</span>
+          <span class="pname">Pod Cockpit</span>
+          <span class="pill p-live">live</span>
+          <span class="owner">Maui</span>
+          <span class="bar"><i style="width:40%"></i></span>
+          <span class="tix">5 tix</span>
+        </div>
+        <div class="prow">
+          <span class="pid">6156178a</span>
+          <span class="pname">Compute &amp; Spark</span>
+          <span class="pill p-live">live</span>
+          <span class="owner">Maui</span>
+          <span class="bar"><i style="width:55%"></i></span>
+          <span class="tix">6 tix</span>
+        </div>
+        <div class="prow">
+          <span class="pid">new ··</span>
+          <span class="pname">Memory Spine</span>
+          <span class="pill p-blueprint">blueprint</span>
+          <span class="owner">Aloha</span>
+          <span class="bar"><i style="width:8%"></i></span>
+          <span class="tix">3 tix</span>
+        </div>
+        <div class="prow">
+          <span class="pid">3d7ccbd4</span>
+          <span class="pname">Project Guardian</span>
+          <span class="pill p-blueprint">blueprint</span>
+          <span class="owner">Tony</span>
+          <span class="bar"><i style="width:22%"></i></span>
+          <span class="tix">4 tix</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- TICKETS -->
+    <div class="sec">
+      <div class="sec-head"><span class="sec-title">TICKETS</span><span class="sec-act">100 open</span></div>
+      <div class="card">
+        <div class="filterbar">
+          <span class="chip on">All</span><span class="chip">Mine</span>
+          <span class="chip">Urgent</span><span class="chip">By project</span>
+        </div>
+        <div class="trow"><span class="tdot" style="background:var(--red)"></span>
+          <span class="ttitle">Security cleanup: prevent secrets from entering memory</span>
+          <span class="tmeta">Rooster · urgent</span></div>
+        <div class="trow"><span class="tdot" style="background:var(--amber)"></span>
+          <span class="ttitle">iMessage outbound reply-contract → Aloha owns comms</span>
+          <span class="tmeta">Aloha · high</span></div>
+        <div class="trow"><span class="tdot" style="background:var(--amber)"></span>
+          <span class="ttitle">M1: Runtime Registry classification — 106 units</span>
+          <span class="tmeta">Coral · high</span></div>
+        <div class="trow"><span class="tdot" style="background:var(--green)"></span>
+          <span class="ttitle">M0: Final team return smoke and status</span>
+          <span class="tmeta">Maui · closed</span></div>
+        <div class="viewall">View all 100 tickets  ›</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav">
+    <div><span class="ico">▢</span>Dashboard</div>
+    <div><span class="ico">◷</span>Runtime</div>
+    <div><span class="ico">◌</span>Chat</div>
+    <div class="on"><span class="ico">◆</span>Work</div>
+    <div><span class="ico">▤</span>Knowledge</div>
+    <div><span class="ico">◉</span>Agents</div>
+  </div>
+</div>
+</body>
+</html>

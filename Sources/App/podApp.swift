@@ -1,30 +1,53 @@
 import SwiftUI
+import SwiftData
+import UIKit
+import UserNotifications
 
-// MARK: - AppState Environment Key
+final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        UNUserNotificationCenter.current().delegate = self
+        PushNotificationService.shared.registerNotificationCategories()
+        return true
+    }
 
-@MainActor private func makeDefaultAppState() -> AppState {
-    AppState()
-}
+    func application(
+        _ application: UIApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+    ) {
+        PushNotificationService.shared.didRegisterForRemoteNotifications(deviceToken: deviceToken)
+    }
 
-private struct AppStateKey: EnvironmentKey {
-    @MainActor static let defaultValue: AppState = makeDefaultAppState()
-}
+    func application(
+        _ application: UIApplication,
+        didFailToRegisterForRemoteNotificationsWithError error: Error
+    ) {
+        PushNotificationService.shared.didFailToRegisterForRemoteNotifications(error: error)
+    }
 
-extension EnvironmentValues {
-    @MainActor var appState: AppState {
-        get { self[AppStateKey.self] }
-        set { self[AppStateKey.self] = newValue }
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        _ = await PushNotificationService.shared.handleNotificationForForeground(
+            userInfo: notification.request.content.userInfo
+        )
+        return [.banner, .badge, .sound]
     }
 }
 
 @main
 struct podApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var appState = AppState()
 
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environment(\.appState, appState)
+                .modelContainer(for: [DMConversation.self, DMMessage.self])
+                .environmentObject(appState)
                 .preferredColorScheme(.dark)
                 .onAppear {
                     configureAppearance()
@@ -32,7 +55,9 @@ struct podApp: App {
                         await appState.attemptAutoLogin()
                     }
                     if CommandLine.arguments.contains("--auto-login") {
-                        let testToken = "ebe9a0fdfaf9b7674f4e2b9d0149f881d46111730b780d9e508ad94023c03051"
+                        // SEC-007 remediation 2026-05-08: token sourced from
+                        // OrcaSecrets.swift (gitignored) instead of hardcoded literal.
+                        let testToken = OrcaSecrets.bearerToken
                         print("[podApp] TEST MODE: auto-submitting token via --auto-login")
                         Task { @MainActor in
                             await appState.authenticate(token: testToken)
@@ -46,7 +71,7 @@ struct podApp: App {
     }
 
     private func handleURL(_ url: URL) {
-        print("[podApp] URL received: \(url)")
+        print("[podApp] connect URL received")
         // pod://connect/<token> — bypasses the login form
         guard url.scheme == "pod",
               url.host == "connect",

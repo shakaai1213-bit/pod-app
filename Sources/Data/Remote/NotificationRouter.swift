@@ -19,7 +19,7 @@ final class NotificationRouter {
             navigateTo(.chat(channelId: channelId))
 
         case .taskAssigned(let taskId, _):
-            selectedTab = .projects
+            selectedTab = .work
             navigateTo(.projects(taskId: taskId))
 
         case .approvalRequested(let approvalId, _):
@@ -29,7 +29,7 @@ final class NotificationRouter {
             navigateTo(.approvals(approvalId: approvalId))
 
         case .agentError(let agentId, _):
-            selectedTab = .agents
+            selectedTab = .crew  // agents folded into Crew (L1 revamp)
             navigateTo(.agents(agentId: agentId))
 
         case .unknown:

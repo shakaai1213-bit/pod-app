@@ -20,6 +20,7 @@ struct Channel: Identifiable, Hashable, Sendable {
         case .agents:    return "cpu"
         case .research:  return "magnifyingglass"
         case .alerts:    return "bell"
+        case .direct:    return "person.fill"
         }
     }
 
@@ -32,6 +33,7 @@ enum ChatChannelType: String, CaseIterable, Sendable {
     case agents   = "agents"
     case research = "research"
     case alerts   = "alerts"
+    case direct   = "direct"
 }
 
 // MARK: - Message
@@ -50,6 +52,7 @@ struct Message: Identifiable, Hashable, Sendable {
     var isHighlighted: Bool
     var replyTo: UUID?  // Parent message ID for threading
     var queueState: CachedQueueMessage.QueueState?  // nil = not cached
+    var fileAttachment: ChatFileAttachment?
 
     init(
         id: UUID = UUID(),
@@ -64,7 +67,8 @@ struct Message: Identifiable, Hashable, Sendable {
         reactions: [Reaction] = [],
         isHighlighted: Bool = false,
         replyTo: UUID? = nil,
-        queueState: CachedQueueMessage.QueueState? = nil
+        queueState: CachedQueueMessage.QueueState? = nil,
+        fileAttachment: ChatFileAttachment? = nil
     ) {
         self.id = id
         self.channelId = channelId
@@ -79,6 +83,7 @@ struct Message: Identifiable, Hashable, Sendable {
         self.isHighlighted = isHighlighted
         self.replyTo = replyTo
         self.queueState = queueState
+        self.fileAttachment = fileAttachment
     }
 }
 
@@ -123,6 +128,13 @@ struct MessageGroup: Identifiable, Sendable {
 // MARK: - ChatViewModel
 
 import SwiftUI
+
+// DEPRECATED 2026-05-07 — superseded by Features/DirectChat/. The Channel,
+// Message, Reaction, and ChatChannelType types defined in this file are still
+// referenced by the data layer (Data/Local/SwiftDataModels.swift,
+// Data/Repositories/ChannelRepository.swift, Core/Mock/MockData.swift), so
+// the file cannot be deleted without that cleanup (deferred to a future
+// M-cleanup milestone). DO NOT add new functionality here.
 
 @MainActor
 @Observable
@@ -220,6 +232,10 @@ final class ChatViewModel {
                             Task { _ = await self.offlineQueue.flush() }
                         case .message(let payload):
                             await self.handleSSEMessage(payload)
+                        case .presence:
+                            break  // presence is surfaced in Sonar/direct chat.
+                        case .ticketLifecycle:
+                            break  // not expected on chat stream; harmless no-op
                         case .keepalive:
                             break
                         case .error(let error):
@@ -232,12 +248,22 @@ final class ChatViewModel {
 
                 if Task.isCancelled { break }
 
-                // Only flip the indicator to OFFLINE if we've been disconnected longer than the backoff
-                // This prevents the OFFLINE flash during brief reconnects
-                let reconnectDelay = backoffNanos
-                try? await Task.sleep(nanoseconds: reconnectDelay)
+                // Reconnect backoff — use DispatchSource timer to avoid iOS 26 Task.sleep bug
+                await manager.markReconnecting()
+                let reconnectSeconds = Double(backoffNanos) / 1_000_000_000.0
+                await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                    var fired = false
+                    let timer = DispatchSource.makeTimerSource(queue: .global())
+                    timer.schedule(deadline: .now() + reconnectSeconds)
+                    timer.setEventHandler {
+                        guard !fired else { return }
+                        fired = true
+                        timer.cancel()
+                        cont.resume()
+                    }
+                    timer.resume()
+                }
 
-                // If still not cancelled after the wait, mark offline briefly then reconnect
                 if !Task.isCancelled {
                     self.sseConnected = false
                 }
@@ -255,24 +281,23 @@ final class ChatViewModel {
         let existingIds = Set(messages.map(\.id))
         guard !existingIds.contains(UUID(uuidString: payload.id) ?? UUID()) else { return }
 
-        // Resolve agent name via UserNameCache when sender is an agent
-        let authorName = await UserNameCache.shared.displayName(
-            userId: payload.senderId,
-            agentId: payload.senderAgentId
-        )
+        // Use senderName from payload when available; direct agent streams can
+        // legitimately send null names while still carrying sender_agent_id.
+        let authorName = payload.senderName ?? (payload.senderAgentId == nil ? "Unknown" : "Agent")
         let isAgent = payload.senderAgentId != nil
 
         let newMessage = Message(
             id: UUID(uuidString: payload.id) ?? UUID(),
             channelId: channelId,
-            authorId: UUID(uuidString: payload.senderId) ?? UUID(),
+            authorId: UUID(uuidString: payload.senderId ?? payload.senderAgentId ?? "") ?? UUID(),
             authorName: authorName,
             authorRole: isAgent ? .agent : .human,
             isAgent: isAgent,
             agentId: payload.senderAgentId,
             content: payload.content,
             timestamp: payload.timestamp ?? Date(),
-            replyTo: payload.replyToId != nil ? UUID(uuidString: payload.replyToId!) : nil
+            replyTo: payload.replyToId != nil ? UUID(uuidString: payload.replyToId!) : nil,
+            fileAttachment: payload.fileAttachment
         )
         messages.append(newMessage)
     }
@@ -340,19 +365,20 @@ final class ChatViewModel {
         await withTaskGroup(of: Message.self) { group in
             for dto in dtos {
                 group.addTask {
-                    let authorName = await UserNameCache.shared.displayName(userId: dto.authorId, agentId: dto.agentId)
                     return Message(
                         id: UUID(uuidString: dto.id) ?? UUID(),
                         channelId: channelId,
                         authorId: UUID(uuidString: dto.authorId) ?? UUID(),
-                        authorName: authorName,
+                        authorName: dto.authorName,
+                        authorRole: dto.isAgent ? .agent : .human,
                         isAgent: dto.isAgent,
                         agentId: dto.agentId,
                         content: dto.content,
                         timestamp: dto.timestamp,
                         reactions: dto.reactions?.map { r in
                             Reaction(emoji: r.emoji, count: r.count, userIds: r.userIds, isReactedByMe: false)
-                        } ?? []
+                        } ?? [],
+                        fileAttachment: dto.fileAttachment
                     )
                 }
             }
@@ -365,11 +391,15 @@ final class ChatViewModel {
     // MARK: - Computed
 
     var pinnedChannels: [Channel] {
-        channels.filter(\.isPinned)
+        channels.filter { $0.isPinned && $0.type != .direct }
     }
 
     var unpinnedChannels: [Channel] {
-        channels.filter { !$0.isPinned }
+        channels.filter { !$0.isPinned && $0.type != .direct }
+    }
+
+    var directChannels: [Channel] {
+        channels.filter { $0.type == .direct }
     }
 
     var currentUserIsAgent: Bool {
@@ -493,7 +523,7 @@ final class ChatViewModel {
         // Try to send via API; if offline, the message stays queued
         let repo = ChannelRepository()
         do {
-            try await repo.sendMessage(channelId: channelId, content: content, replyToId: replyToId)
+            _ = try await repo.sendMessage(channelId: channelId, content: content, replyToId: replyToId)
             // Mark as sent in queue and update UI
             offlineQueue.remove(id: queueEntryId)
             updateMessageQueueState(id: queueEntryId, state: .sent)
@@ -523,7 +553,7 @@ final class ChatViewModel {
 
         let repo = ChannelRepository()
         do {
-            try await repo.sendMessage(channelId: msg.channelId, content: msg.content, replyToId: msg.replyTo)
+            _ = try await repo.sendMessage(channelId: msg.channelId, content: msg.content, replyToId: msg.replyTo)
             offlineQueue.remove(id: id)
             updateMessageQueueState(id: id, state: .sent)
         } catch {

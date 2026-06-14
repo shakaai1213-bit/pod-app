@@ -1,29 +1,46 @@
 import Foundation
 import Combine
+import AVFoundation
 
 @MainActor
 final class VoiceCompanionViewModel: ObservableObject {
+    private static let realtimePrompt = "Tap the mic to join LiveKit realtime voice."
+    private static let realtimeTranscriptionWaitingText = "Realtime transcripts will appear when ORCA/LiveKit emits transcription segments."
+
     // MARK: - Published State
     @Published var messages: [VoiceMessage] = []
     @Published var isRecording: Bool = false
     @Published var isProcessing: Bool = false
     @Published var partialTranscript: String = ""
-    @Published var statusText: String = "Tap and hold to speak"
+    @Published var statusText: String = VoiceCompanionViewModel.realtimePrompt
     @Published var errorMessage: String?
+    @Published var realtimePackageText: String = "LiveKit package selected; checking ORCA..."
+    @Published var realtimeSessionText: String?
+    @Published var realtimeTranscriptText: String = VoiceCompanionViewModel.realtimeTranscriptionWaitingText
+    @Published var isPreparingRealtimeSession: Bool = false
+    @Published var isRealtimeConnected: Bool = false
+    @Published var realtimeRemoteParticipantCount: Int = 0
+    @Published var realtimeProviderStatus: RealtimeProviderStatus = .checking
 
     // Routing toggles
     @Published var routeToClaude: Bool = true
     @Published var routeToOpenClaw: Bool = true
+    @Published var routeToRealtimePackage: Bool = true
 
     // MARK: - Dependencies
     private let speechRecorder: SpeechRecorder
     private let claudeClient: ClaudeClient?
     private let openClawClient: OpenClawClient
+    private let liveKitConnection: LiveKitVoiceConnection
+    private var realtimeParticipantPollTask: Task<Void, Never>?
+    private var realtimeStateCancellable: AnyCancellable?
+    private var partialTranscriptTask: Task<Void, Never>?
+    private var realtimeTranscriptMessageIDs: [String: UUID] = [:]
 
     // MARK: - System Prompt
     private let systemPrompt = """
-    You are Aurora, Mission Control for the ORCA team. \
-    You coordinate engineering, research, and operations across both machines. \
+    You are Aloha, Tony-facing coordinator for the ORCA team. \
+    You coordinate intake, standards, routing, and operations across both machines. \
     Keep responses concise and practical. \
     The user is Tony, the Captain.
     """
@@ -45,6 +62,30 @@ final class VoiceCompanionViewModel: ObservableObject {
         }
 
         self.openClawClient = OpenClawClient()
+        self.liveKitConnection = LiveKitVoiceConnection()
+        self.liveKitConnection.onTranscript = { [weak self] segment in
+            Task { @MainActor [weak self] in
+                self?.appendRealtimeTranscript(segment)
+            }
+        }
+        self.realtimeStateCancellable = liveKitConnection.$state
+            .sink { [weak self] state in
+                Task { @MainActor [weak self] in
+                    self?.applyRealtimeVoiceState(state)
+                }
+            }
+
+        Task { await refreshRealtimeProviderStatus() }
+    }
+
+    deinit {
+        realtimeStateCancellable?.cancel()
+        realtimeParticipantPollTask?.cancel()
+        partialTranscriptTask?.cancel()
+        Task { @MainActor [liveKitConnection] in
+            liveKitConnection.onTranscript = nil
+            await liveKitConnection.disconnect()
+        }
     }
 
     // MARK: - Recording Control
@@ -60,23 +101,20 @@ final class VoiceCompanionViewModel: ObservableObject {
             try speechRecorder.startRecording()
             isRecording = true
             statusText = "Listening…"
-
-            // Observe partial transcript changes
-            for await transcript in speechRecorder.$partialTranscript.terminalValues {
-                self.partialTranscript = transcript
-            }
+            startPartialTranscriptObservation()
         } catch {
             errorMessage = "Failed to start recording: \(error.localizedDescription)"
         }
     }
 
     func stopRecordingAndProcess() async {
+        stopPartialTranscriptObservation()
         let transcript = speechRecorder.stopRecording()
         isRecording = false
         partialTranscript = ""
 
         guard !transcript.isEmpty else {
-            statusText = "No speech detected. Tap and hold to speak."
+            statusText = "No speech detected. \(Self.realtimePrompt)"
             return
         }
 
@@ -94,10 +132,207 @@ final class VoiceCompanionViewModel: ObservableObject {
     }
 
     func cancelRecording() {
+        stopPartialTranscriptObservation()
         speechRecorder.cancel()
         isRecording = false
         partialTranscript = ""
-        statusText = "Tap and hold to speak"
+        statusText = Self.realtimePrompt
+    }
+
+    // MARK: - Realtime Package
+    func refreshRealtimeProviderStatus() async {
+        realtimeProviderStatus = .checking
+        do {
+            let providers = try await openClawClient.fetchVoiceProviders()
+            if let liveKit = providers.first(where: { $0.provider == "livekit" }) {
+                if liveKit.configured {
+                    realtimeProviderStatus = .configured
+                    realtimePackageText = "LiveKit package ready: \(liveKit.livekitUrl ?? "configured")"
+                } else {
+                    realtimeProviderStatus = .needsConfiguration
+                    realtimePackageText = "LiveKit package selected; ORCA needs LIVEKIT_URL/API credentials"
+                }
+            } else {
+                realtimeProviderStatus = .unavailable
+                realtimePackageText = "No realtime voice package registered in ORCA"
+            }
+        } catch {
+            realtimeProviderStatus = .failed
+            realtimePackageText = "Could not read ORCA voice package status"
+        }
+    }
+
+    func prepareRealtimeSession() async {
+        guard routeToRealtimePackage else { return }
+        isPreparingRealtimeSession = true
+        defer { isPreparingRealtimeSession = false }
+        do {
+            let session = try await openClawClient.createLiveKitSession(agentSlug: "aloha", participantName: "Tony")
+            realtimeSessionText = "LiveKit room ready: \(session.roomName)"
+            statusText = "Realtime room prepared. Ready to join."
+        } catch {
+            realtimeSessionText = nil
+            errorMessage = "LiveKit session not ready: \(error.localizedDescription)"
+            await refreshRealtimeProviderStatus()
+        }
+    }
+
+    func joinRealtimeVoice() async {
+        guard routeToRealtimePackage else { return }
+        guard !isPreparingRealtimeSession else { return }
+        if liveKitConnection.isConnected {
+            applyRealtimeVoiceState(liveKitConnection.state)
+            return
+        }
+
+        stopRealtimeParticipantStatusPolling()
+        isPreparingRealtimeSession = true
+        statusText = "Requesting LiveKit voice session..."
+        defer { isPreparingRealtimeSession = false }
+
+        do {
+            guard await requestRealtimeMicrophoneAccess() else {
+                statusText = "Microphone access is required to join LiveKit voice"
+                errorMessage = "Microphone access is required to join LiveKit voice. Enable microphone access in Settings."
+                return
+            }
+
+            try configureRealtimeAudioSession()
+            let session = try await openClawClient.createLiveKitSession(agentSlug: "aloha", participantName: "Tony")
+            realtimeSessionText = "LiveKit room ready: \(session.roomName)"
+            realtimeTranscriptText = Self.realtimeTranscriptionWaitingText
+            try await liveKitConnection.connect(session: session)
+            applyRealtimeVoiceState(liveKitConnection.state)
+            startRealtimeParticipantStatusPolling()
+        } catch {
+            applyRealtimeVoiceState(liveKitConnection.state)
+            errorMessage = "LiveKit voice could not join: \(error.localizedDescription)"
+            await refreshRealtimeProviderStatus()
+        }
+    }
+
+    private func requestRealtimeMicrophoneAccess() async -> Bool {
+        if AVAudioApplication.shared.recordPermission == .granted {
+            return true
+        }
+        return await AVAudioApplication.requestRecordPermission()
+    }
+
+    private func configureRealtimeAudioSession() throws {
+        let audioSession = AVAudioSession.sharedInstance()
+        try audioSession.setCategory(
+            .playAndRecord,
+            mode: .voiceChat,
+            options: [.defaultToSpeaker, .allowBluetoothHFP, .allowBluetoothA2DP]
+        )
+        try audioSession.setActive(true)
+    }
+
+    func leaveRealtimeVoice() async {
+        stopRealtimeParticipantStatusPolling()
+        statusText = "Leaving LiveKit voice..."
+        await liveKitConnection.disconnect()
+        applyRealtimeVoiceState(liveKitConnection.state)
+        statusText = "Realtime voice left"
+    }
+
+    func toggleRealtimeVoiceFromPrimaryButton() async {
+        if liveKitConnection.isConnected {
+            await leaveRealtimeVoice()
+        } else {
+            await joinRealtimeVoice()
+        }
+    }
+
+    func teardownRealtimeVoice() async {
+        stopPartialTranscriptObservation()
+        stopRealtimeParticipantStatusPolling()
+        if isRecording {
+            speechRecorder.cancel()
+            isRecording = false
+            partialTranscript = ""
+        }
+        await liveKitConnection.disconnect()
+        applyRealtimeVoiceState(liveKitConnection.state)
+    }
+
+    private func startRealtimeParticipantStatusPolling() {
+        stopRealtimeParticipantStatusPolling()
+        realtimeParticipantPollTask = Task { [weak self] in
+            while self?.liveKitConnection.isConnected == true {
+                guard let self else { return }
+                self.realtimeRemoteParticipantCount = self.liveKitConnection.remoteParticipantCount
+                self.statusText = self.liveKitConnection.state.displayText
+                self.realtimeSessionText = self.liveKitConnection.state.displayText
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+            }
+        }
+    }
+
+    private func stopRealtimeParticipantStatusPolling() {
+        realtimeParticipantPollTask?.cancel()
+        realtimeParticipantPollTask = nil
+    }
+
+    private func applyRealtimeVoiceState(_ state: RealtimeVoiceState) {
+        let wasConnected = isRealtimeConnected
+        let displayText = state.displayText
+
+        isRealtimeConnected = liveKitConnection.isConnected
+        realtimeRemoteParticipantCount = liveKitConnection.remoteParticipantCount
+
+        switch state {
+        case .disconnected:
+            if wasConnected || realtimeSessionText != nil {
+                realtimeSessionText = displayText
+                statusText = displayText
+            }
+        case .connecting, .connected, .failed:
+            realtimeSessionText = displayText
+            statusText = displayText
+        }
+    }
+
+    private func appendRealtimeTranscript(_ segment: RealtimeTranscriptSegment) {
+        let content = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !content.isEmpty else { return }
+
+        realtimeTranscriptText = segment.isFinal
+            ? "Realtime transcript received."
+            : "Receiving realtime transcript..."
+
+        let role: VoiceMessage.MessageRole = segment.isAgent ? .assistant : .user
+        let messageID = realtimeTranscriptMessageIDs[segment.segmentID] ?? UUID()
+        realtimeTranscriptMessageIDs[segment.segmentID] = messageID
+
+        let message = VoiceMessage(
+            id: messageID,
+            role: role,
+            content: content,
+            timestamp: segment.timestamp
+        )
+
+        if let index = messages.firstIndex(where: { $0.id == messageID }) {
+            messages[index] = message
+        } else {
+            messages.append(message)
+        }
+    }
+
+    private func startPartialTranscriptObservation() {
+        stopPartialTranscriptObservation()
+        partialTranscriptTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            for await transcript in speechRecorder.$partialTranscript.values {
+                if Task.isCancelled { return }
+                partialTranscript = transcript
+            }
+        }
+    }
+
+    private func stopPartialTranscriptObservation() {
+        partialTranscriptTask?.cancel()
+        partialTranscriptTask = nil
     }
 
     // MARK: - Message Processing
@@ -140,7 +375,7 @@ final class VoiceCompanionViewModel: ObservableObject {
                     )
                 }
 
-                statusText = "Tap and hold to speak"
+                statusText = Self.realtimePrompt
             } catch {
                 errorMessage = "AI response failed: \(error.localizedDescription)"
                 statusText = "Error getting response"
@@ -155,7 +390,7 @@ final class VoiceCompanionViewModel: ObservableObject {
     // MARK: - Utilities
     func clearConversation() {
         messages.removeAll()
-        statusText = "Tap and hold to speak"
+        statusText = Self.realtimePrompt
     }
 
     func dismissError() {
@@ -164,6 +399,14 @@ final class VoiceCompanionViewModel: ObservableObject {
 }
 
 // MARK: - Supporting Types
+
+enum RealtimeProviderStatus: Equatable {
+    case checking
+    case configured
+    case needsConfiguration
+    case unavailable
+    case failed
+}
 
 struct VoiceMessage: Identifiable {
     let id: UUID

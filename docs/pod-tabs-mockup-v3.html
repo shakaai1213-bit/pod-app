@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pod — Work + Captain's Log mockup v3 (LOCKED)</title>
+<style>
+  :root{
+    --bg:#0a0a0c;--card:#161618;--card2:#1d1d20;--line:#2a2a2e;
+    --txt:#ecedef;--dim:#8b8b91;--faint:#9a9aa1;
+    --green:#34c759;--amber:#ff9f0a;--red:#ff453a;--blue:#0a84ff;--violet:#bf5af2;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,"SF Pro Text",Helvetica,Arial,sans-serif;}
+  body{background:#000;display:flex;justify-content:center;gap:26px;padding:30px;}
+  .ipad{width:600px;background:var(--bg);border-radius:24px;overflow:hidden;border:1px solid #222;}
+  .statusbar{display:flex;justify-content:space-between;padding:9px 20px;font-size:12px;color:var(--txt);}
+  .scroll{padding:4px 18px 0;}
+  .hdr{padding:6px 2px 12px;}
+  .hdr h1{font-size:26px;font-weight:700;color:var(--txt);}
+  .hdr .sub{font-size:12px;color:var(--dim);margin-top:2px;}
+  .caplabel{text-align:center;font-size:11px;font-weight:700;letter-spacing:1px;color:var(--blue);
+            padding:6px;border:1px dashed var(--line);border-radius:8px;margin-bottom:8px;}
+  .sec{margin-bottom:16px;}
+  .sec-head{display:flex;align-items:center;justify-content:space-between;margin:4px 2px 8px;}
+  .sec-title{font-size:11px;font-weight:700;letter-spacing:1.3px;color:var(--dim);}
+  .sec-act{font-size:12px;color:var(--blue);padding:6px 10px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:13px;overflow:hidden;}
+  /* projects */
+  .prow{display:flex;align-items:center;gap:9px;padding:13px 13px;border-bottom:1px solid var(--line);min-height:44px;}
+  .prow:last-child{border-bottom:none;}
+  .pid{font-family:"SF Mono",Menlo,monospace;font-size:10px;color:var(--faint);
+       background:#0e0e10;border:1px solid var(--line);border-radius:4px;padding:3px 6px;flex:0 0 auto;}
+  .pname{flex:1;font-size:13px;color:var(--txt);min-width:0;}
+  .pill{font-size:9px;font-weight:600;padding:3px 8px;border-radius:9px;flex:0 0 auto;}
+  .p-live{background:rgba(52,199,89,.16);color:#5cd97a;}
+  .p-blue{background:rgba(139,139,145,.18);color:#a8a8af;}
+  .owner{font-size:11px;color:var(--dim);width:42px;flex:0 0 auto;}
+  .bar{width:62px;height:5px;border-radius:3px;background:#26262a;flex:0 0 auto;overflow:hidden;}
+  .bar>i{display:block;height:100%;background:var(--green);}
+  .tix{font-size:11px;color:var(--faint);width:38px;text-align:right;flex:0 0 auto;}
+  /* tickets */
+  .filterbar{display:flex;gap:8px;padding:11px 13px;border-bottom:1px solid var(--line);background:var(--card2);}
+  .chip{font-size:11px;padding:7px 13px;border-radius:8px;border:1px solid var(--line);color:var(--dim);min-height:30px;}
+  .chip.on{background:var(--txt);color:#000;border-color:var(--txt);font-weight:600;}
+  .trow{display:flex;align-items:center;gap:9px;padding:11px 13px;border-bottom:1px solid var(--line);min-height:40px;}
+  .tdot{width:7px;height:7px;border-radius:50%;flex:0 0 auto;}
+  .ttitle{flex:1;font-size:12.5px;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .tmeta{font-size:11px;color:var(--faint);flex:0 0 auto;}
+  .viewall{padding:13px 13px;font-size:12px;color:var(--blue);text-align:center;font-weight:500;}
+  /* captain's log */
+  .compose{display:flex;align-items:center;gap:9px;padding:14px 13px;border-bottom:1px solid var(--line);background:var(--card2);min-height:44px;}
+  .compose .plus{width:24px;height:24px;border-radius:50%;background:var(--blue);color:#fff;
+        font-size:16px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
+  .compose .ph{flex:1;color:var(--faint);font-size:13px;}
+  .lentry{padding:14px 13px;border-bottom:1px solid var(--line);}
+  .lentry:last-child{border-bottom:none;}
+  .lmeta{display:flex;align-items:center;gap:7px;margin-bottom:5px;}
+  .lwho{font-size:12px;font-weight:600;color:var(--txt);}
+  .lwhen{font-size:11px;color:var(--faint);}
+  .ldot{width:8px;height:8px;border-radius:50%;background:var(--amber);margin-left:auto;flex:0 0 auto;
+        box-shadow:0 0 0 3px rgba(255,159,10,.18);}
+  .lbody{font-size:13px;color:#cfcfd4;line-height:1.5;}
+  .lfoot{display:flex;align-items:center;gap:8px;margin-top:9px;}
+  .lbtn{font-size:11px;padding:8px 14px;border-radius:8px;border:1px solid var(--line);color:var(--dim);min-height:32px;}
+  .lbtn.promote{background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600;}
+  .ltag{font-size:11px;color:var(--faint);}
+  .ltag.done{color:#5cd97a;}
+  .ltag.link{color:#5fa9ff;}
+  /* nav */
+  .nav{display:flex;justify-content:space-around;padding:9px 0 14px;border-top:1px solid var(--line);background:#0d0d0f;margin-top:6px;}
+  .nav div{font-size:9.5px;color:var(--faint);text-align:center;}
+  .nav div.on{color:var(--blue);}
+  .nav .ico{font-size:15px;display:block;margin-bottom:2px;}
+  /* v3 fixes badge */
+  .v3{position:fixed;top:14px;left:14px;font-size:10px;letter-spacing:1px;color:var(--blue);
+      background:rgba(10,132,255,.12);border:1px solid var(--blue);padding:5px 9px;border-radius:6px;}
+</style>
+</head>
+<body>
+<div class="v3">V3 · LOCKED — segmented dropped · view-all added · contrast + touch fixed</div>
+
+<!-- ============ WORK TAB ============ -->
+<div class="ipad">
+  <div class="statusbar"><span>1:38 PM&nbsp;&nbsp;Fri May 22</span><span>Wi-Fi&nbsp;100%</span></div>
+  <div class="scroll">
+    <div class="caplabel">TAB 1 — replaces "Tickets" + "Projects"</div>
+    <div class="hdr"><h1>Work</h1><div class="sub">Committed work — projects and the tickets under them.</div></div>
+
+    <div class="sec">
+      <div class="sec-head"><span class="sec-title">PROJECTS · 10</span><span class="sec-act">+ New</span></div>
+      <div class="card">
+        <div class="prow"><span class="pid">bbc62861</span><span class="pname">Schoolhouse Transition Closeout</span><span class="pill p-blue">blueprint</span><span class="owner">Aloha</span><span class="bar"><i style="width:15%"></i></span><span class="tix">12</span></div>
+        <div class="prow"><span class="pid">07c8c25e</span><span class="pname">ORCA Control Plane</span><span class="pill p-live">live</span><span class="owner">Maui</span><span class="bar"><i style="width:62%"></i></span><span class="tix">8</span></div>
+        <div class="prow"><span class="pid">c912019e</span><span class="pname">Pod Cockpit</span><span class="pill p-live">live</span><span class="owner">Maui</span><span class="bar"><i style="width:40%"></i></span><span class="tix">5</span></div>
+        <div class="prow"><span class="pid">6156178a</span><span class="pname">Compute &amp; Spark</span><span class="pill p-live">live</span><span class="owner">Maui</span><span class="bar"><i style="width:55%"></i></span><span class="tix">6</span></div>
+        <div class="prow"><span class="pid">new ··</span><span class="pname">Memory Spine</span><span class="pill p-blue">blueprint</span><span class="owner">Aloha</span><span class="bar"><i style="width:8%"></i></span><span class="tix">3</span></div>
+        <div class="prow"><span class="pid">3d7ccbd4</span><span class="pname">Project Guardian</span><span class="pill p-blue">blueprint</span><span class="owner">Tony</span><span class="bar"><i style="width:22%"></i></span><span class="tix">4</span></div>
+        <div class="viewall">View all 10 projects ›</div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-head"><span class="sec-title">TICKETS</span><span class="sec-act">100 open</span></div>
+      <div class="card">
+        <div class="filterbar"><span class="chip on">All</span><span class="chip">Mine</span><span class="chip">Urgent</span><span class="chip">By project</span></div>
+        <div class="trow"><span class="tdot" style="background:var(--red)"></span><span class="ttitle">Security cleanup: prevent secrets entering memory</span><span class="tmeta">Rooster·urgent</span></div>
+        <div class="trow"><span class="tdot" style="background:var(--amber)"></span><span class="ttitle">iMessage outbound reply-contract</span><span class="tmeta">Aloha·high</span></div>
+        <div class="trow"><span class="tdot" style="background:var(--amber)"></span><span class="ttitle">M1: Runtime Registry classification — 106 units</span><span class="tmeta">Coral·high</span></div>
+        <div class="viewall">View all 100 tickets ›</div>
+      </div>
+    </div>
+  </div>
+  <div class="nav">
+    <div><span class="ico">▢</span>Dashboard</div><div><span class="ico">◷</span>Runtime</div>
+    <div><span class="ico">◌</span>Chat</div><div class="on"><span class="ico">◆</span>Work</div>
+    <div><span class="ico">✎</span>Captain's Log</div><div><span class="ico">▤</span>Knowledge</div>
+    <div><span class="ico">◉</span>Agents</div>
+  </div>
+</div>
+
+<!-- ============ CAPTAIN'S LOG TAB ============ -->
+<div class="ipad">
+  <div class="statusbar"><span>1:38 PM&nbsp;&nbsp;Fri May 22</span><span>Wi-Fi&nbsp;100%</span></div>
+  <div class="scroll">
+    <div class="caplabel">TAB 2 — NEW</div>
+    <div class="hdr"><h1>Captain's Log</h1><div class="sub">Your running notes. The team reads; Aloha digests.</div></div>
+
+    <div class="card" style="margin-bottom:14px;">
+      <div class="compose"><span class="plus">+</span><span class="ph">Add a note…</span></div>
+
+      <div class="lentry">
+        <div class="lmeta"><span class="lwho">Tony</span><span class="lwhen">· 2h ago</span><span class="ldot"></span></div>
+        <div class="lbody">Pod should let me dictate notes by voice when I'm walking — typing on the iPad is the friction.</div>
+        <div class="lfoot"><span class="lbtn promote">Promote ▾</span><span class="ltag">awaiting Aloha digest</span></div>
+      </div>
+
+      <div class="lentry">
+        <div class="lmeta"><span class="lwho">Tony</span><span class="lwhen">· 5h ago</span></div>
+        <div class="lbody">Idea — voice capture for daily logs across all agents, not just me.</div>
+        <div class="lfoot"><span class="ltag link">→ promoted to ticket 9af2c1d0</span></div>
+      </div>
+
+      <div class="lentry">
+        <div class="lmeta"><span class="lwho">Maui</span><span class="lwhen">· 1d ago</span></div>
+        <div class="lbody">Note for Tony — compute-router circuit-breaker is healthy after the reload; no action, just FYI.</div>
+        <div class="lfoot"><span class="ltag done">✓ digested by Aloha — no action</span></div>
+      </div>
+
+      <div class="lentry">
+        <div class="lmeta"><span class="lwho">Tony</span><span class="lwhen">· 2d ago</span></div>
+        <div class="lbody">Whole morning of thoughts on the Pod redesign — tabs, the parking lot, how Knowledge and Projects differ…</div>
+        <div class="lfoot"><span class="ltag done">✓ digested by Aloha → 2 items + 1 project</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="nav">
+    <div><span class="ico">▢</span>Dashboard</div><div><span class="ico">◷</span>Runtime</div>
+    <div><span class="ico">◌</span>Chat</div><div><span class="ico">◆</span>Work</div>
+    <div class="on"><span class="ico">✎</span>Captain's Log</div><div><span class="ico">▤</span>Knowledge</div>
+    <div><span class="ico">◉</span>Agents</div>
+  </div>
+</div>
+
+</body>
+</html>

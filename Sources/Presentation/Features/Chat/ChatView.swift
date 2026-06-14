@@ -1,5 +1,12 @@
 import SwiftUI
 
+// DEPRECATED 2026-05-07 — superseded by Features/DirectChat/. Not wired into
+// ContentView's tab navigation. Channel/Message/ChatChannelType types defined
+// in ChatViewModel.swift are still referenced by Data/Local/SwiftDataModels.swift
+// and Data/Repositories/ChannelRepository.swift, so this file cannot be deleted
+// without untangling that dependency chain (deferred to a future M-cleanup
+// milestone). DO NOT add new functionality here; see Features/DirectChat/.
+
 struct ChatView: View {
     // ViewModel passed in from ContentView so it survives tab switches
     @Bindable var viewModel: ChatViewModel
@@ -201,6 +208,28 @@ struct ChannelListView: View {
                         }
                     }
                 }
+
+                let dms = viewModel.directChannels
+                if !dms.isEmpty {
+                    Section("Direct Messages") {
+                        ForEach(dms) { channel in
+                            NavigationLink(value: channel) {
+                                ChannelListRowContent(channel: channel)
+                            }
+                            .swipeActions(edge: .trailing) {
+                                Button {
+                                    viewModel.toggleMute(channelId: channel.id)
+                                } label: {
+                                    Label(
+                                        channel.isMuted ? "Unmute" : "Mute",
+                                        systemImage: channel.isMuted ? "speaker.wave.2" : "speaker.slash"
+                                    )
+                                }
+                                .tint(AppColors.accentWarning)
+                            }
+                        }
+                    }
+                }
             }
         }
         .listStyle(.insetGrouped)
@@ -291,6 +320,8 @@ struct ChannelListRowContent: View {
             Image(systemName: "magnifyingglass")
         case .alerts:
             Image(systemName: "bell")
+        case .direct:
+            Image(systemName: "person.fill")
         }
     }
 
@@ -301,6 +332,7 @@ struct ChannelListRowContent: View {
         case .agents:   return AppColors.accentAgent
         case .research: return AppColors.accentSuccess
         case .alerts:   return AppColors.accentDanger
+        case .direct:   return AppColors.accentAgent
         }
     }
 }
@@ -453,6 +485,11 @@ struct ChannelRowView: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(channelColor)
                 .frame(width: 24)
+        case .direct:
+            Image(systemName: "person.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(channelColor)
+                .frame(width: 24)
         }
     }
 
@@ -463,6 +500,7 @@ struct ChannelRowView: View {
         case .agents:   return AppColors.accentAgent
         case .research: return AppColors.accentSuccess
         case .alerts:   return AppColors.accentDanger
+        case .direct:   return AppColors.accentAgent
         }
     }
 }
@@ -472,7 +510,7 @@ struct ChannelRowView: View {
 struct MessageThreadView: View {
     let channel: Channel
     @Bindable var viewModel: ChatViewModel
-    @Environment(\.appState) private var appState
+    @EnvironmentObject private var appState: AppState
     @State private var scrollProxy: ScrollViewProxy?
     @State private var isKeyboardVisible = false
 
@@ -607,6 +645,8 @@ struct MessageThreadView: View {
             Image(systemName: "magnifyingglass")
         case .alerts:
             Image(systemName: "bell")
+        case .direct:
+            Image(systemName: "person.fill")
         }
     }
 
@@ -617,6 +657,7 @@ struct MessageThreadView: View {
         case .agents:   return AppColors.accentAgent
         case .research: return AppColors.accentSuccess
         case .alerts:   return AppColors.accentDanger
+        case .direct:   return AppColors.accentAgent
         }
     }
 
@@ -768,5 +809,6 @@ struct EmptyThreadPlaceholder: View {
 
 #Preview {
     ChatView(viewModel: ChatViewModel())
+        .environmentObject(AppState())
         .preferredColorScheme(.dark)
 }

@@ -1,306 +1,5 @@
 import Foundation
 
-// MARK: - SSE Client
-
-/// Real-time SSE client that connects to ORCA MC's event stream.
-/// Uses URLSessionStreamTask for HTTP/1.1 streaming (iOS 15+).
-/// Supports auto-reconnect with exponential backoff.
-public actor SSEClient {
-
-    // MARK: - Types
-
-    /// Event types emitted by the SSE stream.
-    public enum EventType: String, Sendable {
-        case messageNew = "message.new"
-        case taskUpdated = "task.updated"
-        case agentStatus = "agent.status"
-        case approvalRequested = "approval.requested"
-        case unknown
-    }
-
-    /// An event received from the SSE stream.
-    public struct Event: Sendable {
-        public let type: EventType
-        public let data: Data
-        public let rawLine: String
-
-        public init(type: EventType, data: Data, rawLine: String) {
-            self.type = type
-            self.data = data
-            self.rawLine = rawLine
-        }
-
-        /// Attempt to decode the event data as JSON into a Decodable type.
-        public func decode<T: Decodable>(_ type: T.Type) -> T? {
-            try? JSONDecoder().decode(type, from: data)
-        }
-
-        /// Create a connected event
-        public static func connected() -> Event {
-            Event(type: .unknown, data: Data(), rawLine: "")
-        }
-    }
-
-    /// Errors that can occur in the SSE client.
-    public enum SSEError: Error, LocalizedError, Sendable {
-        case invalidURL
-        case connectionTimeout
-        case streamTaskFailed(Error?)
-        case disconnected
-        case cancelled
-        case invalidResponse
-        case streamReadFailed(Error?)
-        case decodeFailed(String)
-        case maxRetriesExceeded
-
-        public var errorDescription: String? {
-            switch self {
-            case .invalidURL:
-                return "Invalid SSE endpoint URL"
-            case .connectionTimeout:
-                return "Connection timed out after 30 seconds"
-            case .streamTaskFailed(let error):
-                return "Stream task failed: \(error?.localizedDescription ?? "unknown error")"
-            case .disconnected:
-                return "Disconnected from event stream"
-            case .cancelled:
-                return "Connection was cancelled"
-            case .invalidResponse:
-                return "Invalid HTTP response from server"
-            case .streamReadFailed(let error):
-                return "Failed to read from stream: \(error?.localizedDescription ?? "unknown error")"
-            case .decodeFailed(let message):
-                return "Failed to decode event: \(message)"
-            case .maxRetriesExceeded:
-                return "Max reconnection attempts exceeded"
-            }
-        }
-    }
-
-    // MARK: - Constants
-
-    #if targetEnvironment(simulator)
-    private static let endpoint = "http://127.0.0.1:19002/api/v1/events/stream"
-    #else
-    private static let endpoint = "http://100.76.196.40:8000/api/v1/events/stream"
-    #endif
-    private static let connectionTimeoutSeconds: TimeInterval = 30
-    private static let maxBackoffSeconds: TimeInterval = 30
-
-    // MARK: - State
-
-    private let session: URLSession
-    private var streamTask: URLSessionStreamTask?
-    private var continuation: AsyncStream<Event>.Continuation?
-    private var eventsStream: AsyncStream<Event>?
-
-    /// Whether the client is currently connected to the SSE endpoint.
-    public private(set) var isConnected: Bool = false
-
-    private var currentToken: String?
-    private var isReconnecting: Bool = false
-    private var reconnectAttempt: Int = 0
-    private let maxRetries: Int = 10
-
-    // MARK: - Initialization
-
-    public init() {
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = Self.connectionTimeoutSeconds
-        config.timeoutIntervalForResource = .infinity
-        config.httpAdditionalHeaders = [
-            "Accept": "text/event-stream",
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive"
-        ]
-        self.session = URLSession(configuration: config)
-    }
-
-    // MARK: - Public API
-
-    /// Returns an AsyncStream of SSE events. The stream is lazy — it starts
-    /// producing events only after `connect(token:)` is called.
-    public var events: AsyncStream<Event> {
-        if let existing = eventsStream {
-            return existing
-        }
-        let stream = AsyncStream<Event> { [weak self] continuation in
-            Task { [weak self] in
-                await self?.attachContinuation(continuation)
-            }
-        }
-        self.eventsStream = stream
-        return stream
-    }
-
-    /// Connect to the SSE endpoint using the provided bearer token.
-    /// - Parameter token: The Authorization bearer token.
-    public func connect(token: String) async throws {
-        guard !isConnected else { return }
-
-        currentToken = token
-        reconnectAttempt = 0
-        isReconnecting = false
-
-        try await establishConnection(token: token)
-    }
-
-    /// Disconnect from the SSE endpoint and stop the event stream.
-    public func disconnect() {
-        streamTask?.cancel()
-        streamTask = nil
-        isConnected = false
-        isReconnecting = false
-        reconnectAttempt = 0
-        continuation?.finish()
-        continuation = nil
-        eventsStream = nil
-    }
-
-    // MARK: - Private
-
-    private func attachContinuation(_ cont: AsyncStream<Event>.Continuation) {
-        continuation = cont
-        cont.onTermination = { [weak self] _ in
-            Task { [weak self] in
-                await self?.handleTermination()
-            }
-        }
-    }
-
-    private func handleTermination() {
-        if !isReconnecting {
-            disconnect()
-        }
-    }
-
-    private func establishConnection(token: String) async throws {
-        // SSE streaming via URLSessionStreamTask with URL (no custom headers support)
-        // For production, use a dedicated SSE library or custom URLSession configuration
-        guard URL(string: Self.endpoint) != nil else {
-            throw SSEError.invalidURL
-        }
-        streamTask?.cancel()
-        isConnected = true
-        continuation?.yield(Event.connected())
-    }
-
-    private func readStream() async {
-        guard let task = streamTask else { return }
-
-        isConnected = true
-
-        // Buffer for accumulating SSE lines
-        var eventType: String?
-        var eventData: String?
-
-        while !Task.isCancelled {
-            do {
-                // Read a single line from the stream
-                let line = try await task.readLine()
-
-                if let line = line {
-                    let trimmed = line.trimmingCharacters(in: .whitespaces)
-
-                    if trimmed.isEmpty {
-                        // Empty line → dispatch accumulated event
-                        if let type = eventType, let data = eventData, !data.isEmpty {
-                            let event = buildEvent(type: type, data: data)
-                            continuation?.yield(event)
-                        }
-                        eventType = nil
-                        eventData = nil
-
-                    } else if trimmed.hasPrefix("event:") {
-                        eventType = String(trimmed.dropFirst(6)).trimmingCharacters(in: .whitespaces)
-
-                    } else if trimmed.hasPrefix("data:") {
-                        let value = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespaces)
-                        if eventData == nil {
-                            eventData = value
-                        } else {
-                            eventData = (eventData ?? "") + "\n" + value
-                        }
-
-                    } else if trimmed.hasPrefix("id:") || trimmed.hasPrefix("retry:") {
-                        // Acknowledge but don't act on these for now
-                    }
-                }
-            } catch {
-                isConnected = false
-
-                if Task.isCancelled {
-                    continuation?.finish()
-                    return
-                }
-
-                // Attempt reconnect unless we've given up
-                let shouldReconnect = shouldAttemptReconnect()
-
-                if shouldReconnect {
-                    await performReconnect()
-                } else {
-                    continuation?.finish()
-                    return
-                }
-            }
-        }
-
-        isConnected = false
-    }
-
-    private func shouldAttemptReconnect() -> Bool {
-        if reconnectAttempt >= maxRetries {
-            continuation?.finish()
-            return false
-        }
-        return true
-    }
-
-    private func performReconnect() async {
-        guard let token = currentToken else {
-            continuation?.finish()
-            return
-        }
-
-        isReconnecting = true
-        reconnectAttempt += 1
-
-        // Exponential backoff: 1s, 2s, 4s, ... max 30s
-        let backoffSeconds = min(pow(2.0, Double(reconnectAttempt - 1)), Self.maxBackoffSeconds)
-
-        do {
-            // Use Timer instead of Task.sleep to avoid iOS 26 bug where
-            // Task.sleep can fire immediately inside task groups.
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                var didResume = false
-                let timer = DispatchSource.makeTimerSource(queue: .global())
-                timer.schedule(deadline: .now() + backoffSeconds)
-                timer.setEventHandler {
-                    guard !didResume else { return }
-                    didResume = true
-                    continuation.resume()
-                }
-                timer.resume()
-            }
-            try await establishConnection(token: token)
-            isReconnecting = false
-        } catch {
-            isReconnecting = false
-            isConnected = false
-
-            if reconnectAttempt >= maxRetries {
-                continuation?.finish()
-            }
-        }
-    }
-
-    private func buildEvent(type: String, data: String) -> Event {
-        let eventType = EventType(rawValue: type) ?? .unknown
-        let payloadData = Data(data.utf8)
-        return Event(type: eventType, data: payloadData, rawLine: "\(type): \(data)")
-    }
-}
 
 // MARK: - SSEStreamManager
 // Actor-based SSE manager for channel-scoped real-time chat streaming.
@@ -339,8 +38,43 @@ public actor SSEStreamManager {
     public enum SSEEvent: Sendable {
         case connected
         case message(MessageNewPayload)
+        case presence(PresencePayload)
+        case ticketLifecycle(TicketLifecycleEnvelope)
         case keepalive
         case error(StreamError)
+    }
+
+    public enum ConnectionState: String, Sendable {
+        case idle
+        case connecting
+        case connected
+        case reconnecting
+        case stale
+        case failed
+        case disconnected
+    }
+
+    public struct StreamHealth: Sendable {
+        public let state: ConnectionState
+        public let lastConnectedAt: Date?
+        public let lastEventAt: Date?
+        public let lastErrorDescription: String?
+        public let reconnectAttempt: Int
+
+        public var isStale: Bool {
+            guard state == .connected, let lastEventAt else { return state == .stale }
+            return Date().timeIntervalSince(lastEventAt) > 30
+        }
+    }
+
+    /// Stream mode determines how `SSEDelegate` decodes the `data:` body.
+    /// `/chat/channels/<id>/stream` emits `event: message` with MessageNewPayload;
+    /// `/tickets/stream` emits envelopes whose SSE event-name is the envelope
+    /// type (e.g. "fyi") and whose data is a TicketLifecycleEnvelope.
+    enum StreamMode: Sendable {
+        case chat
+        case tickets
+        case boards
     }
 
     // MARK: - State
@@ -348,6 +82,13 @@ public actor SSEStreamManager {
     private var dataTask: URLSessionDataTask?
     private var session: URLSession?
     private var isCancelled: Bool = false
+    private var health = StreamHealth(
+        state: .idle,
+        lastConnectedAt: nil,
+        lastEventAt: nil,
+        lastErrorDescription: nil,
+        reconnectAttempt: 0
+    )
 
     // MARK: - Public API
 
@@ -359,6 +100,7 @@ public actor SSEStreamManager {
         baseURL: String
     ) -> AsyncThrowingStream<SSEEvent, Error> {
         isCancelled = false
+        markConnecting()
         let urlString = "\(baseURL)/api/v1/chat/channels/\(channelId)/stream"
         guard URL(string: urlString) != nil else {
             return AsyncThrowingStream { continuation in
@@ -399,16 +141,124 @@ public actor SSEStreamManager {
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         request.timeoutInterval = .infinity
 
-        let delegate = SSEDelegate(continuation: continuation, manager: self)
+        let delegate = SSEDelegate(continuation: continuation, manager: self, mode: .chat)
         session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
         dataTask = session?.dataTask(with: request)
         dataTask?.resume()
 
-        // Signal connected after a short delay (stream opens)
-        try? await Task.sleep(nanoseconds: 500_000_000)
-        if !isCancelled {
-            continuation.yield(.connected)
+        // The delegate yields .connected only after the HTTP response is
+        // validated or a backend "connected" SSE event arrives.
+    }
+
+    /// Connect to the team-wide ticket lifecycle SSE stream.
+    /// Backend: `/api/v1/tickets/stream` fans the `team.tickets.events` NATS
+    /// subject (created-no-assignee, claimed, in_progress, closed, cancelled,
+    /// status transitions). Assignee-routed lifecycle events go through the
+    /// agent's NATS inbox, not this stream.
+    /// Caller consumes events on the returned AsyncThrowingStream.
+    public func connectTickets(
+        token: String,
+        baseURL: String
+    ) -> AsyncThrowingStream<SSEEvent, Error> {
+        isCancelled = false
+        markConnecting()
+        let urlString = "\(baseURL)/api/v1/tickets/stream"
+        guard URL(string: urlString) != nil else {
+            return AsyncThrowingStream { continuation in
+                continuation.finish(throwing: StreamError.invalidURL)
+            }
         }
+
+        return AsyncThrowingStream<SSEEvent, Error> { [weak self] continuation in
+            continuation.onTermination = { [weak self] _ in
+                Task { [weak self] in
+                    await self?.disconnect()
+                }
+            }
+
+            Task { [weak self] in
+                await self?.runTicketsStream(token: token, baseURL: baseURL, continuation: continuation)
+            }
+        }
+    }
+
+    private func runTicketsStream(
+        token: String,
+        baseURL: String,
+        continuation: AsyncThrowingStream<SSEEvent, Error>.Continuation
+    ) async {
+        let urlString = "\(baseURL)/api/v1/tickets/stream"
+        guard let url = URL(string: urlString) else {
+            continuation.finish(throwing: StreamError.invalidURL)
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        request.timeoutInterval = .infinity
+
+        let delegate = SSEDelegate(continuation: continuation, manager: self, mode: .tickets)
+        session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        dataTask = session?.dataTask(with: request)
+        dataTask?.resume()
+
+        // The delegate yields .connected only after the HTTP response is
+        // validated or a backend "connected" SSE event arrives.
+    }
+
+    /// Connect to a board-scoped lifecycle SSE stream.
+    /// Backend: `/api/v1/boards/<id>/stream` emits data-only JSON payloads
+    /// with `event` values such as ticket_added, ticket_updated, and stage_changed.
+    public func connectBoards(
+        boardId: String,
+        token: String,
+        baseURL: String
+    ) -> AsyncThrowingStream<SSEEvent, Error> {
+        isCancelled = false
+        markConnecting()
+        let urlString = "\(baseURL)/api/v1/boards/\(boardId)/stream"
+        guard URL(string: urlString) != nil else {
+            return AsyncThrowingStream { continuation in
+                continuation.finish(throwing: StreamError.invalidURL)
+            }
+        }
+
+        return AsyncThrowingStream<SSEEvent, Error> { [weak self] continuation in
+            continuation.onTermination = { [weak self] _ in
+                Task { [weak self] in
+                    await self?.disconnect()
+                }
+            }
+
+            Task { [weak self] in
+                await self?.runBoardsStream(boardId: boardId, token: token, baseURL: baseURL, continuation: continuation)
+            }
+        }
+    }
+
+    private func runBoardsStream(
+        boardId: String,
+        token: String,
+        baseURL: String,
+        continuation: AsyncThrowingStream<SSEEvent, Error>.Continuation
+    ) async {
+        let urlString = "\(baseURL)/api/v1/boards/\(boardId)/stream"
+        guard let url = URL(string: urlString) else {
+            continuation.finish(throwing: StreamError.invalidURL)
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue(token, forHTTPHeaderField: "X-Api-Key")
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        request.timeoutInterval = .infinity
+
+        let delegate = SSEDelegate(continuation: continuation, manager: self, mode: .boards)
+        session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        dataTask = session?.dataTask(with: request)
+        dataTask?.resume()
     }
 
     /// Called by SSEDelegate when data arrives.
@@ -421,6 +271,7 @@ public actor SSEStreamManager {
     /// Called by SSEDelegate on error.
     func handleError(_ error: Error?) {
         guard !isCancelled else { return }
+        markFailed(error)
         dataTask = nil
         session?.invalidateAndCancel()
         session = nil
@@ -429,10 +280,81 @@ public actor SSEStreamManager {
     /// Cancel the current stream.
     public func disconnect() {
         isCancelled = true
+        health = StreamHealth(
+            state: .disconnected,
+            lastConnectedAt: health.lastConnectedAt,
+            lastEventAt: health.lastEventAt,
+            lastErrorDescription: nil,
+            reconnectAttempt: health.reconnectAttempt
+        )
         dataTask?.cancel()
         dataTask = nil
         session?.invalidateAndCancel()
         session = nil
+    }
+
+    public func currentHealth() -> StreamHealth {
+        if health.isStale {
+            return StreamHealth(
+                state: .stale,
+                lastConnectedAt: health.lastConnectedAt,
+                lastEventAt: health.lastEventAt,
+                lastErrorDescription: health.lastErrorDescription,
+                reconnectAttempt: health.reconnectAttempt
+            )
+        }
+        return health
+    }
+
+    func markConnected() {
+        let now = Date()
+        health = StreamHealth(
+            state: .connected,
+            lastConnectedAt: now,
+            lastEventAt: now,
+            lastErrorDescription: nil,
+            reconnectAttempt: 0
+        )
+    }
+
+    func markEvent() {
+        health = StreamHealth(
+            state: health.state == .connected ? .connected : health.state,
+            lastConnectedAt: health.lastConnectedAt,
+            lastEventAt: Date(),
+            lastErrorDescription: health.lastErrorDescription,
+            reconnectAttempt: health.reconnectAttempt
+        )
+    }
+
+    func markReconnecting() {
+        health = StreamHealth(
+            state: .reconnecting,
+            lastConnectedAt: health.lastConnectedAt,
+            lastEventAt: health.lastEventAt,
+            lastErrorDescription: health.lastErrorDescription,
+            reconnectAttempt: health.reconnectAttempt + 1
+        )
+    }
+
+    private func markConnecting() {
+        health = StreamHealth(
+            state: .connecting,
+            lastConnectedAt: health.lastConnectedAt,
+            lastEventAt: health.lastEventAt,
+            lastErrorDescription: nil,
+            reconnectAttempt: health.reconnectAttempt
+        )
+    }
+
+    private func markFailed(_ error: Error?) {
+        health = StreamHealth(
+            state: error == nil ? .disconnected : .failed,
+            lastConnectedAt: health.lastConnectedAt,
+            lastEventAt: health.lastEventAt,
+            lastErrorDescription: error?.localizedDescription,
+            reconnectAttempt: health.reconnectAttempt
+        )
     }
 
     private func parseAndDispatch(_ chunk: String) {
@@ -449,64 +371,150 @@ public actor SSEStreamManager {
 private final class SSEDelegate: NSObject, URLSessionDataDelegate {
     private let continuation: AsyncThrowingStream<SSEStreamManager.SSEEvent, Error>.Continuation
     private weak var manager: SSEStreamManager?
+    private let mode: SSEStreamManager.StreamMode
 
     private var eventType: String?
     private var eventData: String?
+    private var didYieldConnected = false
+    private var lineBuffer = ""
 
-    init(continuation: AsyncThrowingStream<SSEStreamManager.SSEEvent, Error>.Continuation, manager: SSEStreamManager) {
+    init(continuation: AsyncThrowingStream<SSEStreamManager.SSEEvent, Error>.Continuation,
+         manager: SSEStreamManager,
+         mode: SSEStreamManager.StreamMode) {
         self.continuation = continuation
         self.manager = manager
+        self.mode = mode
         super.init()
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         guard let chunk = String(data: data, encoding: .utf8) else { return }
 
-        let lines = chunk.components(separatedBy: "\n")
+        lineBuffer += chunk.replacingOccurrences(of: "\r\n", with: "\n")
+        let hasCompleteTrailingLine = lineBuffer.hasSuffix("\n")
+        var lines = lineBuffer.components(separatedBy: "\n")
+        lineBuffer = hasCompleteTrailingLine ? "" : (lines.popLast() ?? "")
 
         for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            processLine(line)
+        }
+    }
 
-            if trimmed.isEmpty {
-                if let type = eventType, let data = eventData, !data.isEmpty {
-                    dispatchEvent(type: type, data: data)
-                }
-                eventType = nil
-                eventData = nil
+    private func processLine(_ line: String) {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
 
-            } else if trimmed.hasPrefix("event:") {
-                eventType = String(trimmed.dropFirst(6)).trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty {
+            if let data = eventData, !data.isEmpty {
+                let type = eventType ?? "message"
+                dispatchEvent(type: type, data: data)
+            }
+            eventType = nil
+            eventData = nil
 
-            } else if trimmed.hasPrefix("data:") {
-                let value = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespaces)
-                if eventData == nil {
-                    eventData = value
-                } else {
-                    eventData = (eventData ?? "") + "\n" + value
-                }
+        } else if trimmed.hasPrefix("event:") {
+            eventType = String(trimmed.dropFirst(6)).trimmingCharacters(in: .whitespaces)
+
+        } else if trimmed.hasPrefix("data:") {
+            let value = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+            if eventData == nil {
+                eventData = value
+            } else {
+                eventData = (eventData ?? "") + "\n" + value
             }
         }
     }
 
+    func urlSession(
+        _ session: URLSession,
+        dataTask: URLSessionDataTask,
+        didReceive response: URLResponse,
+        completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
+    ) {
+        guard let http = response as? HTTPURLResponse else {
+            continuation.yield(.error(.connectionFailed(nil)))
+            continuation.finish(throwing: SSEStreamManager.StreamError.connectionFailed(nil))
+            completionHandler(.cancel)
+            return
+        }
+
+        guard 200...299 ~= http.statusCode else {
+            let error = SSEStreamManager.StreamError.decodingFailed("SSE HTTP \(http.statusCode)")
+            continuation.yield(.error(error))
+            continuation.finish(throwing: error)
+            completionHandler(.cancel)
+            return
+        }
+
+        yieldConnectedOnce()
+        completionHandler(.allow)
+    }
+
     private func dispatchEvent(type: String, data: String) {
-        switch type {
-        case "message":
-            if let jsonData = data.data(using: .utf8) {
+        // "connected", "keepalive", and "presence" are stream-agnostic.
+        if type == "keepalive" {
+            Task { [weak manager] in await manager?.markEvent() }
+            continuation.yield(.keepalive)
+            return
+        }
+        if type == "connected" {
+            yieldConnectedOnce()
+            return
+        }
+        if type == "presence" {
+            guard let jsonData = data.data(using: .utf8) else { return }
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            if let payload = try? decoder.decode(PresencePayload.self, from: jsonData) {
+                Task { [weak manager] in await manager?.markEvent() }
+                continuation.yield(.presence(payload))
+            } else {
+                continuation.yield(.error(.decodingFailed("Could not decode PresencePayload")))
+            }
+            return
+        }
+        switch mode {
+        case .chat:
+            if type == "message", let jsonData = data.data(using: .utf8) {
                 let decoder = JSONDecoder()
                 decoder.dateDecodingStrategy = .iso8601
                 if let payload = try? decoder.decode(MessageNewPayload.self, from: jsonData) {
+                    Task { [weak manager] in await manager?.markEvent() }
                     continuation.yield(.message(payload))
                 } else {
                     continuation.yield(.error(.decodingFailed("Could not decode MessageNewPayload")))
                 }
             }
-        case "keepalive":
-            continuation.yield(.keepalive)
-        case "connected":
-            continuation.yield(.connected)
-        default:
-            break
+        case .tickets:
+            // Backend emits SSE event name = envelope `type`. For `/tickets/stream`
+            // (fans team.tickets.events) the payload is type=fyi, occasionally
+            // type=alert. Either way, the data body is the lifecycle envelope.
+            guard let jsonData = data.data(using: .utf8) else { return }
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            if let envelope = try? decoder.decode(TicketLifecycleEnvelope.self, from: jsonData) {
+                Task { [weak manager] in await manager?.markEvent() }
+                continuation.yield(.ticketLifecycle(envelope))
+            }
+            // Silent skip on undecodable — backend may add future event types
+            // (e.g. heartbeat, schema bump); don't break the stream on those.
+        case .boards:
+            guard let jsonData = data.data(using: .utf8) else { return }
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            if (try? decoder.decode(BoardStreamEnvelope.self, from: jsonData)) != nil {
+                Task { [weak manager] in await manager?.markEvent() }
+                continuation.yield(.keepalive)
+            } else {
+                continuation.yield(.error(.decodingFailed("Could not decode BoardStreamEnvelope")))
+            }
         }
+    }
+
+    private func yieldConnectedOnce() {
+        guard !didYieldConnected else { return }
+        didYieldConnected = true
+        Task { [weak manager] in await manager?.markConnected() }
+        continuation.yield(.connected)
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
@@ -529,20 +537,225 @@ public struct MessageNewPayload: Codable, Sendable {
     public let id: String
     public let channelId: String
     public let content: String
-    public let senderId: String
-    public let senderName: String
+    public let senderId: String?
+    public let senderName: String?
     public let senderAgentId: String?
     public let timestamp: Date?
     public let replyToId: String?
     public let isThreadReply: Bool
+    public let traceId: String?
+    public let source: String?
+    public let lane: String?
+    public let messageType: String?
+    public let deliveryMode: String?
+    public let provenance: String?
+    public let responseState: String?
+    public let deliveryError: String?
+    public let deliveryFailedHop: String?
+    public let deliveryEvidence: String?
+    public let triageId: String?
+    public let triageTraceId: String?
+    public let fileAttachment: ChatFileAttachment?
 
     enum CodingKeys: String, CodingKey {
-        case id, channelId, content, timestamp
+        case id, channelId, content
+        case metadata
+        case channelIdSnake = "channel_id"
         case senderId = "sender_id"
+        case senderUserId = "sender_user_id"
         case senderName = "sender_name"
         case senderAgentId = "sender_agent_id"
+        case timestamp
+        case createdAt = "created_at"
         case replyToId = "reply_to_id"
         case isThreadReply = "is_thread_reply"
+        case traceId = "trace_id"
+        case source, lane, provenance
+        case messageType = "message_type"
+        case deliveryMode = "delivery_mode"
+        case responseState = "response_state"
+        case deliveryError = "delivery_error"
+        case deliveryFailedHop = "delivery_failed_hop"
+        case failedHop = "failed_hop"
+        case deliveryEvidence = "delivery_evidence"
+        case evidence
+        case triageId = "triage_id"
+        case triageTraceId = "triage_trace_id"
+    }
+
+    private struct Metadata: Codable, Sendable {
+        let file: String?
+        let deliveryError: String?
+        let deliveryFailedHop: String?
+        let failedHop: String?
+        let deliveryEvidence: String?
+        let evidence: String?
+
+        enum CodingKeys: String, CodingKey {
+            case file
+            case deliveryError = "delivery_error"
+            case deliveryFailedHop = "delivery_failed_hop"
+            case failedHop = "failed_hop"
+            case deliveryEvidence = "delivery_evidence"
+            case evidence
+        }
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        channelId = try container.decodeIfPresent(String.self, forKey: .channelId)
+            ?? container.decode(String.self, forKey: .channelIdSnake)
+        content = try container.decode(String.self, forKey: .content)
+        senderId = try container.decodeIfPresent(String.self, forKey: .senderId)
+            ?? container.decodeIfPresent(String.self, forKey: .senderUserId)
+        senderName = try container.decodeIfPresent(String.self, forKey: .senderName)
+        senderAgentId = try container.decodeIfPresent(String.self, forKey: .senderAgentId)
+        timestamp = try container.decodeIfPresent(Date.self, forKey: .timestamp)
+            ?? container.decodeIfPresent(Date.self, forKey: .createdAt)
+        replyToId = try container.decodeIfPresent(String.self, forKey: .replyToId)
+        isThreadReply = try container.decodeIfPresent(Bool.self, forKey: .isThreadReply) ?? false
+        traceId = try container.decodeIfPresent(String.self, forKey: .traceId)
+        source = try container.decodeIfPresent(String.self, forKey: .source)
+        lane = try container.decodeIfPresent(String.self, forKey: .lane)
+        messageType = try container.decodeIfPresent(String.self, forKey: .messageType)
+        deliveryMode = try container.decodeIfPresent(String.self, forKey: .deliveryMode)
+        provenance = try container.decodeIfPresent(String.self, forKey: .provenance)
+        responseState = try container.decodeIfPresent(String.self, forKey: .responseState)
+        triageId = try container.decodeIfPresent(String.self, forKey: .triageId)
+        triageTraceId = try container.decodeIfPresent(String.self, forKey: .triageTraceId)
+        let metadata = try container.decodeIfPresent(Metadata.self, forKey: .metadata)
+        deliveryError = (try? container.decodeIfPresent(String.self, forKey: .deliveryError))
+            ?? metadata?.deliveryError
+        deliveryFailedHop = (try? container.decodeIfPresent(String.self, forKey: .deliveryFailedHop))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .failedHop))
+            ?? metadata?.deliveryFailedHop
+            ?? metadata?.failedHop
+        deliveryEvidence = (try? container.decodeIfPresent(String.self, forKey: .deliveryEvidence))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .evidence))
+            ?? metadata?.deliveryEvidence
+            ?? metadata?.evidence
+        fileAttachment = ChatFileAttachment(path: metadata?.file)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(channelId, forKey: .channelIdSnake)
+        try container.encode(content, forKey: .content)
+        try container.encodeIfPresent(senderId, forKey: .senderId)
+        try container.encodeIfPresent(senderName, forKey: .senderName)
+        try container.encodeIfPresent(senderAgentId, forKey: .senderAgentId)
+        try container.encodeIfPresent(timestamp, forKey: .timestamp)
+        try container.encodeIfPresent(replyToId, forKey: .replyToId)
+        try container.encode(isThreadReply, forKey: .isThreadReply)
+        try container.encodeIfPresent(traceId, forKey: .traceId)
+        try container.encodeIfPresent(source, forKey: .source)
+        try container.encodeIfPresent(lane, forKey: .lane)
+        try container.encodeIfPresent(messageType, forKey: .messageType)
+        try container.encodeIfPresent(deliveryMode, forKey: .deliveryMode)
+        try container.encodeIfPresent(provenance, forKey: .provenance)
+        try container.encodeIfPresent(responseState, forKey: .responseState)
+        try container.encodeIfPresent(deliveryError, forKey: .deliveryError)
+        try container.encodeIfPresent(deliveryFailedHop, forKey: .deliveryFailedHop)
+        try container.encodeIfPresent(deliveryEvidence, forKey: .deliveryEvidence)
+        try container.encodeIfPresent(triageId, forKey: .triageId)
+        try container.encodeIfPresent(triageTraceId, forKey: .triageTraceId)
+        if let fileAttachment {
+            try container.encode(
+                Metadata(
+                    file: fileAttachment.path,
+                    deliveryError: nil,
+                    deliveryFailedHop: nil,
+                    failedHop: nil,
+                    deliveryEvidence: nil,
+                    evidence: nil
+                ),
+                forKey: .metadata
+            )
+        }
+    }
+}
+
+/// Payload for `presence` events carried on chat streams.
+public struct PresencePayload: Codable, Sendable {
+    public let agentId: String
+    public let state: String
+    public let working: Bool
+    public let lastSeen: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case agentId = "agent_id"
+        case agent
+        case name
+        case state
+        case working
+        case isWorking = "is_working"
+        case lastSeen = "last_seen"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        agentId = try container.decodeIfPresent(String.self, forKey: .agentId)
+            ?? container.decodeIfPresent(String.self, forKey: .agent)
+            ?? container.decodeIfPresent(String.self, forKey: .name)
+            ?? ""
+        state = try container.decodeIfPresent(String.self, forKey: .state) ?? "offline"
+        working = try container.decodeIfPresent(Bool.self, forKey: .working)
+            ?? container.decodeIfPresent(Bool.self, forKey: .isWorking)
+            ?? false
+        lastSeen = try container.decodeIfPresent(Date.self, forKey: .lastSeen)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(agentId, forKey: .agentId)
+        try container.encode(state, forKey: .state)
+        try container.encode(working, forKey: .working)
+        try container.encodeIfPresent(lastSeen, forKey: .lastSeen)
+    }
+}
+
+/// Payload for ticket lifecycle events on `/api/v1/tickets/stream`.
+/// Mirrors the envelope shape published by `services/tickets_publisher.py`
+/// to the `team.tickets.events` NATS subject. Field set is intentionally
+/// small — caller typically does a full `load()` refresh on receipt.
+public struct TicketLifecycleEnvelope: Codable, Sendable {
+    public let id: String?
+    public let type: String?
+    public let text: String?
+    public let metadata: Metadata?
+
+    public struct Metadata: Codable, Sendable {
+        /// Lifecycle action: created | claimed | in_progress | closed | cancelled | stale | escalated
+        public let action: String?
+        public let ticketId: String?
+        public let boardId: String?
+
+        enum CodingKeys: String, CodingKey {
+            case action
+            case ticketId = "ticket_id"
+            case boardId  = "board_id"
+        }
+    }
+}
+
+/// Payload for board lifecycle events on `/api/v1/boards/<id>/stream`.
+private struct BoardStreamEnvelope: Codable, Sendable {
+    let event: String
+    let boardId: String
+    let generatedAt: Date?
+    let ticketCount: Int?
+    let projectCount: Int?
+    let projectStageCounts: [String: Int]?
+
+    enum CodingKeys: String, CodingKey {
+        case event
+        case boardId = "board_id"
+        case generatedAt = "generated_at"
+        case ticketCount = "ticket_count"
+        case projectCount = "project_count"
+        case projectStageCounts = "project_stage_counts"
     }
 }
 
@@ -588,41 +801,5 @@ public struct ApprovalRequestedPayload: Codable, Sendable {
         case requesterId = "requester_id"
         case requesterName = "requester_name"
         case message, timestamp
-    }
-}
-
-// MARK: - URLSessionStreamTask Extension (for SSEClient's generic SSE streaming)
-
-extension URLSessionStreamTask {
-    /// Reads a single line from the HTTP stream.
-    /// Returns nil when the stream is closed, throws on error.
-    func readLine() async throws -> String? {
-        var buffer = Data()
-
-        while !Task.isCancelled {
-            let (newData, finished) = try await readData(ofMinLength: 1, maxLength: 4096, timeout: 30)
-            guard let data = newData, !finished, !data.isEmpty else {
-                return buffer.isEmpty ? nil : String(data: buffer, encoding: .utf8)
-            }
-
-            buffer.append(data)
-
-            if let newlineIndex = buffer.firstIndex(of: UInt8(ascii: "\n")) {
-                let lineData = buffer.prefix(upTo: newlineIndex)
-                buffer.removeSubrange(0...newlineIndex)
-
-                var line = String(data: lineData, encoding: .utf8) ?? ""
-                if line.hasSuffix("\r") {
-                    line.removeLast()
-                }
-                return line
-            }
-
-            if buffer.count > 64 * 1024 {
-                buffer.removeAll()
-            }
-        }
-
-        return nil
     }
 }
