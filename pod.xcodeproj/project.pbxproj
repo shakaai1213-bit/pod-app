@@ -108,6 +108,7 @@
 		D96AB4256A47F86B36F2E110 /* DashboardViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 130933CBCC9FDA9087DA6467 /* DashboardViewModel.swift */; };
 		DA32D039FF43CFDC2AA758B7 /* PlanningTimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8ED85013F876DF8D74EF28D /* PlanningTimelineView.swift */; };
 		DFD770B9DA4818B8C2281172 /* TicketsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20234CA39E8E4AC57B913F4C /* TicketsView.swift */; };
+		E02B41FD39062F030B26534B /* PlaygroundPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FC87A1CABF4CCE2FBDF5678 /* PlaygroundPanel.swift */; };
 		E6AAF82F7C5C65A6843220A8 /* SSEClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F46573C102E73A66AA6431C /* SSEClient.swift */; };
 		E887DC0291327FDCA8E3A7D2 /* MessageBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C62213C075198085FB1FC11D /* MessageBubbleView.swift */; };
 		EA0C06FDC1442F08A3550A36 /* podApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CC5A89E0995E0ECB8ABF610 /* podApp.swift */; };
@@ -158,6 +159,7 @@
 		3E4E290EBCFA3FCCA5B6D6F8 /* ResearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResearchViewModel.swift; sourceTree = "<group>"; };
 		3ECF09C31E0CCB3C58FAA879 /* KnowledgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeView.swift; sourceTree = "<group>"; };
 		3F4CCB4395C49C6788871A98 /* WallDisplayViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallDisplayViewModel.swift; sourceTree = "<group>"; };
+		3FC87A1CABF4CCE2FBDF5678 /* PlaygroundPanel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlaygroundPanel.swift; sourceTree = "<group>"; };
 		42CA60C568F609F5B3EF4C4F /* Projects.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Projects.swift; sourceTree = "<group>"; };
 		49A69CF51ACDCD9D554A9BA5 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		49B691A32B1F1F566C259775 /* ProjectsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectsView.swift; sourceTree = "<group>"; };
@@ -359,6 +361,7 @@
 				130933CBCC9FDA9087DA6467 /* DashboardViewModel.swift */,
 				802C03DADDC0952CE2E3ABAC /* ScanSheet.swift */,
 				538A3B3487E3FD106CCB6B2F /* SearchSheet.swift */,
+				3FC87A1CABF4CCE2FBDF5678 /* PlaygroundPanel.swift */,
 			);
 			path = Dashboard;
 			sourceTree = "<group>";
@@ -927,6 +930,7 @@
 				EA0C06FDC1442F08A3550A36 /* podApp.swift in Sources */,
 				DA32D039FF43CFDC2AA758B7 /* PlanningTimelineView.swift in Sources */,
 				74D52DBA11627F3E19480C5B /* MakerView.swift in Sources */,
+				E02B41FD39062F030B26534B /* PlaygroundPanel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

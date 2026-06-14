@@ -18,6 +18,7 @@ struct DashboardView: View {
     @State private var showingFundLanding = false
     @State private var showingVoiceRoom = false
     @State private var showingSettings = false
+    @State private var playgroundModel = PlaygroundPanelModel()
     @AppStorage("orca_display_name") private var displayName: String = "Captain"
 
     // MARK: - Body
@@ -44,10 +45,15 @@ struct DashboardView: View {
                     // 5. Tier 1 sign queue — "what needs your eyes"
                     CockpitSignQueueSection()
 
-                    // 6. Compact briefing + doctrine velocity line
+                    // 6. Playground NATS tail — unread inbox + action-required
+                    PlaygroundPanelView(model: playgroundModel, onChatTap: {
+                        appState.navigateTo(.chat)
+                    })
+
+                    // 7. Compact briefing + doctrine velocity line
                     classroomBriefingLine
 
-                    // 7. Top flow card — one blocker, tap → Work
+                    // 8. Top flow card — one blocker, tap → Work
                     classroomFlowCard
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -67,6 +73,7 @@ struct DashboardView: View {
                             await dailyBriefingModel.load(force: true)
                             await fundLandingModel.load()
                             await fundUniverseLoopModel.load()
+                            await playgroundModel.load()
                         }
                     } label: {
                         Image(systemName: viewModel.isLoading ? "hourglass" : "arrow.clockwise")
@@ -112,6 +119,7 @@ struct DashboardView: View {
                 await dailyBriefingModel.load()
                 await fundLandingModel.load()
                 await fundUniverseLoopModel.load()
+                await playgroundModel.load()
             }
             .task {
                 await viewModel.startFlowReviewPolling()
