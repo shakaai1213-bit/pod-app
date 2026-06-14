@@ -135,6 +135,8 @@ struct ContentView: View {
             LabView()
         } else if selectedTab == .runtime {
             RuntimeView()
+        } else if selectedTab == .maker {
+            MakerView()
         } else if selectedTab == .system {
             SystemView()
         // MARK: Legacy aliases — routable via deep-link for 30-day dwell period
@@ -169,7 +171,7 @@ struct ContentView: View {
 
     private var visibleTabs: [AppTab] {
         // Legacy cases excluded from bar (still deep-linkable).
-        [.dashboard, .chat, .work, .crew, .knowledge, .lab, .runtime]
+        [.dashboard, .chat, .work, .crew, .knowledge, .lab, .runtime, .maker]
     }
 
     private func tabBarButton(for tab: AppTab) -> some View {

@@ -50,6 +50,7 @@
 		7007166115FC21DF1D224686 /* ProjectRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 928284E5D88714A670BD7542 /* ProjectRepository.swift */; };
 		710AEB8A57C35177AD7DB6F6 /* KnowledgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ECF09C31E0CCB3C58FAA879 /* KnowledgeView.swift */; };
 		7220D0BB4926EC9516B9ADC5 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 308D6AB690E03E31147A14E0 /* OnboardingView.swift */; };
+		74D52DBA11627F3E19480C5B /* MakerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EE8F29D3F6B9DB3DBE02846 /* MakerView.swift */; };
 		7B3C12FECEB78F9D71D4AC06 /* AgentSecrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5106151FE25B0B26C56D66DC /* AgentSecrets.swift */; };
 		7D73F19AA5F1A62E35E17CAC /* SwiftDataModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 652176F506F2AFBA5504A5DB /* SwiftDataModels.swift */; };
 		808D6CB1C446F74B0C367DD3 /* SearchSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 538A3B3487E3FD106CCB6B2F /* SearchSheet.swift */; };
@@ -161,6 +162,7 @@
 		49A69CF51ACDCD9D554A9BA5 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		49B691A32B1F1F566C259775 /* ProjectsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectsView.swift; sourceTree = "<group>"; };
 		4CC5A89E0995E0ECB8ABF610 /* podApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = podApp.swift; sourceTree = "<group>"; };
+		4EE8F29D3F6B9DB3DBE02846 /* MakerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MakerView.swift; sourceTree = "<group>"; };
 		5106151FE25B0B26C56D66DC /* AgentSecrets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSecrets.swift; sourceTree = "<group>"; };
 		52704E1BE41BEF8E97D4B80A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		538A3B3487E3FD106CCB6B2F /* SearchSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchSheet.swift; sourceTree = "<group>"; };
@@ -503,6 +505,7 @@
 				11D06A5303C4235EC623115D /* VoiceCompanion */,
 				751B52C9774E765B495E6BCD /* WallDisplay */,
 				B6A27F86571736E0BADA22A4 /* Work */,
+				DE6530A82B3E0A12B79D0D24 /* Maker */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -700,6 +703,15 @@
 			);
 			path = Local;
 			sourceTree = "<group>";
+		};
+		DE6530A82B3E0A12B79D0D24 /* Maker */ = {
+			isa = PBXGroup;
+			children = (
+				4EE8F29D3F6B9DB3DBE02846 /* MakerView.swift */,
+			);
+			name = Maker;
+			path = Sources/Presentation/Features/Maker;
+			sourceTree = SOURCE_ROOT;
 		};
 		E673CECAE08ED91276E2ED83 /* Shared */ = {
 			isa = PBXGroup;
@@ -914,6 +926,7 @@
 				F83091AE4E41C3ECF3813D83 /* WorkView.swift in Sources */,
 				EA0C06FDC1442F08A3550A36 /* podApp.swift in Sources */,
 				DA32D039FF43CFDC2AA758B7 /* PlanningTimelineView.swift in Sources */,
+				74D52DBA11627F3E19480C5B /* MakerView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

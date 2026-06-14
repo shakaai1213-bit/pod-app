@@ -358,6 +358,7 @@ final class AppState: ObservableObject {
         case .arms: navigationState = .agents(agentId: nil)  // legacy alias
         case .knowledge: navigationState = .knowledge(standardId: nil)
         case .agents: navigationState = .agents(agentId: nil)  // legacy alias
+        case .maker: navigationState = .dashboard
         }
     }
 

@@ -16,6 +16,7 @@ enum AppTab: String, CaseIterable, Hashable {
     case knowledge
     case lab
     case runtime
+    case maker
     case system         // folded into Runtime → Overview; kept routable during dwell
 
     // MARK: Legacy aliases (not in tab bar; kept for deep-link compat — 30-day dwell per spec)
@@ -32,6 +33,7 @@ enum AppTab: String, CaseIterable, Hashable {
         case .knowledge:   return "Library"
         case .lab:         return "Lab"
         case .runtime:     return "Runtime"
+        case .maker:       return "Maker"
         case .system:      return "System"
         // Legacy
         case .captainsLog: return "Captain's Log"
@@ -49,6 +51,7 @@ enum AppTab: String, CaseIterable, Hashable {
         case .knowledge:   return "books.vertical.fill"
         case .lab:         return "flask.fill"
         case .runtime:     return "waveform.path.ecg"
+        case .maker:       return "wand.and.sparkles"
         case .system:      return "server.rack"
         // Legacy (not shown in tab bar)
         case .captainsLog: return "square.and.pencil"
