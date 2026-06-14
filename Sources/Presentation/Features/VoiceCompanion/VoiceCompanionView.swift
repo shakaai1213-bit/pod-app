@@ -36,9 +36,6 @@ struct VoiceCompanionView: View {
                 // Voice button
                 voiceButtonView
 
-                // Routing toggles
-                routingTogglesView
-
                 realtimePackageView
             }
             .padding(.bottom, 20)
@@ -153,7 +150,7 @@ struct VoiceCompanionView: View {
             }
         }
         .buttonStyle(.plain)
-        .disabled(!viewModel.routeToRealtimePackage || viewModel.isPreparingRealtimeSession || viewModel.isProcessing)
+        .disabled(viewModel.isPreparingRealtimeSession || viewModel.isProcessing)
         .accessibilityLabel(viewModel.isRealtimeConnected ? "Leave LiveKit realtime voice" : "Join LiveKit realtime voice")
     }
 
@@ -292,7 +289,7 @@ struct VoiceCompanionView: View {
                         .fill(accentColor.opacity(viewModel.routeToRealtimePackage ? 0.35 : 0.12))
                 )
             }
-            .disabled(!viewModel.routeToRealtimePackage || viewModel.isPreparingRealtimeSession)
+            .disabled(viewModel.isPreparingRealtimeSession)
         }
         .padding(.top, 12)
     }
