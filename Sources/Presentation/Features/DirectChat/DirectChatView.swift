@@ -78,7 +78,7 @@ struct DirectChatView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(AppColors.backgroundPrimary)
-        .navigationTitle("Sonar")
+        .navigationTitle("Playground")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(
             text: Binding(
@@ -402,7 +402,7 @@ private struct SonarSurfaceHeader: View {
                     .clipShape(Circle())
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Sonar")
+                    Text("Playground")
                         .font(.headline)
                         .foregroundStyle(AppColors.textPrimary)
                     Text("ORCA-backed team chat")
