@@ -162,7 +162,10 @@ struct PodReviewCard: View {
     var isBusy: Bool = false
     var onAction: (PodReviewAction) -> Void = { _ in }
     var onOpenTrace: ((String) -> Void)?
+    var onNoteSubmit: ((String) -> Void)?
     @State private var presentedTrace: PodTraceSelection?
+    @State private var noteText: String = ""
+    @State private var noteSubmitting: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -258,6 +261,36 @@ struct PodReviewCard: View {
                 }
             }
             .padding(.top, 2)
+
+            if let submitNote = onNoteSubmit {
+                Divider()
+                    .padding(.top, 4)
+                HStack(spacing: 6) {
+                    TextField("Add a note…", text: $noteText)
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.textPrimary)
+                        .disabled(noteSubmitting)
+                    Button {
+                        let text = noteText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !text.isEmpty, !noteSubmitting else { return }
+                        noteSubmitting = true
+                        submitNote(text)
+                        noteText = ""
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                            noteSubmitting = false
+                        }
+                    } label: {
+                        Image(systemName: noteSubmitting ? "clock" : "arrow.up.circle.fill")
+                            .font(.system(size: 18))
+                            .foregroundStyle(noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || noteSubmitting
+                                ? AppColors.textSecondary
+                                : AppColors.accentElectric)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || noteSubmitting)
+                }
+                .padding(.top, 2)
+            }
         }
         .padding(9)
         .frame(maxWidth: .infinity, alignment: .leading)

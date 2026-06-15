@@ -299,6 +299,9 @@ struct WorkView: View {
                                 } else {
                                     Task { await model.handleSuggestionAction(action.id, suggestion: suggestion) }
                                 }
+                            },
+                            onNoteSubmit: { note in
+                                Task { await model.postSuggestionNote(note, suggestion: suggestion) }
                             }
                         )
                     }
@@ -1968,6 +1971,45 @@ final class WorkViewModel {
         } else if suggestion.status == "proposed" {
             suggestions.insert(suggestion, at: 0)
         }
+    }
+
+    func postSuggestionNote(_ text: String, suggestion: SchoolhouseSuggestion) async {
+        do {
+            try await APIClient.shared.postVoid(
+                path: "/api/v1/notes",
+                body: NoteCreateBody(
+                    targetType: "suggestion",
+                    targetId: suggestion.id.uuidString,
+                    noteType: "comment",
+                    title: String(text.prefix(80)),
+                    body: text
+                )
+            )
+            priorityToast = PriorityToast(message: "Note saved", isError: false, retry: nil)
+        } catch {
+            priorityToast = PriorityToast(
+                message: "Note failed to save",
+                isError: true,
+                retry: { [weak self] in
+                    Task { await self?.postSuggestionNote(text, suggestion: suggestion) }
+                }
+            )
+        }
+    }
+}
+
+private struct NoteCreateBody: Encodable {
+    let targetType: String
+    let targetId: String
+    let noteType: String
+    let title: String
+    let body: String
+
+    enum CodingKeys: String, CodingKey {
+        case targetType = "target_type"
+        case targetId = "target_id"
+        case noteType = "note_type"
+        case title, body
     }
 }
 
