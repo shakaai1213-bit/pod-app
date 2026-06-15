@@ -53,6 +53,7 @@
 		74D52DBA11627F3E19480C5B /* MakerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EE8F29D3F6B9DB3DBE02846 /* MakerView.swift */; };
 		7B3C12FECEB78F9D71D4AC06 /* AgentSecrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5106151FE25B0B26C56D66DC /* AgentSecrets.swift */; };
 		7D73F19AA5F1A62E35E17CAC /* SwiftDataModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 652176F506F2AFBA5504A5DB /* SwiftDataModels.swift */; };
+		7F3D84AAABD47514FB726F02 /* LabSystemContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA31A829DCEC23520DDDBFF1 /* LabSystemContent.swift */; };
 		808D6CB1C446F74B0C367DD3 /* SearchSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 538A3B3487E3FD106CCB6B2F /* SearchSheet.swift */; };
 		81916D9ADC97416E0C579E35 /* CaptainsLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FB9B918F6720B94640FB12E /* CaptainsLogView.swift */; };
 		82E9235090E750FDADF97077 /* UserNameCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = C49A1876596C226FEB029C28 /* UserNameCache.swift */; };
@@ -241,6 +242,7 @@
 		F5D15A077B49CD21B9DDADD5 /* StandardEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandardEditorView.swift; sourceTree = "<group>"; };
 		F73FE194ED17E1FF892B715D /* DashboardModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardModels.swift; sourceTree = "<group>"; };
 		F92E1097762048180C6B3C9E /* KnowledgeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeViewModel.swift; sourceTree = "<group>"; };
+		FA31A829DCEC23520DDDBFF1 /* LabSystemContent.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LabSystemContent.swift; sourceTree = "<group>"; };
 		FBC7D0B7FA46F3CE605D98CB /* SpeechRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechRecorder.swift; sourceTree = "<group>"; };
 		FC020A48B04971EAC26F9937 /* Chat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Chat.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -573,6 +575,7 @@
 			children = (
 				1D98B88FCFC79DC5214247FB /* LabContent.swift */,
 				39AC4A4AC88444FC3C79EECF /* LabView.swift */,
+				FA31A829DCEC23520DDDBFF1 /* LabSystemContent.swift */,
 			);
 			path = Lab;
 			sourceTree = "<group>";
@@ -931,6 +934,7 @@
 				DA32D039FF43CFDC2AA758B7 /* PlanningTimelineView.swift in Sources */,
 				74D52DBA11627F3E19480C5B /* MakerView.swift in Sources */,
 				E02B41FD39062F030B26534B /* PlaygroundPanel.swift in Sources */,
+				7F3D84AAABD47514FB726F02 /* LabSystemContent.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

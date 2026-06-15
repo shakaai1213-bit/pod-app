@@ -287,12 +287,14 @@ struct ContentView: View {
 private enum RuntimeSurfaceMode: String, CaseIterable {
     case overview
     case fleet
+    case system
     case tags
 
     var title: String {
         switch self {
         case .overview: return "Overview"
         case .fleet: return "Fleet"
+        case .system: return "System"
         case .tags: return "Tags"
         }
     }
@@ -301,6 +303,7 @@ private enum RuntimeSurfaceMode: String, CaseIterable {
         switch self {
         case .overview: return "waveform.path.ecg"
         case .fleet: return "server.rack"
+        case .system: return "cpu"
         case .tags: return "tag"
         }
     }
@@ -377,7 +380,6 @@ private struct RuntimeView: View {
         switch selectedMode {
         case .overview:
             controlRoomSection
-            fundSurfaceSection
             summaryStrip
             startupTruthSection
             computeSummarySection
@@ -386,6 +388,8 @@ private struct RuntimeView: View {
             runtimeFleetSection
             computeRoutesSection
             classificationSyncSection
+        case .system:
+            LabSystemContent()
         case .tags:
             summaryStrip
             tagGroup(title: "Core", prefixes: ["orca.", "nats.", "compute.", "memory."])
@@ -583,7 +587,7 @@ private struct RuntimeView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("STARTUP TRUTH")
                         .podTextStyle(.label, color: AppColors.textTertiary)
-                    Text(model.startupStatus?.ok == true ? "Schoolhouse core is reachable" : "Startup status needs review")
+                    Text(model.startupStatus?.ok == true ? "Schoolhouse core is reachable" : "Startup broken — check components below")
                         .podTextStyle(.caption, color: AppColors.textSecondary)
                 }
 

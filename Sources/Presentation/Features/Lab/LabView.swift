@@ -8,17 +8,10 @@ import SwiftUI
 struct LabView: View {
 
     // Per-section expand/collapse state (default per spec §2).
-    @State private var architectureModel = ArchitectureDiagramModel()
     @State private var catalogModel = LabCatalogModel()
     @State private var workflowCatalogModel = LabWorkflowCatalogModel()
-    @State private var natsHealthModel = LabNATSHealthModel()
-    @State private var showingArchitectureSheet = false
-    @State private var stackExpanded     = true
     @State private var fishExpanded      = false
     @State private var workflowsExpanded = false
-    @State private var flywheelExpanded  = true
-    @State private var buildingExpanded  = true
-    @State private var retiredExpanded      = false
 
     var body: some View {
         NavigationStack {
@@ -29,14 +22,8 @@ struct LabView: View {
                         .padding(.top, 44)
                         .padding(.bottom, 8)
 
-                    stackSection
                     fishSection
                     workflowsSection
-                    flywheelSection
-                    buildingSection
-                    retiredSection
-                    architectureRegistrySection
-                    architectureSection
                 }
                 .frame(maxWidth: 920, alignment: .leading)
                 .padding(.horizontal, 16)
@@ -45,19 +32,12 @@ struct LabView: View {
             .background(AppColors.backgroundPrimary.ignoresSafeArea())
                 .task {
                     await catalogModel.load()
-                    await architectureModel.load()
                     await workflowCatalogModel.load()
-                    await natsHealthModel.load()
                 }
                 .refreshable {
                     await catalogModel.load(force: true)
-                    await architectureModel.load(force: true)
                     await workflowCatalogModel.load(force: true)
-                    await natsHealthModel.load()
                 }
-            .fullScreenCover(isPresented: $showingArchitectureSheet) {
-                ArchitectureDiagramSheet(markdown: architectureModel.markdown)
-            }
         }
     }
 
@@ -68,7 +48,7 @@ struct LabView: View {
             Text("Lab")
                 .font(.system(size: 28, weight: .bold))
                 .foregroundColor(AppColors.textPrimary)
-            Text("What we've built, who's running it, what's spinning.")
+            Text("Experiments: fish agents + workflows.")
                 .font(.system(size: 14))
                 .foregroundColor(AppColors.textSecondary)
         }
@@ -127,228 +107,6 @@ struct LabView: View {
             }
         }
         .contentShape(Rectangle())
-    }
-
-    // MARK: - ARCHITECTURE section
-
-    private var architectureRegistrySection: some View {
-        sectionCard {
-            HStack(spacing: 8) {
-                Image(systemName: "list.bullet.rectangle")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(AppColors.accentElectric)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("ARCHITECTURE REGISTRY")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(AppColors.textPrimary)
-                    Text("Subsystem truth contracts")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(AppColors.textTertiary)
-                }
-                Spacer()
-                Text("STAGED")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundColor(AppColors.textTertiary)
-            }
-        } body: {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "building.columns")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(AppColors.accentElectric)
-                        .frame(width: 28, height: 28)
-                        .background(AppColors.accentElectric.opacity(0.1))
-                        .clipShape(RoundedRectangle(cornerRadius: 7))
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Boards show where work belongs. The registry will show how each subsystem works.")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(AppColors.textPrimary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Text("Source: ORCA-ARCHITECTURE-OWNERSHIP-REGISTRY-2026-05-26.md. Read-only until ORCA exposes a doc-registry/wiki mirror suitable for structured rows.")
-                            .font(.system(size: 11))
-                            .foregroundColor(AppColors.textTertiary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 12)
-        }
-    }
-
-    private var architectureSection: some View {
-        sectionCard {
-            HStack(spacing: 8) {
-                Image(systemName: "point.topleft.down.curvedto.point.bottomright.up")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(AppColors.accentElectric)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("ARCHITECTURE")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(AppColors.textPrimary)
-                    Text("Canonical stack map")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(AppColors.textTertiary)
-                }
-                Spacer()
-                if architectureModel.isLoading {
-                    ProgressView()
-                        .scaleEffect(0.65)
-                } else {
-                    HStack(spacing: 8) {
-                        Text(architectureModel.sourceLabel)
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
-                            .foregroundColor(AppColors.textTertiary)
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(AppColors.accentElectric)
-                    }
-                }
-            }
-        } body: {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 10) {
-                    Image(systemName: "doc.text.magnifyingglass")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(AppColors.accentElectric)
-                        .frame(width: 28, height: 28)
-                        .background(AppColors.accentElectric.opacity(0.1))
-                        .clipShape(RoundedRectangle(cornerRadius: 7))
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Open full architecture map")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(AppColors.textPrimary)
-                            .lineLimit(1)
-                        Text("Mermaid source · zoom and scroll")
-                            .font(.system(size: 11))
-                            .foregroundColor(AppColors.textTertiary)
-                            .lineLimit(1)
-                    }
-
-                    Spacer(minLength: 8)
-
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(AppColors.textTertiary)
-                }
-                .padding(10)
-                .background(AppColors.backgroundPrimary)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(AppColors.border, lineWidth: 0.5)
-                )
-
-                if let error = architectureModel.error {
-                    Text(error)
-                        .font(.system(size: 10))
-                        .foregroundColor(AppColors.textTertiary)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 12)
-            .contentShape(Rectangle())
-            .onTapGesture {
-                showingArchitectureSheet = true
-            }
-        }
-    }
-
-    // MARK: - STACK section
-
-    private var stackSection: some View {
-        let stack = catalogModel.stack
-        return sectionCard {
-            sectionHeader(title: "STACK", count: stack.count, expanded: stackExpanded, rightLabel: natsHealthModel.badgeLabel) {
-                Task { await natsHealthModel.load() }
-            }
-                .onTapGesture {
-                    withAnimation(.easeInOut(duration: 0.15)) { stackExpanded.toggle() }
-                }
-        } body: {
-            if stackExpanded {
-                VStack(spacing: 0) {
-                    catalogSourceRow
-                    ForEach(stack) { layer in
-                        stackRow(layer)
-                        if layer.id != stack.last?.id {
-                            Divider().background(AppColors.border)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private var catalogSourceRow: some View {
-        HStack(spacing: 6) {
-            Text(catalogModel.sourceLabel)
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundColor(catalogModel.sourceLabel == "ORCA" ? AppColors.accentSuccess : AppColors.accentWarning)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(AppColors.backgroundTertiary.opacity(0.75))
-                .clipShape(Capsule())
-            if catalogModel.isLoading {
-                ProgressView()
-                    .scaleEffect(0.65)
-            }
-            if let error = catalogModel.error {
-                Text(error)
-                    .font(.system(size: 10))
-                    .foregroundColor(AppColors.textTertiary)
-                    .lineLimit(2)
-            }
-            Spacer()
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-    }
-
-    private func stackRow(_ layer: LabStackLayer) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(layer.tint.opacity(0.15))
-                    .frame(width: 28, height: 28)
-                Image(systemName: layer.icon)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(layer.tint)
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(layer.title)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(AppColors.textPrimary)
-                Text(layer.oneLine)
-                    .font(.system(size: 13))
-                    .foregroundColor(AppColors.textSecondary)
-                    .lineLimit(2)
-            }
-            Spacer(minLength: 8)
-            VStack(alignment: .trailing, spacing: 4) {
-                if layer.id == "nats" {
-                    natsStatusPill
-                } else {
-                    statusPill(layer.status)
-                }
-                ownerChip(layer.owner)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-    }
-
-    private var natsStatusPill: some View {
-        Text(natsHealthModel.displayStatus)
-            .font(.system(size: 10, weight: .bold))
-            .foregroundColor(natsHealthModel.statusColor)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(natsHealthModel.statusColor.opacity(0.12))
-            .clipShape(Capsule())
-            .accessibilityLabel("NATS \(natsHealthModel.displayStatus)")
     }
 
     // MARK: - FISH section
@@ -498,282 +256,13 @@ struct LabView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
-    // MARK: - FLYWHEEL section
-
-    private var flywheelSection: some View {
-        sectionCard {
-            sectionHeader(title: "FLYWHEEL 🌀", expanded: flywheelExpanded)
-                .onTapGesture {
-                    withAnimation(.easeInOut(duration: 0.15)) { flywheelExpanded.toggle() }
-                }
-        } body: {
-            if flywheelExpanded {
-                VStack(alignment: .leading, spacing: 14) {
-                    flywheelLoop
-                    flywheelNote
-                    flywheelSpinning
-                    flywheelFooter
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-            }
-        }
-    }
-
-    private var flywheelLoop: some View {
-        // Static text-flow rendering; visual chevrons. Accessibility fallback below.
-        VStack(alignment: .leading, spacing: 8) {
-            FlywheelLoopDiagram(nodes: LabContent.flywheelNodes)
-                .accessibilityLabel("Captured to Assessment to Experiment to Evidence to Decision to Doctrine")
-        }
-    }
-
-    private var flywheelNote: some View {
-        Text("Flywheel ≠ Project Lifecycle. The Flywheel is the experimentation loop (idea → evidence → kept-or-killed). Project Lifecycle is the governance stages (Captured → Assessment → Definition → Blueprint → Scoping → Active → Handoff → Closed). A project moves through the Flywheel inside its Lifecycle stages.")
-            .font(.system(size: 11))
-            .italic()
-            .foregroundColor(AppColors.textTertiary)
-    }
-
-    private var flywheelSpinning: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Currently spinning · \(catalogModel.currentlySpinning.count)")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(AppColors.textSecondary)
-            ForEach(catalogModel.currentlySpinning) { item in
-                HStack(alignment: .top, spacing: 6) {
-                    Text("•")
-                        .foregroundColor(AppColors.textTertiary)
-                    Text(item.title)
-                        .font(.system(size: 13))
-                        .foregroundColor(AppColors.textPrimary)
-                    Spacer(minLength: 6)
-                    Text(item.stage)
-                        .font(.system(size: 10, weight: .semibold))
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(AppColors.accentElectric.opacity(0.15))
-                        .foregroundColor(AppColors.accentElectric)
-                        .clipShape(Capsule())
-                    ownerChip(item.owner)
-                }
-            }
-        }
-    }
-
-    private var flywheelFooter: some View {
-        Text("What it costs when it stalls: designer-iteration without ship = process-running. Tickets-as-receipts (not forward work) = false motion.")
-            .font(.system(size: 11))
-            .italic()
-            .foregroundColor(AppColors.textTertiary)
-    }
-
-    // MARK: - CURRENTLY BUILDING section
-
-    private var buildingSection: some View {
-        let building = catalogModel.currentlyBuilding
-        return sectionCard {
-            sectionHeader(title: "CURRENTLY BUILDING", count: building.count, expanded: buildingExpanded)
-                .onTapGesture {
-                    withAnimation(.easeInOut(duration: 0.15)) { buildingExpanded.toggle() }
-                }
-        } body: {
-            if buildingExpanded {
-                if catalogModel.projectSections.isEmpty {
-                    VStack(spacing: 0) {
-                        ForEach(building) { item in
-                            buildingRow(item)
-                            if item.id != building.last?.id {
-                                Divider().background(AppColors.border)
-                            }
-                        }
-                    }
-                } else {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(catalogModel.projectSections) { section in
-                            Text(section.layer.uppercased())
-                                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                .foregroundColor(AppColors.textTertiary)
-                                .padding(.horizontal, 12)
-                                .padding(.top, 10)
-                                .padding(.bottom, 2)
-                            ForEach(section.projects) { item in
-                                buildingRow(item)
-                                if item.id != section.projects.last?.id {
-                                    Divider().background(AppColors.border)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private func buildingRow(_ item: LabBuildingItem) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.title)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(AppColors.textPrimary)
-                    .lineLimit(2)
-                HStack(spacing: 6) {
-                    Text(item.stage)
-                        .font(.system(size: 10, weight: .semibold))
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(AppColors.backgroundTertiary)
-                        .foregroundColor(AppColors.textSecondary)
-                        .clipShape(Capsule())
-                    ownerChip(item.owner)
-                    if let layer = item.layer {
-                        Text(layer)
-                            .font(.system(size: 10, weight: .semibold))
-                            .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(AppColors.accentElectric.opacity(0.12))
-                            .foregroundColor(AppColors.accentElectric)
-                            .clipShape(Capsule())
-                    }
-                    Text(item.shortId)
-                        .font(.system(size: 10, design: .monospaced))
-                        .padding(.horizontal, 5).padding(.vertical, 2)
-                        .background(AppColors.backgroundTertiary.opacity(0.5))
-                        .foregroundColor(AppColors.textTertiary)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 3)
-                                .stroke(AppColors.border, lineWidth: 0.5)
-                        )
-                }
-            }
-            Spacer(minLength: 6)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-    }
-
-    // MARK: - RETIRED section
-
-    private var retiredSection: some View {
-        let retired = catalogModel.retiredItems
-        return sectionCard {
-            sectionHeader(title: "RETIRED", count: retired.count, expanded: retiredExpanded)
-                .onTapGesture {
-                    withAnimation(.easeInOut(duration: 0.15)) { retiredExpanded.toggle() }
-                }
-        } body: {
-            if retiredExpanded {
-                VStack(spacing: 0) {
-                    ForEach(retired) { item in
-                        HStack(alignment: .top, spacing: 8) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(item.name)
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundColor(AppColors.textSecondary)
-                                Text(item.reason)
-                                    .font(.system(size: 11))
-                                    .foregroundColor(AppColors.textTertiary)
-                                    .lineLimit(2)
-                            }
-                            Spacer(minLength: 6)
-                            Text("⚫")
-                                .font(.system(size: 10))
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
-                        if item.id != retired.last?.id {
-                            Divider().background(AppColors.border)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: - Shared bits
-
-    private func statusPill(_ status: LabStatus) -> some View {
-        HStack(spacing: 3) {
-            Text(status.emoji).font(.system(size: 8))
-            Text(status.label)
-                .font(.system(size: 9, weight: .bold))
-                .foregroundColor(status.color)
-                .tracking(0.4)
-        }
-        .padding(.horizontal, 6).padding(.vertical, 2)
-        .background(status.color.opacity(0.12))
-        .clipShape(Capsule())
-    }
-
-    private func ownerChip(_ owner: String) -> some View {
-        Text(owner)
-            .font(.system(size: 9, weight: .bold, design: .monospaced))
-            .foregroundColor(AppColors.textSecondary)
-            .tracking(0.5)
-            .padding(.horizontal, 5).padding(.vertical, 2)
-            .background(AppColors.backgroundTertiary)
-            .clipShape(Capsule())
-    }
-
-}
-
-// MARK: - NATS health
-
-@MainActor
-@Observable
-private final class LabNATSHealthModel {
-    private(set) var status: String?
-    private(set) var detail: String?
-    private(set) var isLoading = false
-
-    var displayStatus: String {
-        if isLoading && status == nil { return "CHECKING" }
-        return (status ?? "UNKNOWN").uppercased()
-    }
-
-    var badgeLabel: String {
-        "NATS \(displayStatus)"
-    }
-
-    var statusColor: Color {
-        switch (status ?? "").lowercased() {
-        case "ok", "healthy", "live", "green":
-            return AppColors.accentSuccess
-        case "degraded", "warn", "warning", "yellow":
-            return AppColors.accentWarning
-        case "down", "failed", "error", "red":
-            return AppColors.accentDanger
-        default:
-            return AppColors.textTertiary
-        }
-    }
-
-    func load() async {
-        if isLoading { return }
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            let response: LabNATSHealthResponse = try await APIClient.shared.get(path: "/api/v1/nats/health")
-            status = response.status ?? response.health ?? response.state ?? "unknown"
-            detail = response.message ?? response.summary
-        } catch {
-            status = "unknown"
-            detail = "NATS health endpoint unavailable."
-        }
-    }
-}
-
-private struct LabNATSHealthResponse: Decodable {
-    let status: String?
-    let health: String?
-    let state: String?
-    let message: String?
-    let summary: String?
 }
 
 // MARK: - ORCA-backed Lab catalog
 
 @MainActor
 @Observable
-private final class LabCatalogModel {
+final class LabCatalogModel {
     private(set) var stack: [LabStackLayer] = []
     private(set) var fishFleet: [LabFish] = []
     private(set) var fishAdjacent: [LabFish] = []
@@ -1030,7 +519,7 @@ private final class LabCatalogModel {
     }
 }
 
-private struct LabProjectSection: Identifiable {
+struct LabProjectSection: Identifiable {
     let layer: String
     let boardId: String
     let projects: [LabBuildingItem]
@@ -1153,7 +642,7 @@ private final class LabWorkflowCatalogModel {
 
 @MainActor
 @Observable
-private final class ArchitectureDiagramModel {
+final class ArchitectureDiagramModel {
     private(set) var markdown = ""
     private(set) var isLoading = false
     private(set) var error: String?
@@ -1202,7 +691,7 @@ private final class ArchitectureDiagramModel {
     }
 }
 
-private struct WikiFileResponse: Decodable {
+struct WikiFileResponse: Decodable {
     let content: String
 
     init(from decoder: Decoder) throws {
@@ -1237,31 +726,7 @@ private struct WikiFileResponse: Decodable {
     }
 }
 
-private struct ArchitectureDiagramCodeBlock: View {
-    let text: String
-    let height: CGFloat
-
-    var body: some View {
-        ScrollView([.horizontal, .vertical], showsIndicators: true) {
-            Text(text)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundColor(AppColors.textPrimary)
-                .textSelection(.enabled)
-                .lineSpacing(2)
-                .padding(9)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .frame(height: height)
-        .background(AppColors.backgroundPrimary)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(AppColors.border, lineWidth: 0.5)
-        )
-    }
-}
-
-private struct ArchitectureDiagramSheet: View {
+struct ArchitectureDiagramSheet: View {
     let markdown: String
     @Environment(\.dismiss) private var dismiss
     @State private var scale: CGFloat = 1
@@ -1314,159 +779,3 @@ private struct ArchitectureDiagramSheet: View {
     }
 }
 
-private enum ArchitectureDiagramSnapshot {
-    static let markdown = """
-    # Architecture — Visual Map
-
-    ## 1. The 5-Layer Stack
-
-    ```mermaid
-    flowchart TB
-        classDef surface fill:#cce5ff,stroke:#004085,color:#000
-        classDef integration fill:#d4edda,stroke:#155724,color:#000
-        classDef backbone fill:#fff3cd,stroke:#856404,color:#000
-        classDef nerve fill:#f8d7da,stroke:#721c24,color:#000
-        classDef actor fill:#e2e3e5,stroke:#383d41,color:#000
-
-        subgraph L1["LAYER 1 — Surfaces (what Tony touches)"]
-            Pod["Pod (iPad/iPhone)"]
-            Chat["Chat"]
-            iMsg["iMessage"]
-        end
-
-        subgraph L2["LAYER 2 — Schoolhouse OS (integration loop)"]
-            SH["Schoolhouse — protocols · standards · workflows · doctrine binding"]
-        end
-
-        subgraph L3["LAYER 3 — Substrate"]
-            ORCA["3a. ORCA (backend truth · endpoints · projects · tickets · boards · notes)"]
-            MEM["3b. Memory (daily logs · Chroma · per-agent · Spine V1)"]
-            CMP["3c. Compute (Spark · Kimi · Claude · Mermaid · cascade triage)"]
-        end
-
-        subgraph L4["LAYER 4 — Nerve (the wire)"]
-            NATS["NATS · Track B envelope · sign chain"]
-        end
-
-        subgraph L5["LAYER 5 — Actors + Observability"]
-            Agents["Agents (Aloha · Maui · Coral · Reef · Rooster · Chief)"]
-            Fish["Fish Fleet (Starfish · Chieffish · Roosterfish) + Workers (Pearl · Mermaid · Turtle · Miner)"]
-            Petals["Petals + Watchdogs"]
-        end
-
-        Pod -->|reads| ORCA
-        Chat -->|reads| ORCA
-        iMsg -->|reads| ORCA
-        SH -->|orchestrates| ORCA
-        SH -->|orchestrates| MEM
-        SH -->|orchestrates| CMP
-        ORCA <-->|envelopes| NATS
-        MEM <-->|envelopes| NATS
-        CMP <-->|envelopes| NATS
-        Agents <-->|publish/subscribe| NATS
-        Fish -->|directive queues| Agents
-        Petals -->|alerts| Agents
-        Petals -->|metrics| ORCA
-
-        L1 ~~~ L2 ~~~ L3 ~~~ L4 ~~~ L5
-
-        class L1 surface
-        class L2 integration
-        class L3 backbone
-        class L4 nerve
-        class L5 actor
-    ```
-
-    ## 2. The Operating Rhythm
-
-    ```mermaid
-    flowchart LR
-        D["1. DESIGN<br>Aloha + Maui<br>Spec / ADR / Standard"]
-        B["2. BUILD<br>Codex / Compute<br>Commits + work-log"]
-        C["3. CODIFY<br>Aloha + Maui<br>DDS / SOP / Catalog"]
-        L["4. LEARN<br>ORCA<br>Suggestions · Memory · Flow"]
-        E["5. EARN<br>Chief<br>P&L · Funding · Outcomes"]
-        D --> B --> C --> L --> E
-        E -.->|next cycle| D
-    ```
-
-    ## 3. Boards Overlay
-
-    ```mermaid
-    flowchart TB
-        subgraph LAYER1["L1 Surfaces"]
-            pod[pod]
-            chat[chat]
-        end
-        subgraph LAYER2["L2 Integration"]
-            gov[governance]
-        end
-        subgraph LAYER3["L3 Substrate"]
-            orca[orca]
-            memory[memory]
-            compute[compute]
-        end
-        subgraph LAYER4["L4 Nerve"]
-            nerve[nerve]
-        end
-        subgraph LAYER5["L5 Observability"]
-            obs[observability]
-        end
-        subgraph CROSSCUT["Cross-cutting / Strategic"]
-            ns[north-star]
-        end
-    ```
-    """
-}
-
-// MARK: - Flywheel loop diagram
-
-private struct FlywheelLoopDiagram: View {
-    let nodes: [String]
-
-    var body: some View {
-        // Compact two-row flow with arrows.
-        // Top row: 1 → 2 → 3
-        // Bottom row: 6 ← 5 ← 4
-        let half = (nodes.count + 1) / 2
-        let top = Array(nodes.prefix(half))
-        let bottom = Array(nodes.suffix(nodes.count - half).reversed())
-
-        return VStack(alignment: .leading, spacing: 8) {
-            row(top, showRightArrow: true)
-            HStack {
-                Spacer()
-                Image(systemName: "arrow.turn.right.down")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(AppColors.textTertiary)
-            }
-            row(bottom, showRightArrow: false)
-        }
-    }
-
-    private func row(_ items: [String], showRightArrow: Bool) -> some View {
-        HStack(spacing: 6) {
-            ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
-                node(item)
-                if idx < items.count - 1 {
-                    Image(systemName: showRightArrow ? "arrow.right" : "arrow.left")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(AppColors.textTertiary)
-                }
-            }
-        }
-    }
-
-    private func node(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundColor(AppColors.textPrimary)
-            .padding(.horizontal, 8).padding(.vertical, 4)
-            .background(AppColors.backgroundTertiary)
-            .overlay(
-                RoundedRectangle(cornerRadius: 4)
-                    .stroke(AppColors.border, lineWidth: 0.5)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 4))
-    }
-}
