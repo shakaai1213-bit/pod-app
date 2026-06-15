@@ -303,13 +303,23 @@ struct AgentDetailSheet: View {
                 .background(AppColors.accentWarning.opacity(0.08))
                 .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
             } else {
-                actionButton(
-                    icon: "bubble.left.fill",
-                    label: "Chat",
-                    color: AppColors.accentElectric
-                ) {
-                    dismiss()
-                    onStartChat?()
+                HStack(spacing: Theme.sm) {
+                    actionButton(
+                        icon: "bubble.left.fill",
+                        label: "Chat",
+                        color: AppColors.accentElectric
+                    ) {
+                        dismiss()
+                        onStartChat?()
+                    }
+
+                    actionButton(
+                        icon: "tray.and.arrow.down.fill",
+                        label: "Message",
+                        color: AppColors.accentAgent
+                    ) {
+                        showingSendMessage = true
+                    }
                 }
             }
 
