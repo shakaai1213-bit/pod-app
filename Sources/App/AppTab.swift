@@ -45,7 +45,7 @@ enum AppTab: String, CaseIterable, Hashable {
     var icon: String {
         switch self {
         case .dashboard:   return "house.fill"
-        case .chat:        return "dot.radiowaves.left.and.right"
+        case .chat:        return "gamecontroller.fill"
         case .work:        return "square.stack.3d.up.fill"
         case .crew:        return "person.3.sequence.fill"
         case .knowledge:   return "books.vertical.fill"
