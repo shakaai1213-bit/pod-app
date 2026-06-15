@@ -532,13 +532,26 @@ struct WorkView: View {
             provenance.append("snoozed \(snoozedUntil.formatted(date: .abbreviated, time: .shortened))")
         }
 
+        // For idea_intake suggestions, surface the cascade stage + assessment verdict
+        var statusLine = "\(suggestion.riskLevel.uppercased()) · \(suggestion.status)"
+        var detail = suggestion.summary
+        if suggestion.isIdeaIntake {
+            statusLine = suggestion.cascadeStageBadge
+            if let assessment = suggestion.provenance?["assessment"],
+               case let .object(obj) = assessment,
+               let rationale = obj["rationale"],
+               case let .string(text) = rationale, !text.isEmpty {
+                detail = text
+            }
+        }
+
         return PodReviewItem(
             id: suggestion.id.uuidString,
             eyebrow: suggestion.reviewEyebrow,
             title: suggestion.title,
-            detail: suggestion.summary,
-            status: "\(suggestion.riskLevel.uppercased()) · \(suggestion.status)",
-            statusColor: suggestion.statusColor,
+            detail: detail,
+            status: statusLine,
+            statusColor: suggestion.isIdeaIntake ? suggestion.ideaStageColor : suggestion.statusColor,
             provenance: provenance,
             traceId: suggestion.traceId,
             artifactHash: suggestion.artifactHash,
@@ -2357,13 +2370,42 @@ struct SchoolhouseSuggestion: Decodable, Identifiable, Hashable {
             || memoryCandidateId != nil
     }
 
+    var isIdeaIntake: Bool { kind == "idea_intake" }
+
     var memoryCandidateId: String? {
         stringValue(for: ["candidate_id", "memory_candidate_id"], in: sourceRefs)
             ?? stringValue(for: ["candidate_id", "memory_candidate_id"], in: provenance)
     }
 
+    // cascade stage stored in provenance.stage by the M2 assessment endpoint
+    var cascadeStage: String? {
+        stringValue(for: ["stage"], in: provenance)
+    }
+
     var reviewEyebrow: String {
-        isMemoryCandidateReview ? "Memory candidate review" : "Schoolhouse suggestion"
+        if isMemoryCandidateReview { return "Memory candidate review" }
+        if isIdeaIntake { return "Maker idea" }
+        return "Schoolhouse suggestion"
+    }
+
+    var cascadeStageBadge: String {
+        switch cascadeStage {
+        case "assessing":     return "Assessment ↻"
+        case "assessed":      return "Assessed"
+        case "discovering":   return "Discovery ↻"
+        case "project_ready": return "Project-ready"
+        default:              return "Intake"
+        }
+    }
+
+    var ideaStageColor: Color {
+        switch cascadeStage {
+        case "discovering":   return AppColors.accentSuccess
+        case "project_ready": return AppColors.accentElectric
+        case "assessing":     return AppColors.accentWarning
+        case "assessed":      return AppColors.textSecondary
+        default:              return AppColors.textTertiary
+        }
     }
 
     var ticketPriority: String {
