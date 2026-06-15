@@ -385,6 +385,9 @@ struct AgentLockerDTO: Decodable, Hashable {
     let schema: String?
     let source: String?
     let generatedAt: String?
+    let agentProfile: LockerAgentProfile?
+    let tools: LockerTools?
+    let guardrails: [String]
     let startHere: StartHere
     let planner: Planner
     let orcaTasks: OrcaTasks
@@ -400,8 +403,10 @@ struct AgentLockerDTO: Decodable, Hashable {
     let wakeMarkdown: String?
 
     enum CodingKeys: String, CodingKey {
-        case schema, source, planner, inbox, dashboards, feedback, gaps, heartbeat, library, escalation
+        case schema, source, planner, inbox, dashboards, feedback, gaps, heartbeat, library, escalation, guardrails
         case generatedAt = "generated_at"
+        case agentProfile = "agent"
+        case tools
         case startHere = "start_here"
         case orcaTasks = "orca_tasks"
         case lockerMemory = "locker_memory"
@@ -414,6 +419,9 @@ struct AgentLockerDTO: Decodable, Hashable {
         schema = try container.decodeIfPresent(String.self, forKey: .schema)
         source = try container.decodeIfPresent(String.self, forKey: .source)
         generatedAt = try container.decodeIfPresent(String.self, forKey: .generatedAt)
+        agentProfile = try container.decodeIfPresent(LockerAgentProfile.self, forKey: .agentProfile)
+        tools = try container.decodeIfPresent(LockerTools.self, forKey: .tools)
+        guardrails = try container.decodeIfPresent([String].self, forKey: .guardrails) ?? []
         startHere = try container.decodeIfPresent(StartHere.self, forKey: .startHere) ?? StartHere()
         planner = try container.decodeIfPresent(Planner.self, forKey: .planner) ?? Planner()
         orcaTasks = try container.decodeIfPresent(OrcaTasks.self, forKey: .orcaTasks) ?? OrcaTasks()
@@ -427,6 +435,53 @@ struct AgentLockerDTO: Decodable, Hashable {
         feedback = try container.decodeIfPresent(Feedback.self, forKey: .feedback) ?? Feedback()
         gaps = try container.decodeIfPresent([String].self, forKey: .gaps) ?? []
         wakeMarkdown = try container.decodeIfPresent(String.self, forKey: .wakeMarkdown)
+    }
+
+    // MARK: - Report Card types (M1 — identity, owns, tools, compliance)
+
+    struct LockerAgentProfile: Decodable, Hashable {
+        let id: String?
+        let name: String?
+        let status: String?
+        let rosterLane: String?
+        let title: String?
+        let owns: [String]
+        let protectedDomains: [String]
+
+        enum CodingKeys: String, CodingKey {
+            case id, name, status, title, owns
+            case rosterLane = "roster_lane"
+            case protectedDomains = "protected_domains"
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            id = try c.decodeIfPresent(String.self, forKey: .id)
+            name = try c.decodeIfPresent(String.self, forKey: .name)
+            status = try c.decodeIfPresent(String.self, forKey: .status)
+            rosterLane = try c.decodeIfPresent(String.self, forKey: .rosterLane)
+            title = try c.decodeIfPresent(String.self, forKey: .title)
+            owns = try c.decodeIfPresent([String].self, forKey: .owns) ?? []
+            protectedDomains = try c.decodeIfPresent([String].self, forKey: .protectedDomains) ?? []
+        }
+    }
+
+    struct LockerTools: Decodable, Hashable {
+        let available: [LockerTool]
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            available = try c.decodeIfPresent([LockerTool].self, forKey: .available) ?? []
+        }
+
+        enum CodingKeys: String, CodingKey { case available }
+
+        struct LockerTool: Decodable, Hashable, Identifiable {
+            let label: String?
+            let endpoint: String?
+            let mode: String?
+            var id: String { label ?? endpoint ?? UUID().uuidString }
+        }
     }
 
     struct StartHere: Decodable, Hashable {

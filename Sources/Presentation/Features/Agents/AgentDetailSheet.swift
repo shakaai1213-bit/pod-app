@@ -37,7 +37,7 @@ struct AgentDetailSheet: View {
     @State private var lockerFeedbackAttachSnapshot: Bool = false
     @State private var isPostingLockerFeedback = false
     @State private var lockerFeedbackMessage: String?
-    @State private var selectedLockerTab: AgentLockerTab = .classroom
+    @State private var selectedLockerTab: AgentLockerTab = .card
     @State private var memoryCandidateNote = ""
     @State private var isPostingMemoryCandidate = false
     @State private var memoryCandidateMessage: String?
@@ -595,6 +595,8 @@ struct AgentDetailSheet: View {
                         .pickerStyle(.segmented)
 
                         switch selectedLockerTab {
+                        case .card:
+                            lockerCardTab(locker)
                         case .classroom:
                             lockerClassroomTab(locker)
                         case .planner:
@@ -661,6 +663,190 @@ struct AgentDetailSheet: View {
                 activationMetric("Blocked", value: "\(locker.planner.counts.blocked)", icon: "lock.fill", color: locker.planner.counts.blocked > 0 ? AppColors.accentWarning : AppColors.textTertiary)
                 activationMetric("Inbox", value: "\(locker.inbox.actionCount)", icon: "tray.full.fill", color: locker.inbox.actionCount > 0 ? AppColors.accentElectric : AppColors.textTertiary)
             }
+        }
+    }
+
+    // MARK: - Report Card Tab (M1 — SPEC-AGENT-LOCKER-REPORT-CARD)
+
+    private func lockerCardTab(_ locker: AgentLockerDTO) -> some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            // Identity
+            if let profile = locker.agentProfile {
+                VStack(alignment: .leading, spacing: Theme.xs) {
+                    Text("Identity")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppColors.textTertiary)
+
+                    HStack(spacing: Theme.xs) {
+                        Label(profile.title ?? agent.role, systemImage: "person.crop.circle.badge.checkmark")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppColors.accentElectric)
+                        Spacer()
+                        let lane = profile.rosterLane?.replacingOccurrences(of: "_", with: " ") ?? "unknown"
+                        Text(lane)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(AppColors.accentAgent)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(AppColors.accentAgent.opacity(0.12))
+                            .clipShape(Capsule())
+                    }
+
+                    if !profile.owns.isEmpty {
+                        AgentDetailFlowLayout(spacing: Theme.xs) {
+                            ForEach(profile.owns, id: \.self) { domain in
+                                Text(domain.replacingOccurrences(of: "_", with: " "))
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(AppColors.textPrimary)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(AppColors.backgroundTertiary)
+                                    .clipShape(Capsule())
+                            }
+                        }
+                    }
+
+                    if !profile.protectedDomains.isEmpty {
+                        Label("Protected: \(profile.protectedDomains.joined(separator: ", "))", systemImage: "lock.shield.fill")
+                            .font(.caption2)
+                            .foregroundStyle(AppColors.accentWarning)
+                    }
+                }
+                .padding(Theme.sm)
+                .background(AppColors.backgroundTertiary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+            }
+
+            // Tools
+            if let tools = locker.tools, !tools.available.isEmpty {
+                VStack(alignment: .leading, spacing: Theme.xs) {
+                    Text("Tools")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppColors.textTertiary)
+
+                    ForEach(tools.available.prefix(8)) { tool in
+                        HStack(spacing: Theme.xs) {
+                            Image(systemName: toolModeIcon(tool.mode))
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(toolModeColor(tool.mode))
+                                .frame(width: 16)
+                            Text(tool.label ?? tool.endpoint ?? "tool")
+                                .font(.caption)
+                                .foregroundStyle(AppColors.textSecondary)
+                                .lineLimit(1)
+                            Spacer()
+                            if let mode = tool.mode?.replacingOccurrences(of: "_", with: " ") {
+                                Text(mode)
+                                    .font(.caption2)
+                                    .foregroundStyle(AppColors.textTertiary)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+                .padding(Theme.sm)
+                .background(AppColors.backgroundTertiary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+            }
+
+            // Compliance / Guardrails
+            if !locker.guardrails.isEmpty {
+                VStack(alignment: .leading, spacing: Theme.xs) {
+                    Text("Compliance")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppColors.textTertiary)
+
+                    ForEach(locker.guardrails.prefix(5), id: \.self) { g in
+                        Label(g, systemImage: "lock.shield.fill")
+                            .font(.caption2)
+                            .foregroundStyle(AppColors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(Theme.sm)
+                .background(AppColors.backgroundTertiary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+            }
+
+            // How I'm doing
+            VStack(alignment: .leading, spacing: Theme.xs) {
+                Text("How I'm Doing")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.textTertiary)
+
+                let now = locker.planner.counts.now
+                let blocked = locker.planner.counts.blocked
+                let review = locker.planner.counts.review
+                let inbox = locker.inbox.actionCount
+
+                HStack(spacing: Theme.xs) {
+                    reportCardMetric("Now", value: now, warn: now > 0)
+                    reportCardMetric("Blocked", value: blocked, warn: blocked > 0)
+                    reportCardMetric("Review", value: review, warn: review > 0)
+                    reportCardMetric("Inbox", value: inbox, warn: inbox > 0)
+                }
+
+                if let currentWork = locker.heartbeat.currentWork, !currentWork.isEmpty {
+                    Text(currentWork)
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(Theme.sm)
+            .background(AppColors.backgroundTertiary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+
+            // Gaps
+            if !locker.gaps.isEmpty {
+                VStack(alignment: .leading, spacing: Theme.xs) {
+                    Label("Gaps (\(locker.gaps.count))", systemImage: "exclamationmark.triangle")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppColors.accentWarning)
+
+                    ForEach(locker.gaps.prefix(4), id: \.self) { gap in
+                        Text(gap)
+                            .font(.caption2)
+                            .foregroundStyle(AppColors.accentWarning.opacity(0.8))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(Theme.sm)
+                .background(AppColors.accentWarning.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+            }
+        }
+    }
+
+    private func reportCardMetric(_ label: String, value: Int, warn: Bool) -> some View {
+        VStack(alignment: .center, spacing: 2) {
+            Text("\(value)")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(warn ? AppColors.accentWarning : AppColors.accentSuccess)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(AppColors.textTertiary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Theme.xxs)
+    }
+
+    private func toolModeIcon(_ mode: String?) -> String {
+        switch mode {
+        case "read_only": return "eye.fill"
+        case "explicit_mutation_required": return "pencil.circle.fill"
+        case "protected": return "lock.fill"
+        default: return "wrench.fill"
+        }
+    }
+
+    private func toolModeColor(_ mode: String?) -> Color {
+        switch mode {
+        case "read_only": return AppColors.accentSuccess
+        case "explicit_mutation_required": return AppColors.accentElectric
+        case "protected": return AppColors.accentWarning
+        default: return AppColors.textTertiary
         }
     }
 
@@ -2057,6 +2243,7 @@ private struct AgentLockerActionResultDTO: Decodable {
 }
 
 private enum AgentLockerTab: String, CaseIterable, Identifiable {
+    case card = "Card"
     case classroom = "Classroom"
     case planner = "Planner"
     case inbox = "Inbox"
