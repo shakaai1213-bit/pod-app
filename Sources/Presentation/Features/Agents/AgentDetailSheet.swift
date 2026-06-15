@@ -597,6 +597,8 @@ struct AgentDetailSheet: View {
                         switch selectedLockerTab {
                         case .card:
                             lockerCardTab(locker)
+                        case .dashboard:
+                            lockerRoleDashboardTab(locker)
                         case .classroom:
                             lockerClassroomTab(locker)
                         case .planner:
@@ -1140,6 +1142,140 @@ struct AgentDetailSheet: View {
 
     private func lockerAttentionCount(_ locker: AgentLockerDTO) -> Int {
         locker.planner.counts.now + locker.planner.counts.blocked + locker.planner.counts.review + locker.inbox.actionCount
+    }
+
+    private func lockerRoleDashboardTab(_ locker: AgentLockerDTO) -> some View {
+        let activeDashboards = locker.dashboards.filter { $0.status != "approval_required" }
+        let protectedDashboards = locker.dashboards.filter { $0.status == "approval_required" }
+        return VStack(alignment: .leading, spacing: Theme.md) {
+            if activeDashboards.isEmpty && protectedDashboards.isEmpty {
+                lockerEmptyText("No role dashboards registered for this agent.")
+            }
+            ForEach(activeDashboards) { dash in
+                VStack(alignment: .leading, spacing: Theme.sm) {
+                    HStack(spacing: Theme.xs) {
+                        Image(systemName: "rectangle.3.group.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppColors.accentAgent)
+                        Text(dash.title ?? dash.id)
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(AppColors.textPrimary)
+                        Spacer()
+                        Text("WIRED")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundStyle(AppColors.accentSuccess)
+                            .tracking(0.5)
+                    }
+                    if let summary = dash.summary {
+                        Text(summary)
+                            .font(.caption)
+                            .foregroundStyle(AppColors.textSecondary)
+                    }
+                    if !dash.cards.isEmpty {
+                        VStack(spacing: Theme.xxs) {
+                            ForEach(dash.cards) { card in
+                                roleDashboardCardRow(card)
+                            }
+                        }
+                    } else {
+                        Text("No active items.")
+                            .font(.caption)
+                            .foregroundStyle(AppColors.textTertiary)
+                            .italic()
+                    }
+                }
+                .padding(Theme.sm)
+                .background(AppColors.backgroundSecondary)
+                .overlay(RoundedRectangle(cornerRadius: Theme.radiusSmall).stroke(AppColors.border, lineWidth: 0.5))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+            }
+            ForEach(protectedDashboards) { dash in
+                HStack(spacing: Theme.xs) {
+                    Image(systemName: "lock.shield.fill")
+                        .font(.caption)
+                        .foregroundStyle(AppColors.accentWarning)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(dash.title ?? dash.id)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppColors.textPrimary)
+                        Text("Requires Rooster review")
+                            .font(.caption2)
+                            .foregroundStyle(AppColors.textTertiary)
+                    }
+                    Spacer()
+                    Text("PROTECTED")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundStyle(AppColors.accentWarning)
+                        .tracking(0.5)
+                }
+                .padding(Theme.sm)
+                .background(AppColors.accentWarning.opacity(0.06))
+                .overlay(RoundedRectangle(cornerRadius: Theme.radiusSmall).stroke(AppColors.accentWarning.opacity(0.3), lineWidth: 0.5))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func roleDashboardCardRow(_ card: AgentLockerDTO.DashboardCard) -> some View {
+        HStack(spacing: Theme.xs) {
+            Image(systemName: statusIcon(card.status ?? "open"))
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(statusColor(card.status ?? "open"))
+                .frame(width: 16)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(card.title ?? card.id)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(AppColors.textPrimary)
+                    .lineLimit(2)
+                if let priority = card.priority {
+                    Text(priority.uppercased())
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(priorityColor(priority))
+                }
+            }
+            Spacer(minLength: Theme.xs)
+            if let status = card.status {
+                Text(status.replacingOccurrences(of: "_", with: " ").uppercased())
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundStyle(statusColor(status))
+                    .tracking(0.3)
+            }
+        }
+        .padding(.horizontal, Theme.sm)
+        .padding(.vertical, Theme.xs)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+
+    private func statusIcon(_ status: String) -> String {
+        switch status {
+        case "open": return "circle"
+        case "in_progress": return "arrow.trianglehead.clockwise"
+        case "claimed": return "hand.raised.fill"
+        case "blocked": return "exclamationmark.triangle.fill"
+        case "closed": return "checkmark.circle.fill"
+        default: return "circle.dotted"
+        }
+    }
+
+    private func statusColor(_ status: String) -> Color {
+        switch status {
+        case "open": return AppColors.textTertiary
+        case "in_progress", "claimed": return AppColors.accentWarning
+        case "closed": return AppColors.accentSuccess
+        case "blocked": return AppColors.accentDanger
+        default: return AppColors.textTertiary
+        }
+    }
+
+    private func priorityColor(_ priority: String) -> Color {
+        switch priority {
+        case "urgent": return AppColors.accentDanger
+        case "high": return AppColors.accentWarning
+        case "medium": return AppColors.accentElectric
+        default: return AppColors.textTertiary
+        }
     }
 
     private func lockerDashboardList(_ dashboards: [AgentLockerDTO.Dashboard]) -> some View {
@@ -2244,6 +2380,7 @@ private struct AgentLockerActionResultDTO: Decodable {
 
 private enum AgentLockerTab: String, CaseIterable, Identifiable {
     case card = "Card"
+    case dashboard = "Dashboard"
     case classroom = "Classroom"
     case planner = "Planner"
     case inbox = "Inbox"

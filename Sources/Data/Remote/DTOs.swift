@@ -777,6 +777,25 @@ struct AgentLockerDTO: Decodable, Hashable {
         }
     }
 
+    struct DashboardCard: Decodable, Hashable, Identifiable {
+        let type: String?
+        let id: String
+        let title: String?
+        let status: String?
+        let priority: String?
+
+        enum CodingKeys: String, CodingKey { case type, id, title, status, priority }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            type = try? c.decodeIfPresent(String.self, forKey: .type)
+            id = (try? c.decodeIfPresent(String.self, forKey: .id)) ?? UUID().uuidString
+            title = try? c.decodeIfPresent(String.self, forKey: .title)
+            status = try? c.decodeIfPresent(String.self, forKey: .status)
+            priority = try? c.decodeIfPresent(String.self, forKey: .priority)
+        }
+    }
+
     struct Dashboard: Decodable, Hashable, Identifiable {
         let id: String
         let title: String?
@@ -784,7 +803,7 @@ struct AgentLockerDTO: Decodable, Hashable {
         let status: String?
         let summary: String?
         let previewAvailable: Bool?
-        let cards: [String]
+        let cards: [DashboardCard]
         let actions: [String]
 
         enum CodingKeys: String, CodingKey {
@@ -800,7 +819,7 @@ struct AgentLockerDTO: Decodable, Hashable {
             status = try container.decodeIfPresent(String.self, forKey: .status)
             summary = try container.decodeIfPresent(String.self, forKey: .summary)
             previewAvailable = try container.decodeIfPresent(Bool.self, forKey: .previewAvailable)
-            cards = (try? container.decodeIfPresent([String].self, forKey: .cards)) ?? []
+            cards = (try? container.decodeIfPresent([DashboardCard].self, forKey: .cards)) ?? []
             actions = (try? container.decodeIfPresent([String].self, forKey: .actions)) ?? []
         }
     }
