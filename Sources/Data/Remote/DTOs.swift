@@ -624,22 +624,21 @@ struct AgentLockerDTO: Decodable, Hashable {
             let timestamp: String?
             let classification: String?
             let source: String?
-            let preview: String?
-            let body: String?
             let bodyAvailable: Bool?
             let bodyUnavailableReason: String?
             let stale: Bool?
             let handled: Bool?
+            let actionRequired: Bool?
             let replyLane: String?
             let sourceRefs: [String: String?]
 
-            var stableId: String { id ?? preview ?? "thread" }
-            var safeBody: String? { body ?? preview }
+            var stableId: String { id ?? sender ?? "thread" }
 
             enum CodingKeys: String, CodingKey {
-                case id, sender, timestamp, classification, source, preview, body, stale, handled
+                case id, sender, timestamp, classification, source, stale, handled
                 case bodyAvailable = "body_available"
                 case bodyUnavailableReason = "body_unavailable_reason"
+                case actionRequired = "action_required"
                 case replyLane = "reply_lane"
                 case sourceRefs = "source_refs"
             }

@@ -698,13 +698,15 @@ struct AgentDetailSheet: View {
     private func lockerInboxTab(_ locker: AgentLockerDTO) -> some View {
         VStack(alignment: .leading, spacing: Theme.sm) {
             HStack(spacing: Theme.sm) {
-                Label("\(locker.inbox.actionCount) action", systemImage: "tray.full.fill")
+                Label("\(locker.inbox.actionCount) need action", systemImage: "tray.full.fill")
                     .font(.caption)
-                    .foregroundStyle(AppColors.textSecondary)
-                Label("\(locker.inbox.bodyGapCount) body gaps", systemImage: locker.inbox.bodyGapCount > 0 ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                    .foregroundStyle(locker.inbox.actionCount > 0 ? AppColors.accentWarning : AppColors.textSecondary)
+                Label("\(locker.inbox.staleCount) stale", systemImage: "timer")
                     .font(.caption)
-                    .foregroundStyle(locker.inbox.bodyGapCount > 0 ? AppColors.accentWarning : AppColors.accentSuccess)
+                    .foregroundStyle(locker.inbox.staleCount > 0 ? AppColors.accentWarning : AppColors.textTertiary)
                 Spacer()
+                Text("metadata only")
+                    .podTextStyle(.label, color: AppColors.textMuted)
             }
 
             if locker.inbox.threads.isEmpty {
@@ -1006,6 +1008,12 @@ struct AgentDetailSheet: View {
                 }
             }
 
+            if let ticketId = item.ticketId ?? item.id, !ticketId.isEmpty {
+                Text(String(ticketId.prefix(8)))
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(AppColors.textMuted)
+            }
+
             lockerText(item.nextAction ?? item.whyShown, fallback: "No next action returned.")
 
             HStack(spacing: Theme.xs) {
@@ -1029,6 +1037,11 @@ struct AgentDetailSheet: View {
     private func lockerThreadRow(_ thread: AgentLockerDTO.Inbox.Thread) -> some View {
         VStack(alignment: .leading, spacing: Theme.xxs) {
             HStack(spacing: Theme.xs) {
+                if thread.actionRequired == true {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(AppColors.accentWarning)
+                }
                 Text(thread.sender ?? "Unknown sender")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(AppColors.textPrimary)
@@ -1037,15 +1050,6 @@ struct AgentDetailSheet: View {
                     Text(classification.replacingOccurrences(of: "_", with: " "))
                         .podTextStyle(.label, color: AppColors.textTertiary)
                 }
-            }
-
-            lockerText(thread.safeBody, fallback: thread.bodyUnavailableReason ?? "Body unavailable; no safe preview returned.")
-
-            if thread.bodyAvailable == false, let reason = thread.bodyUnavailableReason {
-                Label(reason, systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
-                    .foregroundStyle(AppColors.accentWarning)
-                    .fixedSize(horizontal: false, vertical: true)
             }
 
             HStack(spacing: Theme.xs) {
@@ -1058,12 +1062,9 @@ struct AgentDetailSheet: View {
                 if thread.stale == true {
                     workNoteChip("stale", icon: "timer")
                 }
-            }
-
-            if !thread.sourceRefs.isEmpty {
-                Text(thread.sourceRefs.compactMap { key, value in value.map { "\(key): \($0)" } }.joined(separator: "  "))
-                    .podTextStyle(.label, color: AppColors.textTertiary)
-                    .lineLimit(2)
+                if thread.handled == true {
+                    workNoteChip("handled", icon: "checkmark.circle")
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
