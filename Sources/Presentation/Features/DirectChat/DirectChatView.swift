@@ -105,7 +105,7 @@ struct DirectChatView: View {
                 } label: {
                     Image(systemName: "waveform.path.ecg")
                 }
-                .accessibilityLabel("Open Sonar diagnostics")
+                .accessibilityLabel("Open Playground diagnostics")
 
                 Button {
                     viewModel.refreshSonarSurface()
@@ -113,7 +113,7 @@ struct DirectChatView: View {
                     Image(systemName: "arrow.clockwise")
                 }
                 .disabled(viewModel.isLoadingRooms || viewModel.isLoadingSonarHealth)
-                .accessibilityLabel("Refresh Sonar")
+                .accessibilityLabel("Refresh Playground")
             }
         }
         .navigationDestination(for: AgentInfo.self) { agent in
@@ -345,11 +345,11 @@ private struct SonarDiagnosticsSheet: View {
                     Button {
                         viewModel.refreshSonarSurface()
                     } label: {
-                        Label("Refresh Sonar surface", systemImage: "arrow.clockwise")
+                        Label("Refresh Playground surface", systemImage: "arrow.clockwise")
                     }
                 }
             }
-            .navigationTitle("Sonar Diagnostics")
+            .navigationTitle("Playground Diagnostics")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -482,7 +482,7 @@ private struct SonarSurfaceHeader: View {
                 HStack(spacing: 8) {
                     ProgressView()
                         .scaleEffect(0.70)
-                    Text("Checking Sonar health")
+                    Text("Checking Playground health")
                         .font(.caption2)
                         .foregroundStyle(AppColors.textTertiary)
                 }
@@ -507,7 +507,7 @@ private struct SonarSurfaceHeader: View {
         guard let health else {
             return isLoading ? "Checking health" : "Health unknown"
         }
-        return "Sonar \(health.displayStatus)"
+        return "Playground \(health.displayStatus)"
     }
 
     private var healthIcon: String {
@@ -2082,7 +2082,7 @@ struct ConversationView: View {
                                 selectedEvidenceMessage = message
                             }
                             .id(message.id)
-                            .accessibilityHint("Open Sonar evidence for this message.")
+                            .accessibilityHint("Open Playground evidence for this message.")
                         }
                     }
                     .padding(.horizontal, 16)
@@ -3522,7 +3522,7 @@ private struct SonarEvidenceDrawer: View {
                 .padding(16)
             }
             .background(AppColors.backgroundPrimary)
-            .navigationTitle("Sonar Evidence")
+            .navigationTitle("Playground Evidence")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
