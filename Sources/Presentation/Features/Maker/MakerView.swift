@@ -1,7 +1,14 @@
 import SwiftUI
 import PhotosUI
 
-// MARK: - Models
+// MARK: - Mode
+
+private enum MakerMode: String, CaseIterable {
+    case image = "Image"
+    case idea  = "Idea"
+}
+
+// MARK: - Image Models
 
 private struct MakerTransformRequest: Encodable {
     let imageB64: String
@@ -29,17 +36,42 @@ private struct MakerTransformResponse: Decodable {
     }
 }
 
+// MARK: - Idea Models
+
+private struct IdeaIntakeRequest: Encodable {
+    let kind: String
+    let title: String
+    let summary: String?
+    let source: String
+    let ownerLane: String
+    let riskLevel: String
+    let provenance: [String: String]
+
+    enum CodingKeys: String, CodingKey {
+        case kind, title, summary, source, provenance
+        case ownerLane  = "owner_lane"
+        case riskLevel  = "risk_level"
+    }
+}
+
+private struct IdeaIntakeResponse: Decodable {
+    let id: String
+    let kind: String
+    let status: String
+}
+
 // MARK: - ViewModel
 
 @Observable
 @MainActor
 final class MakerViewModel {
+    // Image mode
     var pickerItem: PhotosPickerItem?
     var sourceImage: UIImage?
     var resultImage: UIImage?
     var instruction: String = ""
     var isTransforming = false
-    var errorMessage: String?
+    var imageError: String?
     var promptUsed: String?
     var generationTimeMs: Int?
 
@@ -47,14 +79,28 @@ final class MakerViewModel {
         sourceImage != nil && !instruction.trimmingCharacters(in: .whitespaces).isEmpty && !isTransforming
     }
 
+    // Idea mode
+    var ideaTitle: String = ""
+    var ideaNote: String = ""
+    var ideaHint: String = ""
+    var isSubmittingIdea = false
+    var ideaSubmitMessage: String?
+    var ideaError: String?
+
+    var canSubmitIdea: Bool {
+        !ideaTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSubmittingIdea
+    }
+
+    // MARK: Image
+
     func loadPickedItem() async {
         guard let item = pickerItem else { return }
         resultImage = nil
-        errorMessage = nil
+        imageError = nil
         promptUsed = nil
         guard let data = try? await item.loadTransferable(type: Data.self),
               let image = UIImage(data: data) else {
-            errorMessage = "Couldn't load image."
+            imageError = "Couldn't load image."
             return
         }
         sourceImage = image
@@ -66,47 +112,95 @@ final class MakerViewModel {
         guard !text.isEmpty else { return }
 
         isTransforming = true
-        errorMessage = nil
+        imageError = nil
         resultImage = nil
         promptUsed = nil
         generationTimeMs = nil
         defer { isTransforming = false }
 
-        // Encode image as JPEG (smaller than PNG for photos)
         guard let jpeg = source.jpegData(compressionQuality: 0.82) else {
-            errorMessage = "Couldn't encode image."
+            imageError = "Couldn't encode image."
             return
         }
         let b64 = jpeg.base64EncodedString()
-
         let body = MakerTransformRequest(imageB64: b64, instruction: text, width: 512, height: 512)
 
         do {
             let response: MakerTransformResponse = try await makerPost(body: body)
             guard let resultData = Data(base64Encoded: response.resultImageB64),
                   let img = UIImage(data: resultData) else {
-                errorMessage = "Backend returned unreadable image."
+                imageError = "Backend returned unreadable image."
                 return
             }
             resultImage = img
             promptUsed = response.promptUsed
             generationTimeMs = response.generationTimeMs
         } catch {
-            errorMessage = error.localizedDescription
+            imageError = error.localizedDescription
         }
     }
 
-    func reset() {
+    func resetImage() {
         pickerItem = nil
         sourceImage = nil
         resultImage = nil
         instruction = ""
-        errorMessage = nil
+        imageError = nil
         promptUsed = nil
         generationTimeMs = nil
     }
 
-    // MARK: - Private: direct URLRequest with 100s timeout
+    // MARK: Idea
+
+    func submitIdea() async {
+        let title = ideaTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
+
+        isSubmittingIdea = true
+        ideaError = nil
+        ideaSubmitMessage = nil
+        defer { isSubmittingIdea = false }
+
+        var provenance: [String: String] = ["submitted_via": "pod.maker.idea"]
+        let hint = ideaHint.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !hint.isEmpty { provenance["hint"] = hint }
+
+        let note = ideaNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        let summary = note.isEmpty ? nil : note
+
+        let body = IdeaIntakeRequest(
+            kind: "idea_intake",
+            title: title,
+            summary: summary,
+            source: "pod.maker.idea",
+            ownerLane: "backbone",
+            riskLevel: "low",
+            provenance: provenance
+        )
+
+        do {
+            let response: IdeaIntakeResponse = try await APIClient.shared.post(
+                path: "/api/v1/schoolhouse/suggestions",
+                body: body
+            )
+            ideaSubmitMessage = "Idea queued — ID \(String(response.id.prefix(8))). Team picks it up next cycle."
+            ideaTitle = ""
+            ideaNote = ""
+            ideaHint = ""
+        } catch {
+            ideaError = error.localizedDescription
+        }
+    }
+
+    func resetIdea() {
+        ideaTitle = ""
+        ideaNote = ""
+        ideaHint = ""
+        ideaError = nil
+        ideaSubmitMessage = nil
+    }
+
+    // MARK: Private
 
     private func makerPost<T: Decodable>(body: some Encodable) async throws -> T {
         let token = await APIClient.shared.currentToken()
@@ -121,16 +215,13 @@ final class MakerViewModel {
         if let token {
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
-        let encoder = JSONEncoder()
-        req.httpBody = try encoder.encode(body)
-
+        req.httpBody = try JSONEncoder().encode(body)
         let (data, response) = try await URLSession.shared.data(for: req)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             let body = String(data: data.prefix(400), encoding: .utf8) ?? "no body"
             throw URLError(.badServerResponse, userInfo: [NSLocalizedDescriptionKey: "HTTP \(http.statusCode): \(body)"])
         }
-        let decoder = JSONDecoder()
-        return try decoder.decode(T.self, from: data)
+        return try JSONDecoder().decode(T.self, from: data)
     }
 }
 
@@ -138,22 +229,17 @@ final class MakerViewModel {
 
 struct MakerView: View {
     @State private var model = MakerViewModel()
+    @State private var mode: MakerMode = .idea
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.lg) {
-                    header
-                    imageSection
-                    if model.sourceImage != nil {
-                        instructionSection
-                        transformButton
-                    }
-                    if let error = model.errorMessage {
-                        errorBanner(error)
-                    }
-                    if model.resultImage != nil {
-                        resultSection
+                    modePicker
+                    if mode == .image {
+                        imageContent
+                    } else {
+                        ideaContent
                     }
                 }
                 .padding(.horizontal, Theme.md)
@@ -163,33 +249,62 @@ struct MakerView: View {
             .background(AppColors.backgroundPrimary)
             .navigationTitle("Maker")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                if model.sourceImage != nil || model.resultImage != nil {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button("Reset") { model.reset() }
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(AppColors.textSecondary)
-                    }
-                }
-            }
+            .toolbar { toolbarContent }
         }
         .onChange(of: model.pickerItem) { _, _ in
             Task { await model.loadPickedItem() }
         }
     }
 
-    // MARK: - Header
+    // MARK: - Mode Picker
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Maker")
-                .podTextStyle(.title1, color: AppColors.textPrimary)
-            Text("Pick an image, give an instruction, transform it locally via SDXL Turbo.")
-                .podTextStyle(.body, color: AppColors.textSecondary)
+    private var modePicker: some View {
+        Picker("Mode", selection: $mode) {
+            ForEach(MakerMode.allCases, id: \.self) { m in
+                Text(m.rawValue).tag(m)
+            }
+        }
+        .pickerStyle(.segmented)
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        if mode == .image && (model.sourceImage != nil || model.resultImage != nil) {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button("Reset") { model.resetImage() }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.textSecondary)
+            }
         }
     }
 
-    // MARK: - Image Section
+    // MARK: - Image Mode
+
+    private var imageContent: some View {
+        VStack(alignment: .leading, spacing: Theme.lg) {
+            imageHeader
+            imageSection
+            if model.sourceImage != nil {
+                instructionSection
+                transformButton
+            }
+            if let error = model.imageError {
+                errorBanner(error)
+            }
+            if model.resultImage != nil {
+                resultSection
+            }
+        }
+    }
+
+    private var imageHeader: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Image Maker")
+                .podTextStyle(.title1, color: AppColors.textPrimary)
+            Text("Pick an image, give an instruction, transform it via SDXL Turbo.")
+                .podTextStyle(.body, color: AppColors.textSecondary)
+        }
+    }
 
     private var imageSection: some View {
         VStack(alignment: .leading, spacing: Theme.sm) {
@@ -242,8 +357,6 @@ struct MakerView: View {
         )
     }
 
-    // MARK: - Instruction Section
-
     private var instructionSection: some View {
         VStack(alignment: .leading, spacing: Theme.sm) {
             Text("INSTRUCTION")
@@ -263,26 +376,17 @@ struct MakerView: View {
         }
     }
 
-    // MARK: - Transform Button
-
     private var transformButton: some View {
         Button {
             Task { await model.transform() }
         } label: {
             HStack(spacing: Theme.sm) {
                 if model.isTransforming {
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                        .tint(.white)
-                        .scaleEffect(0.85)
-                    Text("Transforming…")
-                        .font(.body.bold())
-                        .foregroundStyle(.white)
+                    ProgressView().progressViewStyle(.circular).tint(.white).scaleEffect(0.85)
+                    Text("Transforming…").font(.body.bold()).foregroundStyle(.white)
                 } else {
-                    Image(systemName: "wand.and.sparkles")
-                        .font(.system(size: 16, weight: .semibold))
-                    Text("Transform")
-                        .font(.body.bold())
+                    Image(systemName: "wand.and.sparkles").font(.system(size: 16, weight: .semibold))
+                    Text("Transform").font(.body.bold())
                 }
             }
             .foregroundStyle(.white)
@@ -296,39 +400,13 @@ struct MakerView: View {
         .animation(.easeInOut(duration: 0.2), value: model.isTransforming)
     }
 
-    // MARK: - Error Banner
-
-    private func errorBanner(_ message: String) -> some View {
-        HStack(alignment: .top, spacing: Theme.sm) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(AppColors.accentDanger)
-                .padding(.top, 1)
-            Text(message)
-                .podTextStyle(.caption, color: AppColors.textSecondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(Theme.sm)
-        .background(AppColors.accentDanger.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.radiusMedium)
-                .strokeBorder(AppColors.accentDanger.opacity(0.25), lineWidth: 1)
-        )
-    }
-
-    // MARK: - Result Section
-
     private var resultSection: some View {
         VStack(alignment: .leading, spacing: Theme.sm) {
             HStack {
-                Text("RESULT")
-                    .podTextStyle(.label, color: AppColors.textTertiary)
+                Text("RESULT").podTextStyle(.label, color: AppColors.textTertiary)
                 Spacer()
                 if let ms = model.generationTimeMs {
-                    Text("\(ms)ms")
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(AppColors.textTertiary)
+                    Text("\(ms)ms").font(.caption2.monospacedDigit()).foregroundStyle(AppColors.textTertiary)
                 }
             }
 
@@ -353,10 +431,8 @@ struct MakerView: View {
 
             if let prompt = model.promptUsed {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("PROMPT USED")
-                        .podTextStyle(.label, color: AppColors.textTertiary)
-                    Text(prompt)
-                        .podTextStyle(.caption, color: AppColors.textSecondary)
+                    Text("PROMPT USED").podTextStyle(.label, color: AppColors.textTertiary)
+                    Text(prompt).podTextStyle(.caption, color: AppColors.textSecondary)
                 }
                 .padding(Theme.sm)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -364,6 +440,167 @@ struct MakerView: View {
                 .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
             }
         }
+    }
+
+    // MARK: - Idea Mode
+
+    private var ideaContent: some View {
+        VStack(alignment: .leading, spacing: Theme.lg) {
+            ideaHeader
+            ideaTitleSection
+            ideaNoteSection
+            ideaHintSection
+            ideaSubmitButton
+            if let msg = model.ideaSubmitMessage {
+                successBanner(msg)
+            }
+            if let err = model.ideaError {
+                errorBanner(err)
+            }
+            ideaFooter
+        }
+    }
+
+    private var ideaHeader: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Idea Maker")
+                .podTextStyle(.title1, color: AppColors.textPrimary)
+            Text("Type a raw idea. The team pulls it apart — assessment, discovery, then a project and DDS draft if it's real.")
+                .podTextStyle(.body, color: AppColors.textSecondary)
+        }
+    }
+
+    private var ideaTitleSection: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            Text("IDEA")
+                .podTextStyle(.label, color: AppColors.textTertiary)
+
+            TextField("One-line: what's the idea?", text: $model.ideaTitle)
+                .padding(Theme.sm)
+                .background(AppColors.backgroundTertiary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                        .strokeBorder(model.ideaTitle.isEmpty ? AppColors.border : makerPurple.opacity(0.5), lineWidth: 1)
+                )
+                .foregroundStyle(AppColors.textPrimary)
+                .font(.body)
+        }
+    }
+
+    private var ideaNoteSection: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            Text("NOTES (optional)")
+                .podTextStyle(.label, color: AppColors.textTertiary)
+
+            TextField(
+                "Context, motivation, rough shape — anything that helps the team assess it.",
+                text: $model.ideaNote,
+                axis: .vertical
+            )
+            .lineLimit(4...8)
+            .padding(Theme.sm)
+            .background(AppColors.backgroundTertiary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                    .strokeBorder(model.ideaNote.isEmpty ? AppColors.border : makerPurple.opacity(0.3), lineWidth: 1)
+            )
+            .foregroundStyle(AppColors.textPrimary)
+            .font(.body)
+        }
+    }
+
+    private var ideaHintSection: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            Text("AREA HINT (optional)")
+                .podTextStyle(.label, color: AppColors.textTertiary)
+
+            TextField("e.g. pod, infrastructure, trading", text: $model.ideaHint)
+                .padding(Theme.sm)
+                .background(AppColors.backgroundTertiary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                        .strokeBorder(AppColors.border, lineWidth: 1)
+                )
+                .foregroundStyle(AppColors.textPrimary)
+                .font(.body)
+        }
+    }
+
+    private var ideaSubmitButton: some View {
+        Button {
+            Task { await model.submitIdea() }
+        } label: {
+            HStack(spacing: Theme.sm) {
+                if model.isSubmittingIdea {
+                    ProgressView().progressViewStyle(.circular).tint(.white).scaleEffect(0.85)
+                    Text("Queuing…").font(.body.bold()).foregroundStyle(.white)
+                } else {
+                    Image(systemName: "lightbulb.fill").font(.system(size: 16, weight: .semibold))
+                    Text("Queue Idea").font(.body.bold())
+                }
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, Theme.sm + 2)
+            .background(model.canSubmitIdea ? makerPurple : AppColors.backgroundTertiary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+        }
+        .buttonStyle(.plain)
+        .disabled(!model.canSubmitIdea)
+        .animation(.easeInOut(duration: 0.2), value: model.isSubmittingIdea)
+    }
+
+    private var ideaFooter: some View {
+        HStack(spacing: Theme.xs) {
+            Image(systemName: "arrow.triangle.branch")
+                .font(.caption2)
+                .foregroundStyle(AppColors.textMuted)
+            Text("Ideas land in the Work tab → Schoolhouse queue. The team assesses, develops scope, and builds a project if it's real.")
+                .podTextStyle(.label, color: AppColors.textMuted)
+        }
+    }
+
+    // MARK: - Shared Banners
+
+    private func errorBanner(_ message: String) -> some View {
+        HStack(alignment: .top, spacing: Theme.sm) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppColors.accentDanger)
+                .padding(.top, 1)
+            Text(message)
+                .podTextStyle(.caption, color: AppColors.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(Theme.sm)
+        .background(AppColors.accentDanger.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                .strokeBorder(AppColors.accentDanger.opacity(0.25), lineWidth: 1)
+        )
+    }
+
+    private func successBanner(_ message: String) -> some View {
+        HStack(alignment: .top, spacing: Theme.sm) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppColors.accentSuccess)
+                .padding(.top, 1)
+            Text(message)
+                .podTextStyle(.caption, color: AppColors.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(Theme.sm)
+        .background(AppColors.accentSuccess.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                .strokeBorder(AppColors.accentSuccess.opacity(0.25), lineWidth: 1)
+        )
     }
 
     // MARK: - Style
