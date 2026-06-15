@@ -148,12 +148,14 @@ struct BoardDTO: Codable, Identifiable {
     let updatedAt: Date
     let taskCount: Int
     let completedTaskCount: Int
+    let boardGroupId: String?
 
     enum CodingKeys: String, CodingKey {
         case id, name, status, stage, taskCount, completedTaskCount
         case description = "objective"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case boardGroupId = "board_group_id"
     }
 
     init(from decoder: Decoder) throws {
@@ -167,6 +169,18 @@ struct BoardDTO: Codable, Identifiable {
         updatedAt = try c.decode(Date.self, forKey: .updatedAt)
         taskCount = try c.decodeIfPresent(Int.self, forKey: .taskCount) ?? 0
         completedTaskCount = try c.decodeIfPresent(Int.self, forKey: .completedTaskCount) ?? 0
+        boardGroupId = try c.decodeIfPresent(String.self, forKey: .boardGroupId)
+    }
+}
+
+struct BoardGroupDTO: Codable, Identifiable {
+    let id: String
+    let name: String
+    let slug: String
+    let description: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, slug, description
     }
 }
 

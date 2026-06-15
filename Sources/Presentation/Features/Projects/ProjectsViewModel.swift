@@ -75,53 +75,72 @@ final class ProjectsViewModel {
             errorMessage = nil
         }
 
-        // Try /api/v1/boards first (paginated). Falls back to /api/v1/projects/ (flat array) if it 500s.
-        var boards: [Board] = []
+        // Fetch board groups and boards in parallel, then group locally.
+        async let groupsTask = apiClient.get(path: "/api/v1/board-groups") as PaginatedResponse<BoardGroupDTO>
+        async let boardsTask = apiClient.get(path: "/api/v1/boards") as PaginatedResponse<BoardDTO>
 
-        if let response = try? await apiClient.get(path: "/api/v1/boards") as PaginatedResponse<BoardDTO> {
-            boards = response.items.map { dto in
-                Board(
-                    id: UUID(uuidString: dto.id) ?? UUID(),
-                    name: dto.name,
-                    description: dto.description ?? "",
-                    stageCounts: [:],
-                    taskCount: dto.taskCount,
-                    completedTaskCount: dto.completedTaskCount,
-                    lastActivity: dto.updatedAt
+        let groupDTOs = (try? await groupsTask)?.items ?? []
+        let boardDTOs = (try? await boardsTask)?.items ?? []
+
+        // Boards endpoint failed — fall back to projects API
+        if boardDTOs.isEmpty, let projects = try? await ProjectRepository().listProjects() {
+            let fallbackGroup = BoardGroup(
+                id: UUID(),
+                name: "All Projects",
+                boards: projects.map { dto in
+                    Board(id: dto.id, name: dto.name, description: dto.description ?? dto.goal ?? "",
+                          stageCounts: [:], taskCount: 0, completedTaskCount: 0, lastActivity: dto.updatedAt)
+                },
+                taskCount: 0, completedTaskCount: 0
+            )
+            await MainActor.run {
+                self.boardGroups = [fallbackGroup]
+                self.isLoading = false
+            }
+            return
+        }
+
+        // Group boards by board_group_id using the ordered groups from ORCA.
+        // If board-groups endpoint was unavailable, fall back to a single "All Projects" group.
+        let loadedGroups: [BoardGroup]
+        if groupDTOs.isEmpty {
+            let allBoards = boardDTOs.map { dto in
+                Board(id: UUID(uuidString: dto.id) ?? UUID(), name: dto.name,
+                      description: dto.description ?? "", stageCounts: [:],
+                      taskCount: dto.taskCount, completedTaskCount: dto.completedTaskCount,
+                      lastActivity: dto.updatedAt)
+            }
+            loadedGroups = allBoards.isEmpty ? [] : [
+                BoardGroup(id: UUID(), name: "All Projects", boards: allBoards,
+                           taskCount: allBoards.reduce(0) { $0 + $1.taskCount },
+                           completedTaskCount: allBoards.reduce(0) { $0 + $1.completedTaskCount })
+            ]
+        } else {
+            loadedGroups = groupDTOs.compactMap { groupDTO in
+                let groupBoards = boardDTOs
+                    .filter { $0.boardGroupId == groupDTO.id }
+                    .map { dto in
+                        Board(id: UUID(uuidString: dto.id) ?? UUID(), name: dto.name,
+                              description: dto.description ?? "", stageCounts: [:],
+                              taskCount: dto.taskCount, completedTaskCount: dto.completedTaskCount,
+                              lastActivity: dto.updatedAt)
+                    }
+                guard !groupBoards.isEmpty else { return nil }
+                return BoardGroup(
+                    id: UUID(uuidString: groupDTO.id) ?? UUID(),
+                    name: groupDTO.name,
+                    boards: groupBoards,
+                    taskCount: groupBoards.reduce(0) { $0 + $1.taskCount },
+                    completedTaskCount: groupBoards.reduce(0) { $0 + $1.completedTaskCount }
                 )
             }
         }
 
-        // Boards endpoint broken (500) — fall back to /api/v1/projects/
-        if boards.isEmpty, let projects = try? await ProjectRepository().listProjects() {
-            boards = projects.map { dto in
-                Board(
-                    id: dto.id,
-                    name: dto.name,
-                    description: dto.description ?? dto.goal ?? "",
-                    stageCounts: [:],
-                    taskCount: 0,
-                    completedTaskCount: 0,
-                    lastActivity: dto.updatedAt
-                )
-            }
-        }
-
-        let loadedBoards = boards
         await MainActor.run {
-            if !loadedBoards.isEmpty {
-                let group = BoardGroup(
-                    id: UUID(),
-                    name: "All Projects",
-                    boards: loadedBoards,
-                    taskCount: loadedBoards.reduce(0) { $0 + $1.taskCount },
-                    completedTaskCount: loadedBoards.reduce(0) { $0 + $1.completedTaskCount }
-                )
-                self.boardGroups = [group]
-            } else {
-                self.boardGroups = []
-                self.errorMessage = "ORCA boards/projects unavailable. Legacy Projects no longer falls back to mock boards."
+            if loadedGroups.isEmpty {
+                self.errorMessage = "ORCA boards/projects unavailable."
             }
+            self.boardGroups = loadedGroups
             self.isLoading = false
         }
     }
