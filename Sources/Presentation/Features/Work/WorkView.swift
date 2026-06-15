@@ -532,15 +532,19 @@ struct WorkView: View {
             provenance.append("snoozed \(snoozedUntil.formatted(date: .abbreviated, time: .shortened))")
         }
 
-        // For idea_intake suggestions, surface the cascade stage + assessment verdict
+        // For idea_intake suggestions, surface the cascade stage + best available detail
         var statusLine = "\(suggestion.riskLevel.uppercased()) · \(suggestion.status)"
         var detail = suggestion.summary
         if suggestion.isIdeaIntake {
             statusLine = suggestion.cascadeStageBadge
-            if let assessment = suggestion.provenance?["assessment"],
-               case let .object(obj) = assessment,
-               let rationale = obj["rationale"],
-               case let .string(text) = rationale, !text.isEmpty {
+            if let scope = suggestion.discoveryScope {
+                // project_ready: show the richer discovery scope
+                detail = scope
+            } else if let assessment = suggestion.provenance?["assessment"],
+                      case let .object(obj) = assessment,
+                      let rationale = obj["rationale"],
+                      case let .string(text) = rationale, !text.isEmpty {
+                // discovering / assessed: show assessment rationale
                 detail = text
             }
         }
@@ -2390,22 +2394,45 @@ struct SchoolhouseSuggestion: Decodable, Identifiable, Hashable {
 
     var cascadeStageBadge: String {
         switch cascadeStage {
-        case "assessing":     return "Assessment ↻"
-        case "assessed":      return "Assessed"
-        case "discovering":   return "Discovery ↻"
-        case "project_ready": return "Project-ready"
-        default:              return "Intake"
+        case "assessing":          return "Assessment ↻"
+        case "assessed":           return "Assessed"
+        case "discovering",
+             "discovering_active": return "Discovery ↻"
+        case "project_ready":
+            let effort = discoveryEffortSize
+            return effort.isEmpty ? "Project-ready" : "Project-ready · \(effort)"
+        default:                   return "Intake"
         }
     }
 
     var ideaStageColor: Color {
         switch cascadeStage {
-        case "discovering":   return AppColors.accentSuccess
-        case "project_ready": return AppColors.accentElectric
-        case "assessing":     return AppColors.accentWarning
-        case "assessed":      return AppColors.textSecondary
-        default:              return AppColors.textTertiary
+        case "discovering",
+             "discovering_active": return AppColors.accentSuccess
+        case "project_ready":      return AppColors.accentElectric
+        case "assessing":          return AppColors.accentWarning
+        case "assessed":           return AppColors.textSecondary
+        default:                   return AppColors.textTertiary
         }
+    }
+
+    var discoveryScope: String? {
+        guard let disc = provenance?["discovery"],
+              case let .object(obj) = disc,
+              let scopeVal = obj["scope"],
+              case let .string(text) = scopeVal, !text.isEmpty else { return nil }
+        return text
+    }
+
+    var discoveryEffortSize: String {
+        guard let disc = provenance?["discovery"],
+              case let .object(obj) = disc,
+              let effortVal = obj["effort_estimate"],
+              case let .string(text) = effortVal, !text.isEmpty else { return "" }
+        // Extract just the t-shirt size prefix (XS/S/M/L/XL) before the dash or space
+        let firstWord = text.split(separator: " ").first.map(String.init) ?? ""
+        let sizeLabels = ["XS", "S", "M", "L", "XL"]
+        return sizeLabels.contains(firstWord) ? firstWord : ""
     }
 
     var ticketPriority: String {
