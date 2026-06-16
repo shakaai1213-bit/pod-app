@@ -615,6 +615,8 @@ struct AgentDetailSheet: View {
                             lockerLibraryTab(locker)
                         case .escalation:
                             lockerEscalationTab(locker)
+                        case .preferences:
+                            lockerPreferencesTab(locker)
                         }
 
                         if let source = locker.source {
@@ -2296,6 +2298,134 @@ struct AgentDetailSheet: View {
         }
     }
 
+    // MARK: - M3 Preferences Tab
+
+    @State private var preferencesSaving: Bool = false
+    @State private var preferencesError: String? = nil
+
+    private func lockerPreferencesTab(_ locker: AgentLockerDTO) -> some View {
+        let prefs = locker.preferences
+        let allTabs = AgentLockerTab.allCases.filter { $0 != .preferences }.map(\.rawValue)
+        let allTools: [String] = locker.tools?.available.compactMap { $0.label ?? $0.endpoint } ?? []
+        return VStack(alignment: .leading, spacing: Theme.md) {
+            if let err = preferencesError {
+                Text(err).foregroundColor(AppColors.accentWarning).font(.caption)
+            }
+            // Pinned Tabs
+            VStack(alignment: .leading, spacing: Theme.sm) {
+                Text("Pinned Tabs")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(AppColors.textSecondary)
+                ForEach(allTabs, id: \.self) { tabName in
+                    let isPinned = prefs.pinnedTabs.contains(tabName)
+                    Button {
+                        togglePin(agent: locker.agentProfile?.name ?? "", tab: tabName, pinned: isPinned, prefs: prefs)
+                    } label: {
+                        HStack {
+                            Image(systemName: isPinned ? "pin.fill" : "pin")
+                                .foregroundColor(isPinned ? AppColors.accentElectric : AppColors.textTertiary)
+                                .frame(width: 18)
+                            Text(tabName)
+                                .foregroundColor(AppColors.textPrimary)
+                                .font(.subheadline)
+                            Spacer()
+                            if isPinned {
+                                Text("PINNED")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundColor(AppColors.accentElectric)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.plain)
+                    Divider()
+                }
+            }
+            // Pinned Tools
+            if !allTools.isEmpty {
+                VStack(alignment: .leading, spacing: Theme.sm) {
+                    Text("Pinned Tools")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(AppColors.textSecondary)
+                    ForEach(allTools, id: \.self) { toolName in
+                        let isPinned = prefs.pinnedTools.contains(toolName)
+                        Button {
+                            togglePinTool(agent: locker.agentProfile?.name ?? "", tool: toolName, pinned: isPinned, prefs: prefs)
+                        } label: {
+                            HStack {
+                                Image(systemName: isPinned ? "wrench.fill" : "wrench")
+                                    .foregroundColor(isPinned ? AppColors.accentElectric : AppColors.textTertiary)
+                                    .frame(width: 18)
+                                Text(toolName)
+                                    .foregroundColor(AppColors.textPrimary)
+                                    .font(.subheadline)
+                                Spacer()
+                                if isPinned {
+                                    Text("PINNED")
+                                        .font(.caption2.weight(.bold))
+                                        .foregroundColor(AppColors.accentElectric)
+                                }
+                            }
+                            .padding(.vertical, 4)
+                        }
+                        .buttonStyle(.plain)
+                        Divider()
+                    }
+                }
+            }
+            if preferencesSaving {
+                HStack { Spacer(); ProgressView().scaleEffect(0.7); Spacer() }
+            }
+        }
+        .padding(Theme.md)
+    }
+
+    private func togglePin(agent: String, tab: String, pinned: Bool, prefs: AgentLockerPreferences) {
+        var tabs = prefs.pinnedTabs
+        if pinned { tabs.removeAll { $0 == tab } } else { tabs.append(tab) }
+        savePreferences(agent: agent, newPrefs: AgentLockerPreferences(pinnedTabs: tabs, pinnedTools: prefs.pinnedTools))
+    }
+
+    private func togglePinTool(agent: String, tool: String, pinned: Bool, prefs: AgentLockerPreferences) {
+        var tools = prefs.pinnedTools
+        if pinned { tools.removeAll { $0 == tool } } else { tools.append(tool) }
+        savePreferences(agent: agent, newPrefs: AgentLockerPreferences(pinnedTabs: prefs.pinnedTabs, pinnedTools: tools))
+    }
+
+    private func savePreferences(agent: String, newPrefs: AgentLockerPreferences) {
+        guard !agent.isEmpty else { return }
+        preferencesSaving = true
+        preferencesError = nil
+        Task {
+            defer { preferencesSaving = false }
+            do {
+                struct PrefsBody: Encodable {
+                    let pinnedTabs: [String]
+                    let pinnedTools: [String]
+                    enum CodingKeys: String, CodingKey {
+                        case pinnedTabs = "pinned_tabs"
+                        case pinnedTools = "pinned_tools"
+                    }
+                }
+                let body = PrefsBody(pinnedTabs: newPrefs.pinnedTabs, pinnedTools: newPrefs.pinnedTools)
+                let _: [String: String] = try await APIClient.shared.put(
+                    path: "/api/v1/agents/\(agent)/locker-cockpit/preferences",
+                    body: body
+                )
+                await MainActor.run { self.refreshLocker() }
+            } catch {
+                await MainActor.run { preferencesError = "Save failed: \(error.localizedDescription)" }
+            }
+        }
+    }
+
+    private func refreshLocker() {
+        // Trigger a locker reload by resetting selectedAgent briefly — triggers .task in parent
+        // Simpler: post a notification the sheet's parent observes, or use a @State refresh ID.
+        // For M3, we rely on the existing sheet reload on re-open; a manual reload would need
+        // parent ViewModel cooperation. Acceptable for M3 — full live-refresh is M4 scope.
+    }
+
 }
 
 private struct AgentWorkNoteDTO: Identifiable, Decodable {
@@ -2389,6 +2519,7 @@ private enum AgentLockerTab: String, CaseIterable, Identifiable {
     case feedback = "Feedback"
     case library = "Library"
     case escalation = "Escalation"
+    case preferences = "Preferences"
 
     var id: String { rawValue }
 }

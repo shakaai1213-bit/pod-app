@@ -381,6 +381,24 @@ struct InboxTailDTO: Codable, Hashable {
 
 // MARK: - Agent Locker
 
+struct AgentLockerPreferences: Decodable, Hashable {
+    let pinnedTabs: [String]
+    let pinnedTools: [String]
+    enum CodingKeys: String, CodingKey {
+        case pinnedTabs = "pinned_tabs"
+        case pinnedTools = "pinned_tools"
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        pinnedTabs = (try? c.decodeIfPresent([String].self, forKey: .pinnedTabs)) ?? []
+        pinnedTools = (try? c.decodeIfPresent([String].self, forKey: .pinnedTools)) ?? []
+    }
+    init(pinnedTabs: [String] = [], pinnedTools: [String] = []) {
+        self.pinnedTabs = pinnedTabs
+        self.pinnedTools = pinnedTools
+    }
+}
+
 struct AgentLockerDTO: Decodable, Hashable {
     let schema: String?
     let source: String?
@@ -401,9 +419,10 @@ struct AgentLockerDTO: Decodable, Hashable {
     let feedback: Feedback
     let gaps: [String]
     let wakeMarkdown: String?
+    let preferences: AgentLockerPreferences
 
     enum CodingKeys: String, CodingKey {
-        case schema, source, planner, inbox, dashboards, feedback, gaps, heartbeat, library, escalation, guardrails
+        case schema, source, planner, inbox, dashboards, feedback, gaps, heartbeat, library, escalation, guardrails, preferences
         case generatedAt = "generated_at"
         case agentProfile = "agent"
         case tools
@@ -435,6 +454,7 @@ struct AgentLockerDTO: Decodable, Hashable {
         feedback = try container.decodeIfPresent(Feedback.self, forKey: .feedback) ?? Feedback()
         gaps = try container.decodeIfPresent([String].self, forKey: .gaps) ?? []
         wakeMarkdown = try container.decodeIfPresent(String.self, forKey: .wakeMarkdown)
+        preferences = (try? container.decodeIfPresent(AgentLockerPreferences.self, forKey: .preferences)) ?? AgentLockerPreferences()
     }
 
     // MARK: - Report Card types (M1 — identity, owns, tools, compliance)
