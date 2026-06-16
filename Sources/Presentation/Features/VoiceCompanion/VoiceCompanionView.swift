@@ -113,45 +113,89 @@ struct VoiceCompanionView: View {
             .padding(.vertical, 8)
     }
 
+    // Always-on-mic + mute-toggle room control (Tony 2026-06-16; push-to-talk
+    // retired). Disconnected: primary button joins. Connected: primary button
+    // mutes/unmutes the live mic; a separate End button leaves the call.
     private var voiceButtonView: some View {
-        Button {
-            Task { await viewModel.toggleRealtimeVoiceFromPrimaryButton() }
-        } label: {
-            ZStack {
-                if viewModel.isRealtimeConnected {
-                    Circle()
-                        .fill(recordingColor.opacity(0.3))
-                        .frame(width: 140, height: 140)
-                        .scaleEffect(viewModel.isRealtimeConnected ? 1.1 : 1.0)
-                        .animation(
-                            .easeInOut(duration: 0.8).repeatForever(autoreverses: true),
-                            value: viewModel.isRealtimeConnected
-                        )
+        VStack(spacing: 16) {
+            Button {
+                Task {
+                    if viewModel.isRealtimeConnected {
+                        await viewModel.toggleMicMute()
+                    } else {
+                        await viewModel.toggleRealtimeVoiceFromPrimaryButton()
+                    }
                 }
+            } label: {
+                ZStack {
+                    if viewModel.isRealtimeConnected && viewModel.isMicEnabled {
+                        Circle()
+                            .fill(recordingColor.opacity(0.3))
+                            .frame(width: 140, height: 140)
+                            .scaleEffect(1.1)
+                            .animation(
+                                .easeInOut(duration: 0.8).repeatForever(autoreverses: true),
+                                value: viewModel.isMicEnabled
+                            )
+                    }
 
-                Circle()
-                    .fill(viewModel.isRealtimeConnected ? recordingColor : accentColor)
-                    .frame(width: 120, height: 120)
-                    .shadow(color: (viewModel.isRealtimeConnected ? recordingColor : accentColor).opacity(0.5), radius: 20)
-
-                Image(systemName: viewModel.isRealtimeConnected ? "phone.down.fill" : "mic.fill")
-                    .font(.system(size: 40))
-                    .foregroundColor(.white)
-
-                if viewModel.isPreparingRealtimeSession || viewModel.isProcessing {
                     Circle()
-                        .fill(Color.black.opacity(0.5))
+                        .fill(micButtonColor)
                         .frame(width: 120, height: 120)
+                        .shadow(color: micButtonColor.opacity(0.5), radius: 20)
 
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        .scaleEffect(1.5)
+                    Image(systemName: micButtonIcon)
+                        .font(.system(size: 40))
+                        .foregroundColor(.white)
+
+                    if viewModel.isPreparingRealtimeSession || viewModel.isProcessing {
+                        Circle()
+                            .fill(Color.black.opacity(0.5))
+                            .frame(width: 120, height: 120)
+
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(1.5)
+                    }
                 }
             }
+            .buttonStyle(.plain)
+            .disabled(viewModel.isPreparingRealtimeSession || viewModel.isProcessing)
+            .accessibilityLabel(micButtonAccessibilityLabel)
+
+            if viewModel.isRealtimeConnected {
+                Button {
+                    Task { await viewModel.leaveRealtimeVoice() }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "phone.down.fill")
+                        Text("End")
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 10)
+                    .background(Capsule().fill(Color.red.opacity(0.85)))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("End voice call")
+            }
         }
-        .buttonStyle(.plain)
-        .disabled(viewModel.isPreparingRealtimeSession || viewModel.isProcessing)
-        .accessibilityLabel(viewModel.isRealtimeConnected ? "Leave LiveKit realtime voice" : "Join LiveKit realtime voice")
+    }
+
+    private var micButtonColor: Color {
+        guard viewModel.isRealtimeConnected else { return accentColor }
+        return viewModel.isMicEnabled ? recordingColor : Color.gray
+    }
+
+    private var micButtonIcon: String {
+        guard viewModel.isRealtimeConnected else { return "mic.fill" }
+        return viewModel.isMicEnabled ? "mic.fill" : "mic.slash.fill"
+    }
+
+    private var micButtonAccessibilityLabel: String {
+        guard viewModel.isRealtimeConnected else { return "Join voice call" }
+        return viewModel.isMicEnabled ? "Mute microphone" : "Unmute microphone"
     }
 
     private var routingTogglesView: some View {

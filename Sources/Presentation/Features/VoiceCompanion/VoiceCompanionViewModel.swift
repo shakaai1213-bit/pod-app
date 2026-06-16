@@ -19,6 +19,9 @@ final class VoiceCompanionViewModel: ObservableObject {
     @Published var realtimeTranscriptText: String = VoiceCompanionViewModel.realtimeTranscriptionWaitingText
     @Published var isPreparingRealtimeSession: Bool = false
     @Published var isRealtimeConnected: Bool = false
+    /// Live mic state mirrored from LiveKitVoiceConnection — drives the
+    /// mute/unmute room control (always-on-mic model, Tony 2026-06-16).
+    @Published var isMicEnabled: Bool = false
     @Published var realtimeRemoteParticipantCount: Int = 0
     @Published var realtimeProviderStatus: RealtimeProviderStatus = .checking
 
@@ -34,6 +37,7 @@ final class VoiceCompanionViewModel: ObservableObject {
     private let liveKitConnection: LiveKitVoiceConnection
     private var realtimeParticipantPollTask: Task<Void, Never>?
     private var realtimeStateCancellable: AnyCancellable?
+    private var micStateCancellable: AnyCancellable?
     private var partialTranscriptTask: Task<Void, Never>?
     private var realtimeTranscriptMessageIDs: [String: UUID] = [:]
 
@@ -74,12 +78,19 @@ final class VoiceCompanionViewModel: ObservableObject {
                     self?.applyRealtimeVoiceState(state)
                 }
             }
+        self.micStateCancellable = liveKitConnection.$isMicEnabled
+            .sink { [weak self] enabled in
+                Task { @MainActor [weak self] in
+                    self?.isMicEnabled = enabled
+                }
+            }
 
         Task { await refreshRealtimeProviderStatus() }
     }
 
     deinit {
         realtimeStateCancellable?.cancel()
+        micStateCancellable?.cancel()
         realtimeParticipantPollTask?.cancel()
         partialTranscriptTask?.cancel()
         Task { @MainActor [liveKitConnection] in
@@ -242,6 +253,13 @@ final class VoiceCompanionViewModel: ObservableObject {
         } else {
             await joinRealtimeVoice()
         }
+    }
+
+    /// Mute/unmute the live mic while connected (phone-call model). No-op when
+    /// not connected — the primary button joins in that state instead.
+    func toggleMicMute() async {
+        guard liveKitConnection.isConnected else { return }
+        await liveKitConnection.setMicrophone(enabled: !isMicEnabled)
     }
 
     func teardownRealtimeVoice() async {

@@ -6,6 +6,10 @@ final class LiveKitVoiceConnection: NSObject, ObservableObject, RoomDelegate, @u
     @Published private(set) var state: RealtimeVoiceState = .disconnected
     @Published private(set) var activeRoomName: String?
     @Published private(set) var remoteParticipantCount: Int = 0
+    /// Live microphone state for the always-on-mic + mute-toggle model
+    /// (Tony decision 2026-06-16; push-to-talk retired). Mirrored into the
+    /// ViewModel so the room control can show mic-live vs muted.
+    @Published private(set) var isMicEnabled: Bool = false
 
     var onTranscript: ((RealtimeTranscriptSegment) -> Void)?
 
@@ -40,7 +44,9 @@ final class LiveKitVoiceConnection: NSObject, ObservableObject, RoomDelegate, @u
                 token: session.token,
                 connectOptions: ConnectOptions(enableMicrophone: true)
             )
-            try await nextRoom.localParticipant.setMicrophone(enabled: true)
+            // Always-on mic: enable on join. Logged so a silent mic failure
+            // (the P0 regression mode) is caught rather than connecting mic-dead.
+            try await applyMicrophone(enabled: true, on: nextRoom)
             updateParticipantState(room: nextRoom, roomName: session.roomName)
             startParticipantPolling()
         } catch {
@@ -51,7 +57,34 @@ final class LiveKitVoiceConnection: NSObject, ObservableObject, RoomDelegate, @u
             room = nil
             activeRoomName = nil
             remoteParticipantCount = 0
+            isMicEnabled = false
             state = .failed(error.localizedDescription)
+            throw error
+        }
+    }
+
+    /// Toggle the microphone while connected (mute/unmute). Swallows errors so a
+    /// failed toggle never tears down the call — the failure is logged and the
+    /// published mic state stays truthful.
+    func setMicrophone(enabled: Bool) async {
+        guard let room else { return }
+        do {
+            try await applyMicrophone(enabled: enabled, on: room)
+        } catch {
+            // applyMicrophone already logged; keep the call alive.
+        }
+    }
+
+    /// Single point that flips the LiveKit mic and the published state, with
+    /// logging on both success and failure (directive: error handling at the
+    /// setMicrophone call site).
+    private func applyMicrophone(enabled: Bool, on room: Room) async throws {
+        do {
+            try await room.localParticipant.setMicrophone(enabled: enabled)
+            isMicEnabled = enabled
+            print("[LiveKitVoice] microphone set enabled=\(enabled)")
+        } catch {
+            print("[LiveKitVoice] setMicrophone(enabled: \(enabled)) FAILED: \(error.localizedDescription)")
             throw error
         }
     }
@@ -60,6 +93,7 @@ final class LiveKitVoiceConnection: NSObject, ObservableObject, RoomDelegate, @u
         guard let room else {
             activeRoomName = nil
             remoteParticipantCount = 0
+            isMicEnabled = false
             state = .disconnected
             return
         }
@@ -71,6 +105,7 @@ final class LiveKitVoiceConnection: NSObject, ObservableObject, RoomDelegate, @u
         self.room = nil
         activeRoomName = nil
         remoteParticipantCount = 0
+        isMicEnabled = false
         state = .disconnected
     }
 
@@ -128,6 +163,7 @@ final class LiveKitVoiceConnection: NSObject, ObservableObject, RoomDelegate, @u
         self.room = nil
         activeRoomName = nil
         remoteParticipantCount = 0
+        isMicEnabled = false
         state = error.map { .failed($0.localizedDescription) } ?? .disconnected
     }
 
