@@ -26,6 +26,8 @@ struct WorkView: View {
     @State private var pushProjectId: UUID? = nil
     @State private var pushTicketId: String? = nil
     @State private var selectedFlowItem: TicketFlowItem?
+    @State private var flowCommentText: String = ""
+    @State private var isPostingComment = false
     @State private var boardsModel = WorkBoardsModel()
     @State private var selectedBoard: WorkBoardSummary?
     @State private var showingBoardsArchitecture = false
@@ -1309,12 +1311,67 @@ struct WorkView: View {
                     flowDetailBlock(title: "Support lane", values: [flow.supportLane ?? flow.workerLane ?? "standard"])
                     flowDetailBlock(title: "Blockers", values: flow.blockers.isEmpty ? ["None"] : flow.blockers)
                     flowDetailBlock(title: "Reasons", values: flow.reasons.isEmpty ? ["No reasons supplied"] : flow.reasons)
+
+                    // Comment / Note field
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("ADD NOTE")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(AppColors.textTertiary)
+                        TextField("Type a note or comment…", text: $flowCommentText, axis: .vertical)
+                            .lineLimit(3...6)
+                            .font(.system(size: 13))
+                            .foregroundColor(AppColors.textPrimary)
+                            .padding(10)
+                            .background(AppColors.backgroundSecondary)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .strokeBorder(
+                                        flowCommentText.isEmpty ? AppColors.border : AppColors.accentElectric.opacity(0.5),
+                                        lineWidth: 1
+                                    )
+                            )
+                        Button {
+                            let text = flowCommentText.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard !text.isEmpty, !isPostingComment else { return }
+                            isPostingComment = true
+                            let ticketId = flow.ticketId
+                            Task {
+                                await model.postTicketComment(text, ticketId: ticketId)
+                                isPostingComment = false
+                                flowCommentText = ""
+                            }
+                        } label: {
+                            HStack(spacing: 6) {
+                                if isPostingComment {
+                                    ProgressView().progressViewStyle(.circular).tint(.white).scaleEffect(0.8)
+                                } else {
+                                    Image(systemName: "bubble.left.fill")
+                                        .font(.system(size: 12, weight: .semibold))
+                                }
+                                Text(isPostingComment ? "Posting…" : "Post Note")
+                                    .font(.system(size: 13, weight: .semibold))
+                            }
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 9)
+                            .background(
+                                flowCommentText.trimmingCharacters(in: .whitespaces).isEmpty || isPostingComment
+                                    ? AppColors.backgroundTertiary
+                                    : AppColors.accentElectric
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(flowCommentText.trimmingCharacters(in: .whitespaces).isEmpty || isPostingComment)
+                    }
                 }
                 .padding(20)
             }
             .background(AppColors.backgroundPrimary)
             .navigationTitle("Flow Detail")
             .navigationBarTitleDisplayMode(.inline)
+            .onDisappear { flowCommentText = "" }
         }
     }
 
@@ -1973,6 +2030,24 @@ final class WorkViewModel {
         }
     }
 
+    func postTicketComment(_ message: String, ticketId: String) async {
+        do {
+            try await APIClient.shared.postVoid(
+                path: "/api/v1/tickets/\(ticketId)/comments",
+                body: TicketCommentBody(message: message, source: "pod.work.flow")
+            )
+            priorityToast = PriorityToast(message: "Comment posted", isError: false, retry: nil)
+        } catch {
+            priorityToast = PriorityToast(
+                message: "Comment failed",
+                isError: true,
+                retry: { [weak self] in
+                    Task { await self?.postTicketComment(message, ticketId: ticketId) }
+                }
+            )
+        }
+    }
+
     func postSuggestionNote(_ text: String, suggestion: SchoolhouseSuggestion) async {
         do {
             try await APIClient.shared.postVoid(
@@ -1995,6 +2070,17 @@ final class WorkViewModel {
                 }
             )
         }
+    }
+}
+
+private struct TicketCommentBody: Encodable {
+    let message: String
+    let source: String?
+    let lane: String? = nil
+    let traceId: String? = nil
+    enum CodingKeys: String, CodingKey {
+        case message, source, lane
+        case traceId = "trace_id"
     }
 }
 
