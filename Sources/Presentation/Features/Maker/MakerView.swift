@@ -4,8 +4,39 @@ import PhotosUI
 // MARK: - Mode
 
 private enum MakerMode: String, CaseIterable {
-    case image = "Image"
-    case idea  = "Idea"
+    case idea     = "Idea"
+    case pipeline = "Pipeline"
+    case image    = "Image"
+}
+
+// MARK: - Pipeline Models
+
+struct ReadyIdea: Decodable, Identifiable {
+    let id: String
+    let title: String
+    let summary: String?
+    let discovery: [String: String?]?
+    let assessment: [String: String?]?
+    let createdAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, summary, discovery, assessment
+        case createdAt = "created_at"
+    }
+
+    var scope: String? { discovery?["scope"] ?? nil }
+    var effortEstimate: String? { discovery?["effort_estimate"] ?? nil }
+    var rationale: String? { assessment?["rationale"] ?? nil }
+}
+
+struct PromoteResponse: Decodable {
+    let id: String
+    let status: String
+    let convertedTo: [String: String]?
+    enum CodingKeys: String, CodingKey {
+        case id, status
+        case convertedTo = "converted_to"
+    }
 }
 
 // MARK: - Image Models
@@ -90,6 +121,14 @@ final class MakerViewModel {
     var canSubmitIdea: Bool {
         !ideaTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSubmittingIdea
     }
+
+    // Pipeline mode
+    var readyIdeas: [ReadyIdea] = []
+    var isLoadingPipeline = false
+    var pipelineError: String?
+    var promotingIds: Set<String> = []
+    var promoteResults: [String: String] = [:]   // id → success message
+    var promoteErrors: [String: String] = [:]    // id → error message
 
     // MARK: Image
 
@@ -200,6 +239,43 @@ final class MakerViewModel {
         ideaSubmitMessage = nil
     }
 
+    // MARK: Pipeline
+
+    func loadReadyIdeas() async {
+        guard !isLoadingPipeline else { return }
+        isLoadingPipeline = true
+        pipelineError = nil
+        defer { isLoadingPipeline = false }
+        do {
+            let ideas: [ReadyIdea] = try await APIClient.shared.get(
+                path: "/api/v1/schoolhouse/ideas/ready"
+            )
+            readyIdeas = ideas
+        } catch {
+            pipelineError = error.localizedDescription
+        }
+    }
+
+    private struct EmptyBody: Encodable {}
+
+    func promoteIdea(id: String) async {
+        guard !promotingIds.contains(id) else { return }
+        promotingIds.insert(id)
+        promoteErrors[id] = nil
+        defer { promotingIds.remove(id) }
+        do {
+            let result: PromoteResponse = try await APIClient.shared.post(
+                path: "/api/v1/schoolhouse/ideas/\(id)/promote",
+                body: EmptyBody()
+            )
+            let ticketId = result.convertedTo?["id"] ?? "?"
+            promoteResults[id] = "Promoted → ticket \(String(ticketId.prefix(8)))"
+            readyIdeas.removeAll { $0.id == id }
+        } catch {
+            promoteErrors[id] = error.localizedDescription
+        }
+    }
+
     // MARK: Private
 
     private func makerPost<T: Decodable>(body: some Encodable) async throws -> T {
@@ -236,10 +312,10 @@ struct MakerView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.lg) {
                     modePicker
-                    if mode == .image {
-                        imageContent
-                    } else {
-                        ideaContent
+                    switch mode {
+                    case .image:    imageContent
+                    case .idea:     ideaContent
+                    case .pipeline: pipelineContent
                     }
                 }
                 .padding(.horizontal, Theme.md)
@@ -253,6 +329,11 @@ struct MakerView: View {
         }
         .onChange(of: model.pickerItem) { _, _ in
             Task { await model.loadPickedItem() }
+        }
+        .onChange(of: mode) { _, newMode in
+            if newMode == .pipeline && model.readyIdeas.isEmpty && !model.isLoadingPipeline {
+                Task { await model.loadReadyIdeas() }
+            }
         }
     }
 
@@ -561,6 +642,139 @@ struct MakerView: View {
             Text("Ideas land in the Work tab → Schoolhouse queue. The team assesses, develops scope, and builds a project if it's real.")
                 .podTextStyle(.label, color: AppColors.textMuted)
         }
+    }
+
+    // MARK: - Pipeline Mode
+
+    private var pipelineContent: some View {
+        VStack(alignment: .leading, spacing: Theme.lg) {
+            pipelineHeader
+            if model.isLoadingPipeline {
+                HStack {
+                    Spacer()
+                    ProgressView().progressViewStyle(.circular)
+                    Spacer()
+                }
+                .padding(.vertical, Theme.xxl)
+            } else if let err = model.pipelineError {
+                errorBanner(err)
+            } else if model.readyIdeas.isEmpty {
+                emptyPipelineView
+            } else {
+                ForEach(model.readyIdeas) { idea in
+                    readyIdeaCard(idea)
+                }
+                Button {
+                    Task { await model.loadReadyIdeas() }
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppColors.textSecondary)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, Theme.sm)
+            }
+        }
+    }
+
+    private var pipelineHeader: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Pipeline")
+                .podTextStyle(.title1, color: AppColors.textPrimary)
+            Text("Ideas that cleared assessment + discovery. Promote one to kick off a build ticket.")
+                .podTextStyle(.body, color: AppColors.textSecondary)
+        }
+    }
+
+    private var emptyPipelineView: some View {
+        VStack(spacing: Theme.sm) {
+            Image(systemName: "tray")
+                .font(.system(size: 36, weight: .light))
+                .foregroundStyle(AppColors.textMuted)
+            Text("No ideas in pipeline yet.")
+                .podTextStyle(.body, color: AppColors.textSecondary)
+            Text("Submit ideas in the Idea tab — they'll appear here after Schoolhouse assessment + discovery.")
+                .podTextStyle(.caption, color: AppColors.textMuted)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Theme.xxl)
+    }
+
+    private func readyIdeaCard(_ idea: ReadyIdea) -> some View {
+        let isPromoting = model.promotingIds.contains(idea.id)
+        let promoteResult = model.promoteResults[idea.id]
+        let promoteError = model.promoteErrors[idea.id]
+        return VStack(alignment: .leading, spacing: Theme.sm) {
+            Text(idea.title)
+                .podTextStyle(.headline, color: AppColors.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let summary = idea.summary {
+                Text(summary)
+                    .podTextStyle(.body, color: AppColors.textSecondary)
+                    .lineLimit(3)
+            }
+
+            if let scope = idea.scope {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("SCOPE")
+                        .podTextStyle(.label, color: AppColors.textTertiary)
+                    Text(scope)
+                        .podTextStyle(.caption, color: AppColors.textSecondary)
+                        .lineLimit(4)
+                }
+                .padding(Theme.sm)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(AppColors.backgroundTertiary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+            }
+
+            if let effort = idea.effortEstimate {
+                HStack(spacing: 4) {
+                    Image(systemName: "clock")
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.textMuted)
+                    Text(effort)
+                        .podTextStyle(.caption, color: AppColors.textMuted)
+                }
+            }
+
+            if let result = promoteResult {
+                successBanner(result)
+            } else if let err = promoteError {
+                errorBanner(err)
+            } else {
+                Button {
+                    Task { await model.promoteIdea(id: idea.id) }
+                } label: {
+                    HStack(spacing: Theme.xs) {
+                        if isPromoting {
+                            ProgressView().progressViewStyle(.circular).tint(.white).scaleEffect(0.7)
+                        } else {
+                            Image(systemName: "arrow.up.circle.fill")
+                                .font(.system(size: 14, weight: .semibold))
+                        }
+                        Text(isPromoting ? "Promoting…" : "Promote to Ticket")
+                            .font(.subheadline.bold())
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, Theme.sm)
+                    .background(makerPurple)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+                }
+                .buttonStyle(.plain)
+                .disabled(isPromoting)
+            }
+        }
+        .padding(Theme.md)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                .strokeBorder(AppColors.border, lineWidth: 1)
+        )
     }
 
     // MARK: - Shared Banners
