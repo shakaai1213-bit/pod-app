@@ -15,6 +15,7 @@ struct DashboardView: View {
     @State private var selectedBriefingSheet: DashboardBriefingSheetKind?
     @State private var isDailyBriefingExpanded = false
     @State private var expandedDailyBriefingSections: Set<DailyBriefingSection> = []
+    @State private var isGeneratingBriefing = false
     @State private var showingFundLanding = false
     @State private var showingVoiceRoom = false
     @State private var showingSettings = false
@@ -391,9 +392,24 @@ struct DashboardView: View {
 
                     Spacer()
 
-                    if dailyBriefingModel.isLoading {
+                    if dailyBriefingModel.isLoading || isGeneratingBriefing {
                         ProgressView()
                             .scaleEffect(0.65)
+                    } else {
+                        Button {
+                            isGeneratingBriefing = true
+                            Task {
+                                await dailyBriefingModel.generate()
+                                isGeneratingBriefing = false
+                                isDailyBriefingExpanded = true
+                            }
+                        } label: {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(AppColors.accentElectric)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Generate briefing")
                     }
 
                     Image(systemName: isDailyBriefingExpanded ? "chevron.up" : "chevron.down")
@@ -1723,6 +1739,39 @@ private final class DailyBriefingPanelModel {
             }
         }
     }
+
+    func generate() async {
+        guard !isLoading else { return }
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let result: BriefingGenerateResponse = try await APIClient.shared.post(
+                path: "/api/v1/briefing/generate",
+                body: EmptyEncodable()
+            )
+            briefing = DailyBriefingNote(
+                id: result.noteId ?? result.generatedAt ?? UUID().uuidString,
+                body: result.body,
+                createdAt: Date(),
+                sections: DailyBriefingNoteDTO.parseSectionsPublic(result.body)
+            )
+        } catch {
+            // silently fail — briefing is best-effort
+        }
+    }
+}
+
+private struct EmptyEncodable: Encodable {}
+
+private struct BriefingGenerateResponse: Decodable {
+    let body: String
+    let noteId: String?
+    let generatedAt: String?
+    enum CodingKeys: String, CodingKey {
+        case body
+        case noteId = "note_id"
+        case generatedAt = "generated_at"
+    }
 }
 
 private struct DailyBriefingNote: Hashable {
@@ -1779,6 +1828,10 @@ private struct DailyBriefingNoteDTO: Codable {
             createdAt: createdAt,
             sections: Self.parseSections(body)
         )
+    }
+
+    static func parseSectionsPublic(_ markdown: String) -> [DailyBriefingSection: String] {
+        parseSections(markdown)
     }
 
     private static func parseSections(_ markdown: String) -> [DailyBriefingSection: String] {
