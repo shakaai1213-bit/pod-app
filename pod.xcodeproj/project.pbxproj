@@ -66,6 +66,7 @@
 		8C4E5E174E5677C44ED74BCC /* NotificationAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2036DE57828AAAECDE776245 /* NotificationAction.swift */; };
 		8D0426542E7D0012AA56D433 /* AvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED6986244E7F194490495D69 /* AvatarView.swift */; };
 		90237BF2A2CDD9B9FD1A2858 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0AA356201992C4B685F6B8E /* AppTheme.swift */; };
+		92007FD703F6301673C31127 /* LockerChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 426915A6C15ED3E64CAB4BF3 /* LockerChatView.swift */; };
 		93C2FF324195DE9EEEFEEBEA /* SIWASignInService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DACC05C307AB5FA9A895001 /* SIWASignInService.swift */; };
 		95486DC61A2480A4CB0D5EE4 /* ResearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E4E290EBCFA3FCCA5B6D6F8 /* ResearchViewModel.swift */; };
 		96A7A9B8C793026447BF3583 /* ArmsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53BA388CD44F256C597D3FF1 /* ArmsViewModel.swift */; };
@@ -161,6 +162,7 @@
 		3ECF09C31E0CCB3C58FAA879 /* KnowledgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeView.swift; sourceTree = "<group>"; };
 		3F4CCB4395C49C6788871A98 /* WallDisplayViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallDisplayViewModel.swift; sourceTree = "<group>"; };
 		3FC87A1CABF4CCE2FBDF5678 /* PlaygroundPanel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlaygroundPanel.swift; sourceTree = "<group>"; };
+		426915A6C15ED3E64CAB4BF3 /* LockerChatView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LockerChatView.swift; sourceTree = "<group>"; };
 		42CA60C568F609F5B3EF4C4F /* Projects.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Projects.swift; sourceTree = "<group>"; };
 		49A69CF51ACDCD9D554A9BA5 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		49B691A32B1F1F566C259775 /* ProjectsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectsView.swift; sourceTree = "<group>"; };
@@ -566,6 +568,7 @@
 				F4667D6B147D084680DB6685 /* AgentSecrets.swift.template */,
 				5662C577757D6A7B9B15C8B8 /* DirectChatView.swift */,
 				5D08D7D34A8A9C7A08349196 /* DirectChatViewModel.swift */,
+				426915A6C15ED3E64CAB4BF3 /* LockerChatView.swift */,
 			);
 			path = DirectChat;
 			sourceTree = "<group>";
@@ -935,6 +938,7 @@
 				74D52DBA11627F3E19480C5B /* MakerView.swift in Sources */,
 				E02B41FD39062F030B26534B /* PlaygroundPanel.swift in Sources */,
 				7F3D84AAABD47514FB726F02 /* LabSystemContent.swift in Sources */,
+				92007FD703F6301673C31127 /* LockerChatView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
