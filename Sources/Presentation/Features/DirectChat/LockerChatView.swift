@@ -16,20 +16,46 @@ struct LockerChatView: View {
 
     @Environment(\.horizontalSizeClass) private var sizeClass
     @FocusState private var isTextFieldFocused: Bool
-    // Padding to keep compose bar above the floating tab bar on iPhone.
-    // Cleared when keyboard appears (tab bar also hides at that point).
     @State private var tabBarPadding: CGFloat = 83
     @State private var showingTicketConfirmation = false
     @State private var showingAttachTicketSheet = false
     @State private var showingTriageSheet = false
     @State private var isContextExpanded = false
     @State private var selectedEvidenceMessage: DMMessage?
+    @State private var isShowingVoiceRoom = false
+    @StateObject private var voiceViewModel: VoiceCompanionViewModel
+
+    init(viewModel: DirectChatViewModel, agent: AgentInfo) {
+        self.viewModel = viewModel
+        self.agent = agent
+        self._voiceViewModel = StateObject(wrappedValue: VoiceCompanionViewModel(agentSlug: agent.id))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             chatContextSurface
             if !viewModel.routeProgressSteps.isEmpty {
                 RouteProgressStrip(steps: viewModel.routeProgressSteps)
+            }
+
+            // Voice active banner
+            if voiceViewModel.isRealtimeConnected {
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(AppColors.accentSuccess)
+                        .frame(width: 7, height: 7)
+                    Text("Voice active with \(agent.name)")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(AppColors.accentSuccess)
+                    Spacer()
+                    Button("Open") { isShowingVoiceRoom = true }
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(AppColors.accentElectric)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 7)
+                .background(AppColors.accentSuccess.opacity(0.10))
+                .overlay(Rectangle().fill(AppColors.border).frame(height: 0.5), alignment: .bottom)
             }
 
             // Messages
@@ -188,6 +214,21 @@ struct LockerChatView: View {
                         .foregroundColor(AppColors.textTertiary)
                 }
             }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    isShowingVoiceRoom = true
+                } label: {
+                    Image(systemName: voiceViewModel.isRealtimeConnected
+                          ? "phone.fill" : "phone")
+                        .foregroundStyle(voiceViewModel.isRealtimeConnected
+                                         ? AppColors.accentSuccess : AppColors.accentElectric)
+                }
+                .accessibilityLabel(voiceViewModel.isRealtimeConnected
+                                    ? "Voice call active — open" : "Call \(agent.name)")
+            }
+        }
+        .sheet(isPresented: $isShowingVoiceRoom) {
+            VoiceCompanionView(viewModel: voiceViewModel)
         }
     }
 

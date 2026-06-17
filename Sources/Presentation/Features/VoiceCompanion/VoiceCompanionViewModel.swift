@@ -49,8 +49,12 @@ final class VoiceCompanionViewModel: ObservableObject {
     The user is Tony, the Captain.
     """
 
+    // MARK: - Agent Identity
+    let agentSlug: String
+
     // MARK: - Initialization
-    init() {
+    init(agentSlug: String = "aloha") {
+        self.agentSlug = agentSlug
         self.speechRecorder = SpeechRecorder()
 
         // Initialize clients (API key from Secrets.plist or environment)
@@ -178,7 +182,7 @@ final class VoiceCompanionViewModel: ObservableObject {
         isPreparingRealtimeSession = true
         defer { isPreparingRealtimeSession = false }
         do {
-            let session = try await openClawClient.createLiveKitSession(agentSlug: "aloha", participantName: "Tony")
+            let session = try await openClawClient.createLiveKitSession(agentSlug: agentSlug, participantName: "Tony")
             realtimeSessionText = "LiveKit room ready: \(session.roomName)"
             statusText = "Realtime room prepared. Ready to join."
         } catch {
@@ -209,7 +213,7 @@ final class VoiceCompanionViewModel: ObservableObject {
             }
 
             try configureRealtimeAudioSession()
-            let session = try await openClawClient.createLiveKitSession(agentSlug: "aloha", participantName: "Tony")
+            let session = try await openClawClient.createLiveKitSession(agentSlug: agentSlug, participantName: "Tony")
             realtimeSessionText = "LiveKit room ready: \(session.roomName)"
             realtimeTranscriptText = Self.realtimeTranscriptionWaitingText
             try await liveKitConnection.connect(session: session)
