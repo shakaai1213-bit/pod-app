@@ -5,12 +5,12 @@ import SwiftUI
 struct DashboardView: View {
 
     @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var voiceCoordinator: VoiceCoordinator
     @State private var viewModel = DashboardViewModel()
     @State private var briefingModel = DashboardBriefingDoctrineModel()
     @State private var dailyBriefingModel = DailyBriefingPanelModel()
     @State private var fundLandingModel = FundLandingViewModel()
     @State private var fundUniverseLoopModel = FundUniverseLoopViewModel()
-    @State private var voiceViewModel = VoiceCompanionViewModel()
     @State private var selectedAgent: Agent?
     @State private var selectedBriefingSheet: DashboardBriefingSheetKind?
     @State private var isDailyBriefingExpanded = false
@@ -112,7 +112,7 @@ struct DashboardView: View {
                     .presentationDetents([.medium, .large])
             }
             .sheet(isPresented: $showingVoiceRoom) {
-                VoiceCompanionView(viewModel: voiceViewModel)
+                VoiceCompanionView(viewModel: voiceCoordinator.viewModel)
             }
             .task {
                 await viewModel.loadDashboard()
@@ -132,7 +132,14 @@ struct DashboardView: View {
 
     private var dashboardVoiceBanner: some View {
         Button {
-            showingVoiceRoom = true
+            if voiceCoordinator.isActive {
+                showingVoiceRoom = true
+            } else {
+                Task {
+                    await voiceCoordinator.connect(agentSlug: voiceCoordinator.activeAgentSlug)
+                    showingVoiceRoom = true
+                }
+            }
         } label: {
             HStack(spacing: 10) {
                 ZStack {
@@ -183,8 +190,8 @@ struct DashboardView: View {
     }
 
     private var voiceBannerIcon: String {
-        if voiceViewModel.isRealtimeConnected { return "waveform.circle.fill" }
-        switch voiceViewModel.realtimeProviderStatus {
+        if voiceCoordinator.isRealtimeConnected { return "waveform.circle.fill" }
+        switch voiceCoordinator.realtimeProviderStatus {
         case .checking:
             return "mic.circle.fill"
         case .configured:
@@ -195,18 +202,18 @@ struct DashboardView: View {
     }
 
     private var voiceBannerSubtitle: String {
-        if voiceViewModel.isRealtimeConnected {
-            return voiceViewModel.realtimeRemoteParticipantCount > 0
-                ? "Live with Aloha"
-                : "Connected; waiting for Aloha worker"
+        if voiceCoordinator.isRealtimeConnected {
+            return voiceCoordinator.realtimeRemoteParticipantCount > 0
+                ? "Live with \(voiceCoordinator.activeAgentDisplayName)"
+                : "Connected; waiting for \(voiceCoordinator.activeAgentDisplayName) worker"
         }
-        if voiceViewModel.isPreparingRealtimeSession {
+        if voiceCoordinator.isPreparingRealtimeSession {
             return "Preparing LiveKit room"
         }
-        if let sessionText = voiceViewModel.realtimeSessionText, sessionText.localizedCaseInsensitiveContains("ready") {
+        if let sessionText = voiceCoordinator.realtimeSessionText, sessionText.localizedCaseInsensitiveContains("ready") {
             return "Session ready to join"
         }
-        switch voiceViewModel.realtimeProviderStatus {
+        switch voiceCoordinator.realtimeProviderStatus {
         case .checking:
             return "Checking ORCA voice package"
         case .configured:
@@ -221,14 +228,14 @@ struct DashboardView: View {
     }
 
     private var voiceBannerBadge: String {
-        if voiceViewModel.isRealtimeConnected {
-            return voiceViewModel.realtimeRemoteParticipantCount > 0 ? "LIVE" : "WAITING"
+        if voiceCoordinator.isRealtimeConnected {
+            return voiceCoordinator.realtimeRemoteParticipantCount > 0 ? "LIVE" : "WAITING"
         }
-        if voiceViewModel.isPreparingRealtimeSession { return "PREP" }
-        if let sessionText = voiceViewModel.realtimeSessionText, sessionText.localizedCaseInsensitiveContains("ready") {
+        if voiceCoordinator.isPreparingRealtimeSession { return "PREP" }
+        if let sessionText = voiceCoordinator.realtimeSessionText, sessionText.localizedCaseInsensitiveContains("ready") {
             return "SESSION"
         }
-        switch voiceViewModel.realtimeProviderStatus {
+        switch voiceCoordinator.realtimeProviderStatus {
         case .checking:
             return "CHECK"
         case .configured:
@@ -243,14 +250,14 @@ struct DashboardView: View {
     }
 
     private var voiceStatusColor: Color {
-        if voiceViewModel.isRealtimeConnected {
-            return voiceViewModel.realtimeRemoteParticipantCount > 0 ? AppColors.accentSuccess : AppColors.accentWarning
+        if voiceCoordinator.isRealtimeConnected {
+            return voiceCoordinator.realtimeRemoteParticipantCount > 0 ? AppColors.accentSuccess : AppColors.accentWarning
         }
-        if voiceViewModel.isPreparingRealtimeSession { return AppColors.accentElectric }
-        if let sessionText = voiceViewModel.realtimeSessionText, sessionText.localizedCaseInsensitiveContains("ready") {
+        if voiceCoordinator.isPreparingRealtimeSession { return AppColors.accentElectric }
+        if let sessionText = voiceCoordinator.realtimeSessionText, sessionText.localizedCaseInsensitiveContains("ready") {
             return AppColors.accentElectric
         }
-        switch voiceViewModel.realtimeProviderStatus {
+        switch voiceCoordinator.realtimeProviderStatus {
         case .checking, .configured:
             return AppColors.accentElectric
         case .needsConfiguration:

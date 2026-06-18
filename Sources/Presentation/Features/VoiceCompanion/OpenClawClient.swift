@@ -107,7 +107,7 @@ actor OpenClawClient {
         return try JSONDecoder().decode([VoiceProvider].self, from: data)
     }
 
-    func createLiveKitSession(agentSlug: String = "aloha", participantName: String = "Tony") async throws -> LiveKitSession {
+    func createLiveKitSession(agentSlug: String, participantName: String = "Tony") async throws -> LiveKitSession {
         let url = URL(string: "\(baseURL)/api/v1/voice/livekit/sessions")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"

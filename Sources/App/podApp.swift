@@ -48,6 +48,7 @@ struct podApp: App {
             ContentView()
                 .modelContainer(for: [DMConversation.self, DMMessage.self])
                 .environmentObject(appState)
+                .environmentObject(appState.voiceCoordinator)
                 .preferredColorScheme(.dark)
                 .onAppear {
                     configureAppearance()

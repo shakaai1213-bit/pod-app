@@ -36,6 +36,7 @@
 		3FF7F4F2966A2B3337C97B8E /* AuthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E75CB63EBA420B1C8624C8 /* AuthManager.swift */; };
 		42F9E02E32203C7EF152DCB2 /* SonarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C67EF1DD90F4E3DDF038BDE /* SonarView.swift */; };
 		43C5E6069CFE09916C866EF0 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2D290EE8D7D2034F520F37F /* AppState.swift */; };
+		AA2000000000000000000002 /* VoiceCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA2000000000000000000001 /* VoiceCoordinator.swift */; };
 		48DC0D4A902E5E25D14427FF /* ShimmerModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8974E1454949E877F3566950 /* ShimmerModifier.swift */; };
 		50CCE7E17C21A642DDA65C63 /* ChiefFundContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E565B81C093C4FF46686662 /* ChiefFundContent.swift */; };
 		50D5FB832D3F748D484A7DA6 /* OfflineQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2314FFEFA469FFDCDA8BCB0 /* OfflineQueue.swift */; };
@@ -207,6 +208,7 @@
 		A0B1C2D3E4F5061728394A5B /* LiveKitVoiceConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveKitVoiceConnection.swift; sourceTree = "<group>"; };
 		A28A4672374ACF545BD664A8 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		A2D290EE8D7D2034F520F37F /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		AA2000000000000000000001 /* VoiceCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCoordinator.swift; sourceTree = "<group>"; };
 		A4E4C855478DA5C9D41034E0 /* CockpitSignQueueSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CockpitSignQueueSection.swift; sourceTree = "<group>"; };
 		A555838FA2C96A3ADB7AB1C3 /* TicketsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TicketsViewModel.swift; sourceTree = "<group>"; };
 		A671A61727D2A6622982C99A /* PriorityBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PriorityBadge.swift; sourceTree = "<group>"; };
@@ -639,6 +641,7 @@
 			isa = PBXGroup;
 			children = (
 				A2D290EE8D7D2034F520F37F /* AppState.swift */,
+				AA2000000000000000000001 /* VoiceCoordinator.swift */,
 				84961F81D6C2F51B1A1EC335 /* AppTab.swift */,
 				E0AA356201992C4B685F6B8E /* AppTheme.swift */,
 				DBE261A9A40BC12CBB2C0F78 /* Assets.xcassets */,
@@ -839,6 +842,7 @@
 				AADDFD64686449D8343A6080 /* AppIntents.swift in Sources */,
 				A181B4D7C45780A5CA3ECDA0 /* AppShortcuts.swift in Sources */,
 				43C5E6069CFE09916C866EF0 /* AppState.swift in Sources */,
+				AA2000000000000000000002 /* VoiceCoordinator.swift in Sources */,
 				2C0F9BDAFA4025431D6952B6 /* AppTab.swift in Sources */,
 				90237BF2A2CDD9B9FD1A2858 /* AppTheme.swift in Sources */,
 				F3430F45C6039E66C422CBC1 /* ArmsTabView.swift in Sources */,

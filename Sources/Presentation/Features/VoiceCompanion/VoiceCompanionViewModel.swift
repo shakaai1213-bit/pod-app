@@ -41,20 +41,14 @@ final class VoiceCompanionViewModel: ObservableObject {
     private var partialTranscriptTask: Task<Void, Never>?
     private var realtimeTranscriptMessageIDs: [String: UUID] = [:]
 
-    // MARK: - System Prompt
-    private let systemPrompt = """
-    You are Aloha, Tony-facing coordinator for the ORCA team. \
-    You coordinate intake, standards, routing, and operations across both machines. \
-    Keep responses concise and practical. \
-    The user is Tony, the Captain.
-    """
-
     // MARK: - Agent Identity
     let agentSlug: String
+    let agentDisplayName: String
 
     // MARK: - Initialization
-    init(agentSlug: String = "aloha") {
+    init(agentSlug: String) {
         self.agentSlug = agentSlug
+        self.agentDisplayName = Self.displayName(for: agentSlug)
         self.speechRecorder = SpeechRecorder()
 
         // Initialize clients (API key from Secrets.plist or environment)
@@ -90,6 +84,16 @@ final class VoiceCompanionViewModel: ObservableObject {
             }
 
         Task { await refreshRealtimeProviderStatus() }
+    }
+
+    // MARK: - System Prompt
+    private var systemPrompt: String {
+        """
+        You are \(agentDisplayName), Tony-facing voice companion for the ORCA team. \
+        Represent the \(agentSlug) lane identity for this voice session. \
+        Keep responses concise and practical. \
+        The user is Tony, the Captain.
+        """
     }
 
     deinit {
@@ -284,8 +288,9 @@ final class VoiceCompanionViewModel: ObservableObject {
             while self?.liveKitConnection.isConnected == true {
                 guard let self else { return }
                 self.realtimeRemoteParticipantCount = self.liveKitConnection.remoteParticipantCount
-                self.statusText = self.liveKitConnection.state.displayText
-                self.realtimeSessionText = self.liveKitConnection.state.displayText
+                let displayText = self.realtimeDisplayText(for: self.liveKitConnection.state)
+                self.statusText = displayText
+                self.realtimeSessionText = displayText
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
             }
         }
@@ -298,7 +303,7 @@ final class VoiceCompanionViewModel: ObservableObject {
 
     private func applyRealtimeVoiceState(_ state: RealtimeVoiceState) {
         let wasConnected = isRealtimeConnected
-        let displayText = state.displayText
+        let displayText = realtimeDisplayText(for: state)
 
         isRealtimeConnected = liveKitConnection.isConnected
         realtimeRemoteParticipantCount = liveKitConnection.remoteParticipantCount
@@ -312,6 +317,15 @@ final class VoiceCompanionViewModel: ObservableObject {
         case .connecting, .connected, .failed:
             realtimeSessionText = displayText
             statusText = displayText
+        }
+    }
+
+    private func realtimeDisplayText(for state: RealtimeVoiceState) -> String {
+        switch state {
+        case .connected(let roomName, let remoteParticipantCount) where remoteParticipantCount == 0:
+            return "Connected to \(roomName). Waiting for \(agentDisplayName) worker."
+        default:
+            return state.displayText
         }
     }
 
@@ -417,6 +431,16 @@ final class VoiceCompanionViewModel: ObservableObject {
 
     func dismissError() {
         errorMessage = nil
+    }
+
+    private static func displayName(for agentSlug: String) -> String {
+        if let agent = AgentInfo.find(agentSlug) {
+            return agent.name
+        }
+        return agentSlug
+            .split(separator: "-")
+            .map { $0.capitalized }
+            .joined(separator: " ")
     }
 }
 

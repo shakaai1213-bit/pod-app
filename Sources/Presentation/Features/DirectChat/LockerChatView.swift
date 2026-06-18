@@ -14,6 +14,7 @@ struct LockerChatView: View {
     let viewModel: DirectChatViewModel
     let agent: AgentInfo
 
+    @EnvironmentObject private var voiceCoordinator: VoiceCoordinator
     @Environment(\.horizontalSizeClass) private var sizeClass
     @FocusState private var isTextFieldFocused: Bool
     @State private var tabBarPadding: CGFloat = 83
@@ -23,13 +24,6 @@ struct LockerChatView: View {
     @State private var isContextExpanded = false
     @State private var selectedEvidenceMessage: DMMessage?
     @State private var isShowingVoiceRoom = false
-    @StateObject private var voiceViewModel: VoiceCompanionViewModel
-
-    init(viewModel: DirectChatViewModel, agent: AgentInfo) {
-        self.viewModel = viewModel
-        self.agent = agent
-        self._voiceViewModel = StateObject(wrappedValue: VoiceCompanionViewModel(agentSlug: agent.id))
-    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,22 +33,31 @@ struct LockerChatView: View {
             }
 
             // Voice active banner
-            if voiceViewModel.isRealtimeConnected {
+            if voiceCoordinator.isActive {
                 HStack(spacing: 8) {
                     Circle()
-                        .fill(AppColors.accentSuccess)
+                        .fill(lockerVoiceColor)
                         .frame(width: 7, height: 7)
-                    Text("Voice active with \(agent.name)")
+                    Text(lockerVoiceStatusText)
                         .font(.caption2.weight(.semibold))
-                        .foregroundStyle(AppColors.accentSuccess)
+                        .foregroundStyle(lockerVoiceColor)
                     Spacer()
-                    Button("Open") { isShowingVoiceRoom = true }
+                    Button(lockerVoiceActionText) {
+                        if voiceCoordinator.activeAgentSlug == agent.id {
+                            isShowingVoiceRoom = true
+                        } else {
+                            Task {
+                                await voiceCoordinator.connect(agentSlug: agent.id)
+                                isShowingVoiceRoom = true
+                            }
+                        }
+                    }
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(AppColors.accentElectric)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 7)
-                .background(AppColors.accentSuccess.opacity(0.10))
+                .background(lockerVoiceColor.opacity(0.10))
                 .overlay(Rectangle().fill(AppColors.border).frame(height: 0.5), alignment: .bottom)
             }
 
@@ -216,20 +219,51 @@ struct LockerChatView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    isShowingVoiceRoom = true
+                    if voiceCoordinator.isActive && voiceCoordinator.activeAgentSlug == agent.id {
+                        isShowingVoiceRoom = true
+                    } else {
+                        Task {
+                            await voiceCoordinator.connect(agentSlug: agent.id)
+                            isShowingVoiceRoom = true
+                        }
+                    }
                 } label: {
-                    Image(systemName: voiceViewModel.isRealtimeConnected
+                    Image(systemName: voiceCoordinator.isActive && voiceCoordinator.activeAgentSlug == agent.id
                           ? "phone.fill" : "phone")
-                        .foregroundStyle(voiceViewModel.isRealtimeConnected
+                        .foregroundStyle(voiceCoordinator.isActive && voiceCoordinator.activeAgentSlug == agent.id
                                          ? AppColors.accentSuccess : AppColors.accentElectric)
                 }
-                .accessibilityLabel(voiceViewModel.isRealtimeConnected
-                                    ? "Voice call active — open" : "Call \(agent.name)")
+                .accessibilityLabel(lockerVoiceAccessibilityLabel)
             }
         }
         .sheet(isPresented: $isShowingVoiceRoom) {
-            VoiceCompanionView(viewModel: voiceViewModel)
+            VoiceCompanionView(viewModel: voiceCoordinator.viewModel)
         }
+    }
+
+    private var lockerVoiceColor: Color {
+        voiceCoordinator.activeAgentSlug == agent.id ? AppColors.accentSuccess : AppColors.accentWarning
+    }
+
+    private var lockerVoiceStatusText: String {
+        if voiceCoordinator.activeAgentSlug == agent.id {
+            return "Voice active — talking with \(voiceCoordinator.activeAgentDisplayName)"
+        }
+        return "Voice active with \(voiceCoordinator.activeAgentDisplayName) — tap to switch"
+    }
+
+    private var lockerVoiceActionText: String {
+        voiceCoordinator.activeAgentSlug == agent.id ? "Open" : "Switch"
+    }
+
+    private var lockerVoiceAccessibilityLabel: String {
+        if voiceCoordinator.isActive && voiceCoordinator.activeAgentSlug == agent.id {
+            return "Voice call active with \(agent.name) — open"
+        }
+        if voiceCoordinator.isActive {
+            return "Voice active with \(voiceCoordinator.activeAgentDisplayName) — tap to switch"
+        }
+        return "Call \(agent.name)"
     }
 
     @ViewBuilder
@@ -2348,9 +2382,6 @@ struct DMBubble: View {
     private var computeDraftLabel: String? {
         guard hasComputeAttribution else { return nil }
         let provider = computeProviderName
-        if agent.id == "aloha" {
-            return "\(provider) draft in Aloha's voice — she's offline"
-        }
         return "\(provider) draft in \(agent.name)'s voice — live agent offline"
     }
 
@@ -2642,4 +2673,3 @@ private struct MessageDeliveryLedger: View {
         }
     }
 }
-

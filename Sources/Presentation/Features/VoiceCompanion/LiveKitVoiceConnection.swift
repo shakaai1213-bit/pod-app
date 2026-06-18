@@ -209,7 +209,7 @@ enum RealtimeVoiceState: Equatable {
             return "Joining LiveKit room: \(roomName)"
         case .connected(let roomName, let remoteParticipantCount):
             if remoteParticipantCount == 0 {
-                return "Connected to \(roomName). Waiting for Aloha worker."
+                return "Connected to \(roomName). Waiting for voice worker."
             }
             return "LiveKit voice connected: \(roomName) · \(remoteParticipantCount + 1) participants"
         case .failed(let reason):

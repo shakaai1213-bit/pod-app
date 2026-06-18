@@ -5429,9 +5429,6 @@ struct SonarRoomMessage: Identifiable, Hashable {
     var computeDraftLabel: String? {
         guard let computeProvider else { return nil }
         let providerLabel = computeProvider.capitalized
-        if agentDisplayName.lowercased() == "aloha" {
-            return "\(providerLabel) draft in Aloha's voice — she's offline"
-        }
         return "\(providerLabel) draft in \(agentDisplayName)'s voice — live agent offline"
     }
 

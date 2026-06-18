@@ -585,14 +585,8 @@ struct AgentDetailSheet: View {
                     }
                 } else if let locker = lockerData {
                     VStack(alignment: .leading, spacing: Theme.sm) {
-                        lockerTopBand(locker)
-
-                        Picker("Classroom", selection: $selectedLockerTab) {
-                            ForEach(AgentLockerTab.allCases) { tab in
-                                Text(tab.rawValue).tag(tab)
-                            }
-                        }
-                        .pickerStyle(.segmented)
+                        agentStatusBand(locker)
+                        lockerCockpitTabs
 
                         switch selectedLockerTab {
                         case .card:
@@ -634,29 +628,54 @@ struct AgentDetailSheet: View {
         }
     }
 
-    private func lockerTopBand(_ locker: AgentLockerDTO) -> some View {
+    private func agentStatusBand(_ locker: AgentLockerDTO) -> some View {
         VStack(alignment: .leading, spacing: Theme.sm) {
             HStack(alignment: .top, spacing: Theme.sm) {
-                Image(systemName: locker.heartbeat.status == "awake" ? "waveform.path.ecg" : "moon.zzz.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(locker.heartbeat.status == "awake" ? AppColors.accentSuccess : AppColors.textTertiary)
+                ZStack(alignment: .bottomTrailing) {
+                    Circle()
+                        .fill(Color(hexString: agent.avatarColor ?? "3B82F6"))
+                        .frame(width: 40, height: 40)
+
+                    Text(agent.name.prefix(1).uppercased())
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.white)
+
+                    Circle()
+                        .fill(agentStatusDotColor(locker))
+                        .frame(width: 10, height: 10)
+                        .overlay(Circle().stroke(AppColors.backgroundSecondary, lineWidth: 2))
+                }
 
                 VStack(alignment: .leading, spacing: Theme.xxs) {
+                    HStack(spacing: Theme.xs) {
+                        Text(agent.name)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(AppColors.textPrimary)
+                            .lineLimit(1)
+
+                        Text(agentStatusLaneLabel(locker))
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(AppColors.accentAgent)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(AppColors.accentAgent.opacity(0.12))
+                            .clipShape(Capsule())
+                    }
+
                     Text(agent.role)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(AppColors.textTertiary)
-                    Text(runtimeDisplay(agent.supportRuntime))
                         .podTextStyle(.caption, color: AppColors.textSecondary)
-                    Text(agent.runtimeHost?.nilIfBlank ?? "Runtime host unknown")
+                        .lineLimit(1)
+
+                    Text("Last seen \(agentLastSeenLabel(locker))")
                         .podTextStyle(.caption, color: AppColors.textTertiary)
                 }
 
                 Spacer()
 
                 VStack(alignment: .trailing, spacing: Theme.xxs) {
-                    Text(locker.heartbeat.status?.replacingOccurrences(of: "_", with: " ") ?? "unknown")
+                    Text(agentStatusLabel(locker))
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(locker.heartbeat.status == "awake" ? AppColors.accentSuccess : AppColors.textTertiary)
+                        .foregroundStyle(agentStatusDotColor(locker))
                     Text("\(lockerAttentionCount(locker)) needs attention")
                         .podTextStyle(.label, color: AppColors.textTertiary)
                 }
@@ -668,6 +687,107 @@ struct AgentDetailSheet: View {
                 activationMetric("Inbox", value: "\(locker.inbox.actionCount)", icon: "tray.full.fill", color: locker.inbox.actionCount > 0 ? AppColors.accentElectric : AppColors.textTertiary)
             }
         }
+    }
+
+    private var lockerCockpitTabs: some View {
+        HStack(spacing: 4) {
+            ForEach(AgentLockerTab.primaryTabs) { tab in
+                lockerCockpitTabButton(tab)
+            }
+
+            Menu {
+                ForEach(AgentLockerTab.secondaryTabs) { tab in
+                    Button {
+                        selectedLockerTab = tab
+                    } label: {
+                        Label(tab.rawValue, systemImage: tab.systemImage)
+                    }
+                }
+            } label: {
+                lockerCockpitTabLabel(
+                    title: "More",
+                    systemImage: "ellipsis.circle",
+                    isSelected: AgentLockerTab.secondaryTabs.contains(selectedLockerTab)
+                )
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .contain)
+    }
+
+    private func lockerCockpitTabButton(_ tab: AgentLockerTab) -> some View {
+        Button {
+            selectedLockerTab = tab
+        } label: {
+            lockerCockpitTabLabel(
+                title: tab.shortTitle,
+                systemImage: tab.systemImage,
+                isSelected: selectedLockerTab == tab
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(tab.rawValue)
+    }
+
+    private func lockerCockpitTabLabel(title: String, systemImage: String, isSelected: Bool) -> some View {
+        VStack(spacing: 3) {
+            Image(systemName: systemImage)
+                .font(.system(size: 13, weight: .semibold))
+            Text(title)
+                .font(.system(size: 10, weight: .semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            Capsule()
+                .fill(isSelected ? AppColors.accentElectric : Color.clear)
+                .frame(height: 3)
+        }
+        .foregroundStyle(isSelected ? AppColors.accentElectric : AppColors.textTertiary)
+        .frame(maxWidth: .infinity, minHeight: 46)
+        .contentShape(Rectangle())
+    }
+
+    private func agentStatusLaneLabel(_ locker: AgentLockerDTO) -> String {
+        let lane = locker.agentProfile?.rosterLane?.nilIfBlank ?? agent.rosterLane.rawValue
+        return lane.replacingOccurrences(of: "_", with: " ")
+    }
+
+    private func agentStatusLabel(_ locker: AgentLockerDTO) -> String {
+        if let status = locker.heartbeat.status?.nilIfBlank {
+            return status.replacingOccurrences(of: "_", with: " ")
+        }
+        return agent.status.displayName
+    }
+
+    private func agentStatusDotColor(_ locker: AgentLockerDTO) -> Color {
+        switch locker.heartbeat.status?.nilIfBlank ?? agent.status.rawValue {
+        case "awake", "online", "busy":
+            return AppColors.accentSuccess
+        case "idle":
+            return AppColors.accentWarning
+        case "offline", "sleeping", "asleep":
+            return AppColors.textTertiary
+        default:
+            return agent.status.color
+        }
+    }
+
+    private func agentLastSeenLabel(_ locker: AgentLockerDTO) -> String {
+        if let date = parseLockerDate(locker.heartbeat.lastHeartbeatAt) ?? agent.lastActivity ?? agent.lastAwakeProofAt {
+            return date.relativeFormatted
+        }
+        return "unknown"
+    }
+
+    private func parseLockerDate(_ value: String?) -> Date? {
+        guard let value = value?.nilIfBlank else { return nil }
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = isoFormatter.date(from: value) {
+            return date
+        }
+        isoFormatter.formatOptions = [.withInternetDateTime]
+        return isoFormatter.date(from: value)
     }
 
     // MARK: - Report Card Tab (M1 — SPEC-AGENT-LOCKER-REPORT-CARD)
@@ -2522,6 +2642,59 @@ private enum AgentLockerTab: String, CaseIterable, Identifiable {
     case preferences = "Preferences"
 
     var id: String { rawValue }
+
+    static let primaryTabs: [AgentLockerTab] = [
+        .card,
+        .planner,
+        .inbox,
+        .classroom,
+        .memory
+    ]
+
+    static let secondaryTabs: [AgentLockerTab] = [
+        .dashboard,
+        .research,
+        .feedback,
+        .library,
+        .escalation,
+        .preferences
+    ]
+
+    var shortTitle: String {
+        switch self {
+        case .classroom:
+            return "Tickets"
+        default:
+            return rawValue
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .card:
+            return "person.text.rectangle"
+        case .dashboard:
+            return "chart.bar.doc.horizontal"
+        case .classroom:
+            return "ticket.fill"
+        case .planner:
+            return "calendar"
+        case .inbox:
+            return "tray.full.fill"
+        case .memory:
+            return "brain.head.profile"
+        case .research:
+            return "sparkle.magnifyingglass"
+        case .feedback:
+            return "quote.bubble.fill"
+        case .library:
+            return "books.vertical.fill"
+        case .escalation:
+            return "exclamationmark.triangle.fill"
+        case .preferences:
+            return "slider.horizontal.3"
+        }
+    }
 }
 
 private struct AgentResponsibilityDetailDTO: Decodable {

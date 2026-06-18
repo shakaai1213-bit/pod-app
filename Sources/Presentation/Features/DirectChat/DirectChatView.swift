@@ -6,9 +6,9 @@ struct DirectChatView: View {
     @Bindable var viewModel: DirectChatViewModel
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var voiceCoordinator: VoiceCoordinator
     @State private var isShowingSonarDiagnostics = false
     @State private var isShowingVoiceRoom = false
-    @State private var voiceViewModel = VoiceCompanionViewModel()
 
     var body: some View {
         NavigationStack(path: $viewModel.navigationPath) {
@@ -39,7 +39,7 @@ struct DirectChatView: View {
             SonarDiagnosticsSheet(viewModel: viewModel)
         }
         .sheet(isPresented: $isShowingVoiceRoom) {
-            VoiceCompanionView(viewModel: voiceViewModel)
+            VoiceCompanionView(viewModel: voiceCoordinator.viewModel)
         }
     }
 
@@ -93,12 +93,19 @@ struct DirectChatView: View {
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Button {
-                    isShowingVoiceRoom = true
+                    if voiceCoordinator.isActive {
+                        isShowingVoiceRoom = true
+                    } else {
+                        Task {
+                            await voiceCoordinator.connect(agentSlug: voiceCoordinator.activeAgentSlug)
+                            isShowingVoiceRoom = true
+                        }
+                    }
                 } label: {
-                    Image(systemName: voiceViewModel.isRealtimeConnected ? "waveform.circle.fill" : "waveform.circle")
-                        .foregroundStyle(voiceViewModel.isRealtimeConnected ? AppColors.accentSuccess : AppColors.accentElectric)
+                    Image(systemName: voiceCoordinator.isRealtimeConnected ? "waveform.circle.fill" : "waveform.circle")
+                        .foregroundStyle(voiceCoordinator.isRealtimeConnected ? AppColors.accentSuccess : AppColors.accentElectric)
                 }
-                .accessibilityLabel(voiceViewModel.isRealtimeConnected ? "Open live Pod voice room" : "Open Pod voice room")
+                .accessibilityLabel(voiceCoordinator.isRealtimeConnected ? "Open live Pod voice room" : "Start Pod voice room")
 
                 Button {
                     isShowingSonarDiagnostics = true

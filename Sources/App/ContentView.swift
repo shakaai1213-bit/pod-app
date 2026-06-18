@@ -53,7 +53,7 @@ struct ContentView: View {
         ZStack(alignment: .bottom) {
             // Tab content — ignore container safe areas (notch/home indicator) but NOT keyboard
             tabContent
-                .ignoresSafeArea(.container, edges: [.top, .horizontal])
+                .ignoresSafeArea(.container, edges: .top)
 
             // Custom tab bar — hidden when keyboard is up
             if !isKeyboardVisible {
@@ -1785,6 +1785,8 @@ struct LoginView: View {
 // MARK: - Preview
 
 #Preview {
+    let appState = AppState()
     ContentView()
-        .environmentObject(AppState())
+        .environmentObject(appState)
+        .environmentObject(appState.voiceCoordinator)
 }

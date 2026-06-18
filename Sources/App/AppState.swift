@@ -32,6 +32,7 @@ final class AppState: ObservableObject {
     @Published var pendingDirectChatTicketId: String?
     @Published var pendingDirectChatTicketTitle: String?
     @Published var pendingDirectChatChannelId: String?
+    @Published var voiceCoordinator = VoiceCoordinator()
 
     // MARK: - Auth Manager (Keychain-backed)
 

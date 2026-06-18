@@ -48,9 +48,6 @@ struct VoiceCompanionView: View {
         } message: {
             Text(viewModel.errorMessage ?? "")
         }
-        .onDisappear {
-            Task { await viewModel.teardownRealtimeVoice() }
-        }
     }
 
     // MARK: - Subviews
@@ -291,7 +288,7 @@ struct VoiceCompanionView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "person.crop.circle.badge.questionmark")
                         .foregroundColor(.orange)
-                    Text("You are in the room. Aloha is offline until the voice worker is started.")
+                    Text("You are in the room. \(viewModel.agentDisplayName) is offline until the voice worker is started.")
                         .font(.caption.weight(.medium))
                         .foregroundColor(.orange)
                         .fixedSize(horizontal: false, vertical: true)
