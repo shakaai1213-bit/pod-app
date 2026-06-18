@@ -201,7 +201,7 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Tests if the ORCA MC backend is reachable. 5 second timeout. Public for diagnostics.
+    /// Tests if the ORCA MC backend is reachable. 8 second timeout. Public for diagnostics.
     /// Uses /health — confirmed working without auth. Also checks /api/v1/ (returns 404 but proves API is up).
     func checkBackendReachable() async -> Bool {
         print("[AppState] checkBackendReachable: trying \(Self.backendURL)/health")
@@ -230,7 +230,7 @@ final class AppState: ObservableObject {
         }
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        request.timeoutInterval = 3
+        request.timeoutInterval = 8   // 8s: Tailscale cold-handshake on device exceeds 3s (Maui 2026-06-17)
         print("[AppState] pingEndpoint: \(urlString)")
         do {
             let (_, response) = try await URLSession.shared.data(for: request)
