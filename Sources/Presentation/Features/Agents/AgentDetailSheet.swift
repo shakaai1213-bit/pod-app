@@ -599,6 +599,8 @@ struct AgentDetailSheet: View {
                             lockerPlannerTab(locker)
                         case .inbox:
                             lockerInboxTab(locker)
+                        case .chat:
+                            lockerChatTab(locker)
                         case .memory:
                             lockerMemoryTab(locker)
                         case .research:
@@ -794,6 +796,72 @@ struct AgentDetailSheet: View {
 
     private func lockerCardTab(_ locker: AgentLockerDTO) -> some View {
         VStack(alignment: .leading, spacing: Theme.sm) {
+            if locker.reportCard.source != nil || !locker.reportCard.sections.isEmpty {
+                VStack(alignment: .leading, spacing: Theme.xs) {
+                    HStack(alignment: .center, spacing: Theme.sm) {
+                        ZStack {
+                            Circle()
+                                .stroke(reportCardStatusColor(locker.reportCard.status).opacity(0.22), lineWidth: 7)
+                                .frame(width: 58, height: 58)
+                            Text("\(locker.reportCard.score)")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundStyle(reportCardStatusColor(locker.reportCard.status))
+                        }
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(locker.reportCard.status?.replacingOccurrences(of: "_", with: " ").capitalized ?? "Report Card")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(reportCardStatusColor(locker.reportCard.status))
+                            Text(locker.reportCard.headline ?? "Evidence-derived Locker readiness.")
+                                .font(.caption)
+                                .foregroundStyle(AppColors.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer()
+                    }
+
+                    ForEach(locker.reportCard.sections.prefix(7)) { section in
+                        reportCardSectionRow(section)
+                    }
+
+                    if let policyNote = locker.reportCard.agentUpdatePolicy.note {
+                        Label(policyNote, systemImage: "pencil.and.list.clipboard")
+                            .font(.caption2)
+                            .foregroundStyle(AppColors.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, 2)
+                    }
+                }
+                .padding(Theme.sm)
+                .background(AppColors.backgroundTertiary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+            }
+
+            let coreFiles = locker.reportCard.sections.first(where: { $0.key == "core_files" })?.details.files ?? []
+            if !coreFiles.isEmpty {
+                VStack(alignment: .leading, spacing: Theme.xs) {
+                    Text("Core Files")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppColors.textTertiary)
+
+                    AgentDetailFlowLayout(spacing: Theme.xs) {
+                        ForEach(coreFiles) { file in
+                            Label(file.key.replacingOccurrences(of: "_", with: " "), systemImage: file.safeToPreview ? "doc.text.fill" : "doc.badge.exclamationmark")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(file.safeToPreview ? AppColors.textPrimary : AppColors.accentWarning)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(file.safeToPreview ? AppColors.backgroundSecondary : AppColors.accentWarning.opacity(0.08))
+                                .clipShape(Capsule())
+                        }
+                    }
+                }
+                .padding(Theme.sm)
+                .background(AppColors.backgroundTertiary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+            }
+
             // Identity
             if let profile = locker.agentProfile {
                 VStack(alignment: .leading, spacing: Theme.xs) {
@@ -956,6 +1024,60 @@ struct AgentDetailSheet: View {
         .padding(.vertical, Theme.xxs)
     }
 
+    private func reportCardSectionRow(_ section: AgentLockerDTO.ReportCard.Section) -> some View {
+        HStack(spacing: Theme.xs) {
+            Image(systemName: reportCardSectionIcon(section.status))
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(reportCardStatusColor(section.status))
+                .frame(width: 16)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(section.label ?? section.key.replacingOccurrences(of: "_", with: " "))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.textPrimary)
+                if let summary = section.summary {
+                    Text(summary)
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.textTertiary)
+                        .lineLimit(2)
+                }
+            }
+
+            Spacer()
+
+            Text("\(section.score)")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(reportCardStatusColor(section.status))
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func reportCardSectionIcon(_ status: String?) -> String {
+        switch status {
+        case "ready":
+            return "checkmark.circle.fill"
+        case "dormant_archive":
+            return "archivebox.fill"
+        case "attention":
+            return "exclamationmark.triangle.fill"
+        default:
+            return "circle.dotted"
+        }
+    }
+
+    private func reportCardStatusColor(_ status: String?) -> Color {
+        switch status {
+        case "ready":
+            return AppColors.accentSuccess
+        case "dormant_archive":
+            return AppColors.textTertiary
+        case "attention":
+            return AppColors.accentWarning
+        default:
+            return AppColors.accentAgent
+        }
+    }
+
     private func toolModeIcon(_ mode: String?) -> String {
         switch mode {
         case "read_only": return "eye.fill"
@@ -1037,6 +1159,169 @@ struct AgentDetailSheet: View {
                 }
             }
         }
+    }
+
+    private func lockerChatTab(_ locker: AgentLockerDTO) -> some View {
+        let chat = locker.chat
+        return VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack(alignment: .top, spacing: Theme.sm) {
+                Image(systemName: "bubble.left.and.bubble.right.fill")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(lockerChatStatusColor(chat.policyState))
+                    .frame(width: 34, height: 34)
+                    .background(lockerChatStatusColor(chat.policyState).opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(chat.channelName ?? "direct:\(agent.name.lowercased())")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppColors.textPrimary)
+                    Text(lockerChatStatusText(chat))
+                        .font(.caption)
+                        .foregroundStyle(AppColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+
+                Button {
+                    onStartChat?()
+                    dismiss()
+                } label: {
+                    Label("Open", systemImage: "arrow.up.forward.app.fill")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(AppColors.accentElectric)
+                .disabled(onStartChat == nil)
+            }
+            .padding(Theme.sm)
+            .background(AppColors.backgroundTertiary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+
+            HStack(spacing: Theme.xs) {
+                reportCardMetric("Messages", value: chat.messageCount, warn: false)
+                reportCardMetric("Pending", value: chat.pendingCount, warn: chat.pendingCount > 0)
+                reportCardMetric("Unread", value: chat.unreadCount, warn: chat.unreadCount > 0)
+                if let continuityScore = chat.continuityInputsScore {
+                    reportCardMetric(
+                        "Context",
+                        value: Int((continuityScore * 100).rounded()),
+                        warn: continuityScore < 0.5
+                    )
+                }
+            }
+
+            if let preview = chat.latestMessagePreview?.nilIfBlank {
+                VStack(alignment: .leading, spacing: Theme.xs) {
+                    Text("Latest")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppColors.textTertiary)
+                    Text(preview)
+                        .font(.caption)
+                        .foregroundStyle(AppColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(Theme.sm)
+                .background(AppColors.backgroundTertiary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+            }
+
+            VStack(alignment: .leading, spacing: Theme.xs) {
+                Text("Policy")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.textTertiary)
+
+                AgentDetailFlowLayout(spacing: Theme.xs) {
+                    lockerPolicyChip(chat.policyState ?? "open", color: lockerChatStatusColor(chat.policyState))
+                    if let lane = chat.policyLane?.nilIfBlank {
+                        lockerPolicyChip(lane, color: AppColors.accentAgent)
+                    }
+                    ForEach(chat.policyAllowedActions.prefix(6), id: \.self) { action in
+                        lockerPolicyChip(action, color: AppColors.textTertiary)
+                    }
+                }
+
+                if let reason = chat.policyReason?.nilIfBlank {
+                    Text(reason)
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(Theme.sm)
+            .background(AppColors.backgroundTertiary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+
+            VStack(alignment: .leading, spacing: Theme.xs) {
+                Text("Promotions")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.textTertiary)
+
+                AgentDetailFlowLayout(spacing: Theme.xs) {
+                    lockerPromotionChip("Ticket", enabled: chat.canCreateTicket, icon: "ticket.fill")
+                    lockerPromotionChip("Research", enabled: chat.canRequestResearch, icon: "doc.badge.plus")
+                    lockerPromotionChip("Run", enabled: chat.canDispatchSchoolhouseRun, icon: "play.circle.fill")
+                    lockerPromotionChip("Feedback", enabled: chat.canLeaveFeedback, icon: "quote.bubble.fill")
+                }
+            }
+            .padding(Theme.sm)
+            .background(AppColors.backgroundTertiary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+
+            if let ticketId = chat.activeTicketId?.nilIfBlank {
+                lockerMetadataRow("Attached ticket", value: ticketId)
+            }
+
+            if let continuityEventId = chat.continuityEventId?.nilIfBlank {
+                lockerMetadataRow("Continuity evidence", value: continuityEventId)
+            }
+
+            if let note = chat.note?.nilIfBlank {
+                lockerEmptyText(note)
+            }
+        }
+    }
+
+    private func lockerChatStatusText(_ chat: AgentLockerDTO.LockerChat) -> String {
+        let state = (chat.policyState ?? "open").replacingOccurrences(of: "_", with: " ")
+        if chat.exists {
+            return "Playground thread ready • \(state)"
+        }
+        return "Playground will open this 1:1 thread • \(state)"
+    }
+
+    private func lockerChatStatusColor(_ status: String?) -> Color {
+        switch status?.lowercased() {
+        case "open":
+            return AppColors.accentSuccess
+        case "dormant_archive":
+            return AppColors.textTertiary
+        case "ticket_required", "protected", "redacted_summary_available":
+            return AppColors.accentWarning
+        default:
+            return AppColors.accentElectric
+        }
+    }
+
+    private func lockerPolicyChip(_ text: String, color: Color) -> some View {
+        Text(text.replacingOccurrences(of: "_", with: " "))
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(color)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(color.opacity(0.10))
+            .clipShape(Capsule())
+    }
+
+    private func lockerPromotionChip(_ label: String, enabled: Bool, icon: String) -> some View {
+        Label(label, systemImage: enabled ? icon : "lock.fill")
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(enabled ? AppColors.textPrimary : AppColors.textTertiary)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(enabled ? AppColors.backgroundSecondary : AppColors.backgroundTertiary)
+            .clipShape(Capsule())
     }
 
     private func lockerMemoryTab(_ locker: AgentLockerDTO) -> some View {
@@ -2634,6 +2919,7 @@ private enum AgentLockerTab: String, CaseIterable, Identifiable {
     case classroom = "Classroom"
     case planner = "Planner"
     case inbox = "Inbox"
+    case chat = "Chat"
     case memory = "Memory"
     case research = "Research"
     case feedback = "Feedback"
@@ -2647,6 +2933,7 @@ private enum AgentLockerTab: String, CaseIterable, Identifiable {
         .card,
         .planner,
         .inbox,
+        .chat,
         .classroom,
         .memory
     ]
@@ -2681,6 +2968,8 @@ private enum AgentLockerTab: String, CaseIterable, Identifiable {
             return "calendar"
         case .inbox:
             return "tray.full.fill"
+        case .chat:
+            return "bubble.left.and.bubble.right.fill"
         case .memory:
             return "brain.head.profile"
         case .research:

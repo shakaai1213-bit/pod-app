@@ -39,13 +39,33 @@ actor AgentChatService {
         let dailyLogBytes: Int?
         let assignedTicketCount: Int
         let gaps: [String]
+        let reportCardScore: Int
+        let reportCardStatus: String?
+        let chatChannelName: String?
+        let chatExists: Bool
+        let chatPolicyState: String?
+        let chatPolicyLane: String?
+        let chatPendingCount: Int
+        let chatMessageCount: Int
+        let chatCanPost: Bool
+        let chatCanRun: Bool
+        let chatAllowedActions: [String]
+        let startHereHeadline: String?
 
         var readinessText: String {
             var parts: [String] = []
             if let sessionStatus, !sessionStatus.isEmpty {
                 parts.append(sessionStatus)
             }
+            if reportCardScore > 0 {
+                parts.append("\(reportCardScore)% locker")
+            }
             parts.append("\(assignedTicketCount) ticket\(assignedTicketCount == 1 ? "" : "s")")
+            if chatPendingCount > 0 {
+                parts.append("\(chatPendingCount) pending")
+            } else if chatMessageCount > 0 {
+                parts.append("\(chatMessageCount) message\(chatMessageCount == 1 ? "" : "s")")
+            }
             if let dailyLogBytes, dailyLogBytes > 0 {
                 parts.append("\(dailyLogBytes) daily bytes")
             }
@@ -240,16 +260,28 @@ actor AgentChatService {
     // MARK: - Send message via ORCA-controlled direct chat
 
     func loadLockerSummary(limit: Int = 10) async throws -> LockerSummary {
-        let response: AgentLockerResponse = try await APIClient.shared.get(
-            path: "/api/v1/agents/\(agent.id)/locker?limit=\(limit)"
+        let response: AgentLockerDTO = try await APIClient.shared.get(
+            path: "/api/v1/agents/\(agent.id)/locker-cockpit?limit=\(limit)"
         )
         return LockerSummary(
-            source: response.packet?.source,
-            sessionStatus: response.session?.status,
-            dailyLogRef: response.memory?.dailyLogRef,
-            dailyLogBytes: response.memory?.dailyLogBytes,
-            assignedTicketCount: response.work?.assignedTicketCount ?? 0,
-            gaps: response.gaps ?? []
+            source: response.source,
+            sessionStatus: response.agentProfile?.status,
+            dailyLogRef: response.lockerMemory.dailyLogRef,
+            dailyLogBytes: response.lockerMemory.dailyLogBytes,
+            assignedTicketCount: response.planner.counts.now + response.planner.counts.next + response.planner.counts.blocked,
+            gaps: response.gaps,
+            reportCardScore: response.reportCard.score,
+            reportCardStatus: response.reportCard.status,
+            chatChannelName: response.chat.channelName,
+            chatExists: response.chat.exists,
+            chatPolicyState: response.chat.policyState,
+            chatPolicyLane: response.chat.policyLane,
+            chatPendingCount: response.chat.pendingCount,
+            chatMessageCount: response.chat.messageCount,
+            chatCanPost: response.chat.canPost,
+            chatCanRun: response.chat.canDispatchSchoolhouseRun,
+            chatAllowedActions: response.chat.policyAllowedActions,
+            startHereHeadline: response.startHere.headline
         )
     }
 

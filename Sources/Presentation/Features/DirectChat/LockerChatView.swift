@@ -290,6 +290,7 @@ struct LockerChatView: View {
             if isContextExpanded {
                 ticketContextBar
                 ticketContinuityBar
+                lockerCockpitPanel
                 workClassroomPanel
                 routeDecisionBar
             }
@@ -316,6 +317,14 @@ struct LockerChatView: View {
             }
 
             Spacer(minLength: 0)
+
+            if let summary = lockerSummary {
+                lockerPolicyBadge(summary)
+            } else if viewModel.isLoadingAgentLocker {
+                ProgressView()
+                    .controlSize(.mini)
+                    .tint(AppColors.accentElectric)
+            }
 
             Menu {
                 ForEach(viewModel.availableDeliveryModes(for: agent), id: \.rawValue) { mode in
@@ -411,9 +420,14 @@ struct LockerChatView: View {
         }
 
         let channelText = viewModel.shortChannelId(for: agent).map { "ORCA channel \($0)" }
-        return [deliveryTruthText, channelText, agent.boundaryText]
+        let lockerText = lockerSummary.map { "Locker \($0.reportCardScore)%" }
+        return [deliveryTruthText, channelText, lockerText, agent.boundaryText]
             .compactMap { $0 }
             .joined(separator: " · ")
+    }
+
+    private var lockerSummary: AgentChatService.LockerSummary? {
+        viewModel.agentLockerSummaryByAgent[agent.id]
     }
 
     private var contextSummaryIcon: String {
@@ -424,6 +438,154 @@ struct LockerChatView: View {
     private var contextSummaryColor: Color {
         if viewModel.activeTicketId != nil { return AppColors.accentSuccess }
         return routeDecisionColor
+    }
+
+    @ViewBuilder
+    private func lockerPolicyBadge(_ summary: AgentChatService.LockerSummary) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: lockerPolicyIcon(summary))
+                .font(.system(size: 10, weight: .semibold))
+            Text(lockerPolicyText(summary))
+                .font(.caption2.weight(.semibold))
+                .lineLimit(1)
+        }
+        .foregroundStyle(lockerPolicyColor(summary))
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(lockerPolicyColor(summary).opacity(0.10))
+        .clipShape(Capsule())
+        .accessibilityLabel("Locker policy \(lockerPolicyText(summary))")
+    }
+
+    @ViewBuilder
+    private var lockerCockpitPanel: some View {
+        if let summary = lockerSummary {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Label("Locker cockpit", systemImage: "rectangle.3.group.bubble.left")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(AppColors.accentElectric)
+
+                    Spacer(minLength: 0)
+
+                    lockerPolicyBadge(summary)
+                }
+
+                if let headline = summary.startHereHeadline, !headline.isEmpty {
+                    Text(headline)
+                        .font(.caption)
+                        .foregroundStyle(AppColors.textPrimary)
+                        .lineLimit(2)
+                }
+
+                HStack(spacing: 8) {
+                    Text(summary.chatChannelName ?? "direct:\(agent.id)")
+                    Text("\(summary.chatMessageCount) msg")
+                    if summary.chatPendingCount > 0 {
+                        Text("\(summary.chatPendingCount) pending")
+                    }
+                    if let status = summary.reportCardStatus, !status.isEmpty {
+                        Text(status)
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(AppColors.textTertiary)
+                .lineLimit(1)
+
+                HStack(spacing: 6) {
+                    lockerCapabilityChip("Post", enabled: summary.chatCanPost)
+                    lockerCapabilityChip("Ticket", enabled: summary.chatAllowedActions.contains("ticket"))
+                    lockerCapabilityChip("Research", enabled: summary.chatAllowedActions.contains("research"))
+                    lockerCapabilityChip("Run", enabled: summary.chatCanRun)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
+            .background(AppColors.backgroundSecondary.opacity(0.9))
+            .overlay(
+                Rectangle()
+                    .fill(AppColors.border.opacity(0.7))
+                    .frame(height: 0.5),
+                alignment: .bottom
+            )
+        } else if viewModel.isLoadingAgentLocker {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.mini)
+                Text("Loading locker cockpit")
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.textTertiary)
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
+            .background(AppColors.backgroundSecondary.opacity(0.9))
+        } else if let error = viewModel.agentLockerError {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(AppColors.accentWarning)
+                Text(error)
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.textTertiary)
+                    .lineLimit(2)
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
+            .background(AppColors.backgroundSecondary.opacity(0.9))
+        }
+    }
+
+    private func lockerCapabilityChip(_ label: String, enabled: Bool) -> some View {
+        Text(label)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(enabled ? AppColors.accentSuccess : AppColors.textTertiary)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background((enabled ? AppColors.accentSuccess : AppColors.textTertiary).opacity(0.10))
+            .clipShape(Capsule())
+    }
+
+    private func lockerPolicyText(_ summary: AgentChatService.LockerSummary) -> String {
+        switch summary.chatPolicyState {
+        case "ticket_required":
+            return "Ticket gate"
+        case "protected":
+            return "Protected"
+        case "open":
+            return "Open"
+        default:
+            if let lane = summary.chatPolicyLane, !lane.isEmpty {
+                return lane.capitalized
+            }
+            return "Locker"
+        }
+    }
+
+    private func lockerPolicyIcon(_ summary: AgentChatService.LockerSummary) -> String {
+        switch summary.chatPolicyState {
+        case "ticket_required":
+            return "text.badge.checkmark"
+        case "protected":
+            return "lock.fill"
+        case "open":
+            return "checkmark.circle.fill"
+        default:
+            return "rectangle.3.group.bubble.left"
+        }
+    }
+
+    private func lockerPolicyColor(_ summary: AgentChatService.LockerSummary) -> Color {
+        switch summary.chatPolicyState {
+        case "ticket_required":
+            return AppColors.accentWarning
+        case "protected":
+            return AppColors.accentDanger
+        case "open":
+            return AppColors.accentSuccess
+        default:
+            return AppColors.accentElectric
+        }
     }
 
     private var deliveryTruthText: String {

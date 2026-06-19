@@ -407,6 +407,8 @@ struct AgentLockerDTO: Decodable, Hashable {
     let tools: LockerTools?
     let guardrails: [String]
     let startHere: StartHere
+    let reportCard: ReportCard
+    let chat: LockerChat
     let planner: Planner
     let orcaTasks: OrcaTasks
     let inbox: Inbox
@@ -422,11 +424,12 @@ struct AgentLockerDTO: Decodable, Hashable {
     let preferences: AgentLockerPreferences
 
     enum CodingKeys: String, CodingKey {
-        case schema, source, planner, inbox, dashboards, feedback, gaps, heartbeat, library, escalation, guardrails, preferences
+        case schema, source, planner, inbox, dashboards, feedback, gaps, heartbeat, library, escalation, guardrails, preferences, chat
         case generatedAt = "generated_at"
         case agentProfile = "agent"
         case tools
         case startHere = "start_here"
+        case reportCard = "report_card"
         case orcaTasks = "orca_tasks"
         case lockerMemory = "locker_memory"
         case researchRail = "research_rail"
@@ -442,6 +445,8 @@ struct AgentLockerDTO: Decodable, Hashable {
         tools = try container.decodeIfPresent(LockerTools.self, forKey: .tools)
         guardrails = try container.decodeIfPresent([String].self, forKey: .guardrails) ?? []
         startHere = try container.decodeIfPresent(StartHere.self, forKey: .startHere) ?? StartHere()
+        reportCard = try container.decodeIfPresent(ReportCard.self, forKey: .reportCard) ?? ReportCard()
+        chat = try container.decodeIfPresent(LockerChat.self, forKey: .chat) ?? LockerChat()
         planner = try container.decodeIfPresent(Planner.self, forKey: .planner) ?? Planner()
         orcaTasks = try container.decodeIfPresent(OrcaTasks.self, forKey: .orcaTasks) ?? OrcaTasks()
         inbox = try container.decodeIfPresent(Inbox.self, forKey: .inbox) ?? Inbox()
@@ -457,7 +462,308 @@ struct AgentLockerDTO: Decodable, Hashable {
         preferences = (try? container.decodeIfPresent(AgentLockerPreferences.self, forKey: .preferences)) ?? AgentLockerPreferences()
     }
 
-    // MARK: - Report Card types (M1 — identity, owns, tools, compliance)
+    // MARK: - Report Card types
+
+    struct ReportCard: Decodable, Hashable {
+        let source: String?
+        let agent: String?
+        let status: String?
+        let score: Int
+        let headline: String?
+        let sections: [Section]
+        let agentUpdatePolicy: AgentUpdatePolicy
+        let evidenceSources: [String]
+
+        enum CodingKeys: String, CodingKey {
+            case source, agent, status, score, headline, sections
+            case agentUpdatePolicy = "agent_update_policy"
+            case evidenceSources = "evidence_sources"
+        }
+
+        init(source: String? = nil, agent: String? = nil, status: String? = nil, score: Int = 0, headline: String? = nil, sections: [Section] = [], agentUpdatePolicy: AgentUpdatePolicy = AgentUpdatePolicy(), evidenceSources: [String] = []) {
+            self.source = source
+            self.agent = agent
+            self.status = status
+            self.score = score
+            self.headline = headline
+            self.sections = sections
+            self.agentUpdatePolicy = agentUpdatePolicy
+            self.evidenceSources = evidenceSources
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            source = try? c.decodeIfPresent(String.self, forKey: .source)
+            agent = try? c.decodeIfPresent(String.self, forKey: .agent)
+            status = try? c.decodeIfPresent(String.self, forKey: .status)
+            score = (try? c.decodeIfPresent(Int.self, forKey: .score)) ?? 0
+            headline = try? c.decodeIfPresent(String.self, forKey: .headline)
+            if let arraySections = try? c.decodeIfPresent([Section].self, forKey: .sections) {
+                sections = arraySections
+            } else if let keyedSections = try? c.decodeIfPresent([String: Section].self, forKey: .sections) {
+                let order = ["schoolhouse_readiness", "core_files", "awake", "planner", "comms", "research_rail", "chat_continuity", "doctrine", "safety"]
+                sections = keyedSections
+                    .sorted { left, right in
+                        let leftIndex = order.firstIndex(of: left.key) ?? order.count
+                        let rightIndex = order.firstIndex(of: right.key) ?? order.count
+                        if leftIndex == rightIndex { return left.key < right.key }
+                        return leftIndex < rightIndex
+                    }
+                    .map { key, section in
+                        section.key.isEmpty ? Section(
+                            key: key,
+                            label: section.label,
+                            status: section.status,
+                            score: section.score,
+                            summary: section.summary,
+                            details: section.details
+                        ) : section
+                    }
+            } else {
+                sections = []
+            }
+            agentUpdatePolicy = (try? c.decodeIfPresent(AgentUpdatePolicy.self, forKey: .agentUpdatePolicy)) ?? AgentUpdatePolicy()
+            evidenceSources = (try? c.decodeIfPresent([String].self, forKey: .evidenceSources)) ?? []
+        }
+
+        struct Section: Decodable, Hashable, Identifiable {
+            let key: String
+            let label: String?
+            let status: String?
+            let score: Int
+            let summary: String?
+            let details: Details
+
+            var id: String { key }
+
+            enum CodingKeys: String, CodingKey {
+                case key, label, status, score, summary, details
+            }
+
+            init(key: String = "", label: String? = nil, status: String? = nil, score: Int = 0, summary: String? = nil, details: Details = Details()) {
+                self.key = key
+                self.label = label
+                self.status = status
+                self.score = score
+                self.summary = summary
+                self.details = details
+            }
+
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                key = (try? c.decodeIfPresent(String.self, forKey: .key)) ?? UUID().uuidString
+                label = try? c.decodeIfPresent(String.self, forKey: .label)
+                status = try? c.decodeIfPresent(String.self, forKey: .status)
+                score = (try? c.decodeIfPresent(Int.self, forKey: .score)) ?? 0
+                summary = try? c.decodeIfPresent(String.self, forKey: .summary)
+                details = (try? c.decodeIfPresent(Details.self, forKey: .details)) ?? Details()
+            }
+        }
+
+        struct Details: Decodable, Hashable {
+            let files: [CoreFile]
+            let gaps: [String]
+
+            enum CodingKeys: String, CodingKey {
+                case files, gaps
+            }
+
+            init(files: [CoreFile] = [], gaps: [String] = []) {
+                self.files = files
+                self.gaps = gaps
+            }
+
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                files = (try? c.decodeIfPresent([CoreFile].self, forKey: .files)) ?? []
+                gaps = (try? c.decodeIfPresent([String].self, forKey: .gaps)) ?? []
+            }
+        }
+
+        struct CoreFile: Decodable, Hashable, Identifiable {
+            let key: String
+            let path: String?
+            let exists: Bool
+            let safeToPreview: Bool
+            let reason: String?
+            let source: String?
+
+            var id: String { key }
+
+            enum CodingKeys: String, CodingKey {
+                case key, path, exists, reason, source
+                case safeToPreview = "safe_to_preview"
+            }
+
+            init(key: String = "", path: String? = nil, exists: Bool = false, safeToPreview: Bool = false, reason: String? = nil, source: String? = nil) {
+                self.key = key
+                self.path = path
+                self.exists = exists
+                self.safeToPreview = safeToPreview
+                self.reason = reason
+                self.source = source
+            }
+        }
+
+        struct AgentUpdatePolicy: Decodable, Hashable {
+            let canUpdate: [String]
+            let cannotUpdate: [String]
+            let feedbackEndpoint: String?
+            let note: String?
+
+            enum CodingKeys: String, CodingKey {
+                case note
+                case canUpdate = "can_update"
+                case cannotUpdate = "cannot_update"
+                case feedbackEndpoint = "feedback_endpoint"
+            }
+
+            init(canUpdate: [String] = [], cannotUpdate: [String] = [], feedbackEndpoint: String? = nil, note: String? = nil) {
+                self.canUpdate = canUpdate
+                self.cannotUpdate = cannotUpdate
+                self.feedbackEndpoint = feedbackEndpoint
+                self.note = note
+            }
+
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                canUpdate = (try? c.decodeIfPresent([String].self, forKey: .canUpdate)) ?? []
+                cannotUpdate = (try? c.decodeIfPresent([String].self, forKey: .cannotUpdate)) ?? []
+                feedbackEndpoint = try? c.decodeIfPresent(String.self, forKey: .feedbackEndpoint)
+                note = try? c.decodeIfPresent(String.self, forKey: .note)
+            }
+        }
+    }
+
+    struct LockerChat: Decodable, Hashable {
+        let source: String?
+        let channelId: String?
+        let channelName: String?
+        let exists: Bool
+        let latestMessagePreview: String?
+        let latestMessageId: String?
+        let latestTraceId: String?
+        let latestDeliveryMode: String?
+        let latestProvenance: String?
+        let latestResponseState: String?
+        let continuityInputsScore: Double?
+        let continuityEventId: String?
+        let unreadCount: Int
+        let pendingCount: Int
+        let messageCount: Int
+        let activeTicketId: String?
+        let linkedBoardId: String?
+        let policyLane: String?
+        let policyProtectedLevel: String?
+        let policyOwner: String?
+        let policyState: String?
+        let policyReason: String?
+        let policyAllowedActions: [String]
+        let replyWindowSeconds: Int?
+        let canPost: Bool
+        let canCreateTicket: Bool
+        let canRequestResearch: Bool
+        let canDispatchSchoolhouseRun: Bool
+        let canLeaveFeedback: Bool
+        let note: String?
+
+        enum CodingKeys: String, CodingKey {
+            case source, exists, note
+            case channelId = "channel_id"
+            case channelName = "channel_name"
+            case latestMessagePreview = "latest_message_preview"
+            case latestMessageId = "latest_message_id"
+            case latestTraceId = "latest_trace_id"
+            case latestDeliveryMode = "latest_delivery_mode"
+            case latestProvenance = "latest_provenance"
+            case latestResponseState = "latest_response_state"
+            case continuityInputsScore = "continuity_inputs_score"
+            case continuityEventId = "latest_conversation_continuity_event_id"
+            case unreadCount = "unread_count"
+            case pendingCount = "pending_count"
+            case messageCount = "message_count"
+            case activeTicketId = "active_ticket_id"
+            case linkedBoardId = "linked_board_id"
+            case policyLane = "policy_lane"
+            case policyProtectedLevel = "policy_protected_level"
+            case policyOwner = "policy_owner"
+            case policyState = "policy_state"
+            case policyReason = "policy_reason"
+            case policyAllowedActions = "policy_allowed_actions"
+            case replyWindowSeconds = "reply_window_seconds"
+            case canPost = "can_post"
+            case canCreateTicket = "can_create_ticket"
+            case canRequestResearch = "can_request_research"
+            case canDispatchSchoolhouseRun = "can_dispatch_schoolhouse_run"
+            case canLeaveFeedback = "can_leave_feedback"
+        }
+
+        init(
+            source: String? = nil,
+            channelId: String? = nil,
+            channelName: String? = nil,
+            exists: Bool = false,
+            latestMessagePreview: String? = nil,
+            latestMessageId: String? = nil,
+            latestTraceId: String? = nil,
+            latestDeliveryMode: String? = nil,
+            latestProvenance: String? = nil,
+            latestResponseState: String? = nil,
+            continuityInputsScore: Double? = nil,
+            continuityEventId: String? = nil,
+            unreadCount: Int = 0,
+            pendingCount: Int = 0,
+            messageCount: Int = 0,
+            activeTicketId: String? = nil,
+            linkedBoardId: String? = nil,
+            policyLane: String? = nil,
+            policyProtectedLevel: String? = nil,
+            policyOwner: String? = nil,
+            policyState: String? = nil,
+            policyReason: String? = nil,
+            policyAllowedActions: [String] = [],
+            replyWindowSeconds: Int? = nil,
+            canPost: Bool = true,
+            canCreateTicket: Bool = true,
+            canRequestResearch: Bool = true,
+            canDispatchSchoolhouseRun: Bool = true,
+            canLeaveFeedback: Bool = true,
+            note: String? = nil
+        ) {
+            self.source = source
+            self.channelId = channelId
+            self.channelName = channelName
+            self.exists = exists
+            self.latestMessagePreview = latestMessagePreview
+            self.latestMessageId = latestMessageId
+            self.latestTraceId = latestTraceId
+            self.latestDeliveryMode = latestDeliveryMode
+            self.latestProvenance = latestProvenance
+            self.latestResponseState = latestResponseState
+            self.continuityInputsScore = continuityInputsScore
+            self.continuityEventId = continuityEventId
+            self.unreadCount = unreadCount
+            self.pendingCount = pendingCount
+            self.messageCount = messageCount
+            self.activeTicketId = activeTicketId
+            self.linkedBoardId = linkedBoardId
+            self.policyLane = policyLane
+            self.policyProtectedLevel = policyProtectedLevel
+            self.policyOwner = policyOwner
+            self.policyState = policyState
+            self.policyReason = policyReason
+            self.policyAllowedActions = policyAllowedActions
+            self.replyWindowSeconds = replyWindowSeconds
+            self.canPost = canPost
+            self.canCreateTicket = canCreateTicket
+            self.canRequestResearch = canRequestResearch
+            self.canDispatchSchoolhouseRun = canDispatchSchoolhouseRun
+            self.canLeaveFeedback = canLeaveFeedback
+            self.note = note
+        }
+    }
+
+    // MARK: - Identity / tools / compliance
 
     struct LockerAgentProfile: Decodable, Hashable {
         let id: String?
