@@ -889,22 +889,41 @@ struct AgentLockerDTO: Decodable, Hashable {
             let blocked: [WorkItem]
             let waiting: [WorkItem]
             let review: [WorkItem]
+            let done: [WorkItem]
             let fyi: [WorkItem]
 
-            init(now: [WorkItem] = [], next: [WorkItem] = [], blocked: [WorkItem] = [], waiting: [WorkItem] = [], review: [WorkItem] = [], fyi: [WorkItem] = []) {
+            init(now: [WorkItem] = [], next: [WorkItem] = [], blocked: [WorkItem] = [], waiting: [WorkItem] = [], review: [WorkItem] = [], done: [WorkItem] = [], fyi: [WorkItem] = []) {
                 self.now = now
                 self.next = next
                 self.blocked = blocked
                 self.waiting = waiting
                 self.review = review
+                self.done = done
                 self.fyi = fyi
+            }
+
+            enum CodingKeys: String, CodingKey {
+                case now, next, blocked, waiting, review, done, fyi
+            }
+
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                now = try container.decodeIfPresent([WorkItem].self, forKey: .now) ?? []
+                next = try container.decodeIfPresent([WorkItem].self, forKey: .next) ?? []
+                blocked = try container.decodeIfPresent([WorkItem].self, forKey: .blocked) ?? []
+                waiting = try container.decodeIfPresent([WorkItem].self, forKey: .waiting) ?? []
+                review = try container.decodeIfPresent([WorkItem].self, forKey: .review) ?? []
+                done = try container.decodeIfPresent([WorkItem].self, forKey: .done) ?? []
+                fyi = try container.decodeIfPresent([WorkItem].self, forKey: .fyi) ?? []
             }
         }
     }
 
     struct WorkItem: Decodable, Hashable, Identifiable {
         let id: String?
+        let kind: String?
         let title: String?
+        let body: String?
         let priority: String?
         let state: String?
         let status: String?
@@ -912,9 +931,12 @@ struct AgentLockerDTO: Decodable, Hashable {
         let owner: String?
         let nextAction: String?
         let source: String?
+        let sourceType: String?
+        let sourceRef: String?
         let whyShown: String?
         let blockedOn: String?
         let updatedAt: String?
+        let completedAt: String?
         let ticketId: String?
         let reviewStatus: String?
         let summary: String?
@@ -922,13 +944,17 @@ struct AgentLockerDTO: Decodable, Hashable {
         var stableId: String { id ?? title ?? summary ?? "item" }
         var displayTitle: String { title ?? summary ?? id ?? "Untitled item" }
         var displayState: String? { state ?? status ?? reviewStatus }
+        var isPlannerItem: Bool { kind == "planner_item" }
 
         enum CodingKeys: String, CodingKey {
-            case id, title, priority, state, status, lane, owner, source, summary
+            case id, kind, title, body, priority, state, status, lane, owner, source, summary
             case nextAction = "next_action"
+            case sourceType = "source_type"
+            case sourceRef = "source_ref"
             case whyShown = "why_shown"
             case blockedOn = "blocked_on"
             case updatedAt = "updated_at"
+            case completedAt = "completed_at"
             case ticketId = "ticket_id"
             case reviewStatus = "review_status"
         }
@@ -1288,6 +1314,15 @@ struct AgentLockerDTO: Decodable, Hashable {
             self.safeToPreview = safeToPreview
             self.reason = reason
         }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            key = (try? container.decodeIfPresent(String.self, forKey: .key)) ?? UUID().uuidString
+            path = try? container.decodeIfPresent(String.self, forKey: .path)
+            exists = (try? container.decodeIfPresent(Bool.self, forKey: .exists)) ?? false
+            safeToPreview = try? container.decodeIfPresent(Bool.self, forKey: .safeToPreview)
+            reason = try? container.decodeIfPresent(String.self, forKey: .reason)
+        }
     }
 
     struct Library: Decodable, Hashable {
@@ -1306,6 +1341,55 @@ struct AgentLockerDTO: Decodable, Hashable {
             self.documents = documents
             self.doctrineBundle = doctrineBundle
             self.source = source
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            label = try? container.decodeIfPresent(String.self, forKey: .label)
+            documents = (try? container.decodeIfPresent([LibraryDoc].self, forKey: .documents)) ?? []
+            source = try? container.decodeIfPresent(String.self, forKey: .source)
+            doctrineBundle = Self.decodeDoctrineBundleLabel(from: container)
+        }
+
+        private static func decodeDoctrineBundleLabel(from container: KeyedDecodingContainer<CodingKeys>) -> String? {
+            if let label = try? container.decodeIfPresent(String.self, forKey: .doctrineBundle) {
+                return label
+            }
+            if let bundle = try? container.decodeIfPresent(DoctrineBundle.self, forKey: .doctrineBundle) {
+                return bundle.displayLabel
+            }
+            return nil
+        }
+
+        private struct DoctrineBundle: Decodable, Hashable {
+            let source: String?
+            let status: String?
+            let specRef: String?
+            let foundationRef: String?
+            let buildSignature: String?
+
+            var displayLabel: String? {
+                if let status, !status.isEmpty {
+                    return status
+                }
+                if let specRef, !specRef.isEmpty {
+                    return specRef
+                }
+                if let foundationRef, !foundationRef.isEmpty {
+                    return foundationRef
+                }
+                if let buildSignature, !buildSignature.isEmpty {
+                    return buildSignature
+                }
+                return source
+            }
+
+            enum CodingKeys: String, CodingKey {
+                case source, status
+                case specRef = "spec_ref"
+                case foundationRef = "foundation_ref"
+                case buildSignature = "build_signature"
+            }
         }
     }
 

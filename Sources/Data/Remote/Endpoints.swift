@@ -31,6 +31,10 @@ enum Endpoint {
     case agentInboxTail(name: String, limit: Int)   // POD-5 (c797ada1): non-destructive inbox tail
     case agentActivationContext(name: String, limit: Int)
     case agentLocker(name: String, limit: Int)
+    case planner(agentId: UUID)
+    case createPlannerItem(agentId: UUID, PlannerItemCreateRequest)
+    case updatePlannerItem(agentId: UUID, itemId: String, PlannerItemUpdateRequest)
+    case deletePlannerItem(agentId: UUID, itemId: String)
     case leadPlate(leadId: String)
 
     // MARK: - Health
@@ -91,6 +95,20 @@ extension Endpoint {
         case .agentLocker(let name, let limit):
             return "\(Endpoint.basePath)/agents/\(name)/locker-cockpit?limit=\(limit)"
 
+        case .planner(let agentId):
+            return "\(Endpoint.basePath)/planner/\(agentId.uuidString)"
+
+        case .createPlannerItem(let agentId, _):
+            return "\(Endpoint.basePath)/planner/\(agentId.uuidString)/items"
+
+        case .updatePlannerItem(let agentId, let itemId, _):
+            let safeItemId = itemId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? itemId
+            return "\(Endpoint.basePath)/planner/\(agentId.uuidString)/items/\(safeItemId)"
+
+        case .deletePlannerItem(let agentId, let itemId):
+            let safeItemId = itemId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? itemId
+            return "\(Endpoint.basePath)/planner/\(agentId.uuidString)/items/\(safeItemId)"
+
         case .leadPlate(let leadId):
             return "\(Endpoint.basePath)/leads/\(leadId)/plate"
 
@@ -124,10 +142,12 @@ extension Endpoint {
 
     var method: HTTPMethod {
         switch self {
-        case .sendMessage, .createProject, .createProjectTask, .memoryCandidateReviewExport:
+        case .sendMessage, .createProject, .createProjectTask, .memoryCandidateReviewExport, .createPlannerItem:
             return .post
-        case .updateProject:
+        case .updateProject, .updatePlannerItem:
             return .patch
+        case .deletePlannerItem:
+            return .delete
         default:
             return .get
         }
@@ -145,8 +165,61 @@ extension Endpoint {
                 let title: String; let priority: Int?; let status: String?
             }
             return try? JSONEncoder().encode(Body(title: title, priority: priority, status: status))
+        case .createPlannerItem(_, let request):
+            return try? JSONEncoder().encode(request)
+        case .updatePlannerItem(_, _, let request):
+            return try? JSONEncoder().encode(request)
         default:
             return nil
         }
+    }
+}
+
+struct PlannerItemCreateRequest: Encodable {
+    let kind: String
+    let title: String
+    let body: String?
+    let lane: String
+    let priority: String
+    let sourceType: String?
+    let status: String?
+
+    enum CodingKeys: String, CodingKey {
+        case kind, title, body, lane, priority, status
+        case sourceType = "source_type"
+    }
+
+    init(
+        kind: String = "planner_item",
+        title: String,
+        body: String? = nil,
+        lane: String,
+        priority: String = "medium",
+        sourceType: String? = "manual",
+        status: String? = "active"
+    ) {
+        self.kind = kind
+        self.title = title
+        self.body = body
+        self.lane = lane
+        self.priority = priority
+        self.sourceType = sourceType
+        self.status = status
+    }
+}
+
+struct PlannerItemUpdateRequest: Encodable {
+    let title: String?
+    let body: String?
+    let lane: String?
+    let priority: String?
+    let status: String?
+
+    init(title: String? = nil, body: String? = nil, lane: String? = nil, priority: String? = nil, status: String? = nil) {
+        self.title = title
+        self.body = body
+        self.lane = lane
+        self.priority = priority
+        self.status = status
     }
 }

@@ -886,7 +886,7 @@ final class DirectChatViewModel {
     func availableDeliveryModes(for agent: AgentInfo) -> [DMDeliveryMode] {
         let workModes: [DMDeliveryMode] = activeTicketId == nil ? [] : [.agentRun]
         if Self.liveInboxAgents.contains(agent.id) {
-            return [.liveInbox, .compute, .auto] + workModes
+            return [.compute, .liveInbox, .auto] + workModes
         }
         return [.compute, .auto] + workModes
     }

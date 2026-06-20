@@ -27,9 +27,9 @@ actor ProjectRepository {
     private let api = APIClient.shared
 
     func listProjects(status: String? = nil) async throws -> [ProjectDTO] {
-        var path = "/api/v1/projects/"
+        var path = "/api/v1/projects/?limit=200"
         if let status = status {
-            path += "?status=\(status)"
+            path += "&status=\(status)"
         }
         let response: ProjectListResponse = try await api.get(path: path)
         return response.items

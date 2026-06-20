@@ -11,3 +11,4 @@ Sources/App/OrcaSecrets.swift
 # Xcode per-user IDE state (never track)
 *.xcuserstate
 xcuserdata/
+.DS_Store

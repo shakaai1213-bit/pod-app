@@ -167,7 +167,7 @@ extension AgentInfo {
 
     var defaultDeliveryMode: DMDeliveryMode {
         if ["aloha", "maui", "coral", "chief", "rooster", "reef"].contains(id) {
-            return .liveInbox
+            return .compute
         }
         return .compute
     }
@@ -175,9 +175,9 @@ extension AgentInfo {
     var boundaryText: String {
         switch id {
         case "aloha":
-            return "Live inbox is the default Aloha path when her runtime is awake. Compute helper remains available for quick triage, but real continuity comes from ORCA/live inbox."
+            return "Compute helper answers immediately for chat. Use live inbox when you explicitly want a real Aloha handoff."
         case "maui":
-            return "Compute triage for engineering guidance. Real implementation belongs on tickets, runs, commits, and verification."
+            return "Compute helper answers immediately for engineering guidance. Real implementation belongs on tickets, runs, commits, and verification."
         case "chief":
             return "Protected read-only lane. No live P&L, positions, wallets, orders, Chief memory, or trading actions from Pod chat."
         default:

@@ -11,8 +11,11 @@ struct DirectChatView: View {
     @State private var isShowingVoiceRoom = false
 
     var body: some View {
-        NavigationStack(path: $viewModel.navigationPath) {
+        NavigationSplitView {
             agentListSidebar
+                .navigationSplitViewColumnWidth(min: 300, ideal: 360, max: 420)
+        } detail: {
+            playgroundDetail
         }
         .onAppear {
             viewModel.setModelContext(modelContext)
@@ -27,11 +30,6 @@ struct DirectChatView: View {
         .onDisappear {
             viewModel.stopPresenceMonitoring()
         }
-        .onChange(of: viewModel.navigationPath.count) { _, count in
-            if count == 0 {
-                viewModel.clearSelection()
-            }
-        }
         .onReceive(NotificationCenter.default.publisher(for: .orcaAuthTokenInvalidated)) { _ in
             appState.logout()
         }
@@ -40,6 +38,29 @@ struct DirectChatView: View {
         }
         .sheet(isPresented: $isShowingVoiceRoom) {
             VoiceCompanionView(viewModel: voiceCoordinator.viewModel)
+        }
+    }
+
+    @ViewBuilder
+    private var playgroundDetail: some View {
+        if let agent = viewModel.selectedAgent {
+            LockerChatView(viewModel: viewModel, agent: agent)
+                .id("agent-\(agent.id)")
+        } else if let room = viewModel.selectedRoom {
+            SonarRoomConversationView(viewModel: viewModel, room: room)
+                .id("room-\(room.id)")
+        } else {
+            PlaygroundEmptyWorkspace(
+                readyCount: primaryAgents.count + supportAgents.count,
+                roomCount: viewModel.sonarRooms.count,
+                pendingCount: totalPendingRooms,
+                unreadCount: totalUnreadRooms,
+                onOpenFirstAgent: {
+                    if let first = (primaryAgents + supportAgents).first {
+                        viewModel.selectAgent(first)
+                    }
+                }
+            )
         }
     }
 
@@ -147,9 +168,12 @@ struct DirectChatView: View {
     @ViewBuilder
     private func agentRow(_ agent: AgentInfo) -> some View {
         if viewModel.canStartChat(with: agent) {
-            NavigationLink(value: agent) {
+            Button {
+                viewModel.selectAgent(agent)
+            } label: {
                 AgentRowView(agent: agent, viewModel: viewModel)
             }
+            .buttonStyle(.plain)
             .listRowBackground(
                 viewModel.selectedAgent?.id == agent.id
                 ? AppColors.accentElectric.opacity(0.15)
@@ -194,9 +218,12 @@ struct DirectChatView: View {
         } else if !rooms.isEmpty {
             Section(sectionTitle(title, count: rooms.count)) {
                 ForEach(rooms) { room in
-                    NavigationLink(value: room) {
+                    Button {
+                        viewModel.selectRoom(room)
+                    } label: {
                         SonarRoomRow(room: room)
                     }
+                    .buttonStyle(.plain)
                     .listRowBackground(Color.clear)
                 }
             }
@@ -286,19 +313,80 @@ struct DirectChatView: View {
             || room.notificationLevel == "attention"
     }
 
-    // MARK: - Empty State
+}
 
-    private var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "bubble.left.and.bubble.right")
-                .font(.system(size: 48))
-                .foregroundColor(AppColors.textTertiary)
-            Text("Select a lane to start chatting")
-                .font(.title3)
-                .foregroundColor(AppColors.textSecondary)
+private struct PlaygroundEmptyWorkspace: View {
+    let readyCount: Int
+    let roomCount: Int
+    let pendingCount: Int
+    let unreadCount: Int
+    let onOpenFirstAgent: () -> Void
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Image(systemName: "bubble.left.and.bubble.right.fill")
+                .font(.system(size: 46, weight: .semibold))
+                .foregroundStyle(AppColors.accentElectric)
+                .frame(width: 82, height: 82)
+                .background(AppColors.accentElectric.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(spacing: 7) {
+                Text("Playground")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(AppColors.textPrimary)
+                Text("Choose an agent lane or ORCA room. Chat stays in ORCA, Locker Chat shows the same thread, and work promotes into tickets, research, runs, or approvals.")
+                    .font(.subheadline)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 520)
+            }
+
+            HStack(spacing: 8) {
+                workspaceChip("\(readyCount)", "agent lanes", "person.2")
+                workspaceChip("\(roomCount)", "rooms", "number")
+                workspaceChip("\(pendingCount)", "waiting", "person.badge.clock")
+                workspaceChip("\(unreadCount)", "unread", "circle.fill")
+            }
+
+            Button {
+                onOpenFirstAgent()
+            } label: {
+                Label("Open First Agent Lane", systemImage: "arrow.right.circle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .background(AppColors.accentElectric)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .disabled(readyCount == 0)
+            .opacity(readyCount == 0 ? 0.45 : 1)
         }
+        .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AppColors.backgroundPrimary)
+    }
+
+    private func workspaceChip(_ value: String, _ label: String, _ icon: String) -> some View {
+        Label {
+            Text("\(value) \(label)")
+        } icon: {
+            Image(systemName: icon)
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(AppColors.textSecondary)
+        .lineLimit(1)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 6)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(AppColors.border, lineWidth: 1)
+        )
     }
 }
 

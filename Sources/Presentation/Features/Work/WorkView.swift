@@ -1811,7 +1811,7 @@ final class WorkViewModel {
             }
             // Per ticket 7d4c89a7 (UUID→name resolution): fetch tickets AND agents in parallel,
             // resolve assigneeAgentId UUIDs to names client-side.
-            async let ticketsAsync: WorkListResponse<TicketListItem> = APIClient.shared.get(path: "/api/v1/tickets?limit=200")
+            async let ticketsAsync: WorkListResponse<TicketListItem> = APIClient.shared.get(path: "/api/v1/tickets?limit=1000")
             async let agentsAsync: WorkListResponse<AgentNameOnly> = APIClient.shared.get(path: "/api/v1/agents?limit=200")
 
             let ticketResponse = try await ticketsAsync

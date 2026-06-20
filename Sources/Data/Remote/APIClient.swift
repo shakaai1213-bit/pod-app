@@ -204,6 +204,10 @@ actor APIClient {
         let (data, response) = try await session.data(for: request)
         try validateResponse(response)
 
+        if data.isEmpty, T.self == EmptyResponse.self {
+            return EmptyResponse() as! T
+        }
+
         do {
             return try decoder.decode(T.self, from: data)
         } catch {

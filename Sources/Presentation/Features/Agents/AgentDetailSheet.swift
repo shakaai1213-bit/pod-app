@@ -31,6 +31,13 @@ struct AgentDetailSheet: View {
     @State private var lockerData: AgentLockerDTO?
     @State private var isLoadingLocker = false
     @State private var lockerError: String?
+    @State private var plannerNewTitle = ""
+    @State private var plannerNewBody = ""
+    @State private var plannerNewLane = "now"
+    @State private var plannerNewPriority = "medium"
+    @State private var plannerWriteItemId: String?
+    @State private var plannerWriteError: String?
+    @State private var plannerEditDraft: PlannerItemEditDraft?
     @State private var lockerFeedbackText = ""
     @State private var lockerFeedbackRating: String? = nil
     @State private var lockerFeedbackPanel: String = "classroom"
@@ -128,6 +135,9 @@ struct AgentDetailSheet: View {
             }
             .sheet(isPresented: $showingSendMessage) {
                 ComposeMessageSheet(agent: agent.directChatAgentInfo)
+            }
+            .sheet(item: $plannerEditDraft) { draft in
+                plannerEditSheet(draft)
             }
         }
         .presentationDetents([.large])
@@ -1128,13 +1138,87 @@ struct AgentDetailSheet: View {
 
     private func lockerPlannerTab(_ locker: AgentLockerDTO) -> some View {
         VStack(alignment: .leading, spacing: Theme.sm) {
+            plannerCreateRow
             lockerLane("Now", items: locker.planner.lanes.now, emptyReason: locker.planner.emptyReasons["now"] ?? nil)
             lockerLane("Next", items: locker.planner.lanes.next, emptyReason: locker.planner.emptyReasons["next"] ?? nil)
+            lockerLane("Waiting", items: locker.planner.lanes.waiting, emptyReason: locker.planner.emptyReasons["waiting"] ?? nil)
             lockerLane("Blocked", items: locker.planner.lanes.blocked, emptyReason: locker.planner.emptyReasons["blocked"] ?? nil)
             lockerLane("Review", items: locker.planner.lanes.review, emptyReason: locker.planner.emptyReasons["review"] ?? nil)
+            lockerLane("Done", items: locker.planner.lanes.done, emptyReason: locker.planner.emptyReasons["done"] ?? nil)
             lockerLane("Assigned ORCA Tasks", items: locker.orcaTasks.assigned, emptyReason: locker.orcaTasks.emptyReasons["assigned"] ?? nil)
             lockerLane("Active Runs", items: locker.orcaTasks.activeRuns, emptyReason: locker.orcaTasks.emptyReasons["active_runs"] ?? nil)
         }
+    }
+
+    private var plannerCreateRow: some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            TextField("Add a task...", text: $plannerNewTitle)
+                .textInputAutocapitalization(.sentences)
+                .submitLabel(.done)
+                .font(.caption)
+                .padding(.horizontal, Theme.sm)
+                .padding(.vertical, 8)
+                .background(AppColors.backgroundPrimary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.radiusSmall)
+                        .strokeBorder(AppColors.border, lineWidth: 1)
+                )
+                .onSubmit {
+                    Task { await createPlannerItem() }
+                }
+
+            TextField("Notes", text: $plannerNewBody, axis: .vertical)
+                .textInputAutocapitalization(.sentences)
+                .lineLimit(1...3)
+                .font(.caption)
+                .padding(.horizontal, Theme.sm)
+                .padding(.vertical, 8)
+                .background(AppColors.backgroundPrimary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.radiusSmall)
+                        .strokeBorder(AppColors.border, lineWidth: 1)
+                )
+
+            HStack(spacing: Theme.xs) {
+                Picker("Lane", selection: $plannerNewLane) {
+                    ForEach(plannerWritableLanes, id: \.self) { lane in
+                        Text(lane).tag(lane)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Picker("Priority", selection: $plannerNewPriority) {
+                    ForEach(plannerPriorities, id: \.self) { priority in
+                        Text(priority).tag(priority)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Button {
+                    Task { await createPlannerItem() }
+                } label: {
+                    plannerIcon(systemName: "plus")
+                }
+                .buttonStyle(.plain)
+                .disabled(plannerNewTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || plannerWriteItemId != nil)
+                .accessibilityLabel("Add planner item")
+            }
+        }
+        .padding(Theme.xs)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+        .overlay(alignment: .bottomLeading) {
+            if let plannerWriteError {
+                Text(plannerWriteError)
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.accentDanger)
+                    .padding(.top, 2)
+                    .offset(y: Theme.md)
+            }
+        }
+        .padding(.bottom, plannerWriteError == nil ? 0 : Theme.md)
     }
 
     private func lockerInboxTab(_ locker: AgentLockerDTO) -> some View {
@@ -1735,32 +1819,49 @@ struct AgentDetailSheet: View {
 
     private func lockerWorkItemRow(_ item: AgentLockerDTO.WorkItem) -> some View {
         VStack(alignment: .leading, spacing: Theme.xxs) {
-            HStack(alignment: .firstTextBaseline, spacing: Theme.xs) {
+            HStack(alignment: .top, spacing: Theme.xs) {
                 Text(item.displayTitle)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(AppColors.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
-                if let priority = item.priority, !priority.isEmpty {
+                if item.isPlannerItem {
+                    plannerItemControls(item)
+                } else if let priority = item.priority, !priority.isEmpty {
                     Text(priority)
                         .podTextStyle(.label, color: priorityColor(priority))
                 }
             }
 
-            if let ticketId = item.ticketId ?? item.id, !ticketId.isEmpty {
+            if let body = item.body?.nilIfBlank, item.isPlannerItem {
+                Text(body)
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if !item.isPlannerItem, let ticketId = item.ticketId ?? item.id, !ticketId.isEmpty {
                 Text(String(ticketId.prefix(8)))
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .foregroundStyle(AppColors.textMuted)
             }
 
-            lockerText(item.nextAction ?? item.whyShown, fallback: "No next action returned.")
+            if !item.isPlannerItem || (item.nextAction?.nilIfBlank != nil || item.whyShown?.nilIfBlank != nil) {
+                lockerText(item.nextAction ?? item.whyShown, fallback: "No next action returned.")
+            }
 
             HStack(spacing: Theme.xs) {
                 if let state = item.displayState, !state.isEmpty {
                     workNoteChip(state.replacingOccurrences(of: "_", with: " "), icon: "circle.dashed")
                 }
-                if let source = item.source, !source.isEmpty {
+                if let priority = item.priority, item.isPlannerItem, !priority.isEmpty {
+                    workNoteChip(priority, icon: "flag.fill")
+                }
+                if let source = item.source ?? item.sourceType, !source.isEmpty {
                     workNoteChip(source, icon: "link")
+                }
+                if let sourceRef = item.sourceRef, !sourceRef.isEmpty {
+                    workNoteChip(String(sourceRef.prefix(10)), icon: "number")
                 }
                 if let blockedOn = item.blockedOn, !blockedOn.isEmpty {
                     workNoteChip(blockedOn, icon: "lock.fill")
@@ -1771,6 +1872,183 @@ struct AgentDetailSheet: View {
         .padding(Theme.sm)
         .background(AppColors.backgroundTertiary)
         .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+    }
+
+    private func plannerItemControls(_ item: AgentLockerDTO.WorkItem) -> some View {
+        HStack(spacing: 4) {
+            Button {
+                Task { await updatePlannerItem(item, status: "done") }
+            } label: {
+                plannerIcon(systemName: item.status == "done" ? "checkmark.circle.fill" : "circle")
+            }
+            .buttonStyle(.plain)
+            .disabled(plannerWriteItemId == item.id)
+            .accessibilityLabel("Mark done")
+
+            Menu {
+                ForEach(plannerWritableLanes, id: \.self) { lane in
+                    Button {
+                        Task { await updatePlannerItem(item, lane: lane) }
+                    } label: {
+                        Label(lane, systemImage: item.lane == lane ? "checkmark" : "arrow.right")
+                    }
+                }
+            } label: {
+                plannerIcon(systemName: "arrow.left.arrow.right")
+            }
+            .disabled(plannerWriteItemId == item.id)
+
+            Button {
+                plannerEditDraft = PlannerItemEditDraft(item: item)
+            } label: {
+                plannerIcon(systemName: "pencil")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Edit planner item")
+
+            Button(role: .destructive) {
+                Task { await retirePlannerItem(item) }
+            } label: {
+                plannerIcon(systemName: "trash")
+            }
+            .buttonStyle(.plain)
+            .disabled(plannerWriteItemId == item.id)
+            .accessibilityLabel("Retire planner item")
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func plannerIcon(systemName: String) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(AppColors.accentElectric)
+            .frame(width: 26, height: 26)
+            .background(AppColors.backgroundSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+    }
+
+    private var plannerWritableLanes: [String] {
+        ["now", "next", "waiting"]
+    }
+
+    private var plannerPriorities: [String] {
+        ["low", "medium", "high"]
+    }
+
+    private func plannerEditSheet(_ draft: PlannerItemEditDraft) -> some View {
+        PlannerItemEditSheet(draft: draft) { updated in
+            Task { await savePlannerItemEdit(updated) }
+        }
+        .presentationDetents([.medium])
+    }
+
+    private func createPlannerItem() async {
+        let title = plannerNewTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
+        await MainActor.run {
+            plannerWriteItemId = "new"
+            plannerWriteError = nil
+        }
+
+        do {
+            let body = PlannerItemCreateRequest(
+                title: title,
+                body: plannerNewBody.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank,
+                lane: plannerNewLane,
+                priority: plannerNewPriority
+            )
+            let _: EmptyResponse = try await APIClient.shared.request(
+                .createPlannerItem(agentId: agent.id, body),
+                body: body
+            )
+            await MainActor.run {
+                self.plannerNewTitle = ""
+                self.plannerNewBody = ""
+                self.plannerNewPriority = "medium"
+                self.plannerWriteItemId = nil
+            }
+            await loadLocker()
+        } catch {
+            await MainActor.run {
+                self.plannerWriteError = "Planner write failed"
+                self.plannerWriteItemId = nil
+            }
+        }
+    }
+
+    private func updatePlannerItem(
+        _ item: AgentLockerDTO.WorkItem,
+        title: String? = nil,
+        body: String? = nil,
+        lane: String? = nil,
+        priority: String? = nil,
+        status: String? = nil
+    ) async {
+        guard item.isPlannerItem, let itemId = item.id?.nilIfBlank else { return }
+        await MainActor.run {
+            plannerWriteItemId = itemId
+            plannerWriteError = nil
+        }
+
+        do {
+            let request = PlannerItemUpdateRequest(
+                title: title,
+                body: body,
+                lane: lane,
+                priority: priority,
+                status: status
+            )
+            let _: EmptyResponse = try await APIClient.shared.request(
+                .updatePlannerItem(agentId: agent.id, itemId: itemId, request),
+                body: request
+            )
+            await MainActor.run {
+                self.plannerWriteItemId = nil
+            }
+            await loadLocker()
+        } catch {
+            await MainActor.run {
+                self.plannerWriteError = "Planner write failed"
+                self.plannerWriteItemId = nil
+            }
+        }
+    }
+
+    private func savePlannerItemEdit(_ draft: PlannerItemEditDraft) async {
+        guard let item = draft.item else { return }
+        await updatePlannerItem(
+            item,
+            title: draft.title.trimmingCharacters(in: .whitespacesAndNewlines),
+            body: draft.body.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank,
+            lane: draft.lane,
+            priority: draft.priority
+        )
+        await MainActor.run {
+            self.plannerEditDraft = nil
+        }
+    }
+
+    private func retirePlannerItem(_ item: AgentLockerDTO.WorkItem) async {
+        guard item.isPlannerItem, let itemId = item.id?.nilIfBlank else { return }
+        await MainActor.run {
+            plannerWriteItemId = itemId
+            plannerWriteError = nil
+        }
+
+        do {
+            let _: EmptyResponse = try await APIClient.shared.request(
+                .deletePlannerItem(agentId: agent.id, itemId: itemId)
+            )
+            await MainActor.run {
+                self.plannerWriteItemId = nil
+            }
+            await loadLocker()
+        } catch {
+            await MainActor.run {
+                self.plannerWriteError = "Planner retire failed"
+                self.plannerWriteItemId = nil
+            }
+        }
     }
 
     private func lockerThreadRow(_ thread: AgentLockerDTO.Inbox.Thread) -> some View {
@@ -2420,11 +2698,38 @@ struct AgentDetailSheet: View {
                 self.isLoadingLocker = false
             }
         } catch {
+            let errorMessage: String
+            #if DEBUG
+            errorMessage = "Locker unavailable\n\(Self.describeLockerLoadError(error))"
+            print("Locker load failed for \(agent.apiPathComponent): \(Self.describeLockerLoadError(error))")
+            #else
+            errorMessage = "Locker unavailable"
+            #endif
             await MainActor.run {
                 self.isLoadingLocker = false
-                self.lockerError = "Locker unavailable"
+                self.lockerError = errorMessage
             }
         }
+    }
+
+    private static func describeLockerLoadError(_ error: Error) -> String {
+        switch error {
+        case let DecodingError.keyNotFound(key, context):
+            return "DecodingError.keyNotFound(\(key.stringValue)) at \(codingPathDescription(context.codingPath + [key])): \(context.debugDescription)"
+        case let DecodingError.typeMismatch(type, context):
+            return "DecodingError.typeMismatch(\(type)) at \(codingPathDescription(context.codingPath)): \(context.debugDescription)"
+        case let DecodingError.valueNotFound(type, context):
+            return "DecodingError.valueNotFound(\(type)) at \(codingPathDescription(context.codingPath)): \(context.debugDescription)"
+        case let DecodingError.dataCorrupted(context):
+            return "DecodingError.dataCorrupted at \(codingPathDescription(context.codingPath)): \(context.debugDescription)"
+        default:
+            return String(describing: error)
+        }
+    }
+
+    private static func codingPathDescription(_ codingPath: [CodingKey]) -> String {
+        let path = codingPath.map(\.stringValue).joined(separator: ".")
+        return path.isEmpty ? "<root>" : path
     }
 
     private func postWorkNote() async {
@@ -3100,6 +3405,86 @@ private struct AgentResponsibilityDomainDTO: Decodable {
     let fallback: String?
     let scope: String?
     let note: String?
+}
+
+private struct PlannerItemEditDraft: Identifiable {
+    let id: String
+    let item: AgentLockerDTO.WorkItem?
+    var title: String
+    var body: String
+    var lane: String
+    var priority: String
+
+    init(item: AgentLockerDTO.WorkItem) {
+        self.id = item.id ?? item.stableId
+        self.item = item
+        self.title = item.title ?? item.summary ?? ""
+        self.body = item.body ?? ""
+        self.lane = item.lane?.nilIfBlank ?? "now"
+        self.priority = item.priority?.nilIfBlank ?? "medium"
+    }
+}
+
+private struct PlannerItemEditSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var draft: PlannerItemEditDraft
+    let onSave: (PlannerItemEditDraft) -> Void
+
+    init(draft: PlannerItemEditDraft, onSave: @escaping (PlannerItemEditDraft) -> Void) {
+        _draft = State(initialValue: draft)
+        self.onSave = onSave
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: Theme.md) {
+                TextField("Title", text: $draft.title)
+                    .textInputAutocapitalization(.sentences)
+                    .font(.body)
+                    .padding(Theme.sm)
+                    .background(AppColors.backgroundSecondary)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+
+                TextEditor(text: $draft.body)
+                    .frame(minHeight: 96)
+                    .scrollContentBackground(.hidden)
+                    .padding(Theme.xs)
+                    .background(AppColors.backgroundSecondary)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
+
+                Picker("Priority", selection: $draft.priority) {
+                    ForEach(["low", "medium", "high"], id: \.self) { priority in
+                        Text(priority).tag(priority)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Picker("Lane", selection: $draft.lane) {
+                    ForEach(["now", "next", "waiting"], id: \.self) { lane in
+                        Text(lane).tag(lane)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Spacer(minLength: 0)
+            }
+            .padding(Theme.md)
+            .background(AppColors.backgroundPrimary)
+            .navigationTitle("Edit")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        onSave(draft)
+                    }
+                    .disabled(draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
 }
 
 private extension Agent {

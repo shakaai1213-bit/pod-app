@@ -1813,10 +1813,10 @@ final class TicketsViewModel {
 
     private func loadTicketDTOs(includeTerminalTickets: Bool) async throws -> [TicketDTO] {
         do {
-            return try await api.get(path: "/api/v1/tickets?include_closed=\(includeTerminalTickets)")
+            return try await api.get(path: "/api/v1/tickets?include_closed=\(includeTerminalTickets)&limit=1000")
         } catch {
             if includeTerminalTickets {
-                return try await api.get(path: "/api/v1/tickets")
+                return try await api.get(path: "/api/v1/tickets?limit=1000")
             }
             throw error
         }
