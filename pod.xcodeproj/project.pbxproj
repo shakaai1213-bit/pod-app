@@ -32,6 +32,7 @@
 		38A4AD8CE06D7BDB153DB923 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1695C8CD499CB511B0C11D94 /* ChatView.swift */; };
 		3A579D796D053AEF7F48A93B /* Typography.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0905CC7645A277BCFB4D4211 /* Typography.swift */; };
 		3AB34F50F3630DA8760A6CFA /* Colors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A10B6FE95332F160D3E227C /* Colors.swift */; };
+		3B16C56544F5481B9F7F8ED2 /* CaptainsDeskSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A4D73E8F029459D920B7C43 /* CaptainsDeskSection.swift */; };
 		3C135990C2E55C1E5079A33C /* CockpitSignQueueSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4E4C855478DA5C9D41034E0 /* CockpitSignQueueSection.swift */; };
 		3FF7F4F2966A2B3337C97B8E /* AuthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E75CB63EBA420B1C8624C8 /* AuthManager.swift */; };
 		42F9E02E32203C7EF152DCB2 /* SonarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C67EF1DD90F4E3DDF038BDE /* SonarView.swift */; };
@@ -176,6 +177,7 @@
 		55C5EA92AF78A2BD257AA7E1 /* TaskSafeSleep.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskSafeSleep.swift; sourceTree = "<group>"; };
 		5662C577757D6A7B9B15C8B8 /* DirectChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DirectChatView.swift; sourceTree = "<group>"; };
 		574CFE0B1AC9C1B0155DA6F7 /* NotificationRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationRouter.swift; sourceTree = "<group>"; };
+		5A4D73E8F029459D920B7C43 /* CaptainsDeskSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptainsDeskSection.swift; sourceTree = "<group>"; };
 		5D08D7D34A8A9C7A08349196 /* DirectChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DirectChatViewModel.swift; sourceTree = "<group>"; };
 		5E18BACE3C1681D62AFA8498 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		61E316898E420DEC290715F7 /* TaskCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskCardView.swift; sourceTree = "<group>"; };
@@ -360,6 +362,7 @@
 			children = (
 				BBEBD1E0B19B12F48A528F56 /* ActivityItemView.swift */,
 				B7F5808B0A89E2CE05779BF4 /* AgentStatusCard.swift */,
+				5A4D73E8F029459D920B7C43 /* CaptainsDeskSection.swift */,
 				8E565B81C093C4FF46686662 /* ChiefFundContent.swift */,
 				A4E4C855478DA5C9D41034E0 /* CockpitSignQueueSection.swift */,
 				F73FE194ED17E1FF892B715D /* DashboardModels.swift */,
@@ -856,6 +859,7 @@
 				EEB7FD53570A06DB48B7954B /* Chat.swift in Sources */,
 				38A4AD8CE06D7BDB153DB923 /* ChatView.swift in Sources */,
 				A9A6BA534A675DEB3601570D /* ChatViewModel.swift in Sources */,
+				3B16C56544F5481B9F7F8ED2 /* CaptainsDeskSection.swift in Sources */,
 				50CCE7E17C21A642DDA65C63 /* ChiefFundContent.swift in Sources */,
 				86591B7A5B04085131D89111 /* ClaudeClient.swift in Sources */,
 				3C135990C2E55C1E5079A33C /* CockpitSignQueueSection.swift in Sources */,

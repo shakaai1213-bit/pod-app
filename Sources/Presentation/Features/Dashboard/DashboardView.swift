@@ -34,27 +34,30 @@ struct DashboardView: View {
                     // 1. Agent status strip — fast lab pulse before owner-action queues.
                     agentStatusStrip
 
-                    // 2. Voice room status — primary realtime chat surface.
+                    // 2. Captain's Desk — Tony's living focus cards from ORCA.
+                    CaptainsDeskSection()
+
+                    // 3. Voice room status — primary realtime chat surface.
                     dashboardVoiceBanner
 
-                    // 3. Protected Fund visibility — read-only, no controls.
+                    // 4. Protected Fund visibility — read-only, no controls.
                     dashboardFundLandingCard
 
-                    // 4. Daily briefing — collapsible read-only note from ORCA.
+                    // 5. Daily briefing — collapsible read-only note from ORCA.
                     dailyBriefingPanel
 
-                    // 5. Tier 1 sign queue — "what needs your eyes"
+                    // 6. Tier 1 sign queue — "what needs your eyes"
                     CockpitSignQueueSection()
 
-                    // 6. Playground NATS tail — unread inbox + action-required
+                    // 7. Playground NATS tail — unread inbox + action-required
                     PlaygroundPanelView(model: playgroundModel, onChatTap: {
                         appState.navigateTo(.chat)
                     })
 
-                    // 7. Compact briefing + doctrine velocity line
+                    // 8. Compact briefing + doctrine velocity line
                     classroomBriefingLine
 
-                    // 8. Top flow card — one blocker, tap → Work
+                    // 9. Top flow card — one blocker, tap → Work
                     classroomFlowCard
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
