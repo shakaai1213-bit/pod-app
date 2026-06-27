@@ -24,6 +24,7 @@ struct LockerChatView: View {
     @State private var isContextExpanded = false
     @State private var areOlderMessagesExpanded = false
     @State private var selectedEvidenceMessage: DMMessage?
+    @State private var selectedAgentPacketProject: AgentChatService.LockerWorkSpineProject?
     @State private var isShowingVoiceRoom = false
 
     private static let recentMessageLimit = 40
@@ -203,6 +204,21 @@ struct LockerChatView: View {
             if let preview = viewModel.latestTriagePreview {
                 TriagePreviewSheet(preview: preview)
             }
+        }
+        .sheet(item: $selectedAgentPacketProject) { project in
+            let endpoint = trimmedAgentPacketEndpoint(for: project) ?? ""
+            ProjectAgentPacketSheet(
+                project: project,
+                brief: endpoint.isEmpty ? nil : viewModel.agentPacketBriefByEndpoint[endpoint],
+                isLoading: viewModel.isLoadingAgentPacket,
+                errorMessage: viewModel.agentPacketError,
+                onRetry: {
+                    guard !endpoint.isEmpty else { return }
+                    Task {
+                        await viewModel.loadAgentPacket(endpoint: endpoint, for: agent)
+                    }
+                }
+            )
         }
         .sheet(
             isPresented: Binding(
@@ -614,19 +630,7 @@ struct LockerChatView: View {
                 }
 
                 if let project = workSpine.projects.first {
-                    HStack(spacing: 6) {
-                        Image(systemName: "square.grid.2x2")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(AppColors.accentElectric)
-                        Text(project.name)
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(AppColors.textPrimary)
-                            .lineLimit(1)
-                        Text([project.stage, project.status].compactMap { $0 }.joined(separator: " · "))
-                            .font(.caption2)
-                            .foregroundStyle(AppColors.textTertiary)
-                            .lineLimit(1)
-                    }
+                    lockerWorkSpineProjectRow(project)
                 }
 
                 ForEach(Array((workSpine.tickets + workSpine.tasks).prefix(3))) { item in
@@ -662,6 +666,62 @@ struct LockerChatView: View {
                 }
             }
             .padding(.top, 2)
+        }
+    }
+
+    @ViewBuilder
+    private func lockerWorkSpineProjectRow(_ project: AgentChatService.LockerWorkSpineProject) -> some View {
+        if let endpoint = trimmedAgentPacketEndpoint(for: project) {
+            Button {
+                openAgentPacket(project, endpoint: endpoint)
+            } label: {
+                lockerWorkSpineProjectRowContent(project, isTappable: true)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open project agent packet for \(project.name)")
+        } else {
+            lockerWorkSpineProjectRowContent(project, isTappable: false)
+        }
+    }
+
+    private func lockerWorkSpineProjectRowContent(
+        _ project: AgentChatService.LockerWorkSpineProject,
+        isTappable: Bool
+    ) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "square.grid.2x2")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(AppColors.accentElectric)
+            Text(project.name)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(AppColors.textPrimary)
+                .lineLimit(1)
+            Text([project.stage, project.status].compactMap { $0 }.joined(separator: " · "))
+                .font(.caption2)
+                .foregroundStyle(AppColors.textTertiary)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            if isTappable {
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(AppColors.textTertiary)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+
+    private func trimmedAgentPacketEndpoint(for project: AgentChatService.LockerWorkSpineProject) -> String? {
+        guard let endpoint = project.agentPacketEndpoint?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !endpoint.isEmpty else {
+            return nil
+        }
+        return endpoint
+    }
+
+    private func openAgentPacket(_ project: AgentChatService.LockerWorkSpineProject, endpoint: String) {
+        selectedAgentPacketProject = project
+        Task {
+            await viewModel.loadAgentPacket(endpoint: endpoint, for: agent)
         }
     }
 
@@ -1721,6 +1781,205 @@ struct LockerChatView: View {
                 .frame(height: 0.5),
             alignment: .top
         )
+    }
+}
+
+private struct ProjectAgentPacketSheet: View {
+    let project: AgentChatService.LockerWorkSpineProject
+    let brief: AgentChatService.ProjectAgentPacketBrief?
+    let isLoading: Bool
+    let errorMessage: String?
+    let onRetry: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Project") {
+                    labeledValue("Name", brief?.projectName ?? project.name)
+                    if let status = cleaned(brief?.projectStatus) ?? cleaned(project.status) {
+                        labeledValue("Status", formatted(status))
+                    }
+                    if let stage = cleaned(brief?.projectStage) ?? cleaned(project.stage) {
+                        labeledValue("Stage", formatted(stage))
+                    }
+                    if let brief {
+                        labeledValue("Boards", "\(brief.boardIds.count)")
+                    }
+                }
+
+                if isLoading {
+                    Section {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(AppColors.accentElectric)
+                            Text("Loading project brief")
+                                .font(.caption)
+                                .foregroundStyle(AppColors.textSecondary)
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
+
+                if let errorMessage, !errorMessage.isEmpty {
+                    Section {
+                        ErrorBannerView(message: errorMessage, retryTitle: "Retry", retry: onRetry)
+                    }
+                }
+
+                if let brief {
+                    Section("Tickets (\(brief.ticketCount))") {
+                        if brief.tickets.isEmpty {
+                            emptyRow("No tickets in this packet")
+                        } else {
+                            ForEach(brief.tickets) { ticket in
+                                ticketRow(ticket)
+                            }
+                        }
+                    }
+
+                    Section("Work tasks (\(brief.workTaskCount))") {
+                        if brief.workTasks.isEmpty {
+                            emptyRow("No work tasks in this packet")
+                        } else {
+                            ForEach(brief.workTasks) { task in
+                                taskRow(task)
+                            }
+                        }
+                    }
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(AppColors.backgroundPrimary)
+            .navigationTitle("Agent Packet")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func labeledValue(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label.uppercased())
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(AppColors.textTertiary)
+            Text(value.isEmpty ? "None" : value)
+                .font(.caption)
+                .foregroundStyle(AppColors.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func ticketRow(_ ticket: AgentChatService.ProjectAgentPacketTicket) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(ticket.title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppColors.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 6) {
+                if let status = cleaned(ticket.status) {
+                    packetChip(formatted(status), color: AppColors.accentSuccess)
+                }
+                if let priority = cleaned(ticket.priority) {
+                    packetChip(formatted(priority), color: AppColors.accentWarning)
+                }
+                if let ticketType = cleaned(ticket.ticketType) {
+                    packetChip(formatted(ticketType), color: AppColors.accentElectric)
+                }
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func taskRow(_ task: AgentChatService.ProjectAgentPacketTask) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(task.title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppColors.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 6) {
+                if let status = cleaned(task.status) {
+                    packetChip(formatted(status), color: AppColors.accentAgent)
+                }
+                if let stage = cleaned(task.stage) {
+                    packetChip(formatted(stage), color: AppColors.accentElectric)
+                }
+                if let priority = cleaned(task.priority) {
+                    packetChip(formatted(priority), color: AppColors.accentWarning)
+                }
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func emptyRow(_ text: String) -> some View {
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(AppColors.textTertiary)
+    }
+
+    private func packetChip(_ label: String, color: Color) -> some View {
+        Text(label)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(color)
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(color.opacity(0.10))
+            .clipShape(Capsule())
+    }
+
+    private func cleaned(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else {
+            return nil
+        }
+        return value
+    }
+
+    private func formatted(_ value: String) -> String {
+        value.replacingOccurrences(of: "_", with: " ")
+    }
+}
+
+private struct ErrorBannerView: View {
+    let message: String
+    let retryTitle: String?
+    let retry: (() -> Void)?
+
+    init(message: String, retryTitle: String? = nil, retry: (() -> Void)? = nil) {
+        self.message = message
+        self.retryTitle = retryTitle
+        self.retry = retry
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(AppColors.accentWarning)
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(AppColors.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            if let retryTitle, let retry {
+                Button(retryTitle, action: retry)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.accentElectric)
+            }
+        }
+        .padding(12)
+        .background(AppColors.accentWarning.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 

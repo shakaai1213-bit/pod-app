@@ -85,6 +85,9 @@ final class DirectChatViewModel {
     var agentLockerSummaryByAgent: [String: AgentChatService.LockerSummary] = [:]
     var isLoadingAgentLocker: Bool = false
     var agentLockerError: String?
+    var agentPacketBriefByEndpoint: [String: AgentChatService.ProjectAgentPacketBrief] = [:]
+    var isLoadingAgentPacket: Bool = false
+    var agentPacketError: String?
 
     // Conversation data from SwiftData
     var conversations: [DMConversation] = []
@@ -778,6 +781,8 @@ final class DirectChatViewModel {
         routeProgressSteps = []
         latestTriagePreview = nil
         triagePreviewError = nil
+        isLoadingAgentPacket = false
+        agentPacketError = nil
         selectedDeliveryMode = agent.defaultDeliveryMode
         loadMessages(for: agent)
         loadTicketContext(for: agent)
@@ -831,6 +836,8 @@ final class DirectChatViewModel {
         roomActionMessage = nil
         isLoadingAgentLocker = false
         agentLockerError = nil
+        isLoadingAgentPacket = false
+        agentPacketError = nil
         stopRoomAutoRefresh()
     }
 
@@ -853,6 +860,32 @@ final class DirectChatViewModel {
         } catch {
             if selectedAgent?.id == agent.id {
                 agentLockerError = "Agent locker unavailable"
+            }
+        }
+    }
+
+    func loadAgentPacket(endpoint: String, for agent: AgentInfo) async {
+        let path = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !path.isEmpty else { return }
+
+        isLoadingAgentPacket = true
+        agentPacketError = nil
+        agentPacketBriefByEndpoint.removeValue(forKey: path)
+        defer { isLoadingAgentPacket = false }
+
+        do {
+            let service = AgentChatService(agent: agent)
+            let brief = try await service.fetchAgentPacket(endpoint: path)
+            if selectedAgent?.id == agent.id {
+                agentPacketBriefByEndpoint[path] = brief
+            }
+        } catch let apiError as APIError {
+            if selectedAgent?.id == agent.id {
+                agentPacketError = apiError.message
+            }
+        } catch {
+            if selectedAgent?.id == agent.id {
+                agentPacketError = "Project agent packet unavailable"
             }
         }
     }

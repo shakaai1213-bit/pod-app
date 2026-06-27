@@ -2302,6 +2302,39 @@ struct ProjectNoteDTO: Codable, Identifiable, Hashable, Sendable {
     }
 }
 
+struct ProjectAgentPacketDTO: Decodable {
+    let project: ProjectDTO
+    let boardIds: [UUID]
+    let tickets: [Ticket]
+    let workTasks: [TaskDTO]
+    let ticketCount: Int
+    let workTaskCount: Int
+
+    // Self-contained agent-packet ticket shape (decodes ServiceTicketRead; extra
+    // backend fields are ignored). Fixed: arm referenced a non-existent
+    // AgentLockerDTO.Ticket nested type. Mapping reads id/title/status only.
+    struct Ticket: Decodable, Hashable, Identifiable {
+        let id: String
+        let title: String
+        let status: String?
+        let priority: String?
+        let ticketType: String?
+
+        enum CodingKeys: String, CodingKey {
+            case id, title, status, priority
+            case ticketType = "ticket_type"
+        }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case project, tickets
+        case boardIds = "board_ids"
+        case workTasks = "work_tasks"
+        case ticketCount = "ticket_count"
+        case workTaskCount = "work_task_count"
+    }
+}
+
 struct ProjectCreateRequest: Encodable {
     let name: String
     let goal: String?
