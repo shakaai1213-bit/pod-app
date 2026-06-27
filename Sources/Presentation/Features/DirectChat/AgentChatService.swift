@@ -74,6 +74,34 @@ actor AgentChatService {
         }
     }
 
+    struct ProjectAgentPacketTicket: Sendable, Hashable, Identifiable {
+        let id: String
+        let title: String
+        let status: String?
+        let priority: String?
+        let ticketType: String?
+    }
+
+    struct ProjectAgentPacketTask: Sendable, Hashable, Identifiable {
+        let id: String
+        let title: String
+        let status: String?
+        let stage: String?
+        let priority: String?
+    }
+
+    struct ProjectAgentPacketBrief: Sendable, Hashable, Identifiable {
+        let id: String
+        let projectName: String
+        let projectStatus: String
+        let projectStage: String?
+        let boardIds: [String]
+        let ticketCount: Int
+        let workTaskCount: Int
+        let tickets: [ProjectAgentPacketTicket]
+        let workTasks: [ProjectAgentPacketTask]
+    }
+
     struct LockerSummary: Sendable, Hashable {
         let source: String?
         let sessionStatus: String?
@@ -333,6 +361,16 @@ actor AgentChatService {
         )
     }
 
+    func fetchAgentPacket(endpoint: String) async throws -> ProjectAgentPacketBrief {
+        let path = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !path.isEmpty else {
+            throw APIError(code: 0, message: "Missing project agent-packet endpoint")
+        }
+
+        let response: ProjectAgentPacketDTO = try await APIClient.shared.get(path: path)
+        return Self.agentPacketBrief(from: response)
+    }
+
     private static func workSpineSummary(from spine: AgentLockerDTO.WorkSpine) -> LockerWorkSpineSummary {
         LockerWorkSpineSummary(
             source: spine.source,
@@ -352,6 +390,36 @@ actor AgentChatService {
             },
             tickets: spine.tickets.map { Self.workSpineItem(from: $0, kind: "ticket") },
             tasks: spine.tasks.map { Self.workSpineItem(from: $0, kind: "task") }
+        )
+    }
+
+    private static func agentPacketBrief(from packet: ProjectAgentPacketDTO) -> ProjectAgentPacketBrief {
+        ProjectAgentPacketBrief(
+            id: packet.project.id.uuidString,
+            projectName: packet.project.name,
+            projectStatus: packet.project.status,
+            projectStage: packet.project.stage,
+            boardIds: packet.boardIds.map(\.uuidString),
+            ticketCount: packet.ticketCount,
+            workTaskCount: packet.workTaskCount,
+            tickets: packet.tickets.map {
+                ProjectAgentPacketTicket(
+                    id: $0.id,
+                    title: $0.title,
+                    status: $0.status,
+                    priority: $0.priority,
+                    ticketType: $0.ticketType
+                )
+            },
+            workTasks: packet.workTasks.map {
+                ProjectAgentPacketTask(
+                    id: $0.id,
+                    title: $0.title,
+                    status: $0.status,
+                    stage: $0.stage,
+                    priority: $0.priority
+                )
+            }
         )
     }
 

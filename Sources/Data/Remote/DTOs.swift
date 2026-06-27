@@ -2302,6 +2302,23 @@ struct ProjectNoteDTO: Codable, Identifiable, Hashable, Sendable {
     }
 }
 
+struct ProjectAgentPacketDTO: Decodable {
+    let project: ProjectDTO
+    let boardIds: [UUID]
+    let tickets: [AgentLockerDTO.Ticket]
+    let workTasks: [TaskDTO]
+    let ticketCount: Int
+    let workTaskCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case project, tickets
+        case boardIds = "board_ids"
+        case workTasks = "work_tasks"
+        case ticketCount = "ticket_count"
+        case workTaskCount = "work_task_count"
+    }
+}
+
 struct ProjectCreateRequest: Encodable {
     let name: String
     let goal: String?
