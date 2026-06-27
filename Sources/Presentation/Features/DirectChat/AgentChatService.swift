@@ -32,6 +32,48 @@ actor AgentChatService {
         let metadata: ResponseMetadata?
     }
 
+    struct LockerWorkSpineProject: Sendable, Hashable, Identifiable {
+        let id: String
+        let name: String
+        let status: String?
+        let stage: String?
+        let agentPacketEndpoint: String?
+    }
+
+    struct LockerWorkSpineItem: Sendable, Hashable, Identifiable {
+        let id: String
+        let kind: String
+        let title: String
+        let status: String?
+        let priority: String?
+        let projectId: String?
+        let boardId: String?
+        let sourceTicketId: String?
+    }
+
+    struct LockerWorkSpineSummary: Sendable, Hashable {
+        let source: String?
+        let projectCount: Int
+        let ticketCount: Int
+        let taskCount: Int
+        let reviewRunCount: Int
+        let blockedCount: Int
+        let projects: [LockerWorkSpineProject]
+        let tickets: [LockerWorkSpineItem]
+        let tasks: [LockerWorkSpineItem]
+
+        var hasWork: Bool {
+            projectCount + ticketCount + taskCount + reviewRunCount > 0
+                || !projects.isEmpty
+                || !tickets.isEmpty
+                || !tasks.isEmpty
+        }
+
+        var totalWorkCount: Int {
+            ticketCount + taskCount + reviewRunCount
+        }
+    }
+
     struct LockerSummary: Sendable, Hashable {
         let source: String?
         let sessionStatus: String?
@@ -51,6 +93,7 @@ actor AgentChatService {
         let chatCanRun: Bool
         let chatAllowedActions: [String]
         let startHereHeadline: String?
+        let workSpine: LockerWorkSpineSummary
 
         var readinessText: String {
             var parts: [String] = []
@@ -71,6 +114,9 @@ actor AgentChatService {
             }
             if !gaps.isEmpty {
                 parts.append("\(gaps.count) gap\(gaps.count == 1 ? "" : "s")")
+            }
+            if workSpine.hasWork {
+                parts.append("\(workSpine.totalWorkCount) work")
             }
             return parts.joined(separator: " · ")
         }
@@ -263,6 +309,7 @@ actor AgentChatService {
         let response: AgentLockerDTO = try await APIClient.shared.get(
             path: "/api/v1/agents/\(agent.id)/locker-cockpit?limit=\(limit)"
         )
+        let workSpine = Self.workSpineSummary(from: response.workSpine)
         return LockerSummary(
             source: response.source,
             sessionStatus: response.agentProfile?.status,
@@ -281,8 +328,53 @@ actor AgentChatService {
             chatCanPost: response.chat.canPost,
             chatCanRun: response.chat.canDispatchSchoolhouseRun,
             chatAllowedActions: response.chat.policyAllowedActions,
-            startHereHeadline: response.startHere.headline
+            startHereHeadline: response.startHere.headline,
+            workSpine: workSpine
         )
+    }
+
+    private static func workSpineSummary(from spine: AgentLockerDTO.WorkSpine) -> LockerWorkSpineSummary {
+        LockerWorkSpineSummary(
+            source: spine.source,
+            projectCount: spine.counts.projects,
+            ticketCount: spine.counts.tickets,
+            taskCount: spine.counts.tasks,
+            reviewRunCount: spine.counts.reviewRuns,
+            blockedCount: spine.counts.blocked,
+            projects: spine.projects.map {
+                LockerWorkSpineProject(
+                    id: $0.id,
+                    name: $0.name ?? $0.id,
+                    status: $0.status,
+                    stage: $0.stage,
+                    agentPacketEndpoint: $0.agentPacketEndpoint
+                )
+            },
+            tickets: spine.tickets.map { Self.workSpineItem(from: $0, kind: "ticket") },
+            tasks: spine.tasks.map { Self.workSpineItem(from: $0, kind: "task") }
+        )
+    }
+
+    private static func workSpineItem(from item: AgentLockerDTO.WorkItem, kind: String) -> LockerWorkSpineItem {
+        let sourceTicketId = item.sourceTicketId
+            ?? sourceRef(item.sourceRefs, "source_ticket_id")
+            ?? sourceRef(item.sourceRefs, "ticket_id")
+            ?? item.ticketId
+        return LockerWorkSpineItem(
+            id: item.id ?? UUID().uuidString,
+            kind: item.kind ?? kind,
+            title: item.displayTitle,
+            status: item.displayState,
+            priority: item.priority,
+            projectId: item.projectId ?? sourceRef(item.sourceRefs, "project_id"),
+            boardId: item.boardId ?? sourceRef(item.sourceRefs, "board_id"),
+            sourceTicketId: sourceTicketId
+        )
+    }
+
+    private static func sourceRef(_ refs: [String: String?]?, _ key: String) -> String? {
+        guard let value = refs?[key] else { return nil }
+        return value
     }
 
     /// Sends a message to the ORCA direct-chat endpoint.

@@ -1959,8 +1959,9 @@ struct KnowledgeView: View {
             }
 
             HStack(spacing: Theme.sm) {
-                Text("Pending \(ops.pendingReview)")
-                Text("Sensitive \(ops.sensitiveWaiting)")
+                Text("Tony \(ops.tonyPendingReview ?? ops.sensitiveWaiting)")
+                Text("Aloha \(ops.normalPending ?? max(0, ops.pendingReview - ops.sensitiveWaiting))")
+                Text("Total \(ops.pendingReview)")
                 Text("Extract \(ops.latestExtractCandidates)")
             }
             .font(.caption2)

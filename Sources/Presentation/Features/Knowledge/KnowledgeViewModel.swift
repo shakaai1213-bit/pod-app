@@ -1124,6 +1124,8 @@ struct MemoryOpsResponse: Codable, Hashable, Sendable {
     let durableTotal: Int
     let durableByLifecycle: [String: Int]
     let pendingReview: Int
+    let normalPending: Int?
+    let tonyPendingReview: Int?
     let sensitiveWaiting: Int
     let latestExtractCandidates: Int
     let presentAgents: [String]
@@ -1137,6 +1139,8 @@ struct MemoryOpsResponse: Codable, Hashable, Sendable {
         case durableTotal = "durable_total"
         case durableByLifecycle = "durable_by_lifecycle"
         case pendingReview = "pending_review"
+        case normalPending = "normal_pending"
+        case tonyPendingReview = "tony_pending_review"
         case sensitiveWaiting = "sensitive_waiting"
         case latestExtractCandidates = "latest_extract_candidates"
         case presentAgents = "present_agents"

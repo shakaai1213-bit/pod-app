@@ -22,8 +22,11 @@ struct LockerChatView: View {
     @State private var showingAttachTicketSheet = false
     @State private var showingTriageSheet = false
     @State private var isContextExpanded = false
+    @State private var areOlderMessagesExpanded = false
     @State private var selectedEvidenceMessage: DMMessage?
     @State private var isShowingVoiceRoom = false
+
+    private static let recentMessageLimit = 40
 
     var body: some View {
         VStack(spacing: 0) {
@@ -65,7 +68,22 @@ struct LockerChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 12) {
-                        ForEach(viewModel.currentMessages, id: \.id) { message in
+                        if shouldCompactMessages {
+                            PlaygroundHistoryToggle(
+                                hiddenCount: hiddenMessageCount,
+                                isExpanded: areOlderMessagesExpanded,
+                                action: {
+                                    withAnimation(.easeInOut(duration: 0.18)) {
+                                        areOlderMessagesExpanded.toggle()
+                                    }
+                                    if !areOlderMessagesExpanded {
+                                        scrollToLatestMessage(proxy, animated: false)
+                                    }
+                                }
+                            )
+                        }
+
+                        ForEach(displayedMessages, id: \.id) { message in
                             messageBubble(message, agent: agent)
                                 .id(message.id)
                         }
@@ -73,17 +91,14 @@ struct LockerChatView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                 }
+                .onAppear {
+                    scrollToLatestMessage(proxy, animated: false)
+                }
                 .onChange(of: viewModel.currentMessages.count) { _, _ in
-                    if let last = viewModel.currentMessages.last {
-                        withAnimation(.easeOut(duration: 0.2)) {
-                            proxy.scrollTo(last.id, anchor: .bottom)
-                        }
-                    }
+                    scrollToLatestMessage(proxy, animated: true)
                 }
                 .onChange(of: viewModel.streamingContent) { _, _ in
-                    if let last = viewModel.currentMessages.last {
-                        proxy.scrollTo(last.id, anchor: .bottom)
-                    }
+                    scrollToLatestMessage(proxy, animated: false)
                 }
             }
             .background(AppColors.backgroundPrimary)
@@ -238,6 +253,37 @@ struct LockerChatView: View {
         }
         .sheet(isPresented: $isShowingVoiceRoom) {
             VoiceCompanionView(viewModel: voiceCoordinator.viewModel)
+        }
+    }
+
+    private var shouldCompactMessages: Bool {
+        viewModel.currentMessages.count > Self.recentMessageLimit
+    }
+
+    private var hiddenMessageCount: Int {
+        max(0, viewModel.currentMessages.count - Self.recentMessageLimit)
+    }
+
+    private var displayedMessages: [DMMessage] {
+        guard shouldCompactMessages, !areOlderMessagesExpanded else {
+            return viewModel.currentMessages
+        }
+        return Array(viewModel.currentMessages.suffix(Self.recentMessageLimit))
+    }
+
+    private func scrollToLatestMessage(_ proxy: ScrollViewProxy, animated: Bool) {
+        guard let last = viewModel.currentMessages.last else { return }
+        let scroll = {
+            proxy.scrollTo(last.id, anchor: .bottom)
+        }
+        DispatchQueue.main.async {
+            if animated {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    scroll()
+                }
+            } else {
+                scroll()
+            }
         }
     }
 
@@ -498,6 +544,8 @@ struct LockerChatView: View {
                     lockerCapabilityChip("Research", enabled: summary.chatAllowedActions.contains("research"))
                     lockerCapabilityChip("Run", enabled: summary.chatCanRun)
                 }
+
+                lockerWorkSpineRows(summary.workSpine)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 9)
@@ -544,6 +592,101 @@ struct LockerChatView: View {
             .padding(.vertical, 4)
             .background((enabled ? AppColors.accentSuccess : AppColors.textTertiary).opacity(0.10))
             .clipShape(Capsule())
+    }
+
+    @ViewBuilder
+    private func lockerWorkSpineRows(_ workSpine: AgentChatService.LockerWorkSpineSummary) -> some View {
+        if workSpine.hasWork {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Label("Work spine", systemImage: "rectangle.stack.badge.person.crop")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(AppColors.accentAgent)
+
+                    Spacer(minLength: 0)
+
+                    lockerMetricChip("\(workSpine.projectCount) project", color: AppColors.accentElectric)
+                    lockerMetricChip("\(workSpine.ticketCount) ticket", color: AppColors.accentSuccess)
+                    lockerMetricChip("\(workSpine.taskCount) task", color: AppColors.accentAgent)
+                    if workSpine.blockedCount > 0 {
+                        lockerMetricChip("\(workSpine.blockedCount) blocked", color: AppColors.accentWarning)
+                    }
+                }
+
+                if let project = workSpine.projects.first {
+                    HStack(spacing: 6) {
+                        Image(systemName: "square.grid.2x2")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(AppColors.accentElectric)
+                        Text(project.name)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(AppColors.textPrimary)
+                            .lineLimit(1)
+                        Text([project.stage, project.status].compactMap { $0 }.joined(separator: " · "))
+                            .font(.caption2)
+                            .foregroundStyle(AppColors.textTertiary)
+                            .lineLimit(1)
+                    }
+                }
+
+                ForEach(Array((workSpine.tickets + workSpine.tasks).prefix(3))) { item in
+                    HStack(spacing: 6) {
+                        Image(systemName: item.kind == "task" ? "checklist" : "text.badge.checkmark")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(item.kind == "task" ? AppColors.accentAgent : AppColors.accentSuccess)
+                        Text(item.title)
+                            .font(.caption2)
+                            .foregroundStyle(AppColors.textSecondary)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        if let status = item.status, !status.isEmpty {
+                            Text(status.replacingOccurrences(of: "_", with: " "))
+                                .font(.caption2)
+                                .foregroundStyle(AppColors.textTertiary)
+                                .lineLimit(1)
+                        }
+                        if let ref = shortWorkRef(item) {
+                            Text(ref)
+                                .font(.caption2)
+                                .foregroundStyle(AppColors.textTertiary)
+                                .lineLimit(1)
+                        }
+                    }
+                }
+
+                if let source = workSpine.source, !source.isEmpty {
+                    Text(source)
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.textTertiary)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    private func lockerMetricChip(_ label: String, color: Color) -> some View {
+        Text(label)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(color)
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(color.opacity(0.10))
+            .clipShape(Capsule())
+    }
+
+    private func shortWorkRef(_ item: AgentChatService.LockerWorkSpineItem) -> String? {
+        if let projectId = item.projectId, !projectId.isEmpty {
+            return "P \(String(projectId.prefix(8)))"
+        }
+        if let sourceTicketId = item.sourceTicketId, !sourceTicketId.isEmpty {
+            return "T \(String(sourceTicketId.prefix(8)))"
+        }
+        if let boardId = item.boardId, !boardId.isEmpty {
+            return "B \(String(boardId.prefix(8)))"
+        }
+        return nil
     }
 
     private func lockerPolicyText(_ summary: AgentChatService.LockerSummary) -> String {
@@ -1703,6 +1846,38 @@ private struct RouteProgressStrip: View {
         case .failed:
             return AppColors.accentWarning
         }
+    }
+}
+
+struct PlaygroundHistoryToggle: View {
+    let hiddenCount: Int
+    let isExpanded: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: isExpanded ? "chevron.up.circle.fill" : "chevron.down.circle.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                Text(isExpanded ? "Hide earlier messages" : "\(hiddenCount) earlier messages")
+                    .font(.caption.weight(.semibold))
+                Spacer(minLength: 8)
+                Text(isExpanded ? "Collapse" : "Show")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(AppColors.textTertiary)
+            }
+            .foregroundStyle(AppColors.accentElectric)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(AppColors.accentElectric.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(AppColors.accentElectric.opacity(0.16), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isExpanded ? "Hide earlier messages" : "Show \(hiddenCount) earlier messages")
     }
 }
 

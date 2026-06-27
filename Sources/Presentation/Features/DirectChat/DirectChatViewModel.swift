@@ -886,7 +886,7 @@ final class DirectChatViewModel {
     func availableDeliveryModes(for agent: AgentInfo) -> [DMDeliveryMode] {
         let workModes: [DMDeliveryMode] = activeTicketId == nil ? [] : [.agentRun]
         if Self.liveInboxAgents.contains(agent.id) {
-            return [.compute, .liveInbox, .auto] + workModes
+            return [.liveInbox, .compute, .auto] + workModes
         }
         return [.compute, .auto] + workModes
     }
@@ -2167,6 +2167,9 @@ final class DirectChatViewModel {
             if let minimumCreatedAt, message.timestamp < minimumCreatedAt {
                 continue
             }
+            if hasFinalLiveInboxReply(for: message) {
+                continue
+            }
             message.deliveryState = DMDeliveryState.timedOut.rawValue
             changed = true
         }
@@ -2234,6 +2237,7 @@ final class DirectChatViewModel {
                 DMDeliveryState.parse(message.deliveryState) == .timedOut
                     && (minimumCreatedAt.map { message.timestamp >= $0 } ?? true)
                     && message.role == "assistant"
+                    && !hasFinalLiveInboxReply(for: message)
             }
             .max(by: { $0.timestamp < $1.timestamp })
     }
@@ -2324,12 +2328,38 @@ final class DirectChatViewModel {
     private func hasPendingAsyncReply(for agent: AgentInfo) -> Bool {
         currentMessages.contains { message in
             Self.isPendingAsyncDeliveryState(message.deliveryState)
+                && !hasFinalLiveInboxReply(for: message)
         }
     }
 
     private func hasPendingLiveInboxReply(for agent: AgentInfo) -> Bool {
         currentMessages.contains { message in
             DMDeliveryState.parse(message.deliveryState) == .waitingForLiveAgent
+                && !hasFinalLiveInboxReply(for: message)
+        }
+    }
+
+    private func hasFinalLiveInboxReply(for pending: DMMessage) -> Bool {
+        guard let source = sourceUserMessage(for: pending),
+              let sourceTraceId = source.traceId?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !sourceTraceId.isEmpty else {
+            return false
+        }
+
+        return currentMessages.contains { message in
+            guard message.role == "assistant",
+                  message.timestamp >= source.timestamp,
+                  message.traceId == sourceTraceId,
+                  DMDeliveryState.parse(message.deliveryState) == .responseReceived else {
+                return false
+            }
+
+            let lane = message.lane?.lowercased() ?? ""
+            let messageSource = message.source?.lowercased() ?? ""
+            return DMResponseProvenance.parse(message.provenance) == .liveInbox
+                || DMDeliveryMode.parse(message.deliveryMode) == .liveInbox
+                || lane.contains("direct_agent_inbox")
+                || messageSource.contains("agent.inbox.response")
         }
     }
 

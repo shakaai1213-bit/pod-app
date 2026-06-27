@@ -1214,6 +1214,9 @@ private struct SonarRoomConversationView: View {
 
     @FocusState private var isFocused: Bool
     @State private var selectedEvidenceMessage: SonarRoomMessage?
+    @State private var areOlderMessagesExpanded = false
+
+    private static let recentMessageLimit = 40
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1222,7 +1225,22 @@ private struct SonarRoomConversationView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 10) {
-                        ForEach(viewModel.roomMessages) { message in
+                        if shouldCompactMessages {
+                            PlaygroundHistoryToggle(
+                                hiddenCount: hiddenMessageCount,
+                                isExpanded: areOlderMessagesExpanded,
+                                action: {
+                                    withAnimation(.easeInOut(duration: 0.18)) {
+                                        areOlderMessagesExpanded.toggle()
+                                    }
+                                    if !areOlderMessagesExpanded {
+                                        scrollToLatestMessage(proxy, animated: false)
+                                    }
+                                }
+                            )
+                        }
+
+                        ForEach(displayedMessages) { message in
                             VStack(alignment: message.isUser ? .trailing : .leading, spacing: 4) {
                                 SonarRoomMessageRow(message: message)
                                     .contentShape(Rectangle())
@@ -1298,12 +1316,11 @@ private struct SonarRoomConversationView: View {
                     }
                     .padding(16)
                 }
+                .onAppear {
+                    scrollToLatestMessage(proxy, animated: false)
+                }
                 .onChange(of: viewModel.roomMessages.count) { _, _ in
-                    if let last = viewModel.roomMessages.last {
-                        withAnimation(.easeOut(duration: 0.2)) {
-                            proxy.scrollTo(last.id, anchor: .bottom)
-                        }
-                    }
+                    scrollToLatestMessage(proxy, animated: true)
                 }
             }
             .background(AppColors.backgroundPrimary)
@@ -1361,6 +1378,37 @@ private struct SonarRoomConversationView: View {
         ) {
             if let selectedEvidenceMessage {
                 SonarRoomMessageEvidenceDrawer(message: selectedEvidenceMessage, room: room)
+            }
+        }
+    }
+
+    private var shouldCompactMessages: Bool {
+        viewModel.roomMessages.count > Self.recentMessageLimit
+    }
+
+    private var hiddenMessageCount: Int {
+        max(0, viewModel.roomMessages.count - Self.recentMessageLimit)
+    }
+
+    private var displayedMessages: [SonarRoomMessage] {
+        guard shouldCompactMessages, !areOlderMessagesExpanded else {
+            return viewModel.roomMessages
+        }
+        return Array(viewModel.roomMessages.suffix(Self.recentMessageLimit))
+    }
+
+    private func scrollToLatestMessage(_ proxy: ScrollViewProxy, animated: Bool) {
+        guard let last = viewModel.roomMessages.last else { return }
+        let scroll = {
+            proxy.scrollTo(last.id, anchor: .bottom)
+        }
+        DispatchQueue.main.async {
+            if animated {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    scroll()
+                }
+            } else {
+                scroll()
             }
         }
     }

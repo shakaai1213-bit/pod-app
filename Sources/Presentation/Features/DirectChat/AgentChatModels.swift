@@ -74,9 +74,10 @@ extension AgentInfo {
     // MARK: - Gateway URL constants (non-sensitive)
     private static let computeGateway = AppConfig.computeURL
 
-    /// Pod chat routing v1: active and support agents use ORCA-backed compute
-    /// triage chat. Dormant/archive agents are preserved outside the app
-    /// surface until ORCA exposes them as explicit read-only records.
+    /// Pod chat routing v1: live-capable named agents default to ORCA/NATS
+    /// inbox handoff. Helper draft remains available as an explicit route.
+    /// Dormant/archive agents are preserved outside the app surface until ORCA
+    /// exposes them as explicit read-only records.
     static let team: [AgentInfo] = [
         AgentInfo(
             id: "aloha",
@@ -167,7 +168,7 @@ extension AgentInfo {
 
     var defaultDeliveryMode: DMDeliveryMode {
         if ["aloha", "maui", "coral", "chief", "rooster", "reef"].contains(id) {
-            return .compute
+            return .liveInbox
         }
         return .compute
     }
@@ -175,9 +176,9 @@ extension AgentInfo {
     var boundaryText: String {
         switch id {
         case "aloha":
-            return "Compute helper answers immediately for chat. Use live inbox when you explicitly want a real Aloha handoff."
+            return "Aloha inbox is the live handoff path for real coordination. Use Helper draft only when you want a quick non-live answer."
         case "maui":
-            return "Compute helper answers immediately for engineering guidance. Real implementation belongs on tickets, runs, commits, and verification."
+            return "Maui inbox is the live engineering handoff path. Real implementation still belongs on tickets, runs, commits, and verification."
         case "chief":
             return "Protected read-only lane. No live P&L, positions, wallets, orders, Chief memory, or trading actions from Pod chat."
         default:

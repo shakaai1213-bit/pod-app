@@ -410,6 +410,7 @@ struct AgentLockerDTO: Decodable, Hashable {
     let reportCard: ReportCard
     let chat: LockerChat
     let planner: Planner
+    let workSpine: WorkSpine
     let orcaTasks: OrcaTasks
     let inbox: Inbox
     let heartbeat: Heartbeat
@@ -430,6 +431,7 @@ struct AgentLockerDTO: Decodable, Hashable {
         case tools
         case startHere = "start_here"
         case reportCard = "report_card"
+        case workSpine = "work_spine"
         case orcaTasks = "orca_tasks"
         case lockerMemory = "locker_memory"
         case researchRail = "research_rail"
@@ -448,6 +450,7 @@ struct AgentLockerDTO: Decodable, Hashable {
         reportCard = try container.decodeIfPresent(ReportCard.self, forKey: .reportCard) ?? ReportCard()
         chat = try container.decodeIfPresent(LockerChat.self, forKey: .chat) ?? LockerChat()
         planner = try container.decodeIfPresent(Planner.self, forKey: .planner) ?? Planner()
+        workSpine = try container.decodeIfPresent(WorkSpine.self, forKey: .workSpine) ?? WorkSpine()
         orcaTasks = try container.decodeIfPresent(OrcaTasks.self, forKey: .orcaTasks) ?? OrcaTasks()
         inbox = try container.decodeIfPresent(Inbox.self, forKey: .inbox) ?? Inbox()
         heartbeat = try container.decodeIfPresent(Heartbeat.self, forKey: .heartbeat) ?? Heartbeat()
@@ -933,6 +936,10 @@ struct AgentLockerDTO: Decodable, Hashable {
         let source: String?
         let sourceType: String?
         let sourceRef: String?
+        let sourceRefs: [String: String?]?
+        let boardId: String?
+        let projectId: String?
+        let sourceTicketId: String?
         let whyShown: String?
         let blockedOn: String?
         let updatedAt: String?
@@ -951,12 +958,102 @@ struct AgentLockerDTO: Decodable, Hashable {
             case nextAction = "next_action"
             case sourceType = "source_type"
             case sourceRef = "source_ref"
+            case sourceRefs = "source_refs"
+            case boardId = "board_id"
+            case projectId = "project_id"
+            case sourceTicketId = "source_ticket_id"
             case whyShown = "why_shown"
             case blockedOn = "blocked_on"
             case updatedAt = "updated_at"
             case completedAt = "completed_at"
             case ticketId = "ticket_id"
             case reviewStatus = "review_status"
+        }
+    }
+
+    struct WorkSpine: Decodable, Hashable {
+        let schema: String?
+        let source: String?
+        let agent: String?
+        let counts: Counts
+        let projects: [ProjectRef]
+        let tickets: [WorkItem]
+        let tasks: [WorkItem]
+        let endpoints: [String: String]
+        let emptyReason: String?
+
+        enum CodingKeys: String, CodingKey {
+            case schema, source, agent, counts, projects, tickets, tasks, endpoints
+            case emptyReason = "empty_reason"
+        }
+
+        init(schema: String? = nil, source: String? = nil, agent: String? = nil, counts: Counts = Counts(), projects: [ProjectRef] = [], tickets: [WorkItem] = [], tasks: [WorkItem] = [], endpoints: [String: String] = [:], emptyReason: String? = nil) {
+            self.schema = schema
+            self.source = source
+            self.agent = agent
+            self.counts = counts
+            self.projects = projects
+            self.tickets = tickets
+            self.tasks = tasks
+            self.endpoints = endpoints
+            self.emptyReason = emptyReason
+        }
+
+        struct Counts: Decodable, Hashable {
+            let projects: Int
+            let tickets: Int
+            let tasks: Int
+            let reviewRuns: Int
+            let blocked: Int
+
+            enum CodingKeys: String, CodingKey {
+                case projects, tickets, tasks, blocked
+                case reviewRuns = "review_runs"
+            }
+
+            init(projects: Int = 0, tickets: Int = 0, tasks: Int = 0, reviewRuns: Int = 0, blocked: Int = 0) {
+                self.projects = projects
+                self.tickets = tickets
+                self.tasks = tasks
+                self.reviewRuns = reviewRuns
+                self.blocked = blocked
+            }
+        }
+
+        struct ProjectRef: Decodable, Hashable, Identifiable {
+            let id: String
+            let name: String?
+            let status: String?
+            let stage: String?
+            let priority: Int?
+            let boardIds: [String]
+            let agentPacketEndpoint: String?
+            let ticketsEndpoint: String?
+            let workTasksEndpoint: String?
+            let updatedAt: String?
+
+            enum CodingKeys: String, CodingKey {
+                case id, name, status, stage, priority
+                case boardIds = "board_ids"
+                case agentPacketEndpoint = "agent_packet_endpoint"
+                case ticketsEndpoint = "tickets_endpoint"
+                case workTasksEndpoint = "work_tasks_endpoint"
+                case updatedAt = "updated_at"
+            }
+
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+                name = try container.decodeIfPresent(String.self, forKey: .name)
+                status = try container.decodeIfPresent(String.self, forKey: .status)
+                stage = try container.decodeIfPresent(String.self, forKey: .stage)
+                priority = try container.decodeIfPresent(Int.self, forKey: .priority)
+                boardIds = try container.decodeIfPresent([String].self, forKey: .boardIds) ?? []
+                agentPacketEndpoint = try container.decodeIfPresent(String.self, forKey: .agentPacketEndpoint)
+                ticketsEndpoint = try container.decodeIfPresent(String.self, forKey: .ticketsEndpoint)
+                workTasksEndpoint = try container.decodeIfPresent(String.self, forKey: .workTasksEndpoint)
+                updatedAt = try container.decodeIfPresent(String.self, forKey: .updatedAt)
+            }
         }
     }
 
