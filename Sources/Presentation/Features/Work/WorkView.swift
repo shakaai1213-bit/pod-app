@@ -65,6 +65,10 @@ struct WorkView: View {
                         .padding(.horizontal, 16)
                         .padding(.bottom, 16)
 
+                    AnyView(ticketsSection)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
+
                     AnyView(
                         WorkbenchTasksSection(
                             model: model,
@@ -93,10 +97,6 @@ struct WorkView: View {
                         .padding(.bottom, 16)
 
                     AnyView(projectsSection)
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 16)
-
-                    AnyView(ticketsSection)
                         .padding(.horizontal, 16)
                         .padding(.bottom, 80)
                 }
@@ -434,7 +434,7 @@ struct WorkView: View {
                     .foregroundColor(AppColors.textTertiary)
                     .kerning(0.5)
                 if model.workbenchActionableRows.count > 0 {
-                    Text("TASK ACTIONS · \(model.workbenchActionableRows.count)")
+                    Text("ACTIONS · \(model.workbenchActionableRows.count)")
                         .font(.system(size: 10, weight: .bold, design: .monospaced))
                         .foregroundColor(AppColors.accentSuccess)
                         .padding(.horizontal, 6)
@@ -552,15 +552,39 @@ struct WorkView: View {
                     .foregroundColor(AppColors.accentElectric)
                 }
 
-                if item.canUseAgentActionComment {
+                if item.canUseAgentActionNote {
                     Button {
                         selectedWorkbenchItem = item
                     } label: {
-                        Label("Comment", systemImage: "bubble.left.and.bubble.right.fill")
+                        Label("Note", systemImage: "square.and.pencil")
                             .font(.system(size: 12, weight: .semibold))
                     }
                     .buttonStyle(.plain)
                     .foregroundColor(AppColors.accentSuccess)
+                }
+
+                if let statusAction = item.nextTaskStatusAction {
+                    Button {
+                        Task { await model.commitWorkbenchStatusAdvance(item: item) }
+                    } label: {
+                        Label(statusAction.label, systemImage: statusAction.icon)
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(AppColors.accentWarning)
+                    .disabled(model.isCommittingWorkbenchAction)
+                }
+
+                if item.canAddToPlanner {
+                    Button {
+                        Task { await model.commitWorkbenchPlannerAdd(item: item) }
+                    } label: {
+                        Label("Plan", systemImage: "calendar.badge.plus")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(AppColors.accentElectric)
+                    .disabled(model.isCommittingWorkbenchAction)
                 }
 
                 Spacer()
@@ -590,10 +614,10 @@ struct WorkView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("TASK COMMENT")
+                        Text(item.kind == "ticket" ? "TICKET NOTE" : "TASK NOTE")
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundColor(AppColors.textTertiary)
-                        TextField("Add a pointer-safe task comment", text: $workbenchActionComment, axis: .vertical)
+                        TextField("Add a pointer-safe note", text: $workbenchActionComment, axis: .vertical)
                             .lineLimit(4...8)
                             .font(.system(size: 14))
                             .foregroundColor(AppColors.textPrimary)
@@ -614,10 +638,57 @@ struct WorkView: View {
                             .foregroundColor(AppColors.accentWarning)
                     }
 
+                    if item.nextTaskStatusAction != nil || item.canAddToPlanner {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("QUICK ACTIONS")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(AppColors.textTertiary)
+                            VStack(spacing: 8) {
+                                if let statusAction = item.nextTaskStatusAction {
+                                    Button {
+                                        Task {
+                                            let success = await model.commitWorkbenchStatusAdvance(item: item)
+                                            if success {
+                                                selectedWorkbenchItem = nil
+                                            }
+                                        }
+                                    } label: {
+                                        actionButtonLabel(
+                                            title: statusAction.label,
+                                            icon: statusAction.icon,
+                                            color: AppColors.accentWarning
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(model.isCommittingWorkbenchAction)
+                                }
+
+                                if item.canAddToPlanner {
+                                    Button {
+                                        Task {
+                                            let success = await model.commitWorkbenchPlannerAdd(item: item)
+                                            if success {
+                                                selectedWorkbenchItem = nil
+                                            }
+                                        }
+                                    } label: {
+                                        actionButtonLabel(
+                                            title: "Add to Planner",
+                                            icon: "calendar.badge.plus",
+                                            color: AppColors.accentElectric
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(model.isCommittingWorkbenchAction)
+                                }
+                            }
+                        }
+                    }
+
                     VStack(spacing: 10) {
                         Button {
                             let text = workbenchActionComment.trimmingCharacters(in: .whitespacesAndNewlines)
-                            Task { await model.previewWorkbenchTaskComment(item: item, message: text) }
+                            Task { await model.previewWorkbenchNote(item: item, message: text) }
                         } label: {
                             actionButtonLabel(
                                 title: model.isPreviewingWorkbenchAction ? "Previewing" : "Preview",
@@ -631,7 +702,7 @@ struct WorkView: View {
                         Button {
                             let text = workbenchActionComment.trimmingCharacters(in: .whitespacesAndNewlines)
                             Task {
-                                let success = await model.commitWorkbenchTaskComment(item: item, message: text)
+                                let success = await model.commitWorkbenchNote(item: item, message: text)
                                 if success {
                                     selectedWorkbenchItem = nil
                                     workbenchActionComment = ""
@@ -639,7 +710,7 @@ struct WorkView: View {
                             }
                         } label: {
                             actionButtonLabel(
-                                title: model.isCommittingWorkbenchAction ? "Posting" : "Post Comment",
+                                title: model.isCommittingWorkbenchAction ? "Posting" : "Post Note",
                                 icon: model.isCommittingWorkbenchAction ? "hourglass" : "paperplane.fill",
                                 color: model.hasFreshWorkbenchActionPreview(item: item, message: workbenchActionComment)
                                     ? AppColors.accentSuccess
@@ -2642,7 +2713,7 @@ private struct WorkbenchTasksSection: View {
 
                 Spacer(minLength: 4)
 
-                if item.canUseAgentActionComment {
+                if item.canUseAgentActionNote {
                     taskPill("action", color: AppColors.accentSuccess)
                 } else if item.isProtected {
                     taskPill("protected", color: AppColors.accentWarning)
@@ -2680,15 +2751,39 @@ private struct WorkbenchTasksSection: View {
                     .foregroundColor(AppColors.accentElectric)
                 }
 
-                if item.canUseAgentActionComment {
+                if item.canUseAgentActionNote {
                     Button {
                         onComment(item)
                     } label: {
-                        Label("Comment", systemImage: "bubble.left.and.bubble.right.fill")
+                        Label("Note", systemImage: "square.and.pencil")
                             .font(.system(size: 12, weight: .semibold))
                     }
                     .buttonStyle(.plain)
                     .foregroundColor(AppColors.accentSuccess)
+                }
+
+                if let statusAction = item.nextTaskStatusAction {
+                    Button {
+                        Task { await model.commitWorkbenchStatusAdvance(item: item) }
+                    } label: {
+                        Label(statusAction.label, systemImage: statusAction.icon)
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(AppColors.accentWarning)
+                    .disabled(model.isCommittingWorkbenchAction)
+                }
+
+                if item.canAddToPlanner {
+                    Button {
+                        Task { await model.commitWorkbenchPlannerAdd(item: item) }
+                    } label: {
+                        Label("Plan", systemImage: "calendar.badge.plus")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(AppColors.accentElectric)
+                    .disabled(model.isCommittingWorkbenchAction)
                 }
 
                 Spacer()
@@ -2922,13 +3017,13 @@ final class WorkViewModel {
     }
 
     var workbenchActionableRows: [WorkbenchWorkItem] {
-        visibleWorkbenchRows.filter { $0.canUseAgentActionComment }
+        visibleWorkbenchRows.filter { $0.canUseAgentActionNote }
     }
 
     var displayedWorkbenchRows: [WorkbenchWorkItem] {
         let rows = visibleWorkbenchRows
-        let actionable = rows.filter { $0.canUseAgentActionComment }
-        let passive = rows.filter { !$0.canUseAgentActionComment }
+        let actionable = rows.filter { $0.canUseAgentActionNote }
+        let passive = rows.filter { !$0.canUseAgentActionNote }
         var seen = Set<String>()
         var featured: [WorkbenchWorkItem] = []
         for item in Array(actionable.prefix(4)) + passive + Array(actionable.dropFirst(4)) {
@@ -3361,13 +3456,13 @@ final class WorkViewModel {
     }
 
     @MainActor
-    func previewWorkbenchTaskComment(item: WorkbenchWorkItem, message: String) async {
+    func previewWorkbenchNote(item: WorkbenchWorkItem, message: String) async {
         guard !isPreviewingWorkbenchAction else { return }
         guard let signature = workbenchActionSignature(item: item, message: message),
-              let request = workbenchTaskCommentRequest(item: item, message: message) else {
+              let request = workbenchNoteRequest(item: item, message: message) else {
             workbenchActionPreview = nil
             workbenchActionPreviewSignature = nil
-            workbenchActionError = "Task comment needs a board, task, and message."
+            workbenchActionError = "Note needs a task or ticket target plus a message."
             return
         }
         isPreviewingWorkbenchAction = true
@@ -3384,11 +3479,11 @@ final class WorkViewModel {
     }
 
     @MainActor
-    func commitWorkbenchTaskComment(item: WorkbenchWorkItem, message: String) async -> Bool {
+    func commitWorkbenchNote(item: WorkbenchWorkItem, message: String) async -> Bool {
         guard !isCommittingWorkbenchAction else { return false }
         guard hasFreshWorkbenchActionPreview(item: item, message: message),
-              let request = workbenchTaskCommentRequest(item: item, message: message) else {
-            workbenchActionError = "Preview this exact comment before posting."
+              let request = workbenchNoteRequest(item: item, message: message) else {
+            workbenchActionError = "Preview this exact note before posting."
             return false
         }
         isCommittingWorkbenchAction = true
@@ -3398,7 +3493,7 @@ final class WorkViewModel {
             let response = try await WorkbenchRepository().executeAgentAction(request)
             resetWorkbenchActionPreview()
             priorityToast = PriorityToast(
-                message: "\(response.objectType.replacingOccurrences(of: "_", with: " ").capitalized) posted",
+                message: "\(response.objectType.replacingOccurrences(of: "_", with: " ").capitalized) note posted",
                 isError: false,
                 retry: nil
             )
@@ -3415,30 +3510,130 @@ final class WorkViewModel {
         }
     }
 
-    private func workbenchActionSignature(item: WorkbenchWorkItem, message: String) -> String? {
-        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty,
-              let boardId = item.boardId,
-              let taskId = item.effectiveTaskId else {
-            return nil
+    @MainActor
+    func commitWorkbenchStatusAdvance(item: WorkbenchWorkItem) async -> Bool {
+        guard !isCommittingWorkbenchAction else { return false }
+        guard let request = workbenchTaskStatusRequest(item: item),
+              let statusAction = item.nextTaskStatusAction else {
+            workbenchActionError = "Task status action is unavailable."
+            return false
         }
-        return "\(boardId)|\(taskId)|\(trimmed)"
+        isCommittingWorkbenchAction = true
+        workbenchActionError = nil
+        defer { isCommittingWorkbenchAction = false }
+        do {
+            _ = try await WorkbenchRepository().executeAgentAction(request)
+            priorityToast = PriorityToast(message: "\(statusAction.label) sent", isError: false, retry: nil)
+            await loadWorkbench()
+            return true
+        } catch let error as APIError {
+            workbenchActionError = error.message
+            priorityToast = PriorityToast(message: "Status action failed", isError: true, retry: nil)
+            return false
+        } catch {
+            workbenchActionError = "Status action failed."
+            priorityToast = PriorityToast(message: "Status action failed", isError: true, retry: nil)
+            return false
+        }
     }
 
-    private func workbenchTaskCommentRequest(item: WorkbenchWorkItem, message: String) -> WorkbenchAgentActionRequest? {
+    @MainActor
+    func commitWorkbenchPlannerAdd(item: WorkbenchWorkItem) async -> Bool {
+        guard !isCommittingWorkbenchAction else { return false }
+        guard let request = workbenchPlannerAddRequest(item: item) else {
+            workbenchActionError = "Planner action is unavailable."
+            return false
+        }
+        isCommittingWorkbenchAction = true
+        workbenchActionError = nil
+        defer { isCommittingWorkbenchAction = false }
+        do {
+            _ = try await WorkbenchRepository().executeAgentAction(request)
+            priorityToast = PriorityToast(message: "Added to planner", isError: false, retry: nil)
+            await loadWorkbench()
+            return true
+        } catch let error as APIError {
+            workbenchActionError = error.message
+            priorityToast = PriorityToast(message: "Planner action failed", isError: true, retry: nil)
+            return false
+        } catch {
+            workbenchActionError = "Planner action failed."
+            priorityToast = PriorityToast(message: "Planner action failed", isError: true, retry: nil)
+            return false
+        }
+    }
+
+    private func workbenchActionSignature(item: WorkbenchWorkItem, message: String) -> String? {
         let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty,
-              let boardId = item.boardId,
-              let taskId = item.effectiveTaskId else {
+        guard !trimmed.isEmpty else {
             return nil
         }
+        if let boardId = item.boardId, let taskId = item.effectiveTaskId {
+            return "task|\(boardId)|\(taskId)|\(trimmed)"
+        }
+        if let ticketId = item.effectiveTicketId {
+            return "ticket|\(ticketId)|\(trimmed)"
+        }
+        return nil
+    }
+
+    private func workbenchNoteRequest(item: WorkbenchWorkItem, message: String) -> WorkbenchAgentActionRequest? {
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, item.canUseAgentActionNote else {
+            return nil
+        }
+        if let boardId = item.boardId, let taskId = item.effectiveTaskId {
+            return WorkbenchAgentActionRequest(
+                action: "comment_task",
+                boardId: boardId,
+                taskId: taskId,
+                comment: WorkbenchTaskComment(
+                    message: trimmed,
+                    actionRequired: false
+                )
+            )
+        }
+        guard let ticketId = item.effectiveTicketId else { return nil }
         return WorkbenchAgentActionRequest(
-            action: "comment_task",
-            boardId: boardId,
-            taskId: taskId,
+            action: "ticket_comment",
+            ticketId: ticketId,
             comment: WorkbenchTaskComment(
                 message: trimmed,
                 actionRequired: false
+            )
+        )
+    }
+
+    private func workbenchTaskStatusRequest(item: WorkbenchWorkItem) -> WorkbenchAgentActionRequest? {
+        guard let boardId = item.boardId,
+              let taskId = item.effectiveTaskId,
+              let statusAction = item.nextTaskStatusAction else {
+            return nil
+        }
+        return WorkbenchAgentActionRequest(
+            action: "update_task",
+            boardId: boardId,
+            taskId: taskId,
+            taskUpdate: WorkbenchTaskUpdate(
+                status: statusAction.status,
+                comment: "Pod Bench: \(statusAction.label.lowercased())."
+            )
+        )
+    }
+
+    private func workbenchPlannerAddRequest(item: WorkbenchWorkItem) -> WorkbenchAgentActionRequest? {
+        guard item.canAddToPlanner else { return nil }
+        let sourceType = item.isTaskLike ? "task" : item.kind
+        let sourceRef = item.effectiveTaskId ?? item.effectiveTicketId ?? item.id
+        return WorkbenchAgentActionRequest(
+            action: "create_planner_item",
+            plannerItem: WorkbenchPlannerItem(
+                title: item.safeTitle,
+                body: "\(sourceType.capitalized) \(String(sourceRef.prefix(8))) from Pod Bench.",
+                lane: "now",
+                priority: item.plannerPriority,
+                sourceType: sourceType,
+                sourceRef: sourceRef
             )
         )
     }
@@ -5500,9 +5695,54 @@ private extension WorkbenchWorkItem {
         sourceTaskId ?? (kind == "task" ? id : nil)
     }
 
-    var canUseAgentActionComment: Bool {
-        effectiveTaskId != nil && boardId != nil && !isProtected
+    var effectiveTicketId: String? {
+        sourceTicketId ?? (kind == "ticket" ? id : nil)
     }
+
+    var canUseAgentActionComment: Bool {
+        canUseAgentActionNote
+    }
+
+    var canUseAgentActionNote: Bool {
+        guard !isProtected else { return false }
+        if effectiveTaskId != nil && boardId != nil { return true }
+        return effectiveTicketId != nil
+    }
+
+    var canAddToPlanner: Bool {
+        !isProtected && !safeTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var nextTaskStatusAction: WorkbenchTaskStatusAction? {
+        guard !isProtected, effectiveTaskId != nil, boardId != nil else { return nil }
+        switch (status ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "inbox", "open", "claimed":
+            return WorkbenchTaskStatusAction(status: "in_progress", label: "Start", icon: "play.fill")
+        case "in_progress":
+            return WorkbenchTaskStatusAction(status: "review", label: "Review", icon: "checkmark.seal")
+        case "review":
+            return WorkbenchTaskStatusAction(status: "done", label: "Done", icon: "checkmark.circle.fill")
+        default:
+            return nil
+        }
+    }
+
+    var plannerPriority: String {
+        switch (priority ?? "medium").trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "urgent", "critical", "p0", "high":
+            return "high"
+        case "low":
+            return "low"
+        default:
+            return "medium"
+        }
+    }
+}
+
+private struct WorkbenchTaskStatusAction: Hashable {
+    let status: String
+    let label: String
+    let icon: String
 }
 
 private extension String {

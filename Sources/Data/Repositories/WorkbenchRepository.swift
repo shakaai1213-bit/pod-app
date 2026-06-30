@@ -188,9 +188,14 @@ struct WorkbenchAgentActionRequest: Encodable, Hashable {
     let idempotencyKey: String?
     let boardId: String?
     let taskId: String?
+    let ticketId: String?
     let approvalId: String?
+    let plannerItemId: String?
+    let plannerAgentId: String?
     let taskUpdate: WorkbenchTaskUpdate?
     let comment: WorkbenchTaskComment?
+    let plannerItem: WorkbenchPlannerItem?
+    let plannerUpdate: WorkbenchPlannerUpdate?
     let approvalUpdate: WorkbenchApprovalUpdate?
 
     init(
@@ -198,18 +203,28 @@ struct WorkbenchAgentActionRequest: Encodable, Hashable {
         idempotencyKey: String? = nil,
         boardId: String? = nil,
         taskId: String? = nil,
+        ticketId: String? = nil,
         approvalId: String? = nil,
+        plannerItemId: String? = nil,
+        plannerAgentId: String? = nil,
         taskUpdate: WorkbenchTaskUpdate? = nil,
         comment: WorkbenchTaskComment? = nil,
+        plannerItem: WorkbenchPlannerItem? = nil,
+        plannerUpdate: WorkbenchPlannerUpdate? = nil,
         approvalUpdate: WorkbenchApprovalUpdate? = nil
     ) {
         self.action = action
         self.idempotencyKey = idempotencyKey
         self.boardId = boardId
         self.taskId = taskId
+        self.ticketId = ticketId
         self.approvalId = approvalId
+        self.plannerItemId = plannerItemId
+        self.plannerAgentId = plannerAgentId
         self.taskUpdate = taskUpdate
         self.comment = comment
+        self.plannerItem = plannerItem
+        self.plannerUpdate = plannerUpdate
         self.approvalUpdate = approvalUpdate
     }
 
@@ -218,9 +233,14 @@ struct WorkbenchAgentActionRequest: Encodable, Hashable {
         case idempotencyKey = "idempotency_key"
         case boardId = "board_id"
         case taskId = "task_id"
+        case ticketId = "ticket_id"
         case approvalId = "approval_id"
+        case plannerItemId = "planner_item_id"
+        case plannerAgentId = "planner_agent_id"
         case taskUpdate = "task_update"
         case comment
+        case plannerItem = "planner_item"
+        case plannerUpdate = "planner_update"
         case approvalUpdate = "approval_update"
     }
 }
@@ -240,21 +260,49 @@ struct WorkbenchTaskComment: Encodable, Hashable {
     }
 }
 
+struct WorkbenchPlannerItem: Encodable, Hashable {
+    let title: String
+    let body: String?
+    let lane: String
+    let priority: String
+    let sourceType: String?
+    let sourceRef: String?
+
+    enum CodingKeys: String, CodingKey {
+        case title, body, lane, priority
+        case sourceType = "source_type"
+        case sourceRef = "source_ref"
+    }
+}
+
+struct WorkbenchPlannerUpdate: Encodable, Hashable {
+    let title: String?
+    let body: String?
+    let lane: String?
+    let priority: String?
+    let status: String?
+}
+
 struct WorkbenchApprovalUpdate: Encodable, Hashable {
     let status: String
 }
 
 struct WorkbenchAgentActionResponse: Decodable, Hashable {
     let schemaId: String
+    let ok: Bool
     let action: String
+    let agent: String?
+    let id: String?
     let objectType: String
     let objectId: String?
     let status: String?
+    let detail: String?
+    let resource: [String: AgentRunJSONValue]
     let result: [String: AgentRunJSONValue]
     let policy: [String: AgentRunJSONValue]
 
     enum CodingKeys: String, CodingKey {
-        case action, status, result, policy
+        case ok, action, agent, id, status, detail, resource, result, policy
         case schemaId = "schema_id"
         case objectType = "object_type"
         case objectId = "object_id"
@@ -263,12 +311,30 @@ struct WorkbenchAgentActionResponse: Decodable, Hashable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         schemaId = try c.decodeIfPresent(String.self, forKey: .schemaId) ?? "orca.agent-action.v1"
+        ok = try c.decodeIfPresent(Bool.self, forKey: .ok) ?? true
         action = try c.decodeIfPresent(String.self, forKey: .action) ?? "agent_action"
-        objectType = try c.decodeIfPresent(String.self, forKey: .objectType) ?? "object"
-        objectId = try c.decodeIfPresent(String.self, forKey: .objectId)
+        agent = try c.decodeIfPresent(String.self, forKey: .agent)
+        id = try c.decodeIfPresent(String.self, forKey: .id)
         status = try c.decodeIfPresent(String.self, forKey: .status)
+        detail = try c.decodeIfPresent(String.self, forKey: .detail)
+        resource = (try? c.decodeIfPresent([String: AgentRunJSONValue].self, forKey: .resource)) ?? [:]
         result = (try? c.decodeIfPresent([String: AgentRunJSONValue].self, forKey: .result)) ?? [:]
         policy = (try? c.decodeIfPresent([String: AgentRunJSONValue].self, forKey: .policy)) ?? [:]
+        objectType = try c.decodeIfPresent(String.self, forKey: .objectType)
+            ?? resource["type"]?.displayValue
+            ?? Self.objectType(for: action)
+        objectId = try c.decodeIfPresent(String.self, forKey: .objectId)
+            ?? id
+            ?? resource["task_id"]?.displayValue
+            ?? resource["ticket_id"]?.displayValue
+            ?? resource["agent_id"]?.displayValue
+    }
+
+    private static func objectType(for action: String) -> String {
+        if action.contains("planner") { return "planner_item" }
+        if action.contains("ticket") { return "ticket" }
+        if action.contains("task") { return "task" }
+        return "object"
     }
 }
 
