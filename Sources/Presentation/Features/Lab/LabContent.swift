@@ -132,8 +132,8 @@ enum LabContent {
         LabStackLayer(
             id: "pod",
             title: "Pod",
-            oneLine: "Tony's iPad/iPhone classroom · SwiftUI · 7 tabs",
-            status: .building,
+            oneLine: "Tony's iPad/iPhone classroom · SwiftUI · live work surfaces",
+            status: .live,
             owner: "MAU",
             icon: "ipad.landscape",
             tint: AppColors.accentElectric
@@ -141,7 +141,7 @@ enum LabContent {
         LabStackLayer(
             id: "compute",
             title: "Compute",
-            oneLine: "Spark + Kimi + Claude · routed by tier",
+            oneLine: "Owned-model lanes · Spark/Kimi/Claude routing · Blackfin live",
             status: .live,
             owner: "MAU",
             icon: "cpu.fill",
@@ -150,8 +150,8 @@ enum LabContent {
         LabStackLayer(
             id: "memory",
             title: "Memory",
-            oneLine: "Daily logs · ORCA Notes · Chroma · candidate review",
-            status: .partial,
+            oneLine: "Memory Spine queue · ORCA Notes · Chroma · candidate review",
+            status: .live,
             owner: "ALO",
             icon: "brain",
             tint: AppColors.accentCaptain
@@ -160,7 +160,7 @@ enum LabContent {
             id: "schoolhouse",
             title: "Schoolhouse",
             oneLine: "Agent operating loop · intent → triage → ORCA → evidence",
-            status: .partial,
+            status: .live,
             owner: "MAU",
             icon: "graduationcap.fill",
             tint: AppColors.accentCaptain
@@ -187,26 +187,21 @@ enum LabContent {
     ]
 
     static let currentlySpinning: [LabSpinningItem] = [
-        LabSpinningItem(title: "Mermaid V2 bounded executor",         stage: "Experiment", owner: "MAU"),
-        LabSpinningItem(title: "Pod tab redesign",                    stage: "Experiment", owner: "MAU"),
-        LabSpinningItem(title: "Knowledge Center auto-surface (M-005 v2)", stage: "Experiment", owner: "MAU"),
-        LabSpinningItem(title: "Duplicate-detection watchdog",        stage: "Evidence",   owner: "ALO")
+        LabSpinningItem(title: "Owned-model route registry",          stage: "Live",       owner: "MAU"),
+        LabSpinningItem(title: "Blackfin model lane",                 stage: "Live",       owner: "MAU"),
+        LabSpinningItem(title: "Work-Spine queue automation",         stage: "Live",       owner: "ALO"),
+        LabSpinningItem(title: "Memory Spine candidate review",       stage: "Live",       owner: "ALO"),
+        LabSpinningItem(title: "Pod review cards + suggestions panel", stage: "Evidence",   owner: "MAU")
     ]
 
     static let currentlyBuilding: [LabBuildingItem] = [
-        LabBuildingItem(title: "Schoolhouse Transition Closeout",         stage: "Active",   owner: "ALO", shortId: "bbc62861", layer: nil),
-        LabBuildingItem(title: "Pod Tab Redesign (Work + Captain's Log)", stage: "Active",   owner: "MAU", shortId: "spec-tabs", layer: nil),
-        LabBuildingItem(title: "Board-folds-into-Project ADR",            stage: "Scoping",  owner: "MAU", shortId: "adr-bf", layer: nil),
-        LabBuildingItem(title: "Project Lifecycle Standard",              stage: "Handoff",  owner: "ALO", shortId: "std-life", layer: nil),
-        LabBuildingItem(title: "Knowledge Center Index",                  stage: "Active",   owner: "ALO", shortId: "kc-idx", layer: nil),
-        LabBuildingItem(title: "Pod Agents Tab",                          stage: "Building", owner: "MAU", shortId: "spec-agt", layer: nil),
-        LabBuildingItem(title: "Pod Lab Tab",                             stage: "Building", owner: "MAU", shortId: "spec-lab", layer: nil),
-        LabBuildingItem(title: "APPROVAL-TIERS doctrine",                 stage: "Active",   owner: "ALO", shortId: "std-tier", layer: nil),
-        LabBuildingItem(title: "Weekly Ticket Hygiene Petal",             stage: "Building", owner: "COR", shortId: "petal-h", layer: nil),
-        LabBuildingItem(title: "M-005 Wiki-ORCA mirror",                  stage: "Active",   owner: "MAU", shortId: "m-005", layer: nil),
-        LabBuildingItem(title: "Memory Spine",                            stage: "Captured", owner: "ALO", shortId: "mem-spn", layer: nil),
-        LabBuildingItem(title: "iMessage outbound contract",              stage: "Active",   owner: "ALO", shortId: "cfde783b", layer: nil),
-        LabBuildingItem(title: "Roster Archive cleanup",                  stage: "Active",   owner: "MAU", shortId: "85103d0c", layer: nil)
+        LabBuildingItem(title: "Owned-model / route registry surfacing",  stage: "Live",     owner: "MAU", shortId: "owned-md", layer: "Compute"),
+        LabBuildingItem(title: "Blackfin lane telemetry",                 stage: "Live",     owner: "MAU", shortId: "blackfin", layer: "Compute"),
+        LabBuildingItem(title: "Work-Spine queue + project automation",   stage: "Live",     owner: "ALO", shortId: "work-spn", layer: "Memory"),
+        LabBuildingItem(title: "Pod review cards",                        stage: "Live",     owner: "MAU", shortId: "review", layer: "Pod"),
+        LabBuildingItem(title: "Memory Spine candidate review",           stage: "Live",     owner: "ALO", shortId: "mem-spn", layer: "Memory"),
+        LabBuildingItem(title: "Suggestions panel",                       stage: "Evidence", owner: "MAU", shortId: "suggest", layer: "Pod"),
+        LabBuildingItem(title: "ORCA lab sections route",                 stage: "Active",   owner: "MAU", shortId: "lab-api", layer: "ORCA")
     ]
 
     // Workflows + Protocols — the procedural backbone (per LAB-SYSTEMS-INDEX §13).
@@ -225,6 +220,7 @@ enum LabContent {
                 LabWorkflowItem(title: "project-lifecycle-standard — 8 stages", status: "🟢 LIVE", statusColor: AppColors.accentSuccess),
                 LabWorkflowItem(title: "ADR-013-board-folds-into-project", status: "🟢 LIVE", statusColor: AppColors.accentSuccess),
                 LabWorkflowItem(title: "PROTOCOL-VERIFIED-CLOSE", status: "🟢 LIVE", statusColor: AppColors.accentSuccess),
+                LabWorkflowItem(title: "Work-Spine queue automation", status: "🟢 LIVE", statusColor: AppColors.accentSuccess),
                 LabWorkflowItem(title: "PROTOCOL-INBOX-DRAIN", status: "DRAFT", statusColor: AppColors.accentCaptain)
             ]
         ),
@@ -242,7 +238,15 @@ enum LabContent {
             items: [
                 LabWorkflowItem(title: "agent-documentation-workflow-standard", status: "🟢 LIVE", statusColor: AppColors.accentSuccess),
                 LabWorkflowItem(title: "SOP-MEMORY-UPDATE — verify, mark, point, date", status: "🟢 LIVE", statusColor: AppColors.accentSuccess),
+                LabWorkflowItem(title: "Memory Spine candidate queue", status: "🟢 LIVE", statusColor: AppColors.accentSuccess),
                 LabWorkflowItem(title: "charters/memory.md", status: "🟢 LIVE", statusColor: AppColors.accentSuccess)
+            ]
+        ),
+        LabWorkflowGroup(
+            title: "Compute experiments",
+            items: [
+                LabWorkflowItem(title: "Owned-model route registry", status: "🟢 LIVE", statusColor: AppColors.accentSuccess),
+                LabWorkflowItem(title: "Blackfin model lane", status: "🟢 LIVE", statusColor: AppColors.accentSuccess)
             ]
         ),
         LabWorkflowGroup(

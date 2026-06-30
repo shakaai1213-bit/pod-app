@@ -21,6 +21,10 @@ struct LockerChatView: View {
     @State private var showingTicketConfirmation = false
     @State private var showingAttachTicketSheet = false
     @State private var showingTriageSheet = false
+    @State private var showingToolRequestComposer = false
+    @State private var toolRequestName = "agent_workspace_task"
+    @State private var toolRequestInstruction = ""
+    @State private var toolRequestReason = ""
     @State private var isContextExpanded = false
     @State private var areOlderMessagesExpanded = false
     @State private var selectedEvidenceMessage: DMMessage?
@@ -204,6 +208,28 @@ struct LockerChatView: View {
             if let preview = viewModel.latestTriagePreview {
                 TriagePreviewSheet(preview: preview)
             }
+        }
+        .sheet(isPresented: $showingToolRequestComposer) {
+            LockerToolRequestComposerSheet(
+                ticketTitle: viewModel.activeTicketTitle ?? viewModel.activeTicketContinuity?.ticket.title ?? "Attached ticket",
+                capabilities: viewModel.agentToolsProjection?.capabilities ?? [],
+                selectedToolName: $toolRequestName,
+                instruction: $toolRequestInstruction,
+                reason: $toolRequestReason,
+                isSubmitting: viewModel.isRequestingWorkspaceTool,
+                onSubmit: {
+                    viewModel.requestWorkspaceToolFromChat(
+                        toolName: toolRequestName,
+                        instruction: toolRequestInstruction,
+                        reason: toolRequestReason
+                    )
+                    showingToolRequestComposer = false
+                },
+                onCancel: {
+                    showingToolRequestComposer = false
+                }
+            )
+            .presentationDetents([.medium, .large])
         }
         .sheet(item: $selectedAgentPacketProject) { project in
             let endpoint = trimmedAgentPacketEndpoint(for: project) ?? ""
@@ -814,8 +840,6 @@ struct LockerChatView: View {
     private var workClassroomPanel: some View {
         if viewModel.activeTicketId != nil {
             VStack(alignment: .leading, spacing: 8) {
-                // L6: toolbar overflow fix — status labels + Refresh inline;
-                // Approval/Memory/Artifact/Tool collapsed into a single … Menu.
                 HStack(spacing: 8) {
                     Label(awakeStateLabel, systemImage: awakeStateIcon)
                         .font(.caption2.weight(.semibold))
@@ -875,7 +899,7 @@ struct LockerChatView: View {
                         .disabled(viewModel.isSavingWorkspaceArtifact)
 
                         Button {
-                            viewModel.requestWorkspaceToolFromChat()
+                            openToolRequestComposer()
                         } label: {
                             Label(
                                 viewModel.isRequestingWorkspaceTool ? "Requesting Tool…" : "Request Workspace Tool",
@@ -894,6 +918,10 @@ struct LockerChatView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Classroom actions")
                 }
+
+                classroomToolRail
+                agentToolProjectionRows
+                runtimeProvenanceRows
 
                 HStack(spacing: 8) {
                     Text(viewModel.workClassroomRefreshLabel)
@@ -933,6 +961,251 @@ struct LockerChatView: View {
                 alignment: .bottom
             )
         }
+    }
+
+    private var classroomToolRail: some View {
+        HStack(spacing: 8) {
+            Text("TOOLS")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(AppColors.textTertiary)
+                .frame(width: 38, alignment: .leading)
+
+            classroomActionButton(
+                icon: "person.badge.key",
+                label: viewModel.isRequestingTicketApproval ? "Requesting approval" : "Request approval",
+                tint: AppColors.accentWarning,
+                isBusy: viewModel.isRequestingTicketApproval
+            ) {
+                viewModel.requestApprovalFromChat()
+            }
+
+            classroomActionButton(
+                icon: "hammer",
+                label: viewModel.isRequestingWorkspaceTool ? "Requesting tool" : "Request workspace tool",
+                tint: AppColors.accentElectric,
+                isBusy: viewModel.isRequestingWorkspaceTool
+            ) {
+                openToolRequestComposer()
+            }
+
+            classroomActionButton(
+                icon: "doc.badge.plus",
+                label: viewModel.isSavingWorkspaceArtifact ? "Saving artifact" : "Save workspace artifact",
+                tint: AppColors.accentSuccess,
+                isBusy: viewModel.isSavingWorkspaceArtifact
+            ) {
+                viewModel.saveWorkspaceArtifactFromChat()
+            }
+
+            classroomActionButton(
+                icon: "brain.head.profile",
+                label: viewModel.isSavingMemoryCandidate ? "Saving memory" : "Save memory candidate",
+                tint: AppColors.accentAgent,
+                isBusy: viewModel.isSavingMemoryCandidate
+            ) {
+                viewModel.saveMemoryCandidateFromChat()
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func classroomActionButton(
+        icon: String,
+        label: String,
+        tint: Color,
+        isBusy: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: isBusy ? "hourglass" : icon)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 28, height: 28)
+                .background(tint.opacity(0.10))
+                .clipShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isBusy)
+        .accessibilityLabel(label)
+        .help(label)
+    }
+
+    private func openToolRequestComposer() {
+        let typedInstruction = viewModel.composedMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fallbackInstruction = viewModel.activeTicketContinuity?.nextActionLabel
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let selectedCapability = viewModel.agentToolsProjection?.capabilities.first { capability in
+            capability.id == "workspace_artifact" && capability.normalizedStatus == "available"
+        }
+
+        toolRequestName = selectedCapability?.id ?? "agent_workspace_task"
+        toolRequestInstruction = typedInstruction.isEmpty ? fallbackInstruction : typedInstruction
+        toolRequestReason = "Owner-approved observe-only request from \(agent.name) chat."
+        showingToolRequestComposer = true
+    }
+
+    @ViewBuilder
+    private var agentToolProjectionRows: some View {
+        if viewModel.isLoadingAgentTools {
+            Label("Loading ORCA tool projection", systemImage: "wrench.and.screwdriver")
+                .font(.caption2)
+                .foregroundStyle(AppColors.textTertiary)
+        } else if let projection = viewModel.agentToolsProjection {
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 8) {
+                    Label("ORCA tools", systemImage: "wrench.and.screwdriver.fill")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(AppColors.accentElectric)
+
+                    Spacer(minLength: 0)
+
+                    Text(projection.protectedLevel.replacingOccurrences(of: "_", with: " "))
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(projection.protectedLevel == "open" ? AppColors.accentSuccess : AppColors.accentWarning)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .background((projection.protectedLevel == "open" ? AppColors.accentSuccess : AppColors.accentWarning).opacity(0.10))
+                        .clipShape(Capsule())
+                }
+
+                FlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                    ForEach(projection.capabilities.prefix(7)) { capability in
+                        agentToolCapabilityChip(capability)
+                    }
+                }
+
+                Text("\(projection.availableCapabilities.count) available · \(projection.disabledCapabilities.count) held · \(projection.provenanceSourceLabel)")
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.textTertiary)
+                    .lineLimit(2)
+
+                if !projection.gaps.isEmpty {
+                    Text(projection.gaps.prefix(2).joined(separator: " · "))
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.accentWarning)
+                        .lineLimit(2)
+                } else {
+                    Text(projection.richToolsPolicy.replacingOccurrences(of: "_", with: " "))
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.textTertiary)
+                        .lineLimit(2)
+                }
+            }
+        } else if let error = viewModel.agentToolsError {
+            Label(error, systemImage: "wrench.adjustable")
+                .font(.caption2)
+                .foregroundStyle(AppColors.accentWarning)
+                .lineLimit(2)
+        }
+    }
+
+    private func agentToolCapabilityChip(_ capability: WorkbenchAgentToolCapability) -> some View {
+        let color = agentToolCapabilityColor(capability)
+        return HStack(spacing: 4) {
+            Image(systemName: agentToolCapabilityIcon(capability))
+                .font(.system(size: 9, weight: .semibold))
+            Text(capability.label)
+                .font(.system(size: 10, weight: .semibold))
+                .lineLimit(1)
+            if capability.requiresApproval {
+                Image(systemName: "checkmark.shield")
+                    .font(.system(size: 9, weight: .semibold))
+            }
+        }
+        .foregroundStyle(color)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(color.opacity(0.10))
+        .clipShape(Capsule())
+        .accessibilityLabel("\(capability.label) \(capability.status)")
+        .help(capability.blockedReasons.first ?? capability.mode ?? capability.status)
+    }
+
+    private func agentToolCapabilityColor(_ capability: WorkbenchAgentToolCapability) -> Color {
+        switch capability.normalizedStatus {
+        case "available":
+            return capability.requiresApproval ? AppColors.accentWarning : AppColors.accentSuccess
+        case "disabled", "blocked":
+            return AppColors.textTertiary
+        default:
+            return AppColors.accentElectric
+        }
+    }
+
+    private func agentToolCapabilityIcon(_ capability: WorkbenchAgentToolCapability) -> String {
+        switch capability.toolClass {
+        case "read_context":
+            return "book"
+        case "preview":
+            return "eye"
+        case "workspace_artifact":
+            return "folder.badge.gearshape"
+        case "agent_action":
+            return "paperplane"
+        case "compute":
+            return "cpu"
+        case "external_or_desktop":
+            return "desktopcomputer"
+        case "protected":
+            return "lock.shield"
+        default:
+            return capability.requiresApproval ? "checkmark.shield" : "wrench.and.screwdriver"
+        }
+    }
+
+    @ViewBuilder
+    private var runtimeProvenanceRows: some View {
+        if let run = viewModel.activeTicketContinuity?.latestRun {
+            VStack(alignment: .leading, spacing: 6) {
+                Label("Runtime provenance", systemImage: "cpu")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(AppColors.accentElectric)
+
+                FlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                    provenancePill("run", value: shortRef(run.id), color: AppColors.accentElectric)
+                    provenancePill("trace", value: shortRef(run.traceId), color: AppColors.accentElectric)
+                    provenancePill("backend", value: run.backend, color: AppColors.accentSuccess)
+                    provenancePill("model", value: run.model, color: AppColors.accentAgent)
+                    provenancePill("tier", value: run.tier, color: AppColors.textSecondary)
+                    provenancePill("route", value: run.operationalRouteLabel, color: AppColors.textSecondary)
+                    provenancePill("policy", value: run.toolPolicy, color: AppColors.accentWarning)
+                }
+
+                if let label = run.operationalSourceLabel {
+                    Text(label)
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.textTertiary)
+                        .lineLimit(2)
+                }
+            }
+        } else if viewModel.activeTicketId != nil {
+            Label("Runtime provenance will appear after an Agent Run attaches.", systemImage: "cpu")
+                .font(.caption2)
+                .foregroundStyle(AppColors.textTertiary)
+        }
+    }
+
+    @ViewBuilder
+    private func provenancePill(_ label: String, value: String?, color: Color) -> some View {
+        if let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty {
+            Text("\(label) \(value)")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+                .background(color.opacity(0.10))
+                .clipShape(Capsule())
+        }
+    }
+
+    private func shortRef(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+            return nil
+        }
+        guard value.count > 16 else { return value }
+        return "\(value.prefix(8))...\(value.suffix(4))"
     }
 
     @ViewBuilder
@@ -2138,6 +2411,228 @@ struct PlaygroundHistoryToggle: View {
         .buttonStyle(.plain)
         .accessibilityLabel(isExpanded ? "Hide earlier messages" : "Show \(hiddenCount) earlier messages")
     }
+}
+
+private struct LockerToolRequestComposerSheet: View {
+    let ticketTitle: String
+    let capabilities: [WorkbenchAgentToolCapability]
+    @Binding var selectedToolName: String
+    @Binding var instruction: String
+    @Binding var reason: String
+    let isSubmitting: Bool
+    let onSubmit: () -> Void
+    let onCancel: () -> Void
+
+    private let options = LockerToolRequestOption.defaults
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    header
+                    toolPicker
+                    instructionEditor
+                    reasonEditor
+                    policyStrip
+                }
+                .padding(16)
+            }
+            .background(AppColors.backgroundPrimary)
+            .navigationTitle("Tool Request")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel", action: onCancel)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        onSubmit()
+                    } label: {
+                        Label(isSubmitting ? "Submitting" : "Submit", systemImage: isSubmitting ? "hourglass" : "checkmark.shield")
+                    }
+                    .disabled(isSubmitting || instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .onAppear {
+                if !options.contains(where: { $0.id == selectedToolName }) {
+                    selectedToolName = "agent_workspace_task"
+                }
+            }
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(String(ticketTitle.prefix(96)), systemImage: "ticket")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppColors.textPrimary)
+                .lineLimit(2)
+
+            Text("SEC-010 observe-only broker")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(AppColors.accentWarning)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(AppColors.accentWarning.opacity(0.10))
+                .clipShape(Capsule())
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var toolPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Tool Kind")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppColors.textTertiary)
+
+            Picker("Tool Kind", selection: $selectedToolName) {
+                ForEach(options) { option in
+                    Label(option.label, systemImage: option.icon)
+                        .tag(option.id)
+                }
+            }
+            .pickerStyle(.menu)
+            .tint(AppColors.accentElectric)
+
+            if let selected = options.first(where: { $0.id == selectedToolName }) {
+                Label(selected.detail, systemImage: selected.icon)
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .lineLimit(2)
+            }
+        }
+        .padding(12)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var instructionEditor: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Instruction")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppColors.textTertiary)
+
+            TextEditor(text: $instruction)
+                .font(.body)
+                .foregroundStyle(AppColors.textPrimary)
+                .scrollContentBackground(.hidden)
+                .frame(minHeight: 118)
+                .padding(8)
+                .background(AppColors.backgroundTertiary)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(AppColors.border, lineWidth: 1)
+                )
+        }
+        .padding(12)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var reasonEditor: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Reason")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppColors.textTertiary)
+
+            TextField("Why this tool request is needed", text: $reason, axis: .vertical)
+                .font(.body)
+                .lineLimit(2...4)
+                .padding(10)
+                .background(AppColors.backgroundTertiary)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(AppColors.border, lineWidth: 1)
+                )
+        }
+        .padding(12)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var policyStrip: some View {
+        if !capabilities.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Policy")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.textTertiary)
+
+                FlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                    ForEach(capabilities.prefix(7)) { capability in
+                        capabilityPill(capability)
+                    }
+                }
+            }
+            .padding(12)
+            .background(AppColors.backgroundSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+    }
+
+    private func capabilityPill(_ capability: WorkbenchAgentToolCapability) -> some View {
+        let color: Color = capability.normalizedStatus == "available"
+            ? (capability.requiresApproval ? AppColors.accentWarning : AppColors.accentSuccess)
+            : AppColors.textTertiary
+        return Label(capability.label, systemImage: capability.requiresApproval ? "checkmark.shield" : "wrench.and.screwdriver")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(color.opacity(0.10))
+            .clipShape(Capsule())
+    }
+}
+
+private struct LockerToolRequestOption: Identifiable, Hashable {
+    let id: String
+    let label: String
+    let icon: String
+    let detail: String
+
+    static let defaults: [LockerToolRequestOption] = [
+        LockerToolRequestOption(
+            id: "agent_workspace_task",
+            label: "Workspace Task",
+            icon: "hammer",
+            detail: "Records a bounded request for owner-reviewed workspace follow-up."
+        ),
+        LockerToolRequestOption(
+            id: "workspace_artifact",
+            label: "Workspace Artifact",
+            icon: "doc.badge.plus",
+            detail: "Creates an observe-only artifact request tied to this ticket."
+        ),
+        LockerToolRequestOption(
+            id: "evidence_pack",
+            label: "Evidence Pack",
+            icon: "point.topleft.down.curvedto.point.bottomright.up",
+            detail: "Asks ORCA to assemble trace, file, and run evidence."
+        ),
+        LockerToolRequestOption(
+            id: "code_review_packet",
+            label: "Code Review Packet",
+            icon: "curlybraces.square",
+            detail: "Prepares a review packet for changed files and residual risk."
+        ),
+        LockerToolRequestOption(
+            id: "research_packet",
+            label: "Research Packet",
+            icon: "magnifyingglass",
+            detail: "Stages a research handoff without running external tools."
+        ),
+        LockerToolRequestOption(
+            id: "runtime_probe_plan",
+            label: "Runtime Probe Plan",
+            icon: "stethoscope",
+            detail: "Captures a bounded diagnostic plan for later approved execution."
+        )
+    ]
 }
 
 private struct SonarEvidenceDrawer: View {

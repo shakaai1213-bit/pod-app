@@ -72,12 +72,21 @@ struct podApp: App {
     }
 
     private func handleURL(_ url: URL) {
-        print("[podApp] connect URL received")
+        guard url.scheme == "pod" else { return }
+
+        if url.host == "workbench" || url.host == "bench" || url.host == "work" {
+            print("[podApp] Workbench URL received")
+            Task { @MainActor in
+                NotificationCenter.default.post(name: Notification.Name("pod.openWorkFlowFilter"), object: nil)
+            }
+            return
+        }
+
         // pod://connect/<token> — bypasses the login form
-        guard url.scheme == "pod",
-              url.host == "connect",
+        guard url.host == "connect",
               let token = url.pathComponents.last,
               !token.isEmpty else { return }
+        print("[podApp] connect URL received")
         print("[podApp] Token length: \(token.count)")
         Task { @MainActor in
             print("[podApp] Authenticating via URL scheme...")

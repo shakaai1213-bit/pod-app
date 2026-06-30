@@ -11,6 +11,7 @@ struct DashboardView: View {
     @State private var dailyBriefingModel = DailyBriefingPanelModel()
     @State private var fundLandingModel = FundLandingViewModel()
     @State private var fundUniverseLoopModel = FundUniverseLoopViewModel()
+    @State private var fundPredictionModel = FundPredictionBriefViewModel()
     @State private var selectedAgent: Agent?
     @State private var selectedBriefingSheet: DashboardBriefingSheetKind?
     @State private var isDailyBriefingExpanded = false
@@ -77,6 +78,7 @@ struct DashboardView: View {
                             await dailyBriefingModel.load(force: true)
                             await fundLandingModel.load()
                             await fundUniverseLoopModel.load()
+                            await fundPredictionModel.load()
                             await playgroundModel.load()
                         }
                     } label: {
@@ -110,7 +112,10 @@ struct DashboardView: View {
             .sheet(isPresented: $showingFundLanding) {
                 FundLandingDetailSheet(
                     landing: fundLandingModel.landing,
-                    universeLoop: fundUniverseLoopModel.response
+                    universeLoop: fundUniverseLoopModel.response,
+                    predictionBrief: fundPredictionModel.brief,
+                    predictionError: fundPredictionModel.errorMessage,
+                    predictionsLoading: fundPredictionModel.isLoading
                 )
                     .presentationDetents([.medium, .large])
             }
@@ -123,6 +128,7 @@ struct DashboardView: View {
                 await dailyBriefingModel.load()
                 await fundLandingModel.load()
                 await fundUniverseLoopModel.load()
+                await fundPredictionModel.load()
                 await playgroundModel.load()
             }
             .task {
@@ -1460,9 +1466,195 @@ private enum DashboardBriefingSheetKind: String, Identifiable {
     var id: String { rawValue }
 }
 
+@MainActor
+@Observable
+private final class FundPredictionBriefViewModel {
+    var brief: MarketPredictionBrief?
+    var isLoading = false
+    var errorMessage: String?
+
+    private let apiClient: APIClient
+
+    init(apiClient: APIClient = .shared) {
+        self.apiClient = apiClient
+    }
+
+    func load() async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        do {
+            let dto: FundMarketPredictionBriefDTO = try await apiClient.get(path: "/api/v1/research/predictions/market-brief/latest")
+            brief = dto.toDomain()
+        } catch let apiError as APIError where apiError.code == 404 {
+            brief = nil
+            errorMessage = "Waiting for ORCA /api/v1/research/predictions/market-brief/latest."
+        } catch {
+            brief = nil
+            errorMessage = "Market prediction brief is unavailable from ORCA."
+        }
+    }
+}
+
+private struct FundMarketPredictionBriefDTO: Decodable {
+    let generatedAt: String?
+    let asOfDate: String?
+    let podSurface: FundPredictionPodSurfaceDTO?
+    let calibration: FundPredictionCalibrationDTO?
+
+    private enum CodingKeys: String, CodingKey {
+        case generatedAt = "generated_at"
+        case asOfDate = "as_of_date"
+        case podSurface = "pod_surface"
+        case calibration
+    }
+
+    func toDomain() -> MarketPredictionBrief {
+        MarketPredictionBrief(
+            generatedAt: generatedAt,
+            asOfDate: asOfDate,
+            marketRows: podSurface?.marketRows ?? [],
+            earningsRows: podSurface?.earningsRows ?? [],
+            calibration: calibration?.toDomain()
+        )
+    }
+}
+
+private struct FundPredictionPodSurfaceDTO: Decodable {
+    let marketRows: [MarketTrendPrediction]
+    let earningsRows: [WeekAheadEarningsPrediction]
+
+    private struct Card: Decodable {
+        let id: String?
+        let rows: [FundPredictionRowValue]?
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case cards
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let cards = try container.decodeIfPresent([Card].self, forKey: .cards) ?? []
+        marketRows = cards.first(where: { $0.id == "market_30_60_90" })?.rows?.compactMap(\.marketRow) ?? []
+        earningsRows = cards.first(where: { $0.id == "week_ahead_earnings" })?.rows?.compactMap(\.earningsRow) ?? []
+    }
+}
+
+private struct FundPredictionRowValue: Decodable {
+    let symbol: String?
+    let name: String?
+    let assetClass: String?
+    let lastPrice: Double?
+    let return30d: Double?
+    let return60d: Double?
+    let return90d: Double?
+    let prediction30d: String?
+    let prediction60d: String?
+    let prediction90d: String?
+    let confidence30d: Double?
+    let confidence60d: Double?
+    let confidence90d: Double?
+    let companyName: String?
+    let sector: String?
+    let earningsDate: String?
+    let daysUntil: Int?
+    let prediction: String?
+    let confidence: Double?
+    let qualityScore: Double?
+    let epsEstimate: Double?
+    let chartSetup: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case symbol, name, sector, prediction, confidence
+        case assetClass = "asset_class"
+        case lastPrice = "last_price"
+        case return30d = "return_30d"
+        case return60d = "return_60d"
+        case return90d = "return_90d"
+        case prediction30d = "prediction_30d"
+        case prediction60d = "prediction_60d"
+        case prediction90d = "prediction_90d"
+        case confidence30d = "confidence_30d"
+        case confidence60d = "confidence_60d"
+        case confidence90d = "confidence_90d"
+        case companyName = "company_name"
+        case earningsDate = "earnings_date"
+        case daysUntil = "days_until"
+        case qualityScore = "quality_score"
+        case epsEstimate = "eps_estimate"
+        case chartSetup = "chart_setup"
+    }
+
+    var marketRow: MarketTrendPrediction? {
+        guard let symbol else { return nil }
+        return MarketTrendPrediction(
+            id: symbol,
+            symbol: symbol,
+            name: name,
+            assetClass: assetClass,
+            lastPrice: lastPrice,
+            return30d: return30d,
+            return60d: return60d,
+            return90d: return90d,
+            prediction30d: prediction30d,
+            prediction60d: prediction60d,
+            prediction90d: prediction90d,
+            confidence30d: confidence30d,
+            confidence60d: confidence60d,
+            confidence90d: confidence90d
+        )
+    }
+
+    var earningsRow: WeekAheadEarningsPrediction? {
+        guard let symbol else { return nil }
+        return WeekAheadEarningsPrediction(
+            id: "\(symbol)-\(earningsDate ?? "pending")",
+            symbol: symbol,
+            companyName: companyName,
+            sector: sector,
+            earningsDate: earningsDate,
+            daysUntil: daysUntil,
+            prediction: prediction,
+            confidence: confidence,
+            qualityScore: qualityScore,
+            epsEstimate: epsEstimate,
+            chartSetup: chartSetup,
+            lastPrice: lastPrice
+        )
+    }
+}
+
+private struct FundPredictionCalibrationDTO: Decodable {
+    let totalPredictions: Int?
+    let resolved: Int?
+    let unresolved: Int?
+    let accuracy: Double?
+    let read: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case totalPredictions = "total_predictions"
+        case resolved, unresolved, accuracy, read
+    }
+
+    func toDomain() -> PredictionCalibrationSummary {
+        PredictionCalibrationSummary(
+            totalPredictions: totalPredictions ?? 0,
+            resolved: resolved ?? 0,
+            unresolved: unresolved ?? 0,
+            accuracy: accuracy,
+            read: read
+        )
+    }
+}
+
 private struct FundLandingDetailSheet: View {
     let landing: FundLanding?
     let universeLoop: FundOSProductResponse?
+    let predictionBrief: MarketPredictionBrief?
+    let predictionError: String?
+    let predictionsLoading: Bool
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -1501,6 +1693,7 @@ private struct FundLandingDetailSheet: View {
                             detailMetric("Data App", landing.summary?.dataApplicationStatus ?? landing.agentLanding?.dataApplication?.status ?? "-")
                         }
 
+                        marketPredictionCard
                         universeLoopCard
 
                         if let agentLanding = landing.agentLanding {
@@ -1579,6 +1772,7 @@ private struct FundLandingDetailSheet: View {
                         Text("Fund landing is not available from ORCA yet.")
                             .font(.system(size: 14))
                             .foregroundColor(AppColors.textSecondary)
+                        marketPredictionCard
                     }
                 }
                 .padding(18)
@@ -1592,6 +1786,126 @@ private struct FundLandingDetailSheet: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private var marketPredictionCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "chart.line.uptrend.xyaxis")
+                    .foregroundColor(AppColors.accentElectric)
+                Text("STOCK PREDICTIONS · 30/60/90")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(AppColors.textTertiary)
+                Spacer()
+                if predictionsLoading {
+                    ProgressView()
+                        .scaleEffect(0.65)
+                } else if let predictionBrief, !predictionBrief.marketRows.isEmpty {
+                    detailStatusPill("\(predictionBrief.marketRows.count) ROWS", color: AppColors.accentSuccess)
+                } else {
+                    detailStatusPill("UNAVAILABLE", color: AppColors.textTertiary)
+                }
+            }
+
+            if predictionsLoading {
+                Text("Loading ORCA prediction brief.")
+                    .font(.system(size: 12))
+                    .foregroundColor(AppColors.textSecondary)
+            } else if let predictionBrief {
+                if predictionBrief.marketRows.isEmpty {
+                    Text("ORCA returned no 30/60/90 stock prediction rows.")
+                        .font(.system(size: 12))
+                        .foregroundColor(AppColors.textSecondary)
+                } else {
+                    VStack(spacing: 8) {
+                        ForEach(Array(predictionBrief.marketRows.prefix(8))) { row in
+                            marketPredictionRow(row)
+                        }
+                    }
+                }
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                    detailMetric("Total", predictionBrief.calibration.map { "\($0.totalPredictions)" } ?? "-")
+                    detailMetric("Resolved", predictionBrief.calibration.map { "\($0.resolved)" } ?? "-")
+                    detailMetric("Accuracy", accuracy(predictionBrief.calibration?.accuracy))
+                    detailMetric("As of", predictionBrief.asOfDate ?? "-")
+                }
+
+                if let read = predictionBrief.calibration?.read, !read.isEmpty {
+                    Text(read)
+                        .font(.system(size: 11))
+                        .foregroundColor(AppColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Text("Source: ORCA /api/v1/research/predictions/market-brief/latest · generated \(predictionBrief.generatedAt ?? "-")")
+                    .font(.system(size: 10))
+                    .foregroundColor(AppColors.textTertiary)
+                    .lineLimit(2)
+                    .textSelection(.enabled)
+            } else {
+                Text(predictionError ?? "Waiting for ORCA prediction brief.")
+                    .font(.system(size: 12))
+                    .foregroundColor(AppColors.textSecondary)
+            }
+        }
+        .padding(12)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func marketPredictionRow(_ row: MarketTrendPrediction) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(row.symbol)
+                    .font(.system(size: 15, weight: .bold, design: .monospaced))
+                    .foregroundColor(AppColors.textPrimary)
+                if let name = row.name, !name.isEmpty {
+                    Text(name)
+                        .font(.system(size: 11))
+                        .foregroundColor(AppColors.textSecondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                Text(price(row.lastPrice))
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundColor(AppColors.textTertiary)
+            }
+
+            HStack(spacing: 6) {
+                predictionHorizon("30D", prediction: row.prediction30d, confidence: row.confidence30d, returnValue: row.return30d)
+                predictionHorizon("60D", prediction: row.prediction60d, confidence: row.confidence60d, returnValue: row.return60d)
+                predictionHorizon("90D", prediction: row.prediction90d, confidence: row.confidence90d, returnValue: row.return90d)
+            }
+        }
+        .padding(10)
+        .background(AppColors.backgroundPrimary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func predictionHorizon(_ label: String, prediction: String?, confidence: Double?, returnValue: Double?) -> some View {
+        let color = predictionColor(prediction)
+        return VStack(spacing: 2) {
+            Text(label)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(AppColors.textTertiary)
+            Text(predictionLabel(prediction))
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            Text("\(percent(returnValue)) / \(confidenceLabel(confidence))")
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .foregroundColor(AppColors.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 6)
+        .padding(.horizontal, 4)
+        .background(color.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 7))
     }
 
     @ViewBuilder
@@ -1679,6 +1993,45 @@ private struct FundLandingDetailSheet: View {
     private func number(_ value: Double?) -> String {
         guard let value else { return "-" }
         return value.formatted(.number.precision(.fractionLength(3)))
+    }
+
+    private func price(_ value: Double?) -> String {
+        guard let value else { return "-" }
+        return value.formatted(.currency(code: "USD").precision(.fractionLength(2)))
+    }
+
+    private func percent(_ value: Double?) -> String {
+        guard let value else { return "-" }
+        return value.formatted(.percent.precision(.fractionLength(1)))
+    }
+
+    private func confidenceLabel(_ value: Double?) -> String {
+        guard let value else { return "-" }
+        return value.formatted(.percent.precision(.fractionLength(0)))
+    }
+
+    private func accuracy(_ value: Double?) -> String {
+        guard let value else { return "-" }
+        return value.formatted(.percent.precision(.fractionLength(1)))
+    }
+
+    private func predictionColor(_ prediction: String?) -> Color {
+        let normalized = (prediction ?? "").lowercased()
+        if normalized.contains("bull") || normalized.contains("up") || normalized.contains("long") || normalized.contains("yes") {
+            return AppColors.accentSuccess
+        }
+        if normalized.contains("bear") || normalized.contains("down") || normalized.contains("short") || normalized.contains("no") {
+            return AppColors.accentDanger
+        }
+        if normalized.contains("neutral") || normalized.contains("flat") || normalized.contains("hold") {
+            return AppColors.accentWarning
+        }
+        return AppColors.textSecondary
+    }
+
+    private func predictionLabel(_ prediction: String?) -> String {
+        guard let prediction, !prediction.isEmpty else { return "-" }
+        return prediction.replacingOccurrences(of: "_", with: " ").capitalized
     }
 
     private func boolLabel(_ value: Bool?) -> String {

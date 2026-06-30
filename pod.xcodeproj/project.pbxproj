@@ -88,6 +88,7 @@
 		AA1000000000000000000001 /* SystemRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000000000000000000002 /* SystemRepository.swift */; };
 		AA1000000000000000000003 /* SystemViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000000000000000000004 /* SystemViewModel.swift */; };
 		AA1000000000000000000005 /* SystemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000000000000000000006 /* SystemView.swift */; };
+		AA1000000000000000000008 /* WorkbenchRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000000000000000000009 /* WorkbenchRepository.swift */; };
 		AADDFD64686449D8343A6080 /* AppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 669E5C6A23ECCE8F11F520BF /* AppIntents.swift */; };
 		AB04FB9D1CBCD50B1271BFD6 /* TicketsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A555838FA2C96A3ADB7AB1C3 /* TicketsViewModel.swift */; };
 		AFA32AEFFC89649770ED335E /* NotificationRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 574CFE0B1AC9C1B0155DA6F7 /* NotificationRouter.swift */; };
@@ -220,6 +221,7 @@
 		AA1000000000000000000002 /* SystemRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemRepository.swift; sourceTree = "<group>"; };
 		AA1000000000000000000004 /* SystemViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemViewModel.swift; sourceTree = "<group>"; };
 		AA1000000000000000000006 /* SystemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemView.swift; sourceTree = "<group>"; };
+		AA1000000000000000000009 /* WorkbenchRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkbenchRepository.swift; sourceTree = "<group>"; };
 		AAC3FB7EBC81243BD3E32D8F /* OnboardingPageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingPageView.swift; sourceTree = "<group>"; };
 		AE083260B98D522D8163C7E2 /* AgentChatService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentChatService.swift; sourceTree = "<group>"; };
 		B012FA2131C7C588DFF4EBAB /* ORCAProjectsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ORCAProjectsView.swift; sourceTree = "<group>"; };
@@ -532,6 +534,7 @@
 				7ED4159151441CB032A8460F /* ResearchRepository.swift */,
 				3AB0691F93E9F5494A3A79B1 /* StandardRepository.swift */,
 				AA1000000000000000000002 /* SystemRepository.swift */,
+				AA1000000000000000000009 /* WorkbenchRepository.swift */,
 			);
 			path = Repositories;
 			sourceTree = "<group>";
@@ -921,6 +924,7 @@
 				1CE5ECB5B90CBAEBF1759980 /* StatusBadge.swift in Sources */,
 				7D73F19AA5F1A62E35E17CAC /* SwiftDataModels.swift in Sources */,
 				AA1000000000000000000001 /* SystemRepository.swift in Sources */,
+				AA1000000000000000000008 /* WorkbenchRepository.swift in Sources */,
 				AA1000000000000000000005 /* SystemView.swift in Sources */,
 				AA1000000000000000000003 /* SystemViewModel.swift in Sources */,
 				CBD4F56F27B316E7080C5790 /* TaskCardView.swift in Sources */,

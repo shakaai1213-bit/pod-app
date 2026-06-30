@@ -88,6 +88,9 @@ final class DirectChatViewModel {
     var agentPacketBriefByEndpoint: [String: AgentChatService.ProjectAgentPacketBrief] = [:]
     var isLoadingAgentPacket: Bool = false
     var agentPacketError: String?
+    var agentToolsProjection: WorkbenchAgentToolsProjection?
+    var isLoadingAgentTools: Bool = false
+    var agentToolsError: String?
 
     // Conversation data from SwiftData
     var conversations: [DMConversation] = []
@@ -788,6 +791,10 @@ final class DirectChatViewModel {
         loadTicketContext(for: agent)
         Task { await loadAgentLocker(for: agent) }
         applyPendingTicketContinuationIfNeeded(for: agent)
+        guard modelContext != nil else {
+            currentMessages = []
+            return
+        }
         let conversation = getOrCreateConversation(for: agent)
         if conversation.orcaChannelId == nil, let serverChannelId = orcaChannelIdByAgent[agent.id] {
             conversation.orcaChannelId = serverChannelId
@@ -800,11 +807,14 @@ final class DirectChatViewModel {
         }
         if let ticketId = activeTicketId {
             Task { await loadAttachedTicketContinuity(ticketId: ticketId) }
+            Task { await loadAgentToolsForActiveTicket(agent: agent) }
             startAttachedTicketLifecycleStream(agent: agent, ticketId: ticketId)
         } else {
             stopAttachedTicketLifecycleStream()
             activeTicketContinuity = nil
             ticketContinuityError = nil
+            agentToolsProjection = nil
+            agentToolsError = nil
         }
     }
 
@@ -829,6 +839,9 @@ final class DirectChatViewModel {
         triagePreviewError = nil
         activeTicketId = nil
         activeTicketTitle = nil
+        agentToolsProjection = nil
+        agentToolsError = nil
+        isLoadingAgentTools = false
         selectedDeliveryMode = .compute
         selectedRoom = nil
         roomMessages = []
@@ -958,7 +971,7 @@ final class DirectChatViewModel {
 
     private func getOrCreateConversation(for agent: AgentInfo) -> DMConversation {
         guard let ctx = modelContext else {
-            fatalError("ModelContext not set")
+            return DMConversation(agentId: agent.id)
         }
 
         // Try to find existing
@@ -2518,6 +2531,7 @@ final class DirectChatViewModel {
                 activeTicketTitle = ticket.title
                 saveTicketContext(ticketId: ticket.id, ticketTitle: ticket.title, channelId: getOrCreateConversation(for: agent).orcaChannelId, for: agent)
                 await loadAttachedTicketContinuity(ticketId: ticket.id)
+                await loadAgentToolsForActiveTicket(agent: agent)
                 startAttachedTicketLifecycleStream(agent: agent, ticketId: ticket.id)
                 if draft.shouldAppendSubmittedDraft {
                     appendLocalUserMessage(draft.intake, for: agent)
@@ -2570,6 +2584,7 @@ final class DirectChatViewModel {
         activeTicketId = ticket.id
         activeTicketTitle = ticket.title
         Task { await loadAttachedTicketContinuity(ticketId: ticket.id) }
+        Task { await loadAgentToolsForActiveTicket(agent: agent) }
         ticketActionMessage = "Attached this chat to ORCA ticket \(ticket.id)."
         appendLocalAssistantMessage(
             "Attached this \(agent.name) chat to ORCA ticket \(ticket.id): \(ticket.title). New ticket actions from this chat will append evidence there.",
@@ -2713,6 +2728,8 @@ final class DirectChatViewModel {
         stopAgentRunFollowupRefresh()
         activeTicketContinuity = nil
         ticketContinuityError = nil
+        agentToolsProjection = nil
+        agentToolsError = nil
         clearAgentRunContext()
         ticketActionMessage = "Detached this chat from ORCA. New messages stay local until you create a ticket."
         try? ctx.save()
@@ -2721,6 +2738,7 @@ final class DirectChatViewModel {
     func refreshAttachedTicketContinuity() async {
         guard let ticketId = activeTicketId else { return }
         await loadAttachedTicketContinuity(ticketId: ticketId)
+        await loadAgentToolsForActiveTicket()
         await loadAgentRunContext(ticketId: ticketId)
     }
 
@@ -2777,6 +2795,7 @@ final class DirectChatViewModel {
         guard activeTicketId == ticketId else { return }
         await loadApprovals(ticketId: ticketId)
         await loadWorkspaceContext(ticketId: ticketId)
+        await loadAgentToolsForActiveTicket()
         guard let continuity = activeTicketContinuity else { return }
 
         let runs = continuity.sortedRuns
@@ -2901,6 +2920,36 @@ final class DirectChatViewModel {
             guard activeTicketId == ticketId else { return }
             workspaceContext = nil
             workspaceContextError = "Workspace context unavailable."
+        }
+    }
+
+    func loadAgentToolsForActiveTicket(agent explicitAgent: AgentInfo? = nil) async {
+        guard let ticketId = activeTicketId,
+              let agent = explicitAgent ?? selectedAgent else {
+            agentToolsProjection = nil
+            agentToolsError = nil
+            return
+        }
+
+        isLoadingAgentTools = true
+        agentToolsError = nil
+        defer { isLoadingAgentTools = false }
+
+        do {
+            let projection = try await WorkbenchRepository().loadAgentTools(agentName: agent.id, ticketId: ticketId)
+            guard activeTicketId == ticketId,
+                  (selectedAgent?.id ?? agent.id) == agent.id else {
+                return
+            }
+            agentToolsProjection = projection
+        } catch let apiError as APIError {
+            guard activeTicketId == ticketId else { return }
+            agentToolsProjection = nil
+            agentToolsError = apiError.message
+        } catch {
+            guard activeTicketId == ticketId else { return }
+            agentToolsProjection = nil
+            agentToolsError = "Tool projection unavailable."
         }
     }
 
@@ -3065,28 +3114,42 @@ final class DirectChatViewModel {
         }
     }
 
-    func requestWorkspaceToolFromChat() {
+    func requestWorkspaceToolFromChat(
+        toolName: String = "agent_workspace_task",
+        instruction overrideInstruction: String? = nil,
+        reason overrideReason: String? = nil
+    ) {
         guard !isRequestingWorkspaceTool else { return }
         guard let ticketId = activeTicketId,
               let continuity = activeTicketContinuity else {
             workspaceToolMessage = "Attach a ticket before requesting a tool."
             return
         }
-        let instruction = composedMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        let tool = toolName
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "_")
+        let instruction = (overrideInstruction ?? composedMessage)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let reason = overrideReason?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         isRequestingWorkspaceTool = true
         workspaceToolMessage = nil
         Task {
             defer { isRequestingWorkspaceTool = false }
             let body = DirectChatWorkspaceToolRequestBody(
-                toolName: "agent_workspace_task",
+                toolName: tool.isEmpty ? "agent_workspace_task" : tool,
                 instruction: instruction.isEmpty ? continuity.nextActionLabel : instruction,
-                reason: "Requested from Pod chat for attached ticket \(ticketId).",
+                reason: reason?.isEmpty == false
+                    ? reason
+                    : "Requested from Pod chat for attached ticket \(ticketId).",
                 source: "pod.chat.tool_request"
             )
             do {
                 let dto: DirectChatWorkspaceToolRequestCreateDTO = try await api.post(path: "/api/v1/workspaces/tickets/\(ticketId)/tool-requests", body: body)
                 workspaceToolMessage = dto.message
                 await loadWorkspaceContext(ticketId: ticketId)
+                await loadAgentToolsForActiveTicket()
                 await loadAttachedTicketContinuity(ticketId: ticketId)
             } catch let apiError as APIError {
                 workspaceToolMessage = "Couldn't request tool: \(apiError.message)"
@@ -3119,8 +3182,9 @@ final class DirectChatViewModel {
                     path: "/api/v1/workspaces/tool-requests/\(request.runId)/execute-approved",
                     body: body
                 )
-                workspaceToolMessage = dto.message
+                workspaceToolMessage = "\(dto.message) Result: \(dto.file.path.split(separator: "/").last.map(String.init) ?? dto.file.path)."
                 await loadWorkspaceContext(ticketId: ticketId)
+                await loadAgentToolsForActiveTicket()
                 await loadAttachedTicketContinuity(ticketId: ticketId)
             } catch let apiError as APIError {
                 workspaceToolMessage = "Couldn't execute tool request: \(apiError.message)"

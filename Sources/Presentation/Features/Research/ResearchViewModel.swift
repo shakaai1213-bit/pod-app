@@ -12,7 +12,7 @@ final class ResearchViewModel {
 
     private var pollingTask: Task<Void, Never>?
     
-    let topics = ["iOS 26", "MLX", "SSE", "Offline", "NATS", "SwiftData"]
+    let topics = ["Fish", "Starfish", "Chieffish", "Octopus", "Research Rail", "References", "Policy", "Flywheel"]
     
     func startPolling() {
         guard pollingTask == nil else { return }

@@ -79,11 +79,12 @@ struct ContentView: View {
                 appState.pendingDirectChatAgentId = nil
                 return
             }
-            // Path B per Shaka 2026-05-07: deep-links to unreachable agents land on
-            // the chat tab but don't push into a dead conversation view.
-            withAnimation(.easeInOut(duration: 0.15)) { selectedTab = .chat }
+            // Direct 1:1 chat now lives inside Workbench; keep the old Playground
+            // shell routable, but route current deep links to the operating cockpit.
+            withAnimation(.easeInOut(duration: 0.15)) { selectedTab = .work }
             if agentInfo.isReachable {
                 directChatViewModel.navigationPath = NavigationPath()
+                directChatViewModel.selectAgent(agentInfo)
                 directChatViewModel.navigationPath.append(agentInfo)
             }
             appState.pendingDirectChatAgentId = nil
@@ -98,7 +99,7 @@ struct ContentView: View {
                 appState.pendingDirectChatChannelId = nil
                 return
             }
-            withAnimation(.easeInOut(duration: 0.15)) { selectedTab = .chat }
+            withAnimation(.easeInOut(duration: 0.15)) { selectedTab = .work }
             directChatViewModel.continueWithTicket(
                 ticketId: ticketId,
                 ticketTitle: appState.pendingDirectChatTicketTitle ?? ticketId,
@@ -123,7 +124,7 @@ struct ContentView: View {
         } else if selectedTab == .chat {
             SonarView(viewModel: directChatViewModel)
         } else if selectedTab == .work {
-            WorkView()
+            WorkView(directChatViewModel: directChatViewModel)
         } else if selectedTab == .crew {
             // L2: Crew tab = CrewTabView with 2-segment picker.
             // Agents segment: Focus + Agents + Workers + Protected Fund (via AgentsView).
@@ -171,7 +172,7 @@ struct ContentView: View {
 
     private var visibleTabs: [AppTab] {
         // Legacy cases excluded from bar (still deep-linkable).
-        [.dashboard, .chat, .work, .crew, .knowledge, .lab, .runtime, .maker]
+        [.dashboard, .work, .crew, .knowledge, .lab, .runtime, .maker]
     }
 
     private func tabBarButton(for tab: AppTab) -> some View {
@@ -186,9 +187,12 @@ struct ContentView: View {
                     .font(.system(size: 20, weight: isSelected ? .semibold : .medium))
                     .foregroundColor(isSelected ? AppColors.accentElectric : AppColors.textSecondary)
 
-                Text(tab.title)
-                    .font(.system(size: 10, weight: isSelected ? .semibold : .medium))
+                Text(tab.tabBarTitle)
+                    .font(.system(size: 9.5, weight: isSelected ? .semibold : .medium))
                     .foregroundColor(isSelected ? AppColors.accentElectric : AppColors.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                    .frame(height: 12)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 6)
@@ -198,6 +202,7 @@ struct ContentView: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(tab.title)
     }
 
     // MARK: - Loading Overlay
@@ -287,6 +292,7 @@ struct ContentView: View {
 private enum RuntimeSurfaceMode: String, CaseIterable {
     case overview
     case fleet
+    case data
     case system
     case tags
 
@@ -294,6 +300,7 @@ private enum RuntimeSurfaceMode: String, CaseIterable {
         switch self {
         case .overview: return "Overview"
         case .fleet: return "Fleet"
+        case .data: return "Data"
         case .system: return "System"
         case .tags: return "Tags"
         }
@@ -303,6 +310,7 @@ private enum RuntimeSurfaceMode: String, CaseIterable {
         switch self {
         case .overview: return "waveform.path.ecg"
         case .fleet: return "server.rack"
+        case .data: return "externaldrive.connected.to.line.below"
         case .system: return "cpu"
         case .tags: return "tag"
         }
@@ -346,7 +354,7 @@ private struct RuntimeView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Runtime")
                     .podTextStyle(.title1, color: AppColors.textPrimary)
-                Text("ORCA health, fleet registry, compute routes, and live state tags")
+                Text("ORCA health, fleet registry, data posture, compute routes, and live state tags")
                     .podTextStyle(.body, color: AppColors.textSecondary)
             }
 
@@ -388,6 +396,8 @@ private struct RuntimeView: View {
             runtimeFleetSection
             computeRoutesSection
             classificationSyncSection
+        case .data:
+            dataSourcesSection
         case .system:
             LabSystemContent()
         case .tags:
@@ -851,6 +861,86 @@ private struct RuntimeView: View {
         )
     }
 
+    private var dataSourcesSection: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("DATA SOURCES")
+                        .podTextStyle(.label, color: AppColors.textTertiary)
+                    Text(model.dataSourceRegistry?.mode?.runtimeDisplayLabel ?? "Registry unavailable")
+                        .podTextStyle(.caption, color: AppColors.textSecondary)
+                }
+
+                Spacer()
+
+                if let generatedAt = model.dataSourceRegistry?.generatedAt {
+                    Text(generatedAt.formatted(date: .omitted, time: .shortened))
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.textTertiary)
+                }
+            }
+
+            if let registry = model.dataSourceRegistry {
+                let summary = registry.summary
+                HStack(spacing: Theme.sm) {
+                    runtimeMetric("Sources", value: summary.sourceCount, color: AppColors.accentElectric)
+                    runtimeMetric("Blocked", value: summary.blockedCount, color: summary.blockedCount > 0 ? AppColors.accentWarning : AppColors.accentSuccess)
+                    runtimeMetric("Protected", value: summary.protectedCount, color: summary.protectedCount > 0 ? AppColors.accentWarning : AppColors.accentSuccess)
+                }
+
+                FlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                    dataSourceGuardPill("body reads \(summary.bodyReadCount)", isClean: summary.bodyReadCount == 0)
+                    dataSourceGuardPill("body copies \(summary.bodyCopyCount)", isClean: summary.bodyCopyCount == 0)
+                    dataSourceGuardPill("embeddings \(summary.embeddingCount)", isClean: summary.embeddingCount == 0)
+                    dataSourceGuardPill("protected blocks \(summary.protectedBlockCount)", isClean: true)
+                    if let policy = registry.bodyPolicy?.protected {
+                        dataSourceGuardPill(policy.replacingOccurrences(of: "_", with: " "), isClean: true)
+                    }
+                }
+
+                VStack(spacing: Theme.xs) {
+                    ForEach(registry.sources.sorted(by: dataSourceSort)) { source in
+                        WorkbenchDataSourceRow(source: source)
+                    }
+                }
+                .padding(Theme.sm)
+                .background(AppColors.backgroundSecondary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                        .strokeBorder(AppColors.border, lineWidth: 1)
+                )
+            } else if model.isLoading {
+                Text("Loading data-source registry...")
+                    .podTextStyle(.caption, color: AppColors.textTertiary)
+            } else {
+                Text(model.dataSourcesError ?? "Data-source registry unavailable.")
+                    .podTextStyle(.caption, color: AppColors.textTertiary)
+            }
+        }
+    }
+
+    private func dataSourceGuardPill(_ text: String, isClean: Bool) -> some View {
+        Text(text.uppercased())
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(isClean ? AppColors.accentSuccess : AppColors.accentWarning)
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(AppColors.backgroundSecondary)
+            .clipShape(Capsule())
+    }
+
+    private func dataSourceSort(_ lhs: WorkbenchDataSource, _ rhs: WorkbenchDataSource) -> Bool {
+        let lhsBlocked = lhs.status == "blocked"
+        let rhsBlocked = rhs.status == "blocked"
+        if lhsBlocked != rhsBlocked { return lhsBlocked && !rhsBlocked }
+        let lhsProtected = lhs.sensitivity == "protected" || lhs.dataClass == "protected"
+        let rhsProtected = rhs.sensitivity == "protected" || rhs.dataClass == "protected"
+        if lhsProtected != rhsProtected { return lhsProtected && !rhsProtected }
+        return lhs.displayName < rhs.displayName
+    }
+
     private func runtimeMetric(_ label: String, value: Int, color: Color) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("\(value)")
@@ -902,11 +992,13 @@ private final class RuntimeViewModel {
     var startupStatus: StartupStatusResponseDTO?
     var computeSummary: ComputeRunSummaryDTO?
     var computeRouteRegistry: ComputeRouteRegistryDTO?
+    var dataSourceRegistry: WorkbenchDataSourceRegistry?
     var runtimeExportMessage: String?
     var isLoading = false
     var isClassifying = false
     var isExportingRuntimeSync = false
     var errorMessage: String?
+    var dataSourcesError: String?
 
     var staleCount: Int { tags.filter(\.stale).count }
     var errorCount: Int { tags.filter { $0.quality?.lowercased() == "error" }.count }
@@ -920,6 +1012,7 @@ private final class RuntimeViewModel {
         // L5: partial-load resilience — all requests fire in parallel via async let,
         // but each is awaited with try? so one unavailable endpoint doesn't
         // blank the entire Runtime screen.
+        let workbenchRepository = WorkbenchRepository()
         async let stateResponse: StateRegistryResponse = APIClient.shared.get(path: "/api/v1/state-registry?limit=80")
         async let runtimeResponse: RuntimeRegistryResponseDTO = APIClient.shared.get(path: "/api/v1/runtime-registry?limit=120")
         async let controlRoomResponse: ControlRoomDigestDTO = APIClient.shared.get(path: "/api/v1/control-room/digest")
@@ -928,6 +1021,7 @@ private final class RuntimeViewModel {
         async let startupResponse: StartupStatusResponseDTO = APIClient.shared.get(path: "/api/v1/startup/status")
         async let computeSummaryResponse: ComputeRunSummaryDTO = APIClient.shared.get(path: "/api/v1/compute/runs/summary?window_hours=24")
         async let computeRouteResponse: ComputeRouteRegistryDTO = APIClient.shared.get(path: "/api/v1/compute/runs/routes")
+        async let dataSourcesResponse: WorkbenchDataSourceRegistry = workbenchRepository.loadDataSources()
 
         if let response = try? await stateResponse {
             tags = response.items.sorted { lhs, rhs in
@@ -959,6 +1053,13 @@ private final class RuntimeViewModel {
         startupStatus = try? await startupResponse
         computeSummary = try? await computeSummaryResponse
         computeRouteRegistry = try? await computeRouteResponse
+        if let dataSources = try? await dataSourcesResponse {
+            dataSourceRegistry = dataSources
+            dataSourcesError = nil
+        } else {
+            dataSourceRegistry = nil
+            dataSourcesError = "Data-source registry unavailable."
+        }
     }
 
     @MainActor
@@ -1349,6 +1450,129 @@ private struct ComputeRouteDTO: Decodable, Identifiable {
 }
 
 private struct EmptyRequestDTO: Encodable {}
+
+private struct WorkbenchDataSourceRow: View {
+    let source: WorkbenchDataSource
+
+    var body: some View {
+        HStack(alignment: .top, spacing: Theme.xs) {
+            Image(systemName: icon)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(statusColor)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(alignment: .firstTextBaseline, spacing: Theme.xs) {
+                    Text(source.displayName)
+                        .podTextStyle(.caption, color: AppColors.textPrimary)
+                        .lineLimit(1)
+                    Spacer(minLength: Theme.xs)
+                    Text((source.status ?? "inventory").runtimeDisplayLabel.uppercased())
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(statusColor)
+                        .lineLimit(1)
+                }
+
+                Text(detailLine)
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .lineLimit(2)
+
+                FlowLayout(horizontalSpacing: 5, verticalSpacing: 5) {
+                    chip(source.kind, color: AppColors.textTertiary)
+                    if let owner = source.ownerAgent {
+                        chip(owner, color: AppColors.accentElectric)
+                    }
+                    if let dataClass = source.dataClass {
+                        chip(dataClass, color: dataClass == "protected" ? AppColors.accentWarning : AppColors.textTertiary)
+                    }
+                    if let bodyPolicy = source.bodyPolicy {
+                        chip(bodyPolicy.replacingOccurrences(of: "_", with: " "), color: policyColor(bodyPolicy))
+                    }
+                    if let embeddingPolicy = source.embeddingPolicy {
+                        chip(embeddingPolicy.replacingOccurrences(of: "_", with: " "), color: policyColor(embeddingPolicy))
+                    }
+                }
+
+                if !source.blockers.isEmpty {
+                    Text(blockerLine)
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.accentWarning)
+                        .lineLimit(2)
+                } else if !source.surfaceDestinations.isEmpty {
+                    Text("Surfaces: \(source.surfaceDestinations.joined(separator: ", "))")
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.textTertiary)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .padding(.vertical, Theme.xs)
+    }
+
+    private var icon: String {
+        switch source.kind {
+        case "db": return "cylinder.split.1x2"
+        case "filesystem": return "folder"
+        case "vector", "index": return "point.3.connected.trianglepath.dotted"
+        case "service", "api": return "network"
+        default: return "externaldrive"
+        }
+    }
+
+    private var statusColor: Color {
+        let status = (source.status ?? source.healthStatus ?? "").lowercased()
+        if status.contains("blocked") { return AppColors.accentWarning }
+        if status.contains("error") || status.contains("failed") { return AppColors.accentDanger }
+        if status.contains("healthy") || status.contains("inventory") { return AppColors.accentSuccess }
+        return AppColors.textTertiary
+    }
+
+    private var detailLine: String {
+        var parts: [String] = []
+        if let health = source.healthStatus {
+            parts.append("health \(health.replacingOccurrences(of: "_", with: " "))")
+        }
+        if let sensitivity = source.sensitivity {
+            parts.append("sensitivity \(sensitivity.replacingOccurrences(of: "_", with: " "))")
+        }
+        if let observedAt = source.freshness?.observedAt {
+            parts.append("observed \(observedAt.formatted(date: .omitted, time: .shortened))")
+        }
+        return parts.isEmpty ? source.sourceId : parts.joined(separator: " | ")
+    }
+
+    private var blockerLine: String {
+        let reasons = source.blockers.compactMap(\.reason).map { $0.replacingOccurrences(of: "_", with: " ") }
+        let approvals = Set(source.blockers.flatMap(\.requiredApprovals)).sorted()
+        if !approvals.isEmpty {
+            return "Blocked: \(reasons.first ?? "approval required") | needs \(approvals.joined(separator: ", "))"
+        }
+        return "Blocked: \(reasons.first ?? "review required")"
+    }
+
+    private func chip(_ text: String, color: Color) -> some View {
+        Text(text.uppercased())
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(color)
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(AppColors.backgroundTertiary)
+            .clipShape(Capsule())
+    }
+
+    private func policyColor(_ policy: String) -> Color {
+        let normalized = policy.lowercased()
+        if normalized.contains("blocked") || normalized.contains("not_allowed") {
+            return AppColors.accentWarning
+        }
+        if normalized.contains("metadata") || normalized.contains("inventory") {
+            return AppColors.accentSuccess
+        }
+        return AppColors.textTertiary
+    }
+}
 
 private struct RuntimeUnitRow: View {
     let unit: RuntimeUnitDTO

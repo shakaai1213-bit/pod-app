@@ -41,6 +41,7 @@ actor APIClient {
     private let encoder: JSONEncoder
 
     private var authToken: String?
+    private var agentToken: String?
 
     private init() {
         let config = URLSessionConfiguration.default
@@ -64,8 +65,16 @@ actor APIClient {
         self.authToken = token
     }
 
+    func setAgentToken(_ token: String?) {
+        self.agentToken = token
+    }
+
     func currentToken() -> String? {
         authToken ?? UserDefaults.standard.string(forKey: "orca_auth_token")
+    }
+
+    func currentAgentToken() -> String? {
+        agentToken ?? UserDefaults.standard.string(forKey: "orca_agent_token")
     }
 
     /// Atomically sets the token and verifies it by fetching agents.
@@ -106,7 +115,8 @@ actor APIClient {
         path: String,
         method: String = "GET",
         body: Encodable? = nil,
-        queryItems: [URLQueryItem]? = nil
+        queryItems: [URLQueryItem]? = nil,
+        includeAgentToken: Bool = false
     ) throws -> URLRequest {
         var components = URLComponents(string: "\(baseURL)\(path)")
         if let queryItems = queryItems, !queryItems.isEmpty {
@@ -125,6 +135,10 @@ actor APIClient {
         if let token = currentToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             request.setValue(token, forHTTPHeaderField: "X-Api-Key")
+        }
+
+        if includeAgentToken, let token = self.agentToken ?? UserDefaults.standard.string(forKey: "orca_agent_token") {
+            request.setValue(token, forHTTPHeaderField: "X-Agent-Token")
         }
 
         if let body = body {
@@ -153,13 +167,13 @@ actor APIClient {
 
     // MARK: - Public API Methods
 
-    func get<T: Decodable>(path: String) async throws -> T {
-        let request = try buildRequest(path: path, method: "GET")
+    func get<T: Decodable>(path: String, includeAgentToken: Bool = false) async throws -> T {
+        let request = try buildRequest(path: path, method: "GET", includeAgentToken: includeAgentToken)
         return try await perform(request)
     }
 
-    func post<T: Decodable>(path: String, body: some Encodable) async throws -> T {
-        let request = try buildRequest(path: path, method: "POST", body: AnyEncodable(body))
+    func post<T: Decodable>(path: String, body: some Encodable, includeAgentToken: Bool = false) async throws -> T {
+        let request = try buildRequest(path: path, method: "POST", body: AnyEncodable(body), includeAgentToken: includeAgentToken)
         return try await perform(request)
     }
 
@@ -180,13 +194,13 @@ actor APIClient {
         return try await perform(request)
     }
 
-    func put<T: Decodable>(path: String, body: some Encodable) async throws -> T {
-        let request = try buildRequest(path: path, method: "PUT", body: AnyEncodable(body))
+    func put<T: Decodable>(path: String, body: some Encodable, includeAgentToken: Bool = false) async throws -> T {
+        let request = try buildRequest(path: path, method: "PUT", body: AnyEncodable(body), includeAgentToken: includeAgentToken)
         return try await perform(request)
     }
 
-    func patch<T: Decodable>(path: String, body: some Encodable) async throws -> T {
-        let request = try buildRequest(path: path, method: "PATCH", body: AnyEncodable(body))
+    func patch<T: Decodable>(path: String, body: some Encodable, includeAgentToken: Bool = false) async throws -> T {
+        let request = try buildRequest(path: path, method: "PATCH", body: AnyEncodable(body), includeAgentToken: includeAgentToken)
         return try await perform(request)
     }
 

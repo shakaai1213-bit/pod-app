@@ -137,7 +137,7 @@ struct ResearchView: View {
         if let selectedTopic = viewModel.selectedTopic {
             return "No research findings for \(selectedTopic)"
         }
-        return "Research findings coming soon - Starfish not yet active"
+        return "Research flywheel metadata unavailable"
     }
 
     private var emptyStateDetail: String? {
@@ -147,6 +147,6 @@ struct ResearchView: View {
         if let lastRefreshedAt = viewModel.lastRefreshedAt {
             return "Last checked \(lastRefreshedAt.formatted(date: .abbreviated, time: .shortened))."
         }
-        return "No Starfish findings were returned by ORCA."
+        return "No Workbench research-flywheel rows were returned by ORCA."
     }
 }

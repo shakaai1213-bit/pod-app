@@ -109,9 +109,11 @@ struct CockpitSignQueueSection: View {
         ) { action in
             switch action.id {
             case "sign":
-                Task { await model.sign(item) }
+                detailItem = item
             case "pass":
-                Task { await model.countermand(item) }
+                detailItem = item
+            case "review":
+                detailItem = item
             default:
                 detailItem = item
             }
@@ -135,20 +137,7 @@ struct CockpitSignQueueSection: View {
             status: item.gateLabel,
             statusColor: item.kind.tint,
             provenance: [priority, "Dashboard"].compactMap { $0 },
-            actions: [
-                PodReviewAction(
-                    id: "sign",
-                    title: "Sign",
-                    systemImage: "checkmark.seal.fill",
-                    style: .success
-                ),
-                PodReviewAction(
-                    id: "pass",
-                    title: "Pass",
-                    systemImage: "arrow.uturn.left",
-                    style: .neutral
-                )
-            ]
+            actions: item.reviewActions
         )
     }
 
@@ -274,49 +263,72 @@ struct CockpitSignDetailSheet: View {
             }
             .background(AppColors.backgroundPrimary)
             .safeAreaInset(edge: .bottom) {
-                HStack(spacing: 10) {
-                    Button {
-                        onPass()
-                    } label: {
-                        Text("Pass")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundColor(AppColors.textSecondary)
+                if item.kind == .ticket {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("Ticket approvals now resolve through Workbench actions.", systemImage: "slider.horizontal.3")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(AppColors.accentWarning)
+                        Button {
+                            dismiss()
+                        } label: {
+                            Text("Close")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(AppColors.accentElectric)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(AppColors.backgroundSecondary)
+                } else {
+                    HStack(spacing: 10) {
+                        Button {
+                            onPass()
+                        } label: {
+                            Text("Pass")
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundColor(AppColors.textSecondary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(AppColors.backgroundTertiary)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10).strokeBorder(AppColors.border, lineWidth: 0.5)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isBusy)
+
+                        Button {
+                            onSign()
+                        } label: {
+                            HStack(spacing: 6) {
+                                if isBusy {
+                                    ProgressView().tint(.white).scaleEffect(0.8)
+                                } else {
+                                    Image(systemName: "checkmark.seal.fill")
+                                        .font(.system(size: 13, weight: .semibold))
+                                }
+                                Text("Sign")
+                                    .font(.system(size: 15, weight: .semibold))
+                            }
+                            .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
-                            .background(AppColors.backgroundTertiary)
+                            .background(AppColors.accentElectric)
                             .clipShape(RoundedRectangle(cornerRadius: 10))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10).strokeBorder(AppColors.border, lineWidth: 0.5)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isBusy)
-
-                    Button {
-                        onSign()
-                    } label: {
-                        HStack(spacing: 6) {
-                            if isBusy {
-                                ProgressView().tint(.white).scaleEffect(0.8)
-                            } else {
-                                Image(systemName: "checkmark.seal.fill")
-                                    .font(.system(size: 13, weight: .semibold))
-                            }
-                            Text("Sign")
-                                .font(.system(size: 15, weight: .semibold))
                         }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(AppColors.accentElectric)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .buttonStyle(.plain)
+                        .disabled(isBusy)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(isBusy)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(AppColors.backgroundSecondary)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(AppColors.backgroundSecondary)
             }
             .navigationTitle("Needs Your Sign")
             .navigationBarTitleDisplayMode(.inline)
@@ -344,6 +356,35 @@ struct CockpitSignItem: Identifiable, Hashable {
 
     var shortRef: String {
         String(rawId.replacingOccurrences(of: "-", with: "").prefix(8))
+    }
+
+    var reviewActions: [PodReviewAction] {
+        switch kind {
+        case .ticket:
+            return [
+                PodReviewAction(
+                    id: "review",
+                    title: "Review",
+                    systemImage: "eye",
+                    style: .primary
+                )
+            ]
+        case .note:
+            return [
+                PodReviewAction(
+                    id: "sign",
+                    title: "Sign",
+                    systemImage: "checkmark.seal.fill",
+                    style: .success
+                ),
+                PodReviewAction(
+                    id: "pass",
+                    title: "Pass",
+                    systemImage: "arrow.uturn.left",
+                    style: .neutral
+                )
+            ]
+        }
     }
 
     enum Kind: String {
@@ -519,22 +560,7 @@ final class CockpitSignQueueModel {
                 self.error = "Couldn't sign note. Retry."
             }
         case .ticket:
-            // POST approval-request resolution
-            // For now: mark ticket approval_state=approved via PATCH
-            struct PatchBody: Encodable { let approvalState: String
-                enum CodingKeys: String, CodingKey { case approvalState = "approval_state" }
-            }
-            do {
-                let _: EmptyResponse = try await APIClient.shared.patch(
-                    path: "/api/v1/tickets/\(item.rawId)",
-                    body: PatchBody(approvalState: "approved")
-                )
-                locallyResolvedIds.insert(item.id)
-                items.removeAll { $0.id == item.id }
-                await load()
-            } catch {
-                self.error = "Couldn't approve ticket. Retry."
-            }
+            error = "Open Work or Tickets to resolve approvals through the Workbench action rail."
         }
     }
 

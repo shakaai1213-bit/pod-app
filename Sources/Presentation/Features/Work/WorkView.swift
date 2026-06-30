@@ -1,3 +1,4 @@
+import SwiftData
 import SwiftUI
 
 // MARK: - Work View
@@ -18,6 +19,8 @@ private func boardAccentColor(_ slug: String) -> Color {
 
 struct WorkView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.modelContext) private var modelContext
+    @Bindable var directChatViewModel: DirectChatViewModel
     @State private var model = WorkViewModel()
     @State private var pushProjects = false
     @State private var pushTickets = false
@@ -26,7 +29,9 @@ struct WorkView: View {
     @State private var pushProjectId: UUID? = nil
     @State private var pushTicketId: String? = nil
     @State private var selectedFlowItem: TicketFlowItem?
+    @State private var selectedWorkbenchItem: WorkbenchWorkItem?
     @State private var flowCommentText: String = ""
+    @State private var workbenchActionComment: String = ""
     @State private var isPostingComment = false
     @State private var boardsModel = WorkBoardsModel()
     @State private var selectedBoard: WorkBoardSummary?
@@ -43,23 +48,55 @@ struct WorkView: View {
                         .padding(.top, 60)
                         .padding(.bottom, 12)
 
-                    workHealthStrip
+                    AnyView(WorkHealthStripView(model: model))
                         .padding(.horizontal, 16)
                         .padding(.bottom, 12)
 
-                    suggestionsSection
+                    AnyView(
+                        WorkbenchAgentCockpitSection(
+                            directChatViewModel: directChatViewModel,
+                            modelContext: modelContext
+                        )
+                    )
                         .padding(.horizontal, 16)
                         .padding(.bottom, 16)
 
-                    boardsSection
+                    AnyView(approvalLaneSection)
                         .padding(.horizontal, 16)
                         .padding(.bottom, 16)
 
-                    projectsSection
+                    AnyView(
+                        WorkbenchTasksSection(
+                            model: model,
+                            onOpenTicket: { ticketId in
+                                pushTicketId = ticketId
+                                pushTickets = true
+                            },
+                            onComment: { item in
+                                selectedWorkbenchItem = item
+                            }
+                        )
+                    )
                         .padding(.horizontal, 16)
                         .padding(.bottom, 16)
 
-                    ticketsSection
+                    AnyView(workbenchQueueSection)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
+
+                    AnyView(suggestionsSection)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
+
+                    AnyView(boardsSection)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
+
+                    AnyView(projectsSection)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
+
+                    AnyView(ticketsSection)
                         .padding(.horizontal, 16)
                         .padding(.bottom, 80)
                 }
@@ -73,10 +110,21 @@ struct WorkView: View {
                 await model.load()
                 await boardsModel.load()
             }
+            .task {
+                await directChatViewModel.loadAgentRegistry()
+                await directChatViewModel.loadAgentPresence()
+                await directChatViewModel.loadORCAChannelSummaries()
+            }
             .task { await model.startFlowReviewPolling() }
             .onAppear {
+                directChatViewModel.setModelContext(modelContext)
+                directChatViewModel.navigationPath = NavigationPath()
+                directChatViewModel.startPresenceMonitoring()
                 configureReviewerIdentity()
                 model.consumePendingFlowFilter()
+            }
+            .onDisappear {
+                directChatViewModel.stopPresenceMonitoring()
             }
             .onChange(of: appState.currentUser?.name) { _, _ in
                 configureReviewerIdentity()
@@ -87,6 +135,14 @@ struct WorkView: View {
             .sheet(item: $selectedFlowItem) { flow in
                 flowDetailSheet(flow)
                     .presentationDetents([.medium, .large])
+            }
+            .sheet(item: $selectedWorkbenchItem) { item in
+                workbenchActionSheet(item)
+                    .presentationDetents([.medium, .large])
+                    .onAppear {
+                        workbenchActionComment = ""
+                        model.resetWorkbenchActionPreview()
+                    }
             }
             .fullScreenCover(item: $selectedBoard) { board in
                 WorkBoardDetailView(board: board)
@@ -180,75 +236,515 @@ struct WorkView: View {
 
     private var pageHeader: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Work")
+            Text("Workbench")
                 .font(.system(size: 28, weight: .bold))
                 .foregroundColor(AppColors.textPrimary)
-            Text("Committed work — projects and the tickets under them.")
+            Text("1:1 lanes, approvals, tasks, projects, and tickets.")
                 .font(.system(size: 14))
                 .foregroundColor(AppColors.textSecondary)
         }
     }
 
-    private var workHealthStrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 7) {
-                healthChip(
-                    title: "Suggestions",
-                    count: model.schoolhouseDigest?.attentionStack.count ?? model.suggestions.count,
-                    error: model.suggestionsError,
-                    isLoading: model.isLoadingSuggestions
-                ) { Task { await model.loadSuggestions() } }
-                healthChip(
-                    title: "Projects",
-                    count: model.projects.count,
-                    error: model.projectsError,
-                    isLoading: model.isLoadingProjects
-                ) { Task { await model.loadProjects() } }
-                healthChip(
-                    title: "Tickets",
-                    count: model.activeTicketCount,
-                    error: model.ticketsError,
-                    isLoading: model.isLoadingTickets
-                ) { Task { await model.loadTickets() } }
-                healthChip(
-                    title: "Flow",
-                    count: model.ticketFlowReview?.counts.total ?? 0,
-                    error: model.ticketFlowErrorMessage,
-                    isLoading: false
-                ) { Task { await model.loadTicketFlowReview() } }
+    // MARK: - Approval Lane
+
+    private var approvalLaneSection: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("APPROVALS · \(model.approvalAttentionCount)")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(AppColors.textTertiary)
+                    .kerning(0.5)
+                Spacer()
+                Button {
+                    Task { await model.loadActionPreview() }
+                } label: {
+                    Image(systemName: model.isLoadingActionPreview ? "hourglass" : "eye")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(AppColors.accentElectric)
+                }
+                .buttonStyle(.plain)
+                .disabled(model.isLoadingActionPreview)
+                .accessibilityLabel("Preview Workbench action rail")
+                Button {
+                    Task { await model.loadApprovalAttention() }
+                } label: {
+                    Image(systemName: model.isLoadingApprovalAttention ? "hourglass" : "arrow.clockwise")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(AppColors.accentElectric)
+                }
+                .buttonStyle(.plain)
+                .disabled(model.isLoadingApprovalAttention)
+                .accessibilityLabel("Refresh approvals")
             }
-            .padding(.horizontal, 2)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+
+            VStack(spacing: 8) {
+                approvalActionRailSummary
+
+                if model.isLoadingApprovalAttention && model.approvalAttentionItems.isEmpty {
+                    suggestionSkeletons
+                } else if let err = model.approvalAttentionError {
+                    errorBanner(message: err) { Task { await model.loadApprovalAttention() } }
+                } else if model.approvalAttentionItems.isEmpty {
+                    emptyState(icon: "checkmark.seal", text: "No approval attention waiting.")
+                } else {
+                    ForEach(model.approvalAttentionItems.prefix(5)) { item in
+                        PodReviewCard(
+                            item: approvalReviewItem(item),
+                            isBusy: model.previewingApprovalIds.contains(item.id),
+                            onAction: { action in
+                                switch action.id {
+                                case "open-ticket":
+                                    pushTicketId = item.id
+                                    pushTickets = true
+                                case "preview-action":
+                                    Task { await model.previewApprovalAction(item) }
+                                default:
+                                    break
+                                }
+                            }
+                        )
+                    }
+
+                    if model.approvalAttentionItems.count > 5 {
+                        Text("+\(model.approvalAttentionItems.count - 5) more in Tickets")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(AppColors.textTertiary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 4)
+                    }
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 10)
+        }
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                .strokeBorder(AppColors.border, lineWidth: 0.5)
+        )
+    }
+
+    private var approvalActionRailSummary: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 7) {
+                Label("Action rail", systemImage: "slider.horizontal.3")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(AppColors.accentElectric)
+                Spacer()
+                if let preview = model.actionPreview {
+                    Text(preview.sideEffects == "none" && !preview.wouldWrite ? "no-write preview" : "check preview")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(preview.wouldWrite ? AppColors.accentWarning : AppColors.accentSuccess)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background((preview.wouldWrite ? AppColors.accentWarning : AppColors.accentSuccess).opacity(0.12))
+                        .clipShape(Capsule())
+                }
+            }
+
+            FlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                railPolicyPill("Preview", value: model.actionPreview?.sideEffects ?? "none")
+                railPolicyPill("Writes", value: model.actionPreview?.wouldWrite == true ? "would write" : "blocked here")
+                railPolicyPill("NATS", value: model.actionPreview?.wouldPublishNats == true ? "would publish" : "silent")
+                if let controls = model.workbench?.buckets.controls {
+                    railPolicyPill("Endpoint", value: controls.actionsEndpoint ?? "/agent/actions")
+                }
+            }
+
+            if let error = model.actionPreviewError {
+                Text(error)
+                    .font(.system(size: 11))
+                    .foregroundColor(AppColors.accentWarning)
+            } else {
+                Text(model.actionPreviewLine)
+                    .font(.system(size: 11))
+                    .foregroundColor(AppColors.textSecondary)
+                    .lineLimit(2)
+            }
+        }
+        .padding(9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppColors.backgroundPrimary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(AppColors.border, lineWidth: 0.5)
+        )
+    }
+
+    private func railPolicyPill(_ title: String, value: String) -> some View {
+        HStack(spacing: 4) {
+            Text(title.uppercased())
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(AppColors.textTertiary)
+            Text(value.replacingOccurrences(of: "_", with: " "))
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(AppColors.textSecondary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(Capsule())
+    }
+
+    private func approvalReviewItem(_ item: WorkbenchApprovalAttentionItem) -> PodReviewItem {
+        let latestRun = item.latestRun.map { "\($0.runType.replacingOccurrences(of: "_", with: " ")) · \($0.status.replacingOccurrences(of: "_", with: " "))" }
+        let reasons = item.reasons.map { $0.replacingOccurrences(of: "_", with: " ") }
+        let detail = (reasons + [latestRun].compactMap { $0 }).joined(separator: " · ")
+        return PodReviewItem(
+            id: item.id,
+            eyebrow: "Ticket \(String(item.id.replacingOccurrences(of: "-", with: "").prefix(8)))",
+            title: item.title,
+            detail: detail.isEmpty ? "Approval attention requested." : detail,
+            status: item.approvalGate ?? item.approvalState.replacingOccurrences(of: "_", with: " "),
+            statusColor: AppColors.accentWarning,
+            provenance: [
+                item.priority.uppercased(),
+                item.status.replacingOccurrences(of: "_", with: " "),
+                item.latestRun?.workerLane
+            ].compactMap { $0 },
+            actions: [
+                PodReviewAction(
+                    id: "open-ticket",
+                    title: "Open",
+                    systemImage: "ticket",
+                    style: .primary
+                ),
+                PodReviewAction(
+                    id: "preview-action",
+                    title: "Preview",
+                    systemImage: "eye",
+                    style: .neutral
+                )
+            ]
+        )
+    }
+
+    // MARK: - Workbench Queue
+
+    private var workbenchQueueSection: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("WORKBENCH · \(model.visibleWorkbenchRows.count)")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(AppColors.textTertiary)
+                    .kerning(0.5)
+                if model.workbenchActionableRows.count > 0 {
+                    Text("TASK ACTIONS · \(model.workbenchActionableRows.count)")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(AppColors.accentSuccess)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(AppColors.accentSuccess.opacity(0.1))
+                        .clipShape(Capsule())
+                }
+                Spacer()
+                Button {
+                    Task { await model.loadWorkbench() }
+                } label: {
+                    Image(systemName: model.isLoadingWorkbench ? "hourglass" : "arrow.clockwise")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(AppColors.accentElectric)
+                }
+                .buttonStyle(.plain)
+                .disabled(model.isLoadingWorkbench)
+                .accessibilityLabel("Refresh Workbench")
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+
+            VStack(spacing: 8) {
+                if model.isLoadingWorkbench && model.visibleWorkbenchRows.isEmpty {
+                    suggestionSkeletons
+                } else if let err = model.workbenchError {
+                    errorBanner(message: err) { Task { await model.loadWorkbench() } }
+                } else if model.visibleWorkbenchRows.isEmpty {
+                    emptyState(icon: "tray", text: "No Workbench queue rows.")
+                } else {
+                    ForEach(model.displayedWorkbenchRows) { item in
+                        workbenchRowCard(item)
+                    }
+
+                    if model.visibleWorkbenchRows.count > model.displayedWorkbenchRows.count {
+                        Text("+\(model.visibleWorkbenchRows.count - model.displayedWorkbenchRows.count) more Workbench rows")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(AppColors.textTertiary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 4)
+                    }
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 10)
+        }
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                .strokeBorder(AppColors.border, lineWidth: 0.5)
+        )
+    }
+
+    private func workbenchRowCard(_ item: WorkbenchWorkItem) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .top, spacing: 9) {
+                Image(systemName: workbenchIcon(for: item))
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(workbenchColor(for: item))
+                    .frame(width: 26, height: 26)
+                    .background(workbenchColor(for: item).opacity(0.12))
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.safeTitle)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(AppColors.textPrimary)
+                        .lineLimit(2)
+                    Text(workbenchRowDetail(item))
+                        .font(.system(size: 11))
+                        .foregroundColor(AppColors.textSecondary)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 4)
+
+                if item.isProtected {
+                    Image(systemName: "lock.shield.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(AppColors.accentWarning)
+                        .accessibilityLabel("Protected")
+                }
+            }
+
+            FlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                railPolicyPill("Kind", value: item.kind)
+                if let status = item.status {
+                    railPolicyPill("State", value: status)
+                }
+                if let priority = item.priority {
+                    railPolicyPill("Priority", value: priority)
+                }
+                if let route = item.route ?? item.room {
+                    railPolicyPill("Route", value: route)
+                }
+            }
+
+            WorkbenchAgentToolsShelf(
+                projection: model.toolProjection(for: item),
+                isLoading: model.isLoadingToolProjection(for: item),
+                error: model.toolProjectionError(for: item)
+            )
+
+            HStack(spacing: 8) {
+                if let ticketId = item.sourceTicketId ?? (item.kind == "ticket" ? item.id : nil) {
+                    Button {
+                        pushTicketId = ticketId
+                        pushTickets = true
+                    } label: {
+                        Label("Open", systemImage: "ticket")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(AppColors.accentElectric)
+                }
+
+                if item.canUseAgentActionComment {
+                    Button {
+                        selectedWorkbenchItem = item
+                    } label: {
+                        Label("Comment", systemImage: "bubble.left.and.bubble.right.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(AppColors.accentSuccess)
+                }
+
+                Spacer()
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppColors.backgroundPrimary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(AppColors.border, lineWidth: 0.5)
+        )
+    }
+
+    private func workbenchActionSheet(_ item: WorkbenchWorkItem) -> some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(item.safeTitle)
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundColor(AppColors.textPrimary)
+                        Text(workbenchRowDetail(item))
+                            .font(.system(size: 13))
+                            .foregroundColor(AppColors.textSecondary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("TASK COMMENT")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(AppColors.textTertiary)
+                        TextField("Add a pointer-safe task comment", text: $workbenchActionComment, axis: .vertical)
+                            .lineLimit(4...8)
+                            .font(.system(size: 14))
+                            .foregroundColor(AppColors.textPrimary)
+                            .padding(10)
+                            .background(AppColors.backgroundSecondary)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .strokeBorder(AppColors.border, lineWidth: 1)
+                            )
+                    }
+
+                    if let preview = model.workbenchActionPreview {
+                        actionPreviewBlock(preview)
+                    } else if let error = model.workbenchActionError {
+                        Text(error)
+                            .font(.system(size: 12))
+                            .foregroundColor(AppColors.accentWarning)
+                    }
+
+                    VStack(spacing: 10) {
+                        Button {
+                            let text = workbenchActionComment.trimmingCharacters(in: .whitespacesAndNewlines)
+                            Task { await model.previewWorkbenchTaskComment(item: item, message: text) }
+                        } label: {
+                            actionButtonLabel(
+                                title: model.isPreviewingWorkbenchAction ? "Previewing" : "Preview",
+                                icon: model.isPreviewingWorkbenchAction ? "hourglass" : "eye",
+                                color: AppColors.accentElectric
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(model.isPreviewingWorkbenchAction || workbenchActionComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                        Button {
+                            let text = workbenchActionComment.trimmingCharacters(in: .whitespacesAndNewlines)
+                            Task {
+                                let success = await model.commitWorkbenchTaskComment(item: item, message: text)
+                                if success {
+                                    selectedWorkbenchItem = nil
+                                    workbenchActionComment = ""
+                                }
+                            }
+                        } label: {
+                            actionButtonLabel(
+                                title: model.isCommittingWorkbenchAction ? "Posting" : "Post Comment",
+                                icon: model.isCommittingWorkbenchAction ? "hourglass" : "paperplane.fill",
+                                color: model.hasFreshWorkbenchActionPreview(item: item, message: workbenchActionComment)
+                                    ? AppColors.accentSuccess
+                                    : AppColors.backgroundTertiary,
+                                foregroundColor: model.hasFreshWorkbenchActionPreview(item: item, message: workbenchActionComment)
+                                    ? Color.white
+                                    : AppColors.textTertiary
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(
+                            model.isCommittingWorkbenchAction
+                                || !model.hasFreshWorkbenchActionPreview(item: item, message: workbenchActionComment)
+                        )
+                    }
+                }
+                .padding(20)
+            }
+            .background(AppColors.backgroundPrimary.ignoresSafeArea())
+            .navigationTitle("Workbench Action")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Close") { selectedWorkbenchItem = nil }
+                }
+            }
         }
     }
 
-    private func healthChip(
-        title: String,
-        count: Int,
-        error: String?,
-        isLoading: Bool,
-        retry: @escaping () -> Void
-    ) -> some View {
-        let hasError = error != nil
-        let color = hasError ? AppColors.accentWarning : AppColors.accentSuccess
-        return Button(action: retry) {
-            HStack(spacing: 5) {
-                Image(systemName: isLoading ? "hourglass" : (hasError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"))
-                    .font(.system(size: 10, weight: .semibold))
-                Text(title)
-                    .font(.system(size: 11, weight: .semibold))
-                Text("\(count)")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+    private func actionPreviewBlock(_ preview: WorkbenchPlaygroundPreview) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label(preview.blocked ? "Blocked" : "Preview clear", systemImage: preview.blocked ? "exclamationmark.triangle.fill" : "checkmark.seal.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(preview.blocked ? AppColors.accentWarning : AppColors.accentSuccess)
+                Spacer()
+                Text(preview.sideEffects)
+                    .font(.system(size: 10, weight: .bold))
                     .foregroundColor(AppColors.textTertiary)
             }
-            .foregroundColor(color)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(color.opacity(0.10))
-            .clipShape(Capsule())
-            .overlay(Capsule().stroke(color.opacity(0.16), lineWidth: 0.5))
+            FlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                railPolicyPill("Writes", value: preview.wouldWrite ? "would write" : "preview only")
+                railPolicyPill("NATS", value: preview.wouldPublishNats ? "would publish" : "silent")
+                if let endpoint = preview.result["would_call"]?.displayValue.nilIfBlankForWork {
+                    railPolicyPill("Endpoint", value: endpoint)
+                }
+            }
+            if let warning = preview.warnings.first {
+                Text(warning)
+                    .font(.system(size: 11))
+                    .foregroundColor(AppColors.accentWarning)
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(error ?? "\(title) loaded")
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func actionButtonLabel(
+        title: String,
+        icon: String,
+        color: Color,
+        foregroundColor: Color = Color.white
+    ) -> some View {
+        Label(title, systemImage: icon)
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundColor(foregroundColor)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 11)
+            .background(color)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func workbenchRowDetail(_ item: WorkbenchWorkItem) -> String {
+        let detail = [
+            item.nextAction,
+            item.waitingOn.map { "waiting on \($0)" },
+            item.blockedOn.map { "blocked on \($0)" },
+            item.contentPolicy
+        ]
+        .compactMap { $0?.replacingOccurrences(of: "_", with: " ") }
+        .filter { !$0.isEmpty }
+        .joined(separator: " · ")
+        return detail.nilIfBlankForWork ?? "Ready in Workbench."
+    }
+
+    private func workbenchIcon(for item: WorkbenchWorkItem) -> String {
+        if item.isProtected { return "lock.shield.fill" }
+        switch item.kind {
+        case "task": return "checklist"
+        case "ticket": return "ticket"
+        case "planner": return "calendar.badge.clock"
+        default: return "tray.full"
+        }
+    }
+
+    private func workbenchColor(for item: WorkbenchWorkItem) -> Color {
+        if item.isProtected { return AppColors.accentWarning }
+        if item.stale { return AppColors.accentDanger }
+        switch item.priority?.lowercased() {
+        case "urgent", "high": return AppColors.accentWarning
+        case "low": return AppColors.textTertiary
+        default: return AppColors.accentElectric
+        }
     }
 
     // MARK: - Suggestions Section
@@ -851,24 +1347,19 @@ struct WorkView: View {
                 } else if model.projects.isEmpty {
                     emptyState(icon: "square.stack.3d.up", text: "No active projects. Tap + New to start one.")
                 } else {
-                    ForEach(Array(model.projects.prefix(6).enumerated()), id: \.element.id) { idx, project in
-                        VStack(spacing: 0) {
-                            if idx > 0 {
-                                Divider()
-                                    .background(AppColors.border)
-                                    .padding(.horizontal, 14)
+                    ForEach(model.projects.prefix(6)) { project in
+                        projectRow(project)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                pushProjectId = project.id
+                                pushProjects = true
                             }
-                            projectRow(project)
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    pushProjectId = project.id
-                                    pushProjects = true
-                                }
-                        }
                     }
+                    .padding(.horizontal, 10)
+                    .padding(.top, 10)
+                    .padding(.bottom, 2)
 
                     // View all footer
-                    Divider().background(AppColors.border)
                     Button {
                         pushProjects = true
                     } label: {
@@ -894,56 +1385,100 @@ struct WorkView: View {
     }
 
     private func projectRow(_ project: ProjectDTO) -> some View {
-        HStack(spacing: 10) {
-            // short_id chip
-            Text(String(project.id.uuidString.replacingOccurrences(of: "-", with: "").prefix(8)))
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundColor(AppColors.textTertiary)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .background(Color(hexString: "0e0e10"))
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4)
-                        .strokeBorder(AppColors.border, lineWidth: 0.5)
-                )
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(priorityColorInt(project.priority).opacity(0.12))
+                    Image(systemName: projectIcon(project))
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(priorityColorInt(project.priority))
+                }
+                .frame(width: 34, height: 34)
 
-            // Name
-            Text(project.name)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(AppColors.textPrimary)
-                .lineLimit(1)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(project.name)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(AppColors.textPrimary)
+                        .lineLimit(2)
 
-            Spacer(minLength: 4)
+                    Text(project.goal ?? project.description ?? project.status.replacingOccurrences(of: "_", with: " "))
+                        .font(.system(size: 11))
+                        .foregroundColor(AppColors.textSecondary)
+                        .lineLimit(2)
+                }
 
-            // Stage pill
-            if let stage = project.stage {
-                stagePill(stage)
-            }
+                Spacer(minLength: 4)
 
-            // Priority dot — tap to change (P1–P5)
-            Menu {
-                ForEach(1...5, id: \.self) { level in
-                    Button {
-                        Task { await model.updateProjectPriority(projectId: project.id, priority: level) }
-                    } label: {
-                        HStack {
-                            Text("P\(level)")
-                            if project.priority == level {
-                                Image(systemName: "checkmark")
+                Menu {
+                    ForEach(1...5, id: \.self) { level in
+                        Button {
+                            Task { await model.updateProjectPriority(projectId: project.id, priority: level) }
+                        } label: {
+                            HStack {
+                                Text("P\(level)")
+                                if project.priority == level {
+                                    Image(systemName: "checkmark")
+                                }
                             }
                         }
                     }
+                } label: {
+                    projectPriorityPill(project.priority)
                 }
-            } label: {
-                Circle()
-                    .fill(priorityColorInt(project.priority))
-                    .frame(width: 7, height: 7)
+                .accessibilityLabel("Priority P\(project.priority). Tap to change.")
             }
-            .accessibilityLabel("Priority P\(project.priority). Tap to change.")
+
+            FlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                if let stage = project.stage {
+                    stagePill(stage)
+                }
+                compactWorkPill(project.status.replacingOccurrences(of: "_", with: " "), color: AppColors.textSecondary)
+                compactWorkPill(String(project.id.uuidString.replacingOccurrences(of: "-", with: "").prefix(8)), color: AppColors.textTertiary)
+                if project.automationEnabled == true {
+                    compactWorkPill("auto", color: AppColors.accentSuccess)
+                }
+            }
+
+            HStack(spacing: 8) {
+                Label("Open", systemImage: "arrow.up.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(AppColors.accentElectric)
+                Spacer()
+                if let dueDate = project.dueDate {
+                    Text(dueDate.formatted(date: .abbreviated, time: .omitted))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(AppColors.textTertiary)
+                }
+            }
         }
-        .padding(.horizontal, 14)
-        .frame(minHeight: 44)
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppColors.backgroundPrimary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(AppColors.border, lineWidth: 0.5)
+        )
+    }
+
+    private func projectIcon(_ project: ProjectDTO) -> String {
+        switch (project.stage ?? project.status).lowercased() {
+        case "live", "maintain": return "checkmark.seal.fill"
+        case "build", "in-progress", "in_progress": return "hammer.fill"
+        case "dds", "blueprint": return "doc.text.magnifyingglass"
+        default: return "folder.fill"
+        }
+    }
+
+    private func projectPriorityPill(_ priority: Int) -> some View {
+        Text("P\(priority)")
+            .font(.system(size: 11, weight: .bold, design: .monospaced))
+            .foregroundColor(priorityColorInt(priority))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(priorityColorInt(priority).opacity(0.12))
+            .clipShape(Capsule())
     }
 
     private func stagePill(_ stage: String) -> some View {
@@ -964,6 +1499,17 @@ struct WorkView: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .background(bg)
+            .clipShape(Capsule())
+    }
+
+    private func compactWorkPill(_ text: String, color: Color) -> some View {
+        Text(text.replacingOccurrences(of: "_", with: " "))
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundColor(color)
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(color.opacity(0.12))
             .clipShape(Capsule())
     }
 
@@ -1001,24 +1547,19 @@ struct WorkView: View {
                 } else if model.filteredTickets.isEmpty {
                     emptyState(icon: "ticket", text: "No active tickets in this view.")
                 } else {
-                    ForEach(Array(model.filteredTickets.prefix(3).enumerated()), id: \.element.id) { idx, ticket in
-                        VStack(spacing: 0) {
-                            if idx > 0 {
-                                Divider()
-                                    .background(AppColors.border)
-                                    .padding(.horizontal, 14)
+                    ForEach(model.filteredTickets.prefix(4)) { ticket in
+                        ticketRow(ticket)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                pushTicketId = ticket.id
+                                pushTickets = true
                             }
-                            ticketRow(ticket)
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    pushTicketId = ticket.id
-                                    pushTickets = true
-                                }
-                        }
                     }
+                    .padding(.horizontal, 10)
+                    .padding(.top, 10)
+                    .padding(.bottom, 2)
 
                     // View all footer
-                    Divider().background(AppColors.border)
                     Button {
                         pushTickets = true
                     } label: {
@@ -1209,76 +1750,93 @@ struct WorkView: View {
     }
 
     private func ticketRow(_ ticket: WorkTicketRow) -> some View {
-        HStack(spacing: 8) {
-            // Priority dot — tap to edit per Aloha 2026-05-23 (ticket 46ca818d)
-            Menu {
-                ForEach(["urgent", "high", "medium", "low"], id: \.self) { level in
-                    Button {
-                        Task { await model.updateTicketPriority(ticketId: ticket.id, priority: level) }
-                    } label: {
-                        HStack {
-                            Circle().fill(priorityColor(level)).frame(width: 7, height: 7)
-                            Text(level.capitalized)
-                            if ticket.priority.lowercased() == level {
-                                Image(systemName: "checkmark")
+        let flow = model.flow(for: ticket.id)
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(priorityColor(ticket.priority).opacity(0.12))
+                    Image(systemName: flow?.protected == true ? "lock.shield.fill" : "ticket.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(flow?.protected == true ? AppColors.accentDanger : priorityColor(ticket.priority))
+                }
+                .frame(width: 34, height: 34)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(ticket.title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(AppColors.textPrimary)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+
+                    Text("\(ticket.ownerShort) · \(ticket.status.replacingOccurrences(of: "_", with: " "))")
+                        .font(.system(size: 11))
+                        .foregroundColor(AppColors.textSecondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 4)
+
+                Menu {
+                    ForEach(["urgent", "high", "medium", "low"], id: \.self) { level in
+                        Button {
+                            Task { await model.updateTicketPriority(ticketId: ticket.id, priority: level) }
+                        } label: {
+                            HStack {
+                                Circle().fill(priorityColor(level)).frame(width: 7, height: 7)
+                                Text(level.capitalized)
+                                if ticket.priority.lowercased() == level {
+                                    Image(systemName: "checkmark")
+                                }
                             }
                         }
                     }
-                }
-            } label: {
-                Circle()
-                    .fill(priorityColor(ticket.priority))
-                    .frame(width: 7, height: 7)
-                    .padding(.leading, 4)
-                    .frame(width: 24, height: 32, alignment: .leading)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Priority: \(ticket.priority). Tap to change.")
-
-            // short_id chip — mirrors Project card chip per Tony 2026-05-23
-            ticketShortIdChip(ticket.id)
-
-            if let flow = model.flow(for: ticket.id) {
-                Button {
-                    selectedFlowItem = flow
                 } label: {
-                    flowStatePill(flow)
+                    compactWorkPill(ticket.priority, color: priorityColor(ticket.priority))
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Priority: \(ticket.priority). Tap to change.")
+            }
 
-                if flow.protected {
-                    Image(systemName: "lock.shield.fill")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(AppColors.accentDanger)
-                        .accessibilityLabel("Protected")
-                }
-
-                if flow.dispatchable {
-                    Image(systemName: "bolt.fill")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(AppColors.accentSuccess)
-                        .accessibilityLabel("Dispatchable")
+            FlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                ticketShortIdChip(ticket.id)
+                compactWorkPill(ticket.status.replacingOccurrences(of: "_", with: " "), color: AppColors.textSecondary)
+                if let flow {
+                    Button {
+                        selectedFlowItem = flow
+                    } label: {
+                        flowStatePill(flow)
+                    }
+                    .buttonStyle(.plain)
+                    if flow.dispatchable {
+                        compactWorkPill("dispatch", color: AppColors.accentSuccess)
+                    }
+                    if flow.protected {
+                        compactWorkPill("protected", color: AppColors.accentDanger)
+                    }
                 }
             }
 
-            // Title
-            Text(ticket.title)
-                .font(.system(size: 14))
-                .foregroundColor(AppColors.textPrimary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-
-            Spacer(minLength: 4)
-
-            // Owner · status · priority meta (owner is resolved agent name per ticket 7d4c89a7)
-            Text("\(ticket.ownerShort) · \(ticket.status.replacingOccurrences(of: "_", with: " ")) · \(ticket.priority)")
-                .font(.system(size: 11))
-                .foregroundColor(AppColors.textTertiary)
-                .lineLimit(1)
+            HStack(spacing: 8) {
+                Label("Open", systemImage: "arrow.up.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(AppColors.accentElectric)
+                if flow != nil {
+                    Label("Flow", systemImage: "point.topleft.down.curvedto.point.bottomright.up")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(AppColors.textSecondary)
+                }
+                Spacer()
+            }
         }
-        .padding(.horizontal, 14)
-        .frame(minHeight: 40)
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppColors.backgroundPrimary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(AppColors.border, lineWidth: 0.5)
+        )
     }
 
     private func flowStatePill(_ flow: TicketFlowItem) -> some View {
@@ -1525,6 +2083,710 @@ struct WorkView: View {
     }
 }
 
+private struct WorkbenchAgentCockpitSection: View {
+    @Bindable var directChatViewModel: DirectChatViewModel
+    let modelContext: ModelContext
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("1:1 LANES")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(AppColors.textTertiary)
+                    Text("Agent cockpit")
+                        .font(.headline)
+                        .foregroundColor(AppColors.textPrimary)
+                }
+
+                Spacer()
+
+                Button {
+                    directChatViewModel.refreshSonarSurface()
+                } label: {
+                    Image(systemName: directChatViewModel.isLoadingRooms ? "hourglass" : "arrow.clockwise")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(AppColors.textSecondary)
+                        .frame(width: 30, height: 30)
+                        .background(AppColors.backgroundTertiary)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(directChatViewModel.isLoadingRooms)
+                .accessibilityLabel("Refresh direct agent lanes")
+            }
+
+            if agents.isEmpty {
+                emptyState
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(agents) { agent in
+                            NavigationLink {
+                                AnyView(
+                                    LockerChatView(viewModel: directChatViewModel, agent: agent)
+                                        .onAppear {
+                                            directChatViewModel.setModelContext(modelContext)
+                                            directChatViewModel.selectAgent(agent)
+                                        }
+                                )
+                            } label: {
+                                agentCard(agent)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(!directChatViewModel.canStartChat(with: agent))
+                            .opacity(directChatViewModel.canStartChat(with: agent) ? 1 : 0.45)
+                        }
+                    }
+                    .padding(.horizontal, 2)
+                    .padding(.vertical, 2)
+                }
+            }
+        }
+        .padding(14)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(AppColors.border, lineWidth: 1)
+        )
+        .onAppear {
+            directChatViewModel.setModelContext(modelContext)
+        }
+    }
+
+    private var agents: [AgentInfo] {
+        directChatViewModel.directChatAgents
+            .filter { $0.lane != .dormantAdvisor }
+            .sorted { lhs, rhs in
+                let lhsRank = lhs.lane == .main ? 0 : 1
+                let rhsRank = rhs.lane == .main ? 0 : 1
+                if lhsRank != rhsRank { return lhsRank < rhsRank }
+                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            }
+    }
+
+    private var emptyState: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "person.crop.circle.badge.questionmark")
+                .font(.system(size: 16))
+                .foregroundColor(AppColors.textTertiary)
+            Text("No direct lanes available.")
+                .font(.system(size: 13))
+                .foregroundColor(AppColors.textTertiary)
+        }
+        .padding(14)
+    }
+
+    private func agentCard(_ agent: AgentInfo) -> some View {
+        let tint = Color(hexString: agent.color)
+        let presence = directChatViewModel.presence(for: agent)
+        let preview = directChatViewModel.lastMessagePreview(for: agent)
+        let unread = directChatViewModel.unreadCount(for: agent)
+        let canStart = directChatViewModel.canStartChat(with: agent)
+
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 9) {
+                ZStack(alignment: .bottomTrailing) {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(tint.opacity(0.18))
+                        .frame(width: 42, height: 42)
+                    Image(systemName: agent.icon)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(tint)
+                    Circle()
+                        .fill(presence.state.color)
+                        .frame(width: 9, height: 9)
+                        .overlay(Circle().stroke(AppColors.backgroundSecondary, lineWidth: 1.5))
+                        .offset(x: 2, y: 2)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(agent.name)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(AppColors.textPrimary)
+                        .lineLimit(1)
+                    Text(canStart ? directChatViewModel.rosterBadgeText(for: agent) : "Unavailable")
+                        .font(.caption2)
+                        .foregroundColor(AppColors.textTertiary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+
+                if unread > 0 {
+                    Text("\(unread)")
+                        .font(.caption2.weight(.bold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(AppColors.accentElectric)
+                        .clipShape(Capsule())
+                }
+            }
+
+            Text(preview.text)
+                .font(.caption)
+                .foregroundColor(AppColors.textSecondary)
+                .lineLimit(2)
+                .frame(height: 34, alignment: .topLeading)
+
+            HStack(spacing: 6) {
+                pill(presence.state.label, color: presence.state.color)
+                if let channel = directChatViewModel.shortChannelId(for: agent) {
+                    pill(channel, color: AppColors.textTertiary)
+                } else {
+                    pill(agent.defaultDeliveryMode.displayLabel, color: AppColors.textTertiary)
+                }
+            }
+        }
+        .padding(12)
+        .frame(width: 210, height: 150, alignment: .topLeading)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(AppColors.border, lineWidth: 1)
+        )
+    }
+
+    private func pill(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.caption2.weight(.semibold))
+            .foregroundColor(color)
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(color.opacity(0.12))
+            .clipShape(Capsule())
+    }
+}
+
+private struct WorkHealthStripView: View {
+    let model: WorkViewModel
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 7) {
+                ForEach(metrics) { metric in
+                    WorkHealthChip(metric: metric)
+                }
+            }
+            .padding(.horizontal, 2)
+        }
+    }
+
+    private var metrics: [WorkHealthMetric] {
+        [
+            WorkHealthMetric(
+                id: "suggestions",
+                title: "Suggestions",
+                count: model.schoolhouseDigest?.attentionStack.count ?? model.suggestions.count,
+                error: model.suggestionsError,
+                isLoading: model.isLoadingSuggestions,
+                retry: { Task { await model.loadSuggestions() } }
+            ),
+            WorkHealthMetric(
+                id: "workbench",
+                title: "Workbench",
+                count: model.workbenchReadyCount,
+                error: model.workbenchError,
+                isLoading: model.isLoadingWorkbench,
+                retry: { Task { await model.loadWorkbench() } }
+            ),
+            WorkHealthMetric(
+                id: "approvals",
+                title: "Approvals",
+                count: model.approvalAttentionCount,
+                error: model.approvalAttentionError,
+                isLoading: model.isLoadingApprovalAttention,
+                retry: { Task { await model.loadApprovalAttention() } }
+            ),
+            WorkHealthMetric(
+                id: "projects",
+                title: "Projects",
+                count: model.projects.count,
+                error: model.projectsError,
+                isLoading: model.isLoadingProjects,
+                retry: { Task { await model.loadProjects() } }
+            ),
+            WorkHealthMetric(
+                id: "tickets",
+                title: "Tickets",
+                count: model.activeTicketCount,
+                error: model.ticketsError,
+                isLoading: model.isLoadingTickets,
+                retry: { Task { await model.loadTickets() } }
+            ),
+            WorkHealthMetric(
+                id: "flow",
+                title: "Flow",
+                count: model.ticketFlowReview?.counts.total ?? 0,
+                error: model.ticketFlowErrorMessage,
+                isLoading: false,
+                retry: { Task { await model.loadTicketFlowReview() } }
+            )
+        ]
+    }
+}
+
+private struct WorkHealthMetric: Identifiable {
+    let id: String
+    let title: String
+    let count: Int
+    let error: String?
+    let isLoading: Bool
+    let retry: () -> Void
+}
+
+private struct WorkHealthChip: View {
+    let metric: WorkHealthMetric
+
+    var body: some View {
+        Button(action: metric.retry) {
+            HStack(spacing: 5) {
+                Image(systemName: metric.isLoading ? "hourglass" : (hasError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"))
+                    .font(.system(size: 10, weight: .semibold))
+                Text(metric.title)
+                    .font(.system(size: 11, weight: .semibold))
+                Text("\(metric.count)")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundColor(AppColors.textTertiary)
+            }
+            .foregroundColor(color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(color.opacity(0.10))
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(color.opacity(0.16), lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(metric.error ?? "\(metric.title) loaded")
+    }
+
+    private var hasError: Bool {
+        metric.error != nil
+    }
+
+    private var color: Color {
+        hasError ? AppColors.accentWarning : AppColors.accentSuccess
+    }
+}
+
+private struct WorkbenchAgentToolsShelf: View {
+    let projection: WorkbenchAgentToolsProjection?
+    let isLoading: Bool
+    let error: String?
+
+    var body: some View {
+        Group {
+            if isLoading {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.mini)
+                    Text("Loading ORCA tools")
+                        .font(.caption2)
+                        .foregroundColor(AppColors.textTertiary)
+                }
+            } else if let projection {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Label("Tools", systemImage: "wrench.and.screwdriver.fill")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(AppColors.accentElectric)
+
+                        Spacer(minLength: 0)
+
+                        Text("\(projection.availableCapabilities.count) live")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(AppColors.accentSuccess)
+
+                        Text("\(projection.disabledCapabilities.count) held")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(AppColors.textTertiary)
+                    }
+
+                    FlowLayout(horizontalSpacing: 5, verticalSpacing: 5) {
+                        ForEach(projection.capabilities.prefix(6)) { capability in
+                            toolChip(capability)
+                        }
+                    }
+
+                    Text("\(projection.provenanceSourceLabel) · \(projection.richToolsPolicy.replacingOccurrences(of: "_", with: " "))")
+                        .font(.caption2)
+                        .foregroundColor(AppColors.textTertiary)
+                        .lineLimit(2)
+                }
+                .padding(8)
+                .background(AppColors.backgroundSecondary.opacity(0.72))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(AppColors.border.opacity(0.7), lineWidth: 0.5)
+                )
+            } else if let error {
+                Label(error, systemImage: "wrench.adjustable")
+                    .font(.caption2)
+                    .foregroundColor(AppColors.accentWarning)
+                    .lineLimit(2)
+            }
+        }
+    }
+
+    private func toolChip(_ capability: WorkbenchAgentToolCapability) -> some View {
+        let color = chipColor(for: capability)
+        return HStack(spacing: 4) {
+            Image(systemName: chipIcon(for: capability))
+                .font(.system(size: 9, weight: .semibold))
+            Text(capability.label)
+                .font(.system(size: 10, weight: .semibold))
+                .lineLimit(1)
+            if capability.requiresApproval {
+                Image(systemName: "checkmark.shield")
+                    .font(.system(size: 9, weight: .semibold))
+            }
+        }
+        .foregroundColor(color)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(color.opacity(0.10))
+        .clipShape(Capsule())
+        .accessibilityLabel("\(capability.label) \(capability.status)")
+    }
+
+    private func chipColor(for capability: WorkbenchAgentToolCapability) -> Color {
+        switch capability.normalizedStatus {
+        case "available":
+            return capability.requiresApproval ? AppColors.accentWarning : AppColors.accentSuccess
+        case "disabled", "blocked":
+            return AppColors.textTertiary
+        default:
+            return AppColors.accentElectric
+        }
+    }
+
+    private func chipIcon(for capability: WorkbenchAgentToolCapability) -> String {
+        switch capability.toolClass {
+        case "read_context": return "book"
+        case "preview": return "eye"
+        case "workspace_artifact": return "folder.badge.gearshape"
+        case "agent_action": return "paperplane"
+        case "compute": return "cpu"
+        case "external_or_desktop": return "desktopcomputer"
+        case "protected": return "lock.shield"
+        default: return capability.requiresApproval ? "checkmark.shield" : "wrench.and.screwdriver"
+        }
+    }
+}
+
+enum WorkbenchTaskLane: String, CaseIterable, Identifiable {
+    case mine
+    case waiting
+    case blocking
+    case stale
+    case ready
+    case all
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .mine: return "Mine"
+        case .waiting: return "Waiting"
+        case .blocking: return "Blocking"
+        case .stale: return "Stale"
+        case .ready: return "Ready"
+        case .all: return "All"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .mine: return "person.crop.circle"
+        case .waiting: return "person.badge.clock"
+        case .blocking: return "exclamationmark.octagon"
+        case .stale: return "clock.badge.exclamationmark"
+        case .ready: return "bolt.fill"
+        case .all: return "tray.full"
+        }
+    }
+}
+
+private struct WorkbenchTasksSection: View {
+    var model: WorkViewModel
+    let onOpenTicket: (String) -> Void
+    let onComment: (WorkbenchWorkItem) -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("TASKS · \(model.taskRows(for: model.selectedTaskLane).count)")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(AppColors.textTertiary)
+                    .kerning(0.5)
+                Spacer()
+                Button {
+                    Task { await model.loadWorkbench() }
+                } label: {
+                    Image(systemName: model.isLoadingWorkbench ? "hourglass" : "arrow.clockwise")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(AppColors.accentElectric)
+                }
+                .buttonStyle(.plain)
+                .disabled(model.isLoadingWorkbench)
+                .accessibilityLabel("Refresh tasks")
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+
+            taskLaneBar
+
+            VStack(spacing: 8) {
+                if model.isLoadingWorkbench && model.visibleTaskRows.isEmpty {
+                    taskSkeletons
+                } else if let error = model.workbenchError, model.visibleTaskRows.isEmpty {
+                    taskError(message: error)
+                } else if model.taskRows(for: model.selectedTaskLane).isEmpty {
+                    emptyState
+                } else {
+                    ForEach(model.displayedTaskRows) { item in
+                        taskCard(item)
+                    }
+
+                    let overflow = model.taskRows(for: model.selectedTaskLane).count - model.displayedTaskRows.count
+                    if overflow > 0 {
+                        Text("+\(overflow) more tasks in this lane")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(AppColors.textTertiary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 4)
+                    }
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 10)
+        }
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                .strokeBorder(AppColors.border, lineWidth: 0.5)
+        )
+    }
+
+    private var taskLaneBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(WorkbenchTaskLane.allCases) { lane in
+                    taskLaneChip(lane)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 10)
+        }
+    }
+
+    private func taskLaneChip(_ lane: WorkbenchTaskLane) -> some View {
+        let isOn = model.selectedTaskLane == lane
+        let count = model.taskLaneCount(lane)
+        return Button {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                model.selectedTaskLane = lane
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: lane.icon)
+                    .font(.system(size: 11, weight: .semibold))
+                Text(lane.label)
+                    .font(.system(size: 12, weight: isOn ? .semibold : .regular))
+                Text("\(count)")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundColor(isOn ? Color.black.opacity(0.7) : AppColors.textTertiary)
+            }
+            .foregroundColor(isOn ? Color.black : AppColors.textSecondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(isOn ? AppColors.textPrimary : Color.clear)
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .strokeBorder(isOn ? Color.clear : AppColors.border, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func taskCard(_ item: WorkbenchWorkItem) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(taskColor(item).opacity(0.12))
+                    Image(systemName: item.isProtected ? "lock.shield.fill" : "checklist")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(taskColor(item))
+                }
+                .frame(width: 34, height: 34)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.safeTitle)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(AppColors.textPrimary)
+                        .lineLimit(2)
+
+                    Text(taskDetail(item))
+                        .font(.system(size: 11))
+                        .foregroundColor(AppColors.textSecondary)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 4)
+
+                if item.canUseAgentActionComment {
+                    taskPill("action", color: AppColors.accentSuccess)
+                } else if item.isProtected {
+                    taskPill("protected", color: AppColors.accentWarning)
+                }
+            }
+
+            FlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                taskPill(item.status ?? item.kind, color: AppColors.textSecondary)
+                if let priority = item.priority {
+                    taskPill(priority, color: taskColor(item))
+                }
+                if let route = item.route ?? item.room {
+                    taskPill(route, color: AppColors.textTertiary)
+                }
+                if item.stale {
+                    taskPill("stale", color: AppColors.accentDanger)
+                }
+            }
+
+            WorkbenchAgentToolsShelf(
+                projection: model.toolProjection(for: item),
+                isLoading: model.isLoadingToolProjection(for: item),
+                error: model.toolProjectionError(for: item)
+            )
+
+            HStack(spacing: 8) {
+                if let ticketId = item.sourceTicketId {
+                    Button {
+                        onOpenTicket(ticketId)
+                    } label: {
+                        Label("Open", systemImage: "ticket")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(AppColors.accentElectric)
+                }
+
+                if item.canUseAgentActionComment {
+                    Button {
+                        onComment(item)
+                    } label: {
+                        Label("Comment", systemImage: "bubble.left.and.bubble.right.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(AppColors.accentSuccess)
+                }
+
+                Spacer()
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppColors.backgroundPrimary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(AppColors.border, lineWidth: 0.5)
+        )
+    }
+
+    private var taskSkeletons: some View {
+        VStack(spacing: 8) {
+            ForEach(0..<2, id: \.self) { _ in
+                HStack(spacing: 10) {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(AppColors.backgroundTertiary)
+                        .frame(width: 34, height: 34)
+                    VStack(alignment: .leading, spacing: 7) {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(AppColors.backgroundTertiary)
+                            .frame(height: 13)
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(AppColors.backgroundTertiary)
+                            .frame(width: 150, height: 10)
+                    }
+                }
+                .padding(10)
+                .background(AppColors.backgroundPrimary)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+        }
+    }
+
+    private var emptyState: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "checklist")
+                .font(.system(size: 16))
+                .foregroundColor(AppColors.textTertiary)
+            Text("No tasks in this lane.")
+                .font(.system(size: 13))
+                .foregroundColor(AppColors.textTertiary)
+            Spacer()
+        }
+        .padding(14)
+    }
+
+    private func taskError(message: String) -> some View {
+        HStack {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(AppColors.accentDanger)
+            Text(message)
+                .font(.system(size: 13))
+                .foregroundColor(AppColors.textSecondary)
+            Spacer()
+        }
+        .padding(14)
+    }
+
+    private func taskDetail(_ item: WorkbenchWorkItem) -> String {
+        [
+            item.nextAction,
+            item.waitingOn.map { "waiting on \($0)" },
+            item.blockedOn.map { "blocked on \($0)" },
+            item.contentPolicy
+        ]
+        .compactMap { $0?.replacingOccurrences(of: "_", with: " ") }
+        .filter { !$0.isEmpty }
+        .joined(separator: " · ")
+        .nilIfBlankForWork ?? "Ready in Workbench."
+    }
+
+    private func taskColor(_ item: WorkbenchWorkItem) -> Color {
+        if item.isProtected { return AppColors.accentWarning }
+        if item.stale { return AppColors.accentDanger }
+        switch item.priority?.lowercased() {
+        case "urgent", "high": return AppColors.accentWarning
+        case "low": return AppColors.textTertiary
+        default: return AppColors.accentElectric
+        }
+    }
+
+    private func taskPill(_ text: String, color: Color) -> some View {
+        Text(text.replacingOccurrences(of: "_", with: " "))
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundColor(color)
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(color.opacity(0.12))
+            .clipShape(Capsule())
+    }
+}
+
 // MARK: - Work View Model
 
 @Observable
@@ -1540,6 +2802,27 @@ final class WorkViewModel {
     var isLoadingTickets = false
     var ticketsError: String?
     var activeFilter: TicketFilter = .all
+    var workbench: WorkbenchEnvelope?
+    var workbenchRows: [WorkbenchWorkItem] = []
+    var isLoadingWorkbench = false
+    var workbenchError: String?
+    var workbenchViewerName: String?
+    var approvalAttention: WorkbenchApprovalAttention?
+    var approvalAttentionItems: [WorkbenchApprovalAttentionItem] = []
+    var isLoadingApprovalAttention = false
+    var approvalAttentionError: String?
+    var actionPreview: WorkbenchPlaygroundPreview?
+    var actionPreviewError: String?
+    var isLoadingActionPreview = false
+    var previewingApprovalIds: Set<String> = []
+    var workbenchActionPreview: WorkbenchPlaygroundPreview?
+    var workbenchActionPreviewSignature: String?
+    var workbenchActionError: String?
+    var isPreviewingWorkbenchAction = false
+    var isCommittingWorkbenchAction = false
+    var toolProjectionsByItemKey: [String: WorkbenchAgentToolsProjection] = [:]
+    var loadingToolProjectionKeys: Set<String> = []
+    var toolProjectionErrorsByItemKey: [String: String] = [:]
     var ticketFlowReview: TicketFlowReview?
     var ticketFlowByTicketId: [String: TicketFlowItem] = [:]
     var ticketFlowErrorMessage: String?
@@ -1550,6 +2833,7 @@ final class WorkViewModel {
     var filterNoiseReviewOnly = false
     var filterProtectedOnly = false
     var priorityToast: PriorityToast?
+    var selectedTaskLane: WorkbenchTaskLane = .mine
 
     // MARK: Suggestions
     var schoolhouseDigest: SchoolhouseDigest?
@@ -1557,7 +2841,125 @@ final class WorkViewModel {
     var isLoadingSuggestions = false
     var suggestionsError: String?
     var suggestionActionIds: Set<String> = []
-    var reviewerIdentity = "maui"
+    var reviewerIdentity = "pod"
+
+    var workbenchReadyCount: Int {
+        workbench?.buckets.workQueue?.counts["ready_now"] ?? visibleWorkbenchRows.count
+    }
+
+    var visibleTaskRows: [WorkbenchWorkItem] {
+        taskRows(for: selectedTaskLane)
+    }
+
+    var displayedTaskRows: [WorkbenchWorkItem] {
+        Array(visibleTaskRows.prefix(6))
+    }
+
+    func taskLaneCount(_ lane: WorkbenchTaskLane) -> Int {
+        taskRows(for: lane).count
+    }
+
+    func taskRows(for lane: WorkbenchTaskLane) -> [WorkbenchWorkItem] {
+        guard let queue = workbench?.buckets.workQueue else {
+            return dedupedTaskRows(workbenchRows)
+        }
+
+        switch lane {
+        case .mine:
+            return dedupedTaskRows(queue.assignedToMe)
+        case .waiting:
+            return dedupedTaskRows(queue.waitingOnMe)
+        case .blocking:
+            return dedupedTaskRows(queue.blockingOthers + queue.blockedByMe)
+        case .stale:
+            return dedupedTaskRows(queue.staleOwnedWork)
+        case .ready:
+            return dedupedTaskRows(queue.readyNow)
+        case .all:
+            return dedupedTaskRows([
+                queue.readyNow,
+                queue.assignedToMe,
+                queue.waitingOnMe,
+                queue.blockingOthers,
+                queue.blockedByMe,
+                queue.staleOwnedWork,
+                queue.recentChanges
+            ].flatMap { $0 })
+        }
+    }
+
+    private func dedupedTaskRows(_ candidates: [WorkbenchWorkItem]) -> [WorkbenchWorkItem] {
+        var seen = Set<String>()
+        var rows: [WorkbenchWorkItem] = []
+        for item in candidates where item.isTaskLike {
+            let key = workbenchRowKey(item)
+            guard seen.insert(key).inserted else { continue }
+            rows.append(item)
+        }
+        return rows
+    }
+
+    var visibleWorkbenchRows: [WorkbenchWorkItem] {
+        guard let queue = workbench?.buckets.workQueue else {
+            return workbenchRows
+        }
+        let groups = [
+            queue.readyNow,
+            queue.assignedToMe,
+            queue.waitingOnMe,
+            queue.blockedByMe,
+            queue.staleOwnedWork,
+            queue.recentChanges
+        ]
+        var seen = Set<String>()
+        var rows: [WorkbenchWorkItem] = []
+        for item in groups.flatMap({ $0 }) {
+            let key = workbenchRowKey(item)
+            guard seen.insert(key).inserted else { continue }
+            rows.append(item)
+        }
+        return rows
+    }
+
+    var workbenchActionableRows: [WorkbenchWorkItem] {
+        visibleWorkbenchRows.filter { $0.canUseAgentActionComment }
+    }
+
+    var displayedWorkbenchRows: [WorkbenchWorkItem] {
+        let rows = visibleWorkbenchRows
+        let actionable = rows.filter { $0.canUseAgentActionComment }
+        let passive = rows.filter { !$0.canUseAgentActionComment }
+        var seen = Set<String>()
+        var featured: [WorkbenchWorkItem] = []
+        for item in Array(actionable.prefix(4)) + passive + Array(actionable.dropFirst(4)) {
+            let key = workbenchRowKey(item)
+            guard seen.insert(key).inserted else { continue }
+            featured.append(item)
+            if featured.count >= 8 { break }
+        }
+        return featured
+    }
+
+    private func workbenchRowKey(_ item: WorkbenchWorkItem) -> String {
+        "\(item.kind):\(item.id):\(item.sourceTaskId ?? ""):\(item.sourceTicketId ?? "")"
+    }
+
+    var approvalAttentionCount: Int {
+        approvalAttention?.counts.total ?? approvalAttentionItems.count
+    }
+
+    var actionPreviewLine: String {
+        guard let preview = actionPreview else {
+            return "Preview validates action payloads without writing ORCA rows or publishing NATS."
+        }
+        if preview.blocked {
+            return preview.warnings.first ?? "Preview blocked by backend policy."
+        }
+        if preview.wouldWrite || preview.wouldPublishNats {
+            return "Preview returned a side-effect warning; commit remains disabled in this lane."
+        }
+        return "Preview is read-only. Mutations must use visible confirmation and the signed action rail."
+    }
 
     struct PriorityToast: Equatable {
         let message: String
@@ -1572,7 +2974,7 @@ final class WorkViewModel {
         let normalized = (name ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
-        reviewerIdentity = normalized.isEmpty ? "maui" : normalized
+        reviewerIdentity = normalized.isEmpty ? "pod" : normalized
     }
 
     // MARK: Sheet
@@ -1599,7 +3001,7 @@ final class WorkViewModel {
         case .all:
             base = tickets
         case .mine:
-            base = tickets.filter { $0.ownerShort.lowercased().hasPrefix("mau") || $0.assigneeId == "maui" }
+            base = tickets.filter(isMineTicket)
         case .urgent:
             base = tickets.filter { $0.priority.lowercased() == "urgent" }
         case .byProject:
@@ -1729,15 +3131,316 @@ final class WorkViewModel {
         .map(\.key)
     }
 
+    private func isMineTicket(_ ticket: WorkTicketRow) -> Bool {
+        let workbenchIds = mineWorkbenchTicketIds
+        if !workbenchIds.isEmpty {
+            return workbenchIds.contains(ticket.id)
+        }
+
+        let identities = mineIdentityKeys
+        guard !identities.isEmpty else { return false }
+        let owner = ticket.ownerShort.lowercased()
+        if identities.contains(owner) { return true }
+        if let assigneeId = ticket.assigneeId?.lowercased(), identities.contains(assigneeId) {
+            return true
+        }
+        return false
+    }
+
+    private var mineWorkbenchTicketIds: Set<String> {
+        Set(workbenchRows.compactMap { item in
+            guard item.kind == "ticket" else { return item.sourceTicketId }
+            return item.sourceTicketId ?? item.id
+        })
+    }
+
+    private var mineIdentityKeys: Set<String> {
+        Set([workbenchViewerName, reviewerIdentity]
+            .compactMap { value in
+                let normalized = value?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased()
+                guard let normalized, !normalized.isEmpty, normalized != "pod", normalized != "captain" else {
+                    return nil
+                }
+                return normalized
+            })
+    }
+
     // MARK: - Load
 
     func load() async {
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await self.loadSuggestions() }
+            group.addTask { await self.loadWorkbench() }
+            group.addTask { await self.loadApprovalAttention() }
+            group.addTask { await self.loadActionPreview() }
             group.addTask { await self.loadProjects() }
             group.addTask { await self.loadTickets() }
             group.addTask { await self.loadTicketFlowReview() }
         }
+    }
+
+    @MainActor
+    func loadWorkbench() async {
+        isLoadingWorkbench = true
+        workbenchError = nil
+        defer { isLoadingWorkbench = false }
+        do {
+            let envelope = try await WorkbenchRepository().load(view: .mine, limit: 50)
+            workbench = envelope
+            workbenchViewerName = envelope.viewer.name
+            workbenchRows = envelope.buckets.workQueue?.assignedToMe ?? []
+            await loadAgentToolsForVisibleWorkbenchRows()
+        } catch let error as APIError where error.code == 401 {
+            workbench = nil
+            workbenchRows = []
+            workbenchViewerName = nil
+            toolProjectionsByItemKey = [:]
+            loadingToolProjectionKeys = []
+            toolProjectionErrorsByItemKey = [:]
+            workbenchError = "Agent token required"
+        } catch {
+            workbench = nil
+            workbenchRows = []
+            workbenchViewerName = nil
+            toolProjectionsByItemKey = [:]
+            loadingToolProjectionKeys = []
+            toolProjectionErrorsByItemKey = [:]
+            workbenchError = "Workbench unavailable"
+        }
+    }
+
+    func toolProjection(for item: WorkbenchWorkItem) -> WorkbenchAgentToolsProjection? {
+        guard let key = toolProjectionKey(for: item) else { return nil }
+        return toolProjectionsByItemKey[key]
+    }
+
+    func isLoadingToolProjection(for item: WorkbenchWorkItem) -> Bool {
+        guard let key = toolProjectionKey(for: item) else { return false }
+        return loadingToolProjectionKeys.contains(key)
+    }
+
+    func toolProjectionError(for item: WorkbenchWorkItem) -> String? {
+        guard let key = toolProjectionKey(for: item) else { return nil }
+        return toolProjectionErrorsByItemKey[key]
+    }
+
+    @MainActor
+    private func loadAgentToolsForVisibleWorkbenchRows() async {
+        let candidates = Array((displayedTaskRows + displayedWorkbenchRows).prefix(12))
+        var seen = Set<String>()
+        for item in candidates {
+            guard let key = toolProjectionKey(for: item),
+                  seen.insert(key).inserted,
+                  toolProjectionsByItemKey[key] == nil else {
+                continue
+            }
+            await loadAgentTools(for: item, key: key)
+        }
+    }
+
+    @MainActor
+    private func loadAgentTools(for item: WorkbenchWorkItem, key: String? = nil) async {
+        guard let request = toolProjectionRequest(for: item) else { return }
+        let resolvedKey = key ?? request.key
+        guard !loadingToolProjectionKeys.contains(resolvedKey) else { return }
+
+        loadingToolProjectionKeys.insert(resolvedKey)
+        toolProjectionErrorsByItemKey[resolvedKey] = nil
+        defer { loadingToolProjectionKeys.remove(resolvedKey) }
+
+        do {
+            let projection = try await WorkbenchRepository().loadAgentTools(
+                agentName: request.agentName,
+                ticketId: request.ticketId,
+                taskId: request.taskId
+            )
+            toolProjectionsByItemKey[resolvedKey] = projection
+        } catch let apiError as APIError {
+            toolProjectionsByItemKey[resolvedKey] = nil
+            toolProjectionErrorsByItemKey[resolvedKey] = apiError.message
+        } catch {
+            toolProjectionsByItemKey[resolvedKey] = nil
+            toolProjectionErrorsByItemKey[resolvedKey] = "Tool projection unavailable"
+        }
+    }
+
+    private struct ToolProjectionRequest {
+        let key: String
+        let agentName: String
+        let ticketId: String?
+        let taskId: String?
+    }
+
+    private func toolProjectionRequest(for item: WorkbenchWorkItem) -> ToolProjectionRequest? {
+        let agent = (workbenchViewerName ?? reviewerIdentity)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !agent.isEmpty, agent != "pod", agent != "captain" else { return nil }
+
+        let ticketId = item.sourceTicketId ?? (item.kind == "ticket" ? item.id : nil)
+        let taskId = item.effectiveTaskId
+        guard ticketId != nil || taskId != nil else { return nil }
+
+        return ToolProjectionRequest(
+            key: "\(agent)|\(ticketId ?? "-")|\(taskId ?? "-")",
+            agentName: agent,
+            ticketId: ticketId,
+            taskId: taskId
+        )
+    }
+
+    private func toolProjectionKey(for item: WorkbenchWorkItem) -> String? {
+        toolProjectionRequest(for: item)?.key
+    }
+
+    @MainActor
+    func loadApprovalAttention() async {
+        isLoadingApprovalAttention = true
+        approvalAttentionError = nil
+        defer { isLoadingApprovalAttention = false }
+        do {
+            let response = try await WorkbenchRepository().loadApprovalAttention(limit: 25)
+            approvalAttention = response
+            approvalAttentionItems = response.items
+        } catch {
+            approvalAttention = nil
+            approvalAttentionItems = []
+            approvalAttentionError = "Approvals unavailable"
+        }
+    }
+
+    @MainActor
+    func loadActionPreview() async {
+        isLoadingActionPreview = true
+        actionPreviewError = nil
+        defer { isLoadingActionPreview = false }
+        do {
+            actionPreview = try await WorkbenchRepository().previewAgentAction(action: "resolve_approval")
+        } catch {
+            actionPreview = nil
+            actionPreviewError = "Action preview unavailable"
+        }
+    }
+
+    @MainActor
+    func previewApprovalAction(_ item: WorkbenchApprovalAttentionItem) async {
+        guard !previewingApprovalIds.contains(item.id) else { return }
+        previewingApprovalIds.insert(item.id)
+        actionPreviewError = nil
+        defer { previewingApprovalIds.remove(item.id) }
+        do {
+            actionPreview = try await WorkbenchRepository().previewAgentAction(action: "resolve_approval")
+            priorityToast = PriorityToast(message: "Preview checked: no write", isError: false, retry: nil)
+        } catch {
+            actionPreviewError = "Preview unavailable for \(String(item.id.prefix(8)))"
+            priorityToast = PriorityToast(
+                message: "Preview failed — tap to retry",
+                isError: true,
+                retry: { [weak self] in
+                    Task { await self?.previewApprovalAction(item) }
+                }
+            )
+        }
+    }
+
+    func resetWorkbenchActionPreview() {
+        workbenchActionPreview = nil
+        workbenchActionPreviewSignature = nil
+        workbenchActionError = nil
+    }
+
+    func hasFreshWorkbenchActionPreview(item: WorkbenchWorkItem, message: String) -> Bool {
+        guard let signature = workbenchActionSignature(item: item, message: message),
+              signature == workbenchActionPreviewSignature,
+              let preview = workbenchActionPreview else {
+            return false
+        }
+        return !preview.blocked && !preview.wouldWrite && !preview.wouldPublishNats
+    }
+
+    @MainActor
+    func previewWorkbenchTaskComment(item: WorkbenchWorkItem, message: String) async {
+        guard !isPreviewingWorkbenchAction else { return }
+        guard let signature = workbenchActionSignature(item: item, message: message),
+              let request = workbenchTaskCommentRequest(item: item, message: message) else {
+            workbenchActionPreview = nil
+            workbenchActionPreviewSignature = nil
+            workbenchActionError = "Task comment needs a board, task, and message."
+            return
+        }
+        isPreviewingWorkbenchAction = true
+        workbenchActionError = nil
+        defer { isPreviewingWorkbenchAction = false }
+        do {
+            workbenchActionPreview = try await WorkbenchRepository().previewAgentAction(request)
+            workbenchActionPreviewSignature = signature
+        } catch {
+            workbenchActionPreview = nil
+            workbenchActionPreviewSignature = nil
+            workbenchActionError = "Preview unavailable."
+        }
+    }
+
+    @MainActor
+    func commitWorkbenchTaskComment(item: WorkbenchWorkItem, message: String) async -> Bool {
+        guard !isCommittingWorkbenchAction else { return false }
+        guard hasFreshWorkbenchActionPreview(item: item, message: message),
+              let request = workbenchTaskCommentRequest(item: item, message: message) else {
+            workbenchActionError = "Preview this exact comment before posting."
+            return false
+        }
+        isCommittingWorkbenchAction = true
+        workbenchActionError = nil
+        defer { isCommittingWorkbenchAction = false }
+        do {
+            let response = try await WorkbenchRepository().executeAgentAction(request)
+            resetWorkbenchActionPreview()
+            priorityToast = PriorityToast(
+                message: "\(response.objectType.replacingOccurrences(of: "_", with: " ").capitalized) posted",
+                isError: false,
+                retry: nil
+            )
+            await loadWorkbench()
+            return true
+        } catch let error as APIError {
+            workbenchActionError = error.message
+            priorityToast = PriorityToast(message: "Workbench action failed", isError: true, retry: nil)
+            return false
+        } catch {
+            workbenchActionError = "Workbench action failed."
+            priorityToast = PriorityToast(message: "Workbench action failed", isError: true, retry: nil)
+            return false
+        }
+    }
+
+    private func workbenchActionSignature(item: WorkbenchWorkItem, message: String) -> String? {
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let boardId = item.boardId,
+              let taskId = item.effectiveTaskId else {
+            return nil
+        }
+        return "\(boardId)|\(taskId)|\(trimmed)"
+    }
+
+    private func workbenchTaskCommentRequest(item: WorkbenchWorkItem, message: String) -> WorkbenchAgentActionRequest? {
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let boardId = item.boardId,
+              let taskId = item.effectiveTaskId else {
+            return nil
+        }
+        return WorkbenchAgentActionRequest(
+            action: "comment_task",
+            boardId: boardId,
+            taskId: taskId,
+            comment: WorkbenchTaskComment(
+                message: trimmed,
+                actionRequired: false
+            )
+        )
     }
 
     @MainActor
@@ -3788,7 +5491,26 @@ private extension KeyedDecodingContainer {
     }
 }
 
+private extension WorkbenchWorkItem {
+    var isTaskLike: Bool {
+        kind == "task" || sourceTaskId != nil
+    }
+
+    var effectiveTaskId: String? {
+        sourceTaskId ?? (kind == "task" ? id : nil)
+    }
+
+    var canUseAgentActionComment: Bool {
+        effectiveTaskId != nil && boardId != nil && !isProtected
+    }
+}
+
 private extension String {
+    var nilIfBlankForWork: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     var normalizedBoardLabel: String {
         trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "_", with: " ")

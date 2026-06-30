@@ -3,14 +3,14 @@ import Foundation
 // MARK: - App Tab
 
 // L1 Layout Revamp 2026-W22 (SPEC-POD-LAYOUT-REVAMP-2026-W22):
-// Visible tab bar: dashboard, chat, work, crew, library, lab, runtime
+// Visible tab bar: dashboard, workbench, crew, library, lab, runtime
 // Legacy cases (.captainsLog, .arms, .agents, .system) kept for deep-link and nav-state compat.
 // They are not shown in the tab bar but remain routable.
 
 enum AppTab: String, CaseIterable, Hashable {
     // MARK: Visible (7 tabs — ordered as shown in tab bar)
     case dashboard
-    case chat
+    case chat           // legacy/routable Playground shell; not shown in primary tab bar
     case work
     case crew           // NEW — merges Agents + Arms+Team + Focus
     case knowledge
@@ -28,7 +28,7 @@ enum AppTab: String, CaseIterable, Hashable {
         switch self {
         case .dashboard:   return "Dashboard"
         case .chat:        return "Playground"
-        case .work:        return "Work"
+        case .work:        return "Workbench"
         case .crew:        return "Crew"
         case .knowledge:   return "Library"
         case .lab:         return "Lab"
@@ -39,6 +39,15 @@ enum AppTab: String, CaseIterable, Hashable {
         case .captainsLog: return "Captain's Log"
         case .arms:        return "Arms + Team"
         case .agents:      return "Agents"
+        }
+    }
+
+    var tabBarTitle: String {
+        switch self {
+        case .dashboard: return "Home"
+        case .chat:      return "Play"
+        case .work:      return "Bench"
+        default:         return title
         }
     }
 

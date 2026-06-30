@@ -10,8 +10,19 @@ struct LabView: View {
     // Per-section expand/collapse state (default per spec §2).
     @State private var catalogModel = LabCatalogModel()
     @State private var workflowCatalogModel = LabWorkflowCatalogModel()
+    @State private var researchFlywheelModel = LabResearchFlywheelModel()
+    @State private var fundLandingModel = FundLandingViewModel()
+    @State private var fundUniverseLoopModel = FundUniverseLoopViewModel()
+    @State private var fundProductsModel = LabFundProductsModel()
     @State private var fishExpanded      = false
+    @State private var liveExperimentsExpanded = true
+    @State private var fundResearchExpanded = true
     @State private var workflowsExpanded = false
+    @State private var showingFishFeedSheet = false
+    @State private var fishFeedTitle = ""
+    @State private var fishFeedSummary = ""
+    @State private var fishFeedLane = "next"
+    @State private var fishFeedPriority = "high"
 
     var body: some View {
         NavigationStack {
@@ -23,6 +34,8 @@ struct LabView: View {
                         .padding(.bottom, 8)
 
                     fishSection
+                    fundResearchSection
+                    liveExperimentsSection
                     workflowsSection
                 }
                 .frame(maxWidth: 920, alignment: .leading)
@@ -30,15 +43,53 @@ struct LabView: View {
                 .padding(.bottom, 80)
             }
             .background(AppColors.backgroundPrimary.ignoresSafeArea())
+                .safeAreaInset(edge: .top) {
+                    AppColors.backgroundPrimary
+                        .frame(height: 6)
+                }
                 .task {
                     await catalogModel.load()
                     await workflowCatalogModel.load()
+                    await researchFlywheelModel.load()
+                    await fundLandingModel.load()
+                    await fundUniverseLoopModel.load()
+                    await fundProductsModel.load()
                 }
                 .refreshable {
                     await catalogModel.load(force: true)
                     await workflowCatalogModel.load(force: true)
+                    await researchFlywheelModel.load(force: true)
+                    await fundLandingModel.load()
+                    await fundUniverseLoopModel.load()
+                    await fundProductsModel.load()
+                }
+                .sheet(isPresented: $showingFishFeedSheet) {
+                    StarfishFeedStageSheet(
+                        title: $fishFeedTitle,
+                        summary: $fishFeedSummary,
+                        lane: $fishFeedLane,
+                        priority: $fishFeedPriority,
+                        isStaging: researchFlywheelModel.isStaging
+                    ) {
+                        await stageStarfishFeed()
+                    }
                 }
         }
+    }
+
+    private func stageStarfishFeed() async {
+        let staged = await researchFlywheelModel.stageStarfishFeed(
+            title: fishFeedTitle,
+            summary: fishFeedSummary,
+            lane: fishFeedLane,
+            priority: fishFeedPriority
+        )
+        guard staged else { return }
+        fishFeedTitle = ""
+        fishFeedSummary = ""
+        fishFeedLane = "next"
+        fishFeedPriority = "high"
+        showingFishFeedSheet = false
     }
 
     // MARK: - Header
@@ -48,7 +99,7 @@ struct LabView: View {
             Text("Lab")
                 .font(.system(size: 28, weight: .bold))
                 .foregroundColor(AppColors.textPrimary)
-            Text("Experiments: fish agents + workflows.")
+            Text("Experiments: fish agents, protected research lanes, and workflows.")
                 .font(.system(size: 14))
                 .foregroundColor(AppColors.textSecondary)
         }
@@ -115,7 +166,10 @@ struct LabView: View {
     // The Crew (named operators + workers + compute) lives on the Agents tab — Lab does not duplicate.
 
     private var fishSection: some View {
-        let total = catalogModel.fishFleet.count + catalogModel.fishAdjacent.count
+        let liveFish = researchFlywheelModel.flywheel?.fish?.fish ?? []
+        let total = liveFish.isEmpty
+            ? catalogModel.fishFleet.count + catalogModel.fishAdjacent.count
+            : liveFish.count + catalogModel.fishAdjacent.count
         return sectionCard {
             sectionHeader(title: "THE FISH 🐠", count: total, expanded: fishExpanded)
                 .onTapGesture {
@@ -125,7 +179,14 @@ struct LabView: View {
             if fishExpanded {
                 VStack(alignment: .leading, spacing: 12) {
                     fishHeaderNote
-                    fishStrip(title: "Research substrate fleet", fish: catalogModel.fishFleet)
+                    fishFlywheelSummary
+                    fishNextActionCard
+                    starfishFeedStageCard
+                    if liveFish.isEmpty {
+                        fishStrip(title: "Research substrate fleet", fish: catalogModel.fishFleet)
+                    } else {
+                        liveFishStrip(title: "Live Workbench fish", fish: liveFish)
+                    }
                     fishStrip(title: "Adjacent (chief-local, not Pod-surfaced)", fish: catalogModel.fishAdjacent)
                 }
                 .padding(.horizontal, 12)
@@ -139,6 +200,633 @@ struct LabView: View {
             .font(.system(size: 11))
             .italic()
             .foregroundColor(AppColors.textTertiary)
+    }
+
+    private var fishNextActionCard: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "arrow.triangle.branch")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundColor(AppColors.accentElectric)
+                .frame(width: 28, height: 28)
+                .background(AppColors.accentElectric.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("How to use this")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(AppColors.textPrimary)
+                Text("Feed fish from Planner/Workbench, turn findings into Research Rail packets, then promote reviewed output into tasks, memory, or explicit dead ends.")
+                    .font(.system(size: 11))
+                    .foregroundColor(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .background(AppColors.backgroundTertiary.opacity(0.28))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    @ViewBuilder
+    private var fishFlywheelSummary: some View {
+        let flywheel = researchFlywheelModel.flywheel
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                sourcePill(researchFlywheelModel.sourceLabel)
+                if researchFlywheelModel.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.65)
+                }
+                if let generatedAt = flywheel?.generatedAt {
+                    Text(generatedAt.formatted(date: .omitted, time: .shortened))
+                        .font(.system(size: 10))
+                        .foregroundColor(AppColors.textTertiary)
+                }
+                if let error = researchFlywheelModel.error {
+                    Text(error)
+                        .font(.system(size: 10))
+                        .foregroundColor(AppColors.textTertiary)
+                        .lineLimit(2)
+                }
+            }
+
+            if let flywheel {
+                let fishSummary = flywheel.fish?.summary ?? .empty
+                let refSummary = flywheel.referenceCandidates?.summary
+                let railCounts = flywheel.researchRail?.counts
+                let fishRows = flywheel.fish?.fish ?? []
+                let queueCount = fishRows.reduce(0) { total, item in
+                    total + (item.queue?.pendingCount ?? 0)
+                }
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                    fishMetric("Fish", "\(fishSummary.count)", AppColors.accentElectric)
+                    fishMetric("Blocked", "\(fishSummary.blocked)", fishSummary.blocked > 0 ? AppColors.accentWarning : AppColors.accentSuccess)
+                    fishMetric("Refs", "\(refSummary?.instanceCount ?? 0)", AppColors.accentSuccess)
+                    fishMetric("Requests", "\(railCounts?.activeRequests ?? 0)", AppColors.accentElectric)
+                    fishMetric("Review", "\(railCounts?.awaitingReview ?? 0)", (railCounts?.awaitingReview ?? 0) > 0 ? AppColors.accentWarning : AppColors.accentSuccess)
+                    fishMetric("Queue", "\(queueCount)", AppColors.textSecondary)
+                }
+
+                FlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                    fishPolicyPill(flywheel.mode ?? "read only", clean: true)
+                    fishPolicyPill(flywheel.sideEffects ?? "none", clean: true)
+                    if let policy = flywheel.bodyPolicy {
+                        fishPolicyPill("body reads \(policy.sourceBodiesRead ? "on" : "off")", clean: !policy.sourceBodiesRead)
+                        fishPolicyPill("embeddings \(policy.embeddingsCreated ? "on" : "off")", clean: !policy.embeddingsCreated)
+                        if let protectedResearch = policy.protectedResearch {
+                            fishPolicyPill(protectedResearch.labDisplayLabel, clean: true)
+                        }
+                    }
+                }
+
+                if let loop = flywheel.flywheel?.recommendedReviewLoop {
+                    Text(loop)
+                        .font(.system(size: 11))
+                        .foregroundColor(AppColors.textSecondary)
+                        .lineLimit(2)
+                }
+            }
+        }
+        .padding(10)
+        .background(AppColors.backgroundTertiary.opacity(0.35))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var starfishFeedStageCard: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .center, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Starfish feed")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(AppColors.textPrimary)
+                    Text("Planner staging for Maui")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(AppColors.textSecondary)
+                }
+                Spacer(minLength: 8)
+                Button {
+                    showingFishFeedSheet = true
+                } label: {
+                    Label("Stage", systemImage: "tray.and.arrow.down")
+                        .font(.system(size: 12, weight: .bold))
+                        .labelStyle(.titleAndIcon)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(AppColors.accentElectric.opacity(0.14))
+                        .foregroundColor(AppColors.accentElectric)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+                .disabled(researchFlywheelModel.isStaging)
+            }
+
+            FlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                stageStatusPill("planner item", color: AppColors.accentSuccess)
+                stageStatusPill("fish wake off", color: AppColors.textTertiary)
+                stageStatusPill("queue write off", color: AppColors.textTertiary)
+                if researchFlywheelModel.isStaging {
+                    stageStatusPill("staging", color: AppColors.accentElectric)
+                }
+            }
+
+            if let response = researchFlywheelModel.stageResponse {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Planner \(response.plannerItemId.prefix(8))")
+                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        .foregroundColor(AppColors.accentSuccess)
+                    Text(response.sourceRef)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(AppColors.textTertiary)
+                        .lineLimit(1)
+                }
+            }
+
+            if let error = researchFlywheelModel.stageError {
+                Text(error)
+                    .font(.system(size: 10))
+                    .foregroundColor(AppColors.accentWarning)
+                    .lineLimit(2)
+            }
+        }
+        .padding(10)
+        .background(AppColors.backgroundTertiary.opacity(0.35))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func stageStatusPill(_ text: String, color: Color) -> some View {
+        Text(text.uppercased())
+            .font(.system(size: 9, weight: .bold, design: .monospaced))
+            .foregroundColor(color)
+            .lineLimit(1)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(AppColors.backgroundSecondary)
+            .clipShape(Capsule())
+    }
+
+    private func fishMetric(_ label: String, _ value: String, _ color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value)
+                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .foregroundColor(color)
+                .lineLimit(1)
+            Text(label)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(AppColors.textSecondary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(8)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func fishPolicyPill(_ text: String, clean: Bool) -> some View {
+        Text(text.uppercased())
+            .font(.system(size: 10, weight: .bold, design: .monospaced))
+            .foregroundColor(clean ? AppColors.accentSuccess : AppColors.accentWarning)
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(AppColors.backgroundSecondary)
+            .clipShape(Capsule())
+    }
+
+    // MARK: - PROTECTED FUND RESEARCH section
+
+    private var fundResearchSection: some View {
+        let count = 2 + fundProductsModel.products.count
+        return sectionCard {
+            sectionHeader(title: "CHIEF/FUND RESEARCH", count: count, expanded: fundResearchExpanded)
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.15)) { fundResearchExpanded.toggle() }
+                }
+        } body: {
+            if fundResearchExpanded {
+                VStack(alignment: .leading, spacing: 12) {
+                    fundResearchPolicyNote
+                    fundLandingLabCard
+                    fundUniverseLoopLabCard
+                    fundProductStrip
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+            }
+        }
+    }
+
+    private var fundResearchPolicyNote: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "lock.shield.fill")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundColor(AppColors.accentWarning)
+                .frame(width: 28, height: 28)
+                .background(AppColors.accentWarning.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Protected read-only lane")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(AppColors.textPrimary)
+                Text("Lab shows research readiness, freshness, queues, and product status. No P&L expansion, broker actions, orders, positions, wallets, kill switches, or runtime mutations.")
+                    .font(.system(size: 11))
+                    .foregroundColor(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .background(AppColors.accentWarning.opacity(0.07))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var fundLandingLabCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "building.columns")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(AppColors.accentWarning)
+                Text("Fund OS Landing")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(AppColors.textPrimary)
+                Spacer()
+                if fundLandingModel.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                } else if let landing = fundLandingModel.landing {
+                    labStatusPill(landing.isAvailable ? "ORCA LIVE" : "DEGRADED", color: landing.isAvailable ? AppColors.accentSuccess : AppColors.accentWarning)
+                } else {
+                    labStatusPill("WAITING", color: AppColors.textTertiary)
+                }
+            }
+
+            if let landing = fundLandingModel.landing {
+                Text(landing.degradedReason ?? "Chief's protected Fund snapshot is available through ORCA. Sensitive financial bodies stay out of Lab.")
+                    .font(.system(size: 11))
+                    .foregroundColor(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                    fundLabMetric("Mode", landing.mode ?? "—")
+                    fundLabMetric("Readiness", landing.readiness ?? "—")
+                    fundLabMetric("Gate", labBoolLabel(landing.gateReady))
+                    fundLabMetric("Trades", landing.closedTrades.map(String.init) ?? "—")
+                    fundLabMetric("Sharpe", labNumber(landing.sharpe))
+                    fundLabMetric("Sync", landing.freshnessLabel)
+                    fundLabMetric("REQ-008", labReq008Label(landing))
+                    fundLabMetric("Promote", landing.promotionDecision ?? "—")
+                    fundLabMetric("Data App", landing.summary?.dataApplicationStatus ?? landing.agentLanding?.dataApplication?.status ?? "—")
+                }
+
+                if !landing.blockers.isEmpty {
+                    labCompactTextList(title: "Blockers", values: landing.blockers)
+                }
+
+                Text("Route: \(landing.route) · \(landing.sourceFresh ? "source fresh" : "source stale") · generated \(landing.generatedAt ?? "unknown")")
+                    .font(.system(size: 10))
+                    .foregroundColor(AppColors.textTertiary)
+                    .lineLimit(2)
+            } else {
+                Text(fundLandingModel.errorMessage ?? "Waiting for ORCA Fund landing route.")
+                    .font(.system(size: 11))
+                    .foregroundColor(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .background(AppColors.backgroundTertiary.opacity(0.35))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var fundUniverseLoopLabCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "point.3.connected.trianglepath.dotted")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(AppColors.accentElectric)
+                Text("Universe Loop")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(AppColors.textPrimary)
+                Spacer()
+                if fundUniverseLoopModel.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                } else if let response = fundUniverseLoopModel.response {
+                    labStatusPill(response.isAvailable ? "READ-ONLY" : "DEGRADED", color: response.isAvailable ? AppColors.accentSuccess : AppColors.accentWarning)
+                } else {
+                    labStatusPill("WAITING", color: AppColors.textTertiary)
+                }
+            }
+
+            if let response = fundUniverseLoopModel.response, let loop = response.data {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                    fundLabMetric("Status", loop.displayStatus)
+                    fundLabMetric("Miner", loop.minerStatus ?? "—")
+                    fundLabMetric("Queue", loop.queueItems.map(String.init) ?? "—")
+                    fundLabMetric("Reviews", loop.completedReviews.map(String.init) ?? "—")
+                    fundLabMetric("Calibrate", loop.calibrationPendingRows.map(String.init) ?? "—")
+                    fundLabMetric("Route", loop.routeImplementation ?? "—")
+                }
+
+                if let urgentSymbols = loop.urgentSymbols, !urgentSymbols.isEmpty {
+                    labTokenRow(title: "Urgent queue", values: urgentSymbols)
+                }
+
+                let blockers = loop.displayBlockers
+                if !blockers.isEmpty {
+                    labCompactTextList(title: "Blockers", values: blockers)
+                }
+
+                if let nextActions = loop.nextActions, !nextActions.isEmpty {
+                    labCompactTextList(title: "Next actions", values: nextActions)
+                }
+
+                Text("Route: \(response.route) · \(response.freshnessLabel) · \(response.readPolicy)")
+                    .font(.system(size: 10))
+                    .foregroundColor(AppColors.textTertiary)
+                    .lineLimit(2)
+            } else {
+                Text(fundUniverseLoopModel.response?.degradedReason ?? fundUniverseLoopModel.errorMessage ?? "Waiting for ORCA Universe Loop route.")
+                    .font(.system(size: 11))
+                    .foregroundColor(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .background(AppColors.backgroundTertiary.opacity(0.35))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var fundProductStrip: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Text("FUND RESEARCH PRODUCTS")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(AppColors.textTertiary)
+                    .tracking(0.5)
+                Spacer()
+                if fundProductsModel.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.65)
+                }
+            }
+
+            if let error = fundProductsModel.error {
+                Text(error)
+                    .font(.system(size: 10))
+                    .foregroundColor(AppColors.textTertiary)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(fundProductsModel.products) { product in
+                        fundProductCard(product)
+                    }
+                }
+            }
+        }
+    }
+
+    private func fundProductCard(_ product: LabFundProduct) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: product.icon)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(product.isAvailable ? AppColors.accentSuccess : AppColors.accentWarning)
+                    .frame(width: 28, height: 28)
+                    .background((product.isAvailable ? AppColors.accentSuccess : AppColors.accentWarning).opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(product.title)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(AppColors.textPrimary)
+                        .lineLimit(2)
+                    Text(product.section.labDisplayLabel)
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .foregroundColor(AppColors.textTertiary)
+                        .lineLimit(1)
+                }
+            }
+
+            labStatusPill(product.isAvailable ? "AVAILABLE" : "DEGRADED", color: product.isAvailable ? AppColors.accentSuccess : AppColors.accentWarning)
+
+            Text(product.headline)
+                .font(.system(size: 10))
+                .foregroundColor(AppColors.textSecondary)
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+
+            FlowLayout(horizontalSpacing: 5, verticalSpacing: 5) {
+                liveFishChip("keys \(product.dataKeyCount)", color: AppColors.textTertiary)
+                liveFishChip(product.sourceFresh ? "fresh" : "stale", color: product.sourceFresh ? AppColors.accentSuccess : AppColors.accentWarning)
+                liveFishChip(product.sourceAgeLabel, color: AppColors.textTertiary)
+            }
+        }
+        .frame(width: 174, alignment: .topLeading)
+        .padding(10)
+        .background(AppColors.backgroundTertiary.opacity(0.4))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func fundLabMetric(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label.uppercased())
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(AppColors.textTertiary)
+            Text(value)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(AppColors.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(8)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+    }
+
+    private func labStatusPill(_ text: String, color: Color) -> some View {
+        Text(text.uppercased())
+            .font(.system(size: 9, weight: .bold, design: .monospaced))
+            .foregroundColor(color)
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(color.opacity(0.12))
+            .clipShape(Capsule())
+    }
+
+    private func labCompactTextList(title: String, values: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title.uppercased())
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(AppColors.textTertiary)
+            ForEach(values.prefix(4), id: \.self) { value in
+                Text("• \(value)")
+                    .font(.system(size: 11))
+                    .foregroundColor(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func labTokenRow(title: String, values: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title.uppercased())
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(AppColors.textTertiary)
+            FlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                ForEach(values, id: \.self) { value in
+                    Text(value)
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(AppColors.accentWarning)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .background(AppColors.accentWarning.opacity(0.12))
+                        .clipShape(Capsule())
+                }
+            }
+        }
+    }
+
+    private func labNumber(_ value: Double?) -> String {
+        guard let value else { return "—" }
+        return value.formatted(.number.precision(.fractionLength(3)))
+    }
+
+    private func labBoolLabel(_ value: Bool?) -> String {
+        guard let value else { return "—" }
+        return value ? "Yes" : "No"
+    }
+
+    private func labReq008Label(_ landing: FundLanding) -> String {
+        let concentration = landing.req008OiConcentrationEth.map { $0.formatted(.number.precision(.fractionLength(2))) } ?? "—"
+        let threshold = landing.req008ThresholdPercent.map { $0.formatted(.number.precision(.fractionLength(1))) } ?? "—"
+        let breached = landing.req008Breached == true ? "breach" : "ok"
+        return "\(concentration)/\(threshold)% · \(breached)"
+    }
+
+    // MARK: - LIVE EXPERIMENTS section
+
+    private var liveExperimentsSection: some View {
+        let total = catalogModel.projectSections.isEmpty
+            ? catalogModel.currentlySpinning.count + catalogModel.currentlyBuilding.count
+            : catalogModel.projectSections.reduce(0) { $0 + $1.projects.count }
+        return sectionCard {
+            sectionHeader(
+                title: "LIVE EXPERIMENTS",
+                count: total,
+                expanded: liveExperimentsExpanded
+            )
+            .onTapGesture {
+                withAnimation(.easeInOut(duration: 0.15)) { liveExperimentsExpanded.toggle() }
+            }
+        } body: {
+            if liveExperimentsExpanded {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 6) {
+                        sourcePill(catalogModel.sourceLabel)
+                        if catalogModel.isLoading {
+                            ProgressView()
+                                .scaleEffect(0.65)
+                        }
+                        if let error = catalogModel.error {
+                            Text(error)
+                                .font(.system(size: 10))
+                                .foregroundColor(AppColors.textTertiary)
+                                .lineLimit(2)
+                        }
+                    }
+
+                    if catalogModel.projectSections.isEmpty {
+                        experimentSpinningRows(catalogModel.currentlySpinning)
+                        experimentBuildingRows(catalogModel.currentlyBuilding)
+                    } else {
+                        ForEach(catalogModel.projectSections) { section in
+                            experimentProjectSection(section)
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+            }
+        }
+    }
+
+    private func sourcePill(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 10, weight: .bold, design: .monospaced))
+            .foregroundColor(text == "ORCA" ? AppColors.accentSuccess : AppColors.textTertiary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(AppColors.backgroundTertiary.opacity(0.75))
+            .clipShape(Capsule())
+    }
+
+    private func experimentSpinningRows(_ items: [LabSpinningItem]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("SPINNING NOW")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(AppColors.textTertiary)
+                .tracking(0.5)
+            ForEach(items) { item in
+                experimentRow(title: item.title, stage: item.stage, owner: item.owner, layer: nil)
+            }
+        }
+    }
+
+    private func experimentBuildingRows(_ items: [LabBuildingItem]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("LIVE / BUILDING")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(AppColors.textTertiary)
+                .tracking(0.5)
+            ForEach(items) { item in
+                experimentRow(title: item.title, stage: item.stage, owner: item.owner, layer: item.layer ?? item.shortId)
+            }
+        }
+    }
+
+    private func experimentProjectSection(_ section: LabProjectSection) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(section.layer.uppercased())
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(AppColors.textTertiary)
+                .tracking(0.5)
+            ForEach(section.projects) { project in
+                experimentRow(title: project.title, stage: project.stage, owner: project.owner, layer: project.shortId)
+            }
+        }
+    }
+
+    private func experimentRow(title: String, stage: String, owner: String, layer: String?) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(AppColors.textPrimary)
+                    .lineLimit(2)
+                if let layer, !layer.isEmpty {
+                    Text(layer)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(AppColors.textTertiary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 6)
+            Text(owner)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundColor(AppColors.textSecondary)
+            Text(stage)
+                .font(.system(size: 10, weight: .semibold))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(AppColors.accentSuccess.opacity(stage.localizedCaseInsensitiveContains("live") ? 0.16 : 0.08))
+                .foregroundColor(stage.localizedCaseInsensitiveContains("live") ? AppColors.accentSuccess : AppColors.accentCaptain)
+                .clipShape(Capsule())
+        }
+        .padding(8)
+        .background(AppColors.backgroundTertiary.opacity(0.4))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
     // MARK: - WORKFLOWS + PROTOCOLS section
@@ -256,9 +944,287 @@ struct LabView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
+    private func liveFishStrip(title: String, fish: [WorkbenchFishStatus]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title.uppercased())
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(AppColors.textTertiary)
+                .tracking(0.5)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(fish) { item in
+                        liveFishCard(item)
+                    }
+                }
+            }
+        }
+    }
+
+    private func liveFishCard(_ item: WorkbenchFishStatus) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                Circle()
+                    .fill(fishStatusColor(item).opacity(0.18))
+                    .overlay(
+                        Image(systemName: "waveform.path.ecg")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(fishStatusColor(item))
+                    )
+                    .frame(width: 34, height: 34)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.fish.labDisplayLabel)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(AppColors.textPrimary)
+                        .lineLimit(1)
+                    Text(item.owner?.uppercased() ?? "ORCA")
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundColor(AppColors.textSecondary)
+                }
+                Spacer(minLength: 4)
+            }
+
+            Text((item.runtimeStatus ?? "unknown").labDisplayLabel)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(fishStatusColor(item))
+                .lineLimit(1)
+
+            if let directive = item.directiveSlug, !directive.isEmpty {
+                Text(directive.labDisplayLabel)
+                    .font(.system(size: 10))
+                    .foregroundColor(AppColors.textSecondary)
+                    .lineLimit(2)
+            }
+
+            FlowLayout(horizontalSpacing: 5, verticalSpacing: 5) {
+                liveFishChip("findings \(item.findings?.count ?? item.indexedFindings ?? 0)", color: AppColors.accentSuccess)
+                liveFishChip("queue \(item.queue?.pendingCount ?? 0)", color: (item.queue?.pendingCount ?? 0) > 0 ? AppColors.accentWarning : AppColors.textTertiary)
+                if item.autoresearch?.configured == true {
+                    liveFishChip("autoresearch", color: AppColors.accentElectric)
+                }
+            }
+
+            if let reason = item.statusReason, !reason.isEmpty {
+                Text(reason)
+                    .font(.system(size: 10))
+                    .foregroundColor(AppColors.textTertiary)
+                    .lineLimit(2)
+            }
+        }
+        .frame(width: 168, alignment: .topLeading)
+        .padding(10)
+        .background(AppColors.backgroundTertiary.opacity(0.4))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func liveFishChip(_ text: String, color: Color) -> some View {
+        Text(text.uppercased())
+            .font(.system(size: 9, weight: .bold, design: .monospaced))
+            .foregroundColor(color)
+            .lineLimit(1)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(AppColors.backgroundSecondary)
+            .clipShape(Capsule())
+    }
+
+    private func fishStatusColor(_ item: WorkbenchFishStatus) -> Color {
+        let status = (item.runtimeStatus ?? "").lowercased()
+        if status.contains("blocked") { return AppColors.accentWarning }
+        if status.contains("producing") || status.contains("ready") { return AppColors.accentSuccess }
+        if status.contains("idle") { return AppColors.textTertiary }
+        return AppColors.accentElectric
+    }
+
+}
+
+private struct StarfishFeedStageSheet: View {
+    @Binding var title: String
+    @Binding var summary: String
+    @Binding var lane: String
+    @Binding var priority: String
+
+    let isStaging: Bool
+    let onStage: () async -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    private var canStage: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isStaging
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 6) {
+                            stageSheetPill("Starfish", color: AppColors.accentElectric)
+                            stageSheetPill("Maui", color: AppColors.accentSuccess)
+                            stageSheetPill("Planner only", color: AppColors.textTertiary)
+                        }
+
+                        TextField("Directive title", text: $title, axis: .vertical)
+                            .font(.system(size: 15, weight: .semibold))
+                            .lineLimit(1...3)
+                            .textInputAutocapitalization(.sentences)
+                            .padding(10)
+                            .background(AppColors.backgroundTertiary.opacity(0.55))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                        TextField("Directive summary", text: $summary, axis: .vertical)
+                            .font(.system(size: 13))
+                            .lineLimit(3...7)
+                            .textInputAutocapitalization(.sentences)
+                            .padding(10)
+                            .background(AppColors.backgroundTertiary.opacity(0.55))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("LANE")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundColor(AppColors.textTertiary)
+                        Picker("Lane", selection: $lane) {
+                            Text("Now").tag("now")
+                            Text("Next").tag("next")
+                            Text("Waiting").tag("waiting")
+                        }
+                        .pickerStyle(.segmented)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("PRIORITY")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundColor(AppColors.textTertiary)
+                        Picker("Priority", selection: $priority) {
+                            Text("Low").tag("low")
+                            Text("Medium").tag("medium")
+                            Text("High").tag("high")
+                        }
+                        .pickerStyle(.segmented)
+                    }
+
+                    Button {
+                        Task { await onStage() }
+                    } label: {
+                        HStack(spacing: 8) {
+                            if isStaging {
+                                ProgressView()
+                                    .scaleEffect(0.75)
+                            } else {
+                                Image(systemName: "tray.and.arrow.down.fill")
+                            }
+                            Text(isStaging ? "Staging" : "Stage to Planner")
+                                .font(.system(size: 14, weight: .bold))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 11)
+                        .background(canStage ? AppColors.accentElectric.opacity(0.18) : AppColors.backgroundTertiary.opacity(0.5))
+                        .foregroundColor(canStage ? AppColors.accentElectric : AppColors.textTertiary)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canStage)
+                }
+                .padding(18)
+            }
+            .background(AppColors.backgroundPrimary.ignoresSafeArea())
+            .navigationTitle("Starfish Feed")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Close") { dismiss() }
+                        .foregroundColor(AppColors.accentElectric)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private func stageSheetPill(_ text: String, color: Color) -> some View {
+        Text(text.uppercased())
+            .font(.system(size: 10, weight: .bold, design: .monospaced))
+            .foregroundColor(color)
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(AppColors.backgroundTertiary.opacity(0.75))
+            .clipShape(Capsule())
+    }
 }
 
 // MARK: - ORCA-backed Lab catalog
+
+private extension String {
+    var labDisplayLabel: String {
+        replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .capitalized
+    }
+
+    var labNilIfBlank: String? {
+        let value = trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
+}
+
+@MainActor
+@Observable
+private final class LabResearchFlywheelModel {
+    private(set) var flywheel: WorkbenchResearchFlywheel?
+    private(set) var isLoading = false
+    private(set) var isStaging = false
+    private(set) var error: String?
+    private(set) var stageError: String?
+    private(set) var stageResponse: WorkbenchFishFeedStageResponse?
+    private(set) var sourceLabel = "WORKBENCH"
+
+    func load(force: Bool = false) async {
+        if isLoading { return }
+        if !force && flywheel != nil { return }
+
+        isLoading = true
+        error = nil
+        defer { isLoading = false }
+
+        do {
+            flywheel = try await WorkbenchRepository().loadResearchFlywheel()
+            sourceLabel = "WORKBENCH"
+        } catch {
+            flywheel = nil
+            sourceLabel = "ORCA ERROR"
+            self.error = "Research flywheel unavailable."
+        }
+    }
+
+    func stageStarfishFeed(title: String, summary: String, lane: String, priority: String) async -> Bool {
+        guard !isStaging else { return false }
+        guard let cleanTitle = title.labNilIfBlank else {
+            stageError = "Directive title required."
+            return false
+        }
+
+        isStaging = true
+        stageError = nil
+        defer { isStaging = false }
+
+        do {
+            let request = WorkbenchFishFeedStageRequest(
+                directiveTitle: cleanTitle,
+                directiveSummary: summary.labNilIfBlank,
+                lane: lane,
+                priority: priority,
+                traceId: "pod-workbench-\(UUID().uuidString)"
+            )
+            stageResponse = try await WorkbenchRepository().stageFishFeed(request)
+            await load(force: true)
+            return true
+        } catch {
+            stageError = "Starfish stage blocked or unavailable."
+            return false
+        }
+    }
+}
 
 @MainActor
 @Observable
@@ -640,6 +1606,180 @@ private final class LabWorkflowCatalogModel {
 
 }
 
+private struct LabFundProductSpec: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let path: String
+    let icon: String
+
+    static let all: [LabFundProductSpec] = [
+        LabFundProductSpec(id: "data", title: "Data Intelligence", path: "/api/v1/fund/os/data", icon: "externaldrive.connected.to.line.below"),
+        LabFundProductSpec(id: "universe", title: "Universe", path: "/api/v1/fund/os/universe", icon: "scope"),
+        LabFundProductSpec(id: "radar", title: "Prediction Radar", path: "/api/v1/fund/os/radar", icon: "dot.radiowaves.left.and.right"),
+        LabFundProductSpec(id: "predictions-m3", title: "Predictions M3", path: "/api/v1/fund/os/predictions-m3", icon: "chart.line.uptrend.xyaxis"),
+        LabFundProductSpec(id: "evidence", title: "Evidence Pointers", path: "/api/v1/fund/os/evidence", icon: "checkmark.seal")
+    ]
+}
+
+private struct LabFundProductResponse: Decodable {
+    let status: String
+    let route: String
+    let section: String
+    let sourceFresh: Bool
+    let sourceAgeSeconds: Int?
+    let generatedAt: String?
+    let degradedReason: String?
+    let data: AgentRunJSONValue?
+
+    enum CodingKeys: String, CodingKey {
+        case status, route, section, data
+        case sourceFresh = "source_fresh"
+        case sourceAgeSeconds = "source_age_seconds"
+        case generatedAt = "generated_at"
+        case degradedReason = "degraded_reason"
+    }
+
+    var isAvailable: Bool {
+        status == "available"
+    }
+}
+
+private struct LabFundProduct: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let path: String
+    let icon: String
+    let status: String
+    let route: String
+    let section: String
+    let sourceFresh: Bool
+    let sourceAgeSeconds: Int?
+    let generatedAt: String?
+    let degradedReason: String?
+    let data: AgentRunJSONValue?
+
+    var isAvailable: Bool {
+        status == "available"
+    }
+
+    var dataKeyCount: Int {
+        switch data {
+        case .object(let object): return object.count
+        case .array(let array): return array.count
+        case .string, .int, .double, .bool, .null, .none: return 0
+        }
+    }
+
+    var headline: String {
+        if let degradedReason, !degradedReason.isEmpty {
+            return degradedReason
+        }
+        if case .object(let object) = data {
+            let candidates = [
+                object["status"]?.labStringValue,
+                object["readiness"]?.labStringValue,
+                object["decision"]?.labStringValue,
+                object["purpose"]?.labStringValue,
+                object["blocked_use"]?.labStringValue
+            ]
+            if let first = candidates.compactMap({ $0?.labNilIfBlank }).first {
+                return first
+            }
+        }
+        if let generatedAt {
+            return "Protected research product generated \(generatedAt)."
+        }
+        return "Protected research product available through ORCA."
+    }
+
+    var sourceAgeLabel: String {
+        guard let sourceAgeSeconds else { return "unknown age" }
+        if sourceAgeSeconds < 60 { return "\(sourceAgeSeconds)s" }
+        if sourceAgeSeconds < 3_600 { return "\(sourceAgeSeconds / 60)m" }
+        if sourceAgeSeconds < 86_400 { return "\(sourceAgeSeconds / 3_600)h" }
+        return "\(sourceAgeSeconds / 86_400)d"
+    }
+
+    init(spec: LabFundProductSpec, response: LabFundProductResponse) {
+        id = spec.id
+        title = spec.title
+        path = spec.path
+        icon = spec.icon
+        status = response.status
+        route = response.route
+        section = response.section
+        sourceFresh = response.sourceFresh
+        sourceAgeSeconds = response.sourceAgeSeconds
+        generatedAt = response.generatedAt
+        degradedReason = response.degradedReason
+        data = response.data
+    }
+
+    init(spec: LabFundProductSpec, error: Error) {
+        id = spec.id
+        title = spec.title
+        path = spec.path
+        icon = spec.icon
+        status = "degraded"
+        route = spec.path
+        section = spec.id
+        sourceFresh = false
+        sourceAgeSeconds = nil
+        generatedAt = nil
+        degradedReason = "Unavailable from ORCA."
+        data = nil
+    }
+}
+
+@MainActor
+@Observable
+private final class LabFundProductsModel {
+    private(set) var products: [LabFundProduct] = []
+    private(set) var isLoading = false
+    private(set) var error: String?
+
+    func load(force: Bool = false) async {
+        if isLoading { return }
+        if !force && !products.isEmpty { return }
+
+        isLoading = true
+        error = nil
+        defer { isLoading = false }
+
+        var fetched: [LabFundProduct] = []
+        for spec in LabFundProductSpec.all {
+            do {
+                let response: LabFundProductResponse = try await APIClient.shared.get(path: spec.path)
+                fetched.append(LabFundProduct(spec: spec, response: response))
+            } catch {
+                fetched.append(LabFundProduct(spec: spec, error: error))
+            }
+        }
+
+        products = fetched
+        if fetched.allSatisfy({ !$0.isAvailable }) {
+            error = "Protected Fund research products are unavailable from ORCA."
+        }
+    }
+}
+
+private extension AgentRunJSONValue {
+    var labStringValue: String? {
+        switch self {
+        case .string(let value):
+            return value
+        case .int(let value):
+            return String(value)
+        case .double(let value):
+            return value.formatted(.number.precision(.fractionLength(2)))
+        case .bool(let value):
+            return value ? "true" : "false"
+        case .object, .array, .null:
+            return nil
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class ArchitectureDiagramModel {
@@ -778,4 +1918,3 @@ struct ArchitectureDiagramSheet: View {
         }
     }
 }
-

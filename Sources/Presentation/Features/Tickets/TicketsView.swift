@@ -74,6 +74,36 @@ private enum TicketTimelineFilter: String, CaseIterable, Identifiable {
     }
 }
 
+private enum TicketDetailFocus: String, CaseIterable, Identifiable {
+    case overview
+    case activity
+    case evidence
+    case edit
+    case system
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .overview: return "Now"
+        case .activity: return "Activity"
+        case .evidence: return "Evidence"
+        case .edit: return "Edit"
+        case .system: return "System"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .overview: return "scope"
+        case .activity: return "list.bullet.rectangle"
+        case .evidence: return "checkmark.seal"
+        case .edit: return "square.and.pencil"
+        case .system: return "server.rack"
+        }
+    }
+}
+
 // MARK: - Tickets View
 
 struct TicketsView: View {
@@ -85,6 +115,7 @@ struct TicketsView: View {
     @State private var showingBacklogReprocessReview = false
     @State private var showingAgentRunReviewQueue = false
     @State private var agentRunReviewLaneFilter: String? = nil
+    @State private var showGroomingDetails = false
 
     private var selectedTicket: Binding<Ticket?> {
         Binding(
@@ -316,11 +347,33 @@ struct TicketsView: View {
     private var groomingSummaryBar: some View {
         if let summary = viewModel.groomingSummary {
             let approvalAttentionCount = viewModel.count(for: .waitingApproval)
+            let dispatchableCount = viewModel.count(for: .dispatchable)
+            let runningCount = viewModel.count(for: .running)
+            let opsDebtCount = viewModel.count(for: .operationalDebt)
+            let needsScopeCount = viewModel.count(for: .needsScope)
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 10) {
-                summaryPill(label: "Review", value: summary.needsHumanCount, color: Color.orange)
-                    summaryPill(label: "Keep", value: summary.keepCount, color: AppColors.accentSuccess)
-                    summaryPill(label: "Test", value: summary.staleTestCount, color: AppColors.textSecondary)
+                    Label("Ticket Health", systemImage: "waveform.path.ecg")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(AppColors.textSecondary)
+
+                    Spacer(minLength: 0)
+
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            showGroomingDetails.toggle()
+                        }
+                    } label: {
+                        Label(showGroomingDetails ? "Less" : "More", systemImage: showGroomingDetails ? "chevron.up.circle" : "ellipsis.circle")
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(AppColors.accentElectric)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(showGroomingDetails ? "Hide ticket health details" : "Show ticket health details")
+                }
+
+                FlowLayout(horizontalSpacing: 8, verticalSpacing: 7) {
+                    summaryPill(label: "Review", value: summary.needsHumanCount, color: Color.orange)
                     if approvalAttentionCount > 0 {
                         Button {
                             withAnimation(.easeInOut(duration: 0.15)) {
@@ -333,150 +386,143 @@ struct TicketsView: View {
                         .buttonStyle(.plain)
                         .accessibilityLabel("Show tickets waiting for human approval review")
                     }
-                    if let flow = viewModel.ticketFlowReview?.counts {
-                        ForEach(viewModel.flowStateSummaryItems()) { item in
-                            summaryPill(label: item.label, value: item.value, color: item.color)
-                        }
-                        if flow.dispatchable > 0 {
-                            summaryPill(label: "Flow Ready", value: flow.dispatchable, color: AppColors.accentAgent)
-                        }
-                        if flow.noiseReview > 0 {
-                            summaryPill(label: "Noise", value: flow.noiseReview, color: AppColors.accentDanger)
-                        }
-                        if let coral = flow.bySupportLane["coral-support-runtime"], coral > 0 {
-                            summaryPill(label: "Coral", value: coral, color: AppColors.accentElectric)
-                        }
-                        if let reef = flow.bySupportLane["reef-support-runtime"], reef > 0 {
-                            summaryPill(label: "Reef", value: reef, color: AppColors.accentAgent)
-                        }
-                    } else if viewModel.ticketFlowErrorMessage != nil {
-                        summaryPill(label: "Flow Offline", value: 0, color: AppColors.accentDanger)
+                    if dispatchableCount > 0 {
+                        summaryPill(label: "Dispatchable", value: dispatchableCount, color: AppColors.accentAgent)
                     }
-                    if let integrity = viewModel.workControlIntegritySummary, integrity.issues > 0 {
-                        summaryPill(label: "Source Link", value: integrity.sourceLinkGapCount, color: AppColors.accentDanger)
-                        summaryPill(label: "Triage Link", value: integrity.triageLinkGapCount, color: Color.orange)
-                        if integrity.otherGapCount > 0 {
-                            summaryPill(label: "Other Gaps", value: integrity.otherGapCount, color: AppColors.textSecondary)
-                        }
+                    if runningCount > 0 {
+                        summaryPill(label: "Running", value: runningCount, color: AppColors.accentElectric)
                     }
-                    if let backfill = viewModel.workControlBackfillSummary, backfill.needsBackfill > 0 {
-                        summaryPill(label: "Fields", value: backfill.needsBackfill, color: AppColors.accentAgent)
+                    if opsDebtCount > 0 {
+                        summaryPill(label: "Ops Debt", value: opsDebtCount, color: AppColors.accentWarning)
                     }
-                    if summary.duplicateCount > 0 {
-                        summaryPill(label: "Dupes", value: summary.duplicateCount, color: AppColors.accentDanger)
-                    }
-                    if summary.supersededCount > 0 {
-                        summaryPill(label: "Old", value: summary.supersededCount, color: AppColors.textSecondary)
+                    if needsScopeCount > 0 {
+                        summaryPill(label: "Needs Scope", value: needsScopeCount, color: Color.orange)
                     }
                     if let reprocess = viewModel.backlogReprocessDryRun {
                         summaryPill(label: "Reprocess", value: reprocess.total, color: AppColors.accentElectric)
                     }
-                    if !viewModel.agentRunReviewQueue.isEmpty {
-                        summaryPill(label: "Run Review", value: viewModel.agentRunReviewQueue.count, color: AppColors.accentWarning)
-                    }
-                    Spacer(minLength: 0)
-                    Button {
-                        agentRunReviewLaneFilter = nil
-                        showingAgentRunReviewQueue = true
-                        Task { await viewModel.loadAgentRunReviewQueue() }
-                    } label: {
-                        if viewModel.isLoadingAgentRunReviewQueue {
-                            ProgressView()
-                                .scaleEffect(0.7)
-                        } else {
-                            Image(systemName: "checkmark.seal")
-                                .font(.caption.weight(.semibold))
+                }
+
+                if showGroomingDetails {
+                    FlowLayout(horizontalSpacing: 8, verticalSpacing: 7) {
+                        summaryPill(label: "Keep", value: summary.keepCount, color: AppColors.accentSuccess)
+                        summaryPill(label: "Test", value: summary.staleTestCount, color: AppColors.textSecondary)
+                        if let flow = viewModel.ticketFlowReview?.counts {
+                            ForEach(viewModel.flowStateSummaryItems()) { item in
+                                summaryPill(label: item.label, value: item.value, color: item.color)
+                            }
+                            if flow.dispatchable > 0 {
+                                summaryPill(label: "Flow Ready", value: flow.dispatchable, color: AppColors.accentAgent)
+                            }
+                            if flow.noiseReview > 0 {
+                                summaryPill(label: "Noise", value: flow.noiseReview, color: AppColors.accentDanger)
+                            }
+                            if let coral = flow.bySupportLane["coral-support-runtime"], coral > 0 {
+                                summaryPill(label: "Coral", value: coral, color: AppColors.accentElectric)
+                            }
+                            if let reef = flow.bySupportLane["reef-support-runtime"], reef > 0 {
+                                summaryPill(label: "Reef", value: reef, color: AppColors.accentAgent)
+                            }
+                        } else if viewModel.ticketFlowErrorMessage != nil {
+                            summaryPill(label: "Flow Offline", value: 0, color: AppColors.accentDanger)
+                        }
+                        if let integrity = viewModel.workControlIntegritySummary, integrity.issues > 0 {
+                            summaryPill(label: "Source Link", value: integrity.sourceLinkGapCount, color: AppColors.accentDanger)
+                            summaryPill(label: "Triage Link", value: integrity.triageLinkGapCount, color: Color.orange)
+                            if integrity.otherGapCount > 0 {
+                                summaryPill(label: "Other Gaps", value: integrity.otherGapCount, color: AppColors.textSecondary)
+                            }
+                        }
+                        if let backfill = viewModel.workControlBackfillSummary, backfill.needsBackfill > 0 {
+                            summaryPill(label: "Fields", value: backfill.needsBackfill, color: AppColors.accentAgent)
+                        }
+                        if summary.duplicateCount > 0 {
+                            summaryPill(label: "Dupes", value: summary.duplicateCount, color: AppColors.accentDanger)
+                        }
+                        if summary.supersededCount > 0 {
+                            summaryPill(label: "Old", value: summary.supersededCount, color: AppColors.textSecondary)
+                        }
+                        if !viewModel.agentRunReviewQueue.isEmpty {
+                            summaryPill(label: "Run Review", value: viewModel.agentRunReviewQueue.count, color: AppColors.accentWarning)
                         }
                     }
-                    .buttonStyle(.plain)
-                    .foregroundColor(AppColors.accentWarning)
-                    .disabled(viewModel.isLoadingAgentRunReviewQueue)
-                    .accessibilityLabel("Review agent runs needing owner review")
-                    if viewModel.workControlIntegritySummary?.issues ?? 0 > 0 {
+
+                    HStack(spacing: 14) {
                         Button {
-                            showingIntegrityReview = true
+                            agentRunReviewLaneFilter = nil
+                            showingAgentRunReviewQueue = true
+                            Task { await viewModel.loadAgentRunReviewQueue() }
                         } label: {
-                            Image(systemName: "link.badge.plus")
-                                .font(.caption.weight(.semibold))
+                            if viewModel.isLoadingAgentRunReviewQueue {
+                                ProgressView()
+                                    .scaleEffect(0.7)
+                            } else {
+                                Image(systemName: "checkmark.seal")
+                                    .font(.caption.weight(.semibold))
+                            }
                         }
                         .buttonStyle(.plain)
-                        .foregroundColor(AppColors.accentDanger)
-                        .accessibilityLabel("Review source and triage link gaps")
-                    }
-                    if viewModel.backlogReprocessDryRun != nil {
+                        .foregroundColor(AppColors.accentWarning)
+                        .disabled(viewModel.isLoadingAgentRunReviewQueue)
+                        .accessibilityLabel("Review agent runs needing owner review")
+
+                        if viewModel.workControlIntegritySummary?.issues ?? 0 > 0 {
+                            Button {
+                                showingIntegrityReview = true
+                            } label: {
+                                Image(systemName: "link.badge.plus")
+                                    .font(.caption.weight(.semibold))
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundColor(AppColors.accentDanger)
+                            .accessibilityLabel("Review source and triage link gaps")
+                        }
+
+                        if viewModel.backlogReprocessDryRun != nil {
+                            Button {
+                                showingBacklogReprocessReview = true
+                            } label: {
+                                Image(systemName: "arrow.triangle.2.circlepath.doc.on.clipboard")
+                                    .font(.caption.weight(.semibold))
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundColor(AppColors.accentElectric)
+                            .accessibilityLabel("Review backlog reprocess dry-run")
+                        }
+
+                        if viewModel.workControlBackfillSummary?.needsBackfill ?? 0 > 0 {
+                            Button {
+                                showingBackfillReview = true
+                            } label: {
+                                Image(systemName: "list.bullet.clipboard")
+                                    .font(.caption.weight(.semibold))
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundColor(AppColors.accentAgent)
+                            .accessibilityLabel("Review work-control backfill candidates")
+                        }
+
                         Button {
-                            showingBacklogReprocessReview = true
+                            Task { await viewModel.postBacklogGroomingComments() }
                         } label: {
-                            Image(systemName: "arrow.triangle.2.circlepath.doc.on.clipboard")
-                                .font(.caption.weight(.semibold))
+                            if viewModel.isPostingGroomingComments {
+                                ProgressView()
+                                    .scaleEffect(0.7)
+                            } else {
+                                Image(systemName: "text.badge.checkmark")
+                                    .font(.caption.weight(.semibold))
+                            }
                         }
                         .buttonStyle(.plain)
                         .foregroundColor(AppColors.accentElectric)
-                        .accessibilityLabel("Review backlog reprocess dry-run")
+                        .disabled(viewModel.isPostingGroomingComments)
+                        .accessibilityLabel("Write backlog grooming review comments")
+
+                        Spacer(minLength: 0)
                     }
-                    if viewModel.workControlBackfillSummary?.needsBackfill ?? 0 > 0 {
-                        Button {
-                            showingBackfillReview = true
-                        } label: {
-                            Image(systemName: "list.bullet.clipboard")
-                                .font(.caption.weight(.semibold))
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundColor(AppColors.accentAgent)
-                        .accessibilityLabel("Review work-control backfill candidates")
-                    }
-                    Button {
-                        Task { await viewModel.postBacklogGroomingComments() }
-                    } label: {
-                        if viewModel.isPostingGroomingComments {
-                            ProgressView()
-                                .scaleEffect(0.7)
-                        } else {
-                            Image(systemName: "text.badge.checkmark")
-                                .font(.caption.weight(.semibold))
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundColor(AppColors.accentElectric)
-                    .disabled(viewModel.isPostingGroomingComments)
-                    .accessibilityLabel("Write backlog grooming review comments")
                 }
-                    if let message = viewModel.groomingActionMessage {
-                        Text(message)
-                            .font(.caption2)
-                            .foregroundColor(AppColors.textSecondary)
-                            .lineLimit(2)
-                    } else if let reprocess = viewModel.backlogReprocessDryRun {
-                        let actions = reprocess.reviewActionCounts
-                            .sorted { $0.value > $1.value }
-                            .prefix(3)
-                            .map { "\(displayLabel($0.key)): \($0.value)" }
-                            .joined(separator: ", ")
-                        Text("Reprocess dry-run is comments-first and non-mutating\(actions.isEmpty ? "." : ": \(actions).")")
-                            .font(.caption2)
-                            .foregroundColor(AppColors.textSecondary)
-                            .lineLimit(2)
-                    } else if let integrity = viewModel.workControlIntegritySummary, integrity.issues > 0 {
-                        let topIssues = integrity.countsByField
-                            .sorted { $0.value > $1.value }
-                            .prefix(3)
-                            .map { "\(displayLabel($0.key)): \($0.value)" }
-                            .joined(separator: ", ")
-                        Text("Source links missing on \(integrity.sourceLinkGapCount) tickets; triage links missing on \(integrity.triageLinkGapCount)\(topIssues.isEmpty ? "." : ". Top gaps: \(topIssues).")")
-                            .font(.caption2)
-                            .foregroundColor(AppColors.textSecondary)
-                            .lineLimit(2)
-                    } else if let backfill = viewModel.workControlBackfillSummary, backfill.needsBackfill > 0 {
-                        let topMissing = backfill.countsByMissingField
-                            .sorted { $0.value > $1.value }
-                        .prefix(3)
-                        .map { "\($0.key): \($0.value)" }
-                        .joined(separator: ", ")
-                    Text("Work-control backfill needed on \(backfill.needsBackfill) tickets\(topMissing.isEmpty ? "" : ": \(topMissing)").")
-                        .font(.caption2)
-                        .foregroundColor(AppColors.textTertiary)
-                        .lineLimit(2)
-                }
+
+                groomingSummaryText(summary: summary)
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 10)
@@ -499,6 +545,53 @@ struct TicketsView: View {
         }
     }
 
+    @ViewBuilder
+    private func groomingSummaryText(summary: BacklogGroomingSummary) -> some View {
+        if let message = viewModel.groomingActionMessage {
+            Text(message)
+                .font(.caption2)
+                .foregroundColor(AppColors.textSecondary)
+                .lineLimit(2)
+        } else if showGroomingDetails, let reprocess = viewModel.backlogReprocessDryRun {
+            let actions = reprocess.reviewActionCounts
+                .sorted { $0.value > $1.value }
+                .prefix(3)
+                .map { "\(displayLabel($0.key)): \($0.value)" }
+                .joined(separator: ", ")
+            Text("Reprocess dry-run is comments-first and non-mutating\(actions.isEmpty ? "." : ": \(actions).")")
+                .font(.caption2)
+                .foregroundColor(AppColors.textSecondary)
+                .lineLimit(2)
+        } else if showGroomingDetails, let integrity = viewModel.workControlIntegritySummary, integrity.issues > 0 {
+            let topIssues = integrity.countsByField
+                .sorted { $0.value > $1.value }
+                .prefix(3)
+                .map { "\(displayLabel($0.key)): \($0.value)" }
+                .joined(separator: ", ")
+            Text("Source links missing on \(integrity.sourceLinkGapCount) tickets; triage links missing on \(integrity.triageLinkGapCount)\(topIssues.isEmpty ? "." : ". Top gaps: \(topIssues).")")
+                .font(.caption2)
+                .foregroundColor(AppColors.textSecondary)
+                .lineLimit(2)
+        } else if showGroomingDetails, let backfill = viewModel.workControlBackfillSummary, backfill.needsBackfill > 0 {
+            let topMissing = backfill.countsByMissingField
+                .sorted { $0.value > $1.value }
+                .prefix(3)
+                .map { "\($0.key): \($0.value)" }
+                .joined(separator: ", ")
+            Text("Work-control backfill needed on \(backfill.needsBackfill) tickets\(topMissing.isEmpty ? "" : ": \(topMissing)").")
+                .font(.caption2)
+                .foregroundColor(AppColors.textTertiary)
+                .lineLimit(2)
+        } else {
+            let approvalAttentionCount = viewModel.count(for: .waitingApproval)
+            let dispatchableCount = viewModel.count(for: .dispatchable)
+            Text("Showing the high-signal work queue: \(summary.needsHumanCount) review, \(approvalAttentionCount) approval, \(dispatchableCount) dispatchable.")
+                .font(.caption2)
+                .foregroundColor(AppColors.textSecondary)
+                .lineLimit(2)
+        }
+    }
+
     private func summaryPill(label: String, value: Int, color: Color) -> some View {
         HStack(spacing: 5) {
             Circle()
@@ -507,14 +600,17 @@ struct TicketsView: View {
             Text("\(value)")
                 .font(.caption.bold())
                 .foregroundColor(AppColors.textPrimary)
+                .lineLimit(1)
             Text(label)
                 .font(.caption)
                 .foregroundColor(AppColors.textSecondary)
+                .lineLimit(1)
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 5)
         .background(AppColors.backgroundTertiary)
         .clipShape(Capsule())
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private func displayLabel(_ rawValue: String) -> String {
@@ -2333,6 +2429,7 @@ struct TicketDetailSheet: View {
     @State private var pendingAction: PendingTicketAction?
     @State private var evidenceLens: TicketEvidenceLens = .timeline
     @State private var timelineFilter: TicketTimelineFilter = .all
+    @State private var detailFocus: TicketDetailFocus = .overview
     @State private var sharedNoteText = ""
     @State private var isPostingSharedNote = false
     @State private var sharedNoteStatus: String?
@@ -2367,286 +2464,20 @@ struct TicketDetailSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Title") {
-                    TextField("Ticket title", text: $editedTitle)
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(AppColors.textPrimary)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    ticketDetailHero
+                    ticketDetailStatusStrip
+                    ticketDetailFocusPicker
+                    ticketDetailFocusContent
                 }
-
-                Section("Status & Priority") {
-                    Button {
-                        showingStatusPicker = true
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: editedStatus.icon)
-                                .font(.system(size: 12))
-                            Text(editedStatus.label)
-                                .font(.system(size: 14, weight: .medium))
-                            Spacer()
-                            Image(systemName: "chevron.up.chevron.down")
-                                .font(.system(size: 10))
-                                .foregroundColor(AppColors.textTertiary)
-                        }
-                        .foregroundColor(editedStatus.color)
-                    }
-                    .buttonStyle(.plain)
-
-                    if let flowSignal = viewModel.flowStateBadgeSignal(for: ticket) {
-                        HStack(spacing: 6) {
-                            Text("Flow")
-                                .font(.system(size: 12, weight: .bold, design: .default).dynamic())
-                            Image(systemName: flowSignal.icon)
-                                .font(.caption.weight(.semibold))
-                            Text(flowSignal.label)
-                                .font(.system(size: 12, weight: .semibold, design: .default).dynamic())
-                            Spacer()
-                        }
-                        .foregroundColor(flowSignal.color)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .background(flowSignal.color.opacity(0.12))
-                        .clipShape(Capsule())
-                        .accessibilityLabel("Flow state \(flowSignal.label)")
-                    }
-
-                    Menu {
-                        ForEach(TicketPriority.allCases, id: \.self) { priority in
-                            Button {
-                                editedPriority = priority
-                            } label: {
-                                HStack {
-                                    Image(systemName: priority.icon)
-                                        .foregroundColor(priority.color)
-                                    Text(priority.label)
-                                    if editedPriority == priority {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: editedPriority.icon)
-                                .font(.system(size: 12))
-                                .foregroundColor(editedPriority.color)
-                            Text(editedPriority.label)
-                                .font(.system(size: 14))
-                                .foregroundColor(AppColors.textPrimary)
-                            Spacer()
-                            Image(systemName: "chevron.up.chevron.down")
-                                .font(.system(size: 10))
-                                .foregroundColor(AppColors.textTertiary)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                Section {
-                    workOrderSection
-                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                }
-
-                Section {
-                    evidenceSnapshotSection
-                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                    operationalDebtSection
-                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                    evidenceLinksSection
-                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                    workspaceArtifactsSection
-                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                    currentRunSection
-                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                    executionReadinessSection
-                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                    quickActionsSection
-                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                    workSpineSection
-                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                }
-
-                Section("Shared Note") {
-                    TextField("Add a note for Maui and everyone on this ticket", text: $sharedNoteText, axis: .vertical)
-                        .font(.system(size: 15))
-                        .foregroundColor(AppColors.textPrimary)
-                        .lineLimit(3...8)
-
-                    Button {
-                        Task { await postSharedNote() }
-                    } label: {
-                        HStack {
-                            Label(isPostingSharedNote ? "Adding Note" : "Add Note", systemImage: "text.bubble.fill")
-                            Spacer()
-                            if isPostingSharedNote {
-                                ProgressView()
-                                    .scaleEffect(0.7)
-                            }
-                        }
-                    }
-                    .disabled(sharedNoteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isPostingSharedNote)
-
-                    if let sharedNoteStatus {
-                        Text(sharedNoteStatus)
-                            .font(.caption)
-                            .foregroundColor(sharedNoteStatus.localizedCaseInsensitiveContains("couldn't") ? AppColors.accentDanger : AppColors.textTertiary)
-                    }
-                }
-
-                Section {
-                    ticketNotesSection
-                } header: {
-                    Label("Notes & Decisions", systemImage: "note.text")
-                }
-
-                if !controlSections.isEmpty {
-                    Section {
-                        controlRecordSection
-                    }
-                }
-
-                Section("Description") {
-                    TextField("Description", text: $editedDescription, axis: .vertical)
-                        .font(.system(size: 15))
-                        .foregroundColor(AppColors.textPrimary)
-                        .lineLimit(4...12)
-
-                    if !editedDescription.isEmpty {
-                        Button("Clear") {
-                            editedDescription = ""
-                        }
-                        .font(.caption)
-                        .foregroundColor(AppColors.accentElectric)
-                    }
-                }
-
-                Section("Work Control") {
-                    TextField("Acceptance criteria, one per line", text: $editedAcceptanceCriteria, axis: .vertical)
-                        .font(.system(size: 15))
-                        .foregroundColor(AppColors.textPrimary)
-                        .lineLimit(3...8)
-
-                    TextField("Desired outcome", text: $editedDesiredOutcome, axis: .vertical)
-                        .font(.system(size: 15))
-                        .foregroundColor(AppColors.textPrimary)
-                        .lineLimit(2...5)
-
-                    TextField("Approval state", text: $editedApprovalState)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-
-                    TextField("Autonomy level", text: $editedAutonomyLevel)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-
-                    TextField("Worker lane", text: $editedWorkerLane)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-
-                    TextField("Tool policy", text: $editedToolPolicy)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                }
-
-                Section("Lifecycle") {
-                    Picker("Agent", selection: $lifecycleAgentId) {
-                        ForEach(lifecycleAgents) { agent in
-                            Text(agent.name.capitalized).tag(agent.id)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .disabled(lifecycleAgents.isEmpty)
-
-                    HStack(spacing: 10) {
-                        lifecycleButton("Claim", icon: "hand.raised.fill", enabled: ticket.status == .open) {
-                            await viewModel.claimTicket(ticketId: ticket.id, agentId: lifecycleAgentId)
-                        }
-
-                        lifecycleButton("Start", icon: "play.circle.fill", enabled: ticket.status == .open || ticket.status == .claimed) {
-                            await viewModel.startTicket(ticketId: ticket.id, agentId: lifecycleAgentId)
-                        }
-
-                        lifecycleButton("Close", icon: "checkmark.circle.fill", enabled: canCloseTicket, dismissOnCompletion: false) {
-                            pendingAction = .close
-                        }
-                    }
-
-                    if let message = closeGateMessage {
-                        Label(message, systemImage: "checkmark.seal")
-                            .font(.caption2)
-                            .foregroundColor(AppColors.accentWarning)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    Text("Lifecycle actions call ORCA directly and post system activity to the ticket thread when the backend has one. Dispatch and cancellation live in Actions above so higher-risk operations stay gated in one place.")
-                        .font(.caption)
-                        .foregroundColor(AppColors.textTertiary)
-                }
-
-                Section {
-                    TextField("Lessons learned", text: $editedLessonsLearned, axis: .vertical)
-                        .font(.system(size: 15))
-                        .foregroundColor(AppColors.textPrimary)
-                        .lineLimit(3...10)
-
-                    if !editedLessonsLearned.isEmpty {
-                        Button("Clear") {
-                            editedLessonsLearned = ""
-                        }
-                        .font(.caption)
-                        .foregroundColor(AppColors.accentElectric)
-                    }
-
-                    Text("Capture insights from this ticket for future reference")
-                        .font(.caption)
-                        .foregroundColor(AppColors.textTertiary)
-                } header: {
-                    Label("Lessons Learned", systemImage: "lightbulb.fill")
-                        .foregroundColor(Color.yellow)
-                }
-
-                if editedStatus == .closed || editedStatus == .cancelled || !editedResolutionNotes.isEmpty || ticket.status == .claimed || ticket.status == .inProgress {
-                    Section("Resolution Notes") {
-                        TextField("Resolution notes", text: $editedResolutionNotes, axis: .vertical)
-                            .font(.system(size: 15))
-                            .foregroundColor(AppColors.textPrimary)
-                            .lineLimit(3...10)
-
-                        if !editedResolutionNotes.isEmpty {
-                            Button("Clear") {
-                                editedResolutionNotes = ""
-                            }
-                            .font(.caption)
-                            .foregroundColor(AppColors.accentElectric)
-                        }
-                    }
-                }
-
-                Section("Metadata") {
-                    metadataRow(label: "ID", value: ticket.id.prefix(8) + "...")
-                    metadataRow(label: "Created", value: ticket.createdAt.formatted(date: .abbreviated, time: .shortened))
-                    metadataRow(label: "Updated", value: ticket.updatedAt.formatted(date: .abbreviated, time: .shortened))
-                    if let agent = ticket.assigneeAgentName {
-                        metadataRow(label: "Assignee", value: agent)
-                    }
-                    if let type = ticket.ticketType {
-                        metadataRow(label: "Type", value: type)
-                    }
-                    if let source = ticket.source, !source.isEmpty {
-                        metadataRow(label: "Source", value: source)
-                    }
-                    if hasSourceProvenance {
-                        sourceProvenanceRows
-                    }
-                    if let chatThreadId = ticket.chatThreadId, !chatThreadId.isEmpty {
-                        metadataRow(label: "Chat Thread", value: chatThreadId.prefix(8) + "...")
-                    }
-                }
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+                .padding(.bottom, 28)
             }
-            .scrollContentBackground(.hidden)
             .scrollIndicators(.visible)
             .background(AppColors.backgroundPrimary)
-            .navigationTitle("Ticket Details")
+            .navigationTitle("Ticket")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -2707,6 +2538,521 @@ struct TicketDetailSheet: View {
         }
         .onChange(of: ticket.status) { _, newStatus in
             editedStatus = newStatus
+        }
+    }
+
+    private var ticketDetailHero: some View {
+        let context = viewModel.actionContext(for: ticket)
+        let summary = viewModel.evidenceSummary(for: ticket)
+        let owner = viewModel.operatingOwnerLabel(for: ticket)
+        let subtitle = [
+            ticket.ticketType?.replacingOccurrences(of: "_", with: " ").capitalized,
+            owner,
+            context.workerLane
+        ]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .prefix(3)
+            .joined(separator: " / ")
+
+        return ticketDetailCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(editedStatus.color.opacity(0.14))
+                        Image(systemName: editedStatus.icon)
+                            .font(.headline.weight(.bold))
+                            .foregroundColor(editedStatus.color)
+                    }
+                    .frame(width: 42, height: 42)
+
+                    VStack(alignment: .leading, spacing: 7) {
+                        TextField("Ticket title", text: $editedTitle, axis: .vertical)
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(AppColors.textPrimary)
+                            .lineLimit(1...3)
+                            .textInputAutocapitalization(.sentences)
+
+                        Text(subtitle.isEmpty ? "ORCA ticket" : subtitle)
+                            .font(.caption)
+                            .foregroundColor(AppColors.textSecondary)
+                            .lineLimit(2)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+
+                FlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                    ticketDetailPill(shortRef(ticket.id), icon: "number", color: AppColors.textTertiary)
+                    ticketDetailPill(editedPriority.label, icon: editedPriority.icon, color: editedPriority.color)
+                    ticketDetailPill(summary.finalVerification, icon: "checkmark.seal", color: summary.finalVerificationColor)
+                    if needsApproval {
+                        ticketDetailPill("Needs approval", icon: "person.crop.circle.badge.exclamationmark", color: Color.orange)
+                    } else if hasClearedApproval {
+                        ticketDetailPill("Approval clear", icon: "checkmark.shield", color: AppColors.accentSuccess)
+                    }
+                    if let flowSignal = viewModel.flowStateBadgeSignal(for: ticket) {
+                        ticketDetailPill(flowSignal.label, icon: flowSignal.icon, color: flowSignal.color)
+                    }
+                    if let chatThreadId = ticket.chatThreadId, !chatThreadId.isEmpty {
+                        ticketDetailPill("Chat \(chatThreadId.prefix(8))", icon: "bubble.left.and.bubble.right", color: AppColors.accentElectric)
+                    }
+                }
+
+                if !workOrderIntent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(workOrderIntent)
+                        .font(.callout)
+                        .foregroundColor(AppColors.textSecondary)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    private var ticketDetailStatusStrip: some View {
+        let summary = viewModel.evidenceSummary(for: ticket)
+        let workerHealth = viewModel.workerHealthSummary(for: ticket)
+        let queueCount = viewModel.workerQueue(for: viewModel.actionContext(for: ticket).workerLane).count
+
+        return LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 132), spacing: 8, alignment: .top)],
+            alignment: .leading,
+            spacing: 8
+        ) {
+            ticketDetailMetric(label: "Status", value: editedStatus.label, icon: editedStatus.icon, color: editedStatus.color)
+            ticketDetailMetric(label: "Priority", value: editedPriority.label, icon: editedPriority.icon, color: editedPriority.color)
+            ticketDetailMetric(label: "Runs", value: summary.latestRunStatus?.label ?? "\(summary.runCount) total", icon: summary.latestRunStatus?.icon ?? "bolt.badge.clock", color: summary.latestRunStatus?.color ?? AppColors.textTertiary)
+            ticketDetailMetric(label: "Worker", value: "\(workerHealth.label) / \(queueCount) queued", icon: workerHealth.error > 0 ? "exclamationmark.triangle.fill" : "waveform.path.ecg", color: workerHealth.error > 0 ? AppColors.accentDanger : (workerHealth.stale > 0 || workerHealth.isUnknown ? AppColors.accentWarning : AppColors.accentSuccess))
+        }
+    }
+
+    private var ticketDetailFocusPicker: some View {
+        Picker("Ticket detail focus", selection: $detailFocus) {
+            ForEach(TicketDetailFocus.allCases) { focus in
+                Label(focus.label, systemImage: focus.icon).tag(focus)
+            }
+        }
+        .pickerStyle(.segmented)
+    }
+
+    @ViewBuilder
+    private var ticketDetailFocusContent: some View {
+        switch detailFocus {
+        case .overview:
+            VStack(alignment: .leading, spacing: 12) {
+                workOrderSection
+                executionReadinessSection
+                ticketDetailCard {
+                    quickActionsSection
+                }
+            }
+        case .activity:
+            VStack(alignment: .leading, spacing: 12) {
+                ticketDetailCard {
+                    sharedNoteComposerSection
+                }
+                ticketDetailCard {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ticketDetailSectionHeader("Notes & Decisions", icon: "note.text")
+                        ticketNotesSection
+                    }
+                }
+                workSpineSection
+            }
+        case .evidence:
+            VStack(alignment: .leading, spacing: 12) {
+                evidenceSnapshotSection
+                operationalDebtSection
+                currentRunSection
+                evidenceLinksSection
+                workspaceArtifactsSection
+            }
+        case .edit:
+            VStack(alignment: .leading, spacing: 12) {
+                ticketDetailCard {
+                    statusPriorityControlsSection
+                }
+                ticketDetailCard {
+                    descriptionEditSection
+                }
+                ticketDetailCard {
+                    workControlEditSection
+                }
+                ticketDetailCard {
+                    lifecycleEditSection
+                }
+                ticketDetailCard {
+                    lessonsLearnedEditSection
+                }
+                if shouldShowResolutionNotes {
+                    ticketDetailCard {
+                        resolutionNotesEditSection
+                    }
+                }
+            }
+        case .system:
+            VStack(alignment: .leading, spacing: 12) {
+                ticketDetailCard {
+                    metadataSection
+                }
+                if !controlSections.isEmpty {
+                    ticketDetailCard {
+                        controlRecordSection
+                    }
+                }
+                runtimeHealthSection
+                ticketDetailCard {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ticketDetailSectionHeader("Dispatch Preview", icon: "doc.text.magnifyingglass")
+                        dispatchPreview
+                    }
+                }
+            }
+        }
+    }
+
+    private func ticketDetailCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(AppColors.backgroundSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(AppColors.border.opacity(0.65), lineWidth: 1)
+            )
+    }
+
+    private func ticketDetailSectionHeader(_ title: String, icon: String) -> some View {
+        Label(title.uppercased(), systemImage: icon)
+            .font(.caption.weight(.semibold))
+            .foregroundColor(AppColors.textTertiary)
+    }
+
+    private func ticketDetailPill(_ text: String, icon: String, color: Color) -> some View {
+        Label(text, systemImage: icon)
+            .font(.caption2.weight(.bold))
+            .foregroundColor(color)
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(color.opacity(0.12))
+            .clipShape(Capsule())
+    }
+
+    private func ticketDetailMetric(label: String, value: String, icon: String, color: Color) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: icon)
+                .font(.caption.weight(.bold))
+                .foregroundColor(color)
+                .frame(width: 18, height: 18)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label.uppercased())
+                    .font(.caption2.weight(.bold))
+                    .foregroundColor(AppColors.textTertiary)
+                Text(value)
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(AppColors.textPrimary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(color.opacity(0.18), lineWidth: 1)
+        )
+    }
+
+    private var statusPriorityControlsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ticketDetailSectionHeader("Status & Priority", icon: "slider.horizontal.3")
+
+            Button {
+                showingStatusPicker = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: editedStatus.icon)
+                        .font(.caption.weight(.bold))
+                    Text(editedStatus.label)
+                        .font(.callout.weight(.semibold))
+                    Spacer()
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption2.weight(.bold))
+                        .foregroundColor(AppColors.textTertiary)
+                }
+                .foregroundColor(editedStatus.color)
+                .padding(10)
+                .background(editedStatus.color.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+            .buttonStyle(.plain)
+
+            Menu {
+                ForEach(TicketPriority.allCases, id: \.self) { priority in
+                    Button {
+                        editedPriority = priority
+                    } label: {
+                        HStack {
+                            Image(systemName: priority.icon)
+                                .foregroundColor(priority.color)
+                            Text(priority.label)
+                            if editedPriority == priority {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: editedPriority.icon)
+                        .font(.caption.weight(.bold))
+                        .foregroundColor(editedPriority.color)
+                    Text(editedPriority.label)
+                        .font(.callout.weight(.semibold))
+                        .foregroundColor(AppColors.textPrimary)
+                    Spacer()
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption2.weight(.bold))
+                        .foregroundColor(AppColors.textTertiary)
+                }
+                .padding(10)
+                .background(AppColors.backgroundPrimary)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var sharedNoteComposerSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ticketDetailSectionHeader("Shared Note", icon: "text.bubble.fill")
+
+            TextField("Add a note for Maui and everyone on this ticket", text: $sharedNoteText, axis: .vertical)
+                .font(.system(size: 15))
+                .foregroundColor(AppColors.textPrimary)
+                .lineLimit(3...8)
+                .padding(10)
+                .background(AppColors.backgroundPrimary)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            Button {
+                Task { await postSharedNote() }
+            } label: {
+                HStack {
+                    Label(isPostingSharedNote ? "Adding Note" : "Add Note", systemImage: "text.bubble.fill")
+                    Spacer()
+                    if isPostingSharedNote {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                    }
+                }
+                .font(.caption.weight(.semibold))
+                .padding(.vertical, 9)
+                .padding(.horizontal, 10)
+                .background(AppColors.accentElectric.opacity(0.12))
+                .foregroundColor(AppColors.accentElectric)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+            .buttonStyle(.plain)
+            .disabled(sharedNoteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isPostingSharedNote)
+
+            if let sharedNoteStatus {
+                Text(sharedNoteStatus)
+                    .font(.caption)
+                    .foregroundColor(sharedNoteStatus.localizedCaseInsensitiveContains("couldn't") ? AppColors.accentDanger : AppColors.textTertiary)
+            }
+        }
+    }
+
+    private var descriptionEditSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ticketDetailSectionHeader("Description", icon: "text.alignleft")
+
+            TextField("Description", text: $editedDescription, axis: .vertical)
+                .font(.system(size: 15))
+                .foregroundColor(AppColors.textPrimary)
+                .lineLimit(4...12)
+                .padding(10)
+                .background(AppColors.backgroundPrimary)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            if !editedDescription.isEmpty {
+                Button("Clear") {
+                    editedDescription = ""
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundColor(AppColors.accentElectric)
+            }
+        }
+    }
+
+    private var workControlEditSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ticketDetailSectionHeader("Work Control", icon: "checklist.checked")
+
+            TextField("Acceptance criteria, one per line", text: $editedAcceptanceCriteria, axis: .vertical)
+                .font(.system(size: 15))
+                .foregroundColor(AppColors.textPrimary)
+                .lineLimit(3...8)
+                .padding(10)
+                .background(AppColors.backgroundPrimary)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            TextField("Desired outcome", text: $editedDesiredOutcome, axis: .vertical)
+                .font(.system(size: 15))
+                .foregroundColor(AppColors.textPrimary)
+                .lineLimit(2...5)
+                .padding(10)
+                .background(AppColors.backgroundPrimary)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            VStack(spacing: 8) {
+                ticketInlineTextField("Approval state", text: $editedApprovalState)
+                ticketInlineTextField("Autonomy level", text: $editedAutonomyLevel)
+                ticketInlineTextField("Worker lane", text: $editedWorkerLane)
+                ticketInlineTextField("Tool policy", text: $editedToolPolicy)
+            }
+        }
+    }
+
+    private func ticketInlineTextField(_ label: String, text: Binding<String>) -> some View {
+        HStack(spacing: 10) {
+            Text(label)
+                .font(.caption.weight(.semibold))
+                .foregroundColor(AppColors.textTertiary)
+                .frame(width: 94, alignment: .leading)
+
+            TextField(label, text: text)
+                .font(.caption)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .foregroundColor(AppColors.textPrimary)
+        }
+        .padding(9)
+        .background(AppColors.backgroundPrimary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var lifecycleEditSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ticketDetailSectionHeader("Lifecycle", icon: "arrow.triangle.branch")
+
+            Picker("Agent", selection: $lifecycleAgentId) {
+                ForEach(lifecycleAgents) { agent in
+                    Text(agent.name.capitalized).tag(agent.id)
+                }
+            }
+            .pickerStyle(.menu)
+            .disabled(lifecycleAgents.isEmpty)
+
+            HStack(spacing: 10) {
+                lifecycleButton("Claim", icon: "hand.raised.fill", enabled: ticket.status == .open) {
+                    await viewModel.claimTicket(ticketId: ticket.id, agentId: lifecycleAgentId)
+                }
+
+                lifecycleButton("Start", icon: "play.circle.fill", enabled: ticket.status == .open || ticket.status == .claimed) {
+                    await viewModel.startTicket(ticketId: ticket.id, agentId: lifecycleAgentId)
+                }
+
+                lifecycleButton("Close", icon: "checkmark.circle.fill", enabled: canCloseTicket, dismissOnCompletion: false) {
+                    pendingAction = .close
+                }
+            }
+
+            if let message = closeGateMessage {
+                Label(message, systemImage: "checkmark.seal")
+                    .font(.caption2)
+                    .foregroundColor(AppColors.accentWarning)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Text("Lifecycle actions call ORCA directly and post system activity to the ticket thread when the backend has one. Dispatch and cancellation live in Actions above so higher-risk operations stay gated in one place.")
+                .font(.caption)
+                .foregroundColor(AppColors.textTertiary)
+        }
+    }
+
+    private var lessonsLearnedEditSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ticketDetailSectionHeader("Lessons Learned", icon: "lightbulb.fill")
+
+            TextField("Lessons learned", text: $editedLessonsLearned, axis: .vertical)
+                .font(.system(size: 15))
+                .foregroundColor(AppColors.textPrimary)
+                .lineLimit(3...10)
+                .padding(10)
+                .background(AppColors.backgroundPrimary)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            if !editedLessonsLearned.isEmpty {
+                Button("Clear") {
+                    editedLessonsLearned = ""
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundColor(AppColors.accentElectric)
+            }
+
+            Text("Capture insights from this ticket for future reference")
+                .font(.caption)
+                .foregroundColor(AppColors.textTertiary)
+        }
+    }
+
+    private var shouldShowResolutionNotes: Bool {
+        editedStatus == .closed || editedStatus == .cancelled || !editedResolutionNotes.isEmpty || ticket.status == .claimed || ticket.status == .inProgress
+    }
+
+    private var resolutionNotesEditSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ticketDetailSectionHeader("Resolution Notes", icon: "checkmark.seal")
+
+            TextField("Resolution notes", text: $editedResolutionNotes, axis: .vertical)
+                .font(.system(size: 15))
+                .foregroundColor(AppColors.textPrimary)
+                .lineLimit(3...10)
+                .padding(10)
+                .background(AppColors.backgroundPrimary)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            if !editedResolutionNotes.isEmpty {
+                Button("Clear") {
+                    editedResolutionNotes = ""
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundColor(AppColors.accentElectric)
+            }
+        }
+    }
+
+    private var metadataSection: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            ticketDetailSectionHeader("Metadata", icon: "info.circle")
+            metadataRow(label: "ID", value: "\(ticket.id.prefix(8))...")
+            metadataRow(label: "Created", value: ticket.createdAt.formatted(date: .abbreviated, time: .shortened))
+            metadataRow(label: "Updated", value: ticket.updatedAt.formatted(date: .abbreviated, time: .shortened))
+            if let agent = ticket.assigneeAgentName, !agent.isEmpty {
+                metadataRow(label: "Assignee", value: agent)
+            }
+            if let type = ticket.ticketType, !type.isEmpty {
+                metadataRow(label: "Type", value: type)
+            }
+            if let source = ticket.source, !source.isEmpty {
+                metadataRow(label: "Source", value: source)
+            }
+            if hasSourceProvenance {
+                sourceProvenanceRows
+            }
+            if let chatThreadId = ticket.chatThreadId, !chatThreadId.isEmpty {
+                metadataRow(label: "Chat Thread", value: "\(chatThreadId.prefix(8))...")
+            }
         }
     }
 
@@ -3553,6 +3899,7 @@ struct TicketDetailSheet: View {
             }
 
             Button {
+                detailFocus = .activity
                 evidenceLens = .runs
             } label: {
                 Label(run == nil ? "Open Runs" : "View Run Evidence", systemImage: "arrow.down.doc")
@@ -4055,6 +4402,7 @@ struct TicketDetailSheet: View {
 
     private func traceReferenceButton(label: String, traceId: String) -> some View {
         Button {
+            detailFocus = .activity
             evidenceLens = .trace
             Task { await viewModel.loadTrace(traceId: traceId) }
         } label: {
