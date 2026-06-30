@@ -61,6 +61,10 @@ struct WorkView: View {
                         .padding(.horizontal, 16)
                         .padding(.bottom, 16)
 
+                    AnyView(WorkbenchDivisionToolRunnerSection(model: model))
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
+
                     AnyView(approvalLaneSection)
                         .padding(.horizontal, 16)
                         .padding(.bottom, 16)
@@ -2333,6 +2337,302 @@ private struct WorkbenchAgentCockpitSection: View {
     }
 }
 
+private struct WorkbenchDivisionToolRunnerSection: View {
+    let model: WorkViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            header
+
+            if let workflow = model.divisionWorkflow {
+                divisionBlock(workflow)
+            } else if model.isLoadingWorkbench {
+                loadingLine("Loading division cockpit")
+            } else if model.workbenchError != nil {
+                errorLine(model.workbenchError ?? "Workbench unavailable")
+            }
+
+            toolShelfBlock
+            recentRunsBlock
+        }
+        .padding(14)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(AppColors.border, lineWidth: 1)
+        )
+    }
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("COCKPIT")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(AppColors.textTertiary)
+                Text("Workflow & tools")
+                    .font(.headline)
+                    .foregroundColor(AppColors.textPrimary)
+            }
+
+            Spacer()
+
+            Button {
+                Task {
+                    await model.loadWorkbench()
+                    await model.loadToolRuns()
+                }
+            } label: {
+                Image(systemName: model.isLoadingToolRuns || model.isLoadingWorkbench ? "hourglass" : "arrow.clockwise")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(AppColors.textSecondary)
+                    .frame(width: 30, height: 30)
+                    .background(AppColors.backgroundTertiary)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .disabled(model.isLoadingToolRuns || model.isLoadingWorkbench)
+            .accessibilityLabel("Refresh workflow and tool runs")
+        }
+    }
+
+    private func divisionBlock(_ workflow: WorkbenchDivisionWorkflow) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "rectangle.3.group.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(AppColors.accentElectric)
+                    .frame(width: 30, height: 30)
+                    .background(AppColors.accentElectric.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(workflow.division)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(AppColors.textPrimary)
+                        .lineLimit(2)
+                    Text(workflow.role)
+                        .font(.caption)
+                        .foregroundColor(AppColors.textSecondary)
+                        .lineLimit(3)
+                }
+            }
+
+            if !workflow.operatingLoop.isEmpty {
+                FlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                    ForEach(workflow.operatingLoop.prefix(5)) { step in
+                        toolPill(step.label, icon: stepIcon(step.id), color: AppColors.accentElectric)
+                    }
+                }
+            }
+
+            if !workflow.recurringDuties.isEmpty {
+                VStack(alignment: .leading, spacing: 5) {
+                    ForEach(Array(workflow.recurringDuties.prefix(3)), id: \.self) { duty in
+                        HStack(alignment: .top, spacing: 6) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(AppColors.accentSuccess)
+                                .padding(.top, 2)
+                            Text(duty)
+                                .font(.caption)
+                                .foregroundColor(AppColors.textSecondary)
+                                .lineLimit(2)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(10)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var toolShelfBlock: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 7) {
+                Label("Tool shelf", systemImage: "wrench.and.screwdriver.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(AppColors.accentElectric)
+
+                Spacer()
+
+                if let shelf = model.toolShelf {
+                    Text("\(shelf.availableTools.count) live")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundColor(AppColors.accentSuccess)
+                    Text("\(shelf.approvalTools.count) gated")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundColor(AppColors.accentWarning)
+                }
+            }
+
+            HStack(spacing: 8) {
+                toolButton(
+                    "Queue",
+                    icon: "list.bullet.rectangle",
+                    color: AppColors.accentElectric,
+                    disabled: model.isRunningWorkbenchTool,
+                    action: { Task { await model.runQueueSummaryTool() } }
+                )
+                toolButton(
+                    "Focus",
+                    icon: "plus.circle.fill",
+                    color: AppColors.accentSuccess,
+                    disabled: model.isRunningWorkbenchTool,
+                    action: { Task { await model.runPlannerFocusTool() } }
+                )
+                toolButton(
+                    "Review",
+                    icon: "checkmark.shield.fill",
+                    color: AppColors.accentWarning,
+                    disabled: model.isRunningWorkbenchTool,
+                    action: { Task { await model.runReviewRequestTool() } }
+                )
+            }
+
+            if let error = model.toolRunsError {
+                errorLine(error)
+            } else if model.isRunningWorkbenchTool {
+                loadingLine("Running governed tool")
+            } else if let shelf = model.toolShelf, !shelf.tools.isEmpty {
+                FlowLayout(horizontalSpacing: 5, verticalSpacing: 5) {
+                    ForEach(shelf.tools.prefix(5)) { tool in
+                        toolPill(
+                            tool.label,
+                            icon: tool.approvalRequired ? "lock.shield.fill" : "bolt.fill",
+                            color: tool.approvalRequired ? AppColors.accentWarning : AppColors.textTertiary
+                        )
+                    }
+                }
+            }
+        }
+        .padding(10)
+        .background(AppColors.backgroundTertiary.opacity(0.72))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var recentRunsBlock: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Recent receipts")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(AppColors.textPrimary)
+                Spacer()
+                if model.isLoadingToolRuns {
+                    ProgressView()
+                        .controlSize(.mini)
+                }
+            }
+
+            if model.toolRuns.isEmpty && !model.isLoadingToolRuns {
+                Text("No governed tool receipts yet.")
+                    .font(.caption)
+                    .foregroundColor(AppColors.textTertiary)
+            } else {
+                ForEach(model.toolRuns.prefix(4)) { run in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: run.approvalRequired ? "checkmark.shield" : "checkmark.circle.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(run.approvalRequired ? AppColors.accentWarning : AppColors.accentSuccess)
+                            .frame(width: 18, height: 18)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(run.toolLabel ?? run.toolId ?? "Tool run")
+                                .font(.caption.weight(.semibold))
+                                .foregroundColor(AppColors.textPrimary)
+                                .lineLimit(1)
+                            Text("\(run.summary) · \(run.modelLabel)")
+                                .font(.caption2)
+                                .foregroundColor(AppColors.textTertiary)
+                                .lineLimit(2)
+                        }
+
+                        Spacer(minLength: 0)
+
+                        Text(run.status.replacingOccurrences(of: "_", with: " "))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundColor(run.approvalRequired ? AppColors.accentWarning : AppColors.accentSuccess)
+                            .lineLimit(1)
+                    }
+                }
+            }
+        }
+    }
+
+    private func toolButton(
+        _ label: String,
+        icon: String,
+        color: Color,
+        disabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.system(size: 11, weight: .semibold))
+                Text(label)
+                    .font(.caption.weight(.semibold))
+            }
+            .foregroundColor(color)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(color.opacity(0.11))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .opacity(disabled ? 0.55 : 1)
+    }
+
+    private func toolPill(_ label: String, icon: String, color: Color) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 9, weight: .semibold))
+            Text(label)
+                .font(.caption2.weight(.semibold))
+                .lineLimit(1)
+        }
+        .foregroundColor(color)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(color.opacity(0.10))
+        .clipShape(Capsule())
+    }
+
+    private func loadingLine(_ message: String) -> some View {
+        HStack(spacing: 7) {
+            ProgressView()
+                .controlSize(.mini)
+            Text(message)
+                .font(.caption2)
+                .foregroundColor(AppColors.textTertiary)
+            Spacer()
+        }
+        .padding(10)
+        .background(AppColors.backgroundTertiary.opacity(0.65))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func errorLine(_ message: String) -> some View {
+        Label(message, systemImage: "exclamationmark.triangle.fill")
+            .font(.caption2)
+            .foregroundColor(AppColors.accentWarning)
+            .lineLimit(2)
+    }
+
+    private func stepIcon(_ id: String) -> String {
+        switch id {
+        case "wake": return "sunrise.fill"
+        case "triage": return "arrow.triangle.branch"
+        case "execute": return "play.fill"
+        case "evidence": return "doc.badge.checkmark"
+        case "sleep": return "moon.fill"
+        default: return "circle.grid.cross"
+        }
+    }
+}
+
 private struct WorkHealthStripView: View {
     let model: WorkViewModel
 
@@ -2902,6 +3202,12 @@ final class WorkViewModel {
     var isLoadingWorkbench = false
     var workbenchError: String?
     var workbenchViewerName: String?
+    var divisionWorkflow: WorkbenchDivisionWorkflow?
+    var toolShelf: WorkbenchToolShelf?
+    var toolRuns: [WorkbenchToolRunRecord] = []
+    var toolRunsError: String?
+    var isLoadingToolRuns = false
+    var isRunningWorkbenchTool = false
     var approvalAttention: WorkbenchApprovalAttention?
     var approvalAttentionItems: [WorkbenchApprovalAttentionItem] = []
     var isLoadingApprovalAttention = false
@@ -3268,6 +3574,7 @@ final class WorkViewModel {
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await self.loadSuggestions() }
             group.addTask { await self.loadWorkbench() }
+            group.addTask { await self.loadToolRuns() }
             group.addTask { await self.loadApprovalAttention() }
             group.addTask { await self.loadActionPreview() }
             group.addTask { await self.loadProjects() }
@@ -3285,12 +3592,16 @@ final class WorkViewModel {
             let envelope = try await WorkbenchRepository().load(view: .mine, limit: 50)
             workbench = envelope
             workbenchViewerName = envelope.viewer.name
+            divisionWorkflow = envelope.buckets.divisionWorkflow
+            toolShelf = envelope.buckets.toolShelf
             workbenchRows = envelope.buckets.workQueue?.assignedToMe ?? []
             await loadAgentToolsForVisibleWorkbenchRows()
         } catch let error as APIError where error.code == 401 {
             workbench = nil
             workbenchRows = []
             workbenchViewerName = nil
+            divisionWorkflow = nil
+            toolShelf = nil
             toolProjectionsByItemKey = [:]
             loadingToolProjectionKeys = []
             toolProjectionErrorsByItemKey = [:]
@@ -3299,10 +3610,113 @@ final class WorkViewModel {
             workbench = nil
             workbenchRows = []
             workbenchViewerName = nil
+            divisionWorkflow = nil
+            toolShelf = nil
             toolProjectionsByItemKey = [:]
             loadingToolProjectionKeys = []
             toolProjectionErrorsByItemKey = [:]
             workbenchError = "Workbench unavailable"
+        }
+    }
+
+    @MainActor
+    func loadToolRuns() async {
+        isLoadingToolRuns = true
+        toolRunsError = nil
+        defer { isLoadingToolRuns = false }
+        do {
+            let response = try await WorkbenchRepository().loadToolRuns(limit: 12)
+            toolShelf = response.toolShelf
+            toolRuns = response.runs
+        } catch let error as APIError where error.code == 401 {
+            toolRuns = []
+            toolRunsError = "Agent token required"
+        } catch {
+            toolRuns = []
+            toolRunsError = "Tool runs unavailable"
+        }
+    }
+
+    @MainActor
+    func runQueueSummaryTool() async {
+        await runWorkbenchTool(
+            WorkbenchToolRunRequest(
+                toolId: "workbench.summarize_queue",
+                traceId: "pod-workbench-summary-\(UUID().uuidString)",
+                runtimeSurface: "pod.workbench",
+                runtimeName: "Pod Bench",
+                llmProvider: "agent",
+                llmModel: workbenchViewerName
+            ),
+            successMessage: "Queue summary recorded"
+        )
+    }
+
+    @MainActor
+    func runPlannerFocusTool() async {
+        let title = divisionWorkflow?.recurringDuties.first
+            ?? visibleWorkbenchRows.first?.safeTitle
+            ?? "Review Workbench ready-now queue"
+        await runWorkbenchTool(
+            WorkbenchToolRunRequest(
+                toolId: "planner.add_focus_item",
+                input: [
+                    "title": title,
+                    "body": "Created from Pod Bench governed tool shelf.",
+                    "lane": "now",
+                    "priority": "medium"
+                ],
+                traceId: "pod-workbench-planner-\(UUID().uuidString)",
+                runtimeSurface: "pod.workbench",
+                runtimeName: "Pod Bench",
+                llmProvider: "agent",
+                llmModel: workbenchViewerName
+            ),
+            successMessage: "Planner focus added"
+        )
+    }
+
+    @MainActor
+    func runReviewRequestTool() async {
+        await runWorkbenchTool(
+            WorkbenchToolRunRequest(
+                toolId: "approval.request_review",
+                input: [
+                    "reason": "Workbench requested a reviewer check from the governed tool shelf."
+                ],
+                traceId: "pod-workbench-review-\(UUID().uuidString)",
+                runtimeSurface: "pod.workbench",
+                runtimeName: "Pod Bench",
+                llmProvider: "agent",
+                llmModel: workbenchViewerName
+            ),
+            successMessage: "Review request recorded"
+        )
+    }
+
+    @MainActor
+    private func runWorkbenchTool(_ request: WorkbenchToolRunRequest, successMessage: String) async {
+        guard !isRunningWorkbenchTool else { return }
+        isRunningWorkbenchTool = true
+        toolRunsError = nil
+        defer { isRunningWorkbenchTool = false }
+        do {
+            let receipt = try await WorkbenchRepository().executeToolRun(request)
+            priorityToast = PriorityToast(
+                message: receipt.approvalRequired ? "Tool waiting on approval" : successMessage,
+                isError: false,
+                retry: nil
+            )
+            await loadToolRuns()
+            if request.toolId == "planner.add_focus_item" {
+                await loadWorkbench()
+            }
+        } catch let error as APIError {
+            toolRunsError = error.message
+            priorityToast = PriorityToast(message: "Tool run failed", isError: true, retry: nil)
+        } catch {
+            toolRunsError = "Tool run failed"
+            priorityToast = PriorityToast(message: "Tool run failed", isError: true, retry: nil)
         }
     }
 

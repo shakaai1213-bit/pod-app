@@ -409,6 +409,7 @@ struct AgentLockerDTO: Decodable, Hashable {
     let startHere: StartHere
     let reportCard: ReportCard
     let chat: LockerChat
+    let divisionWorkflow: WorkbenchDivisionWorkflow?
     let planner: Planner
     let workSpine: WorkSpine
     let orcaTasks: OrcaTasks
@@ -429,6 +430,7 @@ struct AgentLockerDTO: Decodable, Hashable {
         case generatedAt = "generated_at"
         case agentProfile = "agent"
         case tools
+        case divisionWorkflow = "division_workflow"
         case startHere = "start_here"
         case reportCard = "report_card"
         case workSpine = "work_spine"
@@ -449,6 +451,7 @@ struct AgentLockerDTO: Decodable, Hashable {
         startHere = try container.decodeIfPresent(StartHere.self, forKey: .startHere) ?? StartHere()
         reportCard = try container.decodeIfPresent(ReportCard.self, forKey: .reportCard) ?? ReportCard()
         chat = try container.decodeIfPresent(LockerChat.self, forKey: .chat) ?? LockerChat()
+        divisionWorkflow = try container.decodeIfPresent(WorkbenchDivisionWorkflow.self, forKey: .divisionWorkflow)
         planner = try container.decodeIfPresent(Planner.self, forKey: .planner) ?? Planner()
         workSpine = try container.decodeIfPresent(WorkSpine.self, forKey: .workSpine) ?? WorkSpine()
         orcaTasks = try container.decodeIfPresent(OrcaTasks.self, forKey: .orcaTasks) ?? OrcaTasks()

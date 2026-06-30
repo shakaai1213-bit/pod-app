@@ -121,6 +121,9 @@ actor AgentChatService {
         let chatCanRun: Bool
         let chatAllowedActions: [String]
         let startHereHeadline: String?
+        let divisionName: String?
+        let divisionRole: String?
+        let divisionLoopLabels: [String]
         let workSpine: LockerWorkSpineSummary
 
         var readinessText: String {
@@ -357,6 +360,9 @@ actor AgentChatService {
             chatCanRun: response.chat.canDispatchSchoolhouseRun,
             chatAllowedActions: response.chat.policyAllowedActions,
             startHereHeadline: response.startHere.headline,
+            divisionName: response.divisionWorkflow?.division,
+            divisionRole: response.divisionWorkflow?.role,
+            divisionLoopLabels: response.divisionWorkflow?.operatingLoop.map(\.label) ?? [],
             workSpine: workSpine
         )
     }

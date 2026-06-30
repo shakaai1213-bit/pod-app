@@ -80,6 +80,14 @@ actor WorkbenchRepository {
     func executeAgentAction(_ request: WorkbenchAgentActionRequest) async throws -> WorkbenchAgentActionResponse {
         try await api.post(path: "/api/v1/agent/actions", body: request, includeAgentToken: true)
     }
+
+    func loadToolRuns(limit: Int = 20) async throws -> WorkbenchToolRunsResponse {
+        try await api.get(path: "/api/v1/agent/tool-runs?limit=\(limit)", includeAgentToken: true)
+    }
+
+    func executeToolRun(_ request: WorkbenchToolRunRequest) async throws -> WorkbenchToolRunReceipt {
+        try await api.post(path: "/api/v1/agent/tool-runs", body: request, includeAgentToken: true)
+    }
 }
 
 struct WorkbenchApprovalAttention: Decodable, Hashable {
@@ -336,6 +344,338 @@ struct WorkbenchAgentActionResponse: Decodable, Hashable {
         if action.contains("task") { return "task" }
         return "object"
     }
+}
+
+struct WorkbenchToolRunRequest: Encodable, Hashable {
+    let toolId: String
+    let input: [String: String]
+    let ticketId: String?
+    let taskId: String?
+    let approvalId: String?
+    let idempotencyKey: String?
+    let traceId: String?
+    let runtimeSurface: String?
+    let runtimeProvider: String?
+    let runtimeName: String?
+    let llmProvider: String?
+    let llmModel: String?
+    let computeRunId: String?
+
+    init(
+        toolId: String,
+        input: [String: String] = [:],
+        ticketId: String? = nil,
+        taskId: String? = nil,
+        approvalId: String? = nil,
+        idempotencyKey: String? = nil,
+        traceId: String? = nil,
+        runtimeSurface: String? = "pod.workbench",
+        runtimeProvider: String? = nil,
+        runtimeName: String? = nil,
+        llmProvider: String? = nil,
+        llmModel: String? = nil,
+        computeRunId: String? = nil
+    ) {
+        self.toolId = toolId
+        self.input = input
+        self.ticketId = ticketId
+        self.taskId = taskId
+        self.approvalId = approvalId
+        self.idempotencyKey = idempotencyKey
+        self.traceId = traceId
+        self.runtimeSurface = runtimeSurface
+        self.runtimeProvider = runtimeProvider
+        self.runtimeName = runtimeName
+        self.llmProvider = llmProvider
+        self.llmModel = llmModel
+        self.computeRunId = computeRunId
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case input
+        case toolId = "tool_id"
+        case ticketId = "ticket_id"
+        case taskId = "task_id"
+        case approvalId = "approval_id"
+        case idempotencyKey = "idempotency_key"
+        case traceId = "trace_id"
+        case runtimeSurface = "runtime_surface"
+        case runtimeProvider = "runtime_provider"
+        case runtimeName = "runtime_name"
+        case llmProvider = "llm_provider"
+        case llmModel = "llm_model"
+        case computeRunId = "compute_run_id"
+    }
+}
+
+struct WorkbenchToolRunReceipt: Decodable, Identifiable, Hashable {
+    let id: String
+    let ok: Bool
+    let schema: String
+    let status: String
+    let tool: WorkbenchToolDefinition
+    let approvalRequired: Bool
+    let approvalState: String
+    let output: [String: AgentRunJSONValue]
+    let resource: [String: AgentRunJSONValue]
+    let modelProvenance: [String: AgentRunJSONValue]
+    let policy: [String: AgentRunJSONValue]
+    let createdAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case ok, schema, status, tool, output, resource, policy
+        case id = "run_id"
+        case approvalRequired = "approval_required"
+        case approvalState = "approval_state"
+        case modelProvenance = "model_provenance"
+        case createdAt = "created_at"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        ok = try c.decodeIfPresent(Bool.self, forKey: .ok) ?? true
+        schema = try c.decodeIfPresent(String.self, forKey: .schema) ?? "orca.agent-tool-run.v1"
+        status = try c.decodeIfPresent(String.self, forKey: .status) ?? "recorded"
+        tool = try c.decodeIfPresent(WorkbenchToolDefinition.self, forKey: .tool) ?? WorkbenchToolDefinition(id: "tool")
+        approvalRequired = try c.decodeIfPresent(Bool.self, forKey: .approvalRequired) ?? false
+        approvalState = try c.decodeIfPresent(String.self, forKey: .approvalState) ?? (approvalRequired ? "approval_required" : "not_required")
+        output = (try? c.decodeIfPresent([String: AgentRunJSONValue].self, forKey: .output)) ?? [:]
+        resource = (try? c.decodeIfPresent([String: AgentRunJSONValue].self, forKey: .resource)) ?? [:]
+        modelProvenance = (try? c.decodeIfPresent([String: AgentRunJSONValue].self, forKey: .modelProvenance)) ?? [:]
+        policy = (try? c.decodeIfPresent([String: AgentRunJSONValue].self, forKey: .policy)) ?? [:]
+        createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt)
+    }
+
+    var summary: String {
+        output["summary"]?.displayValue ?? status.replacingOccurrences(of: "_", with: " ")
+    }
+
+    var modelLabel: String {
+        modelProvenance["llm_model"]?.displayValue
+            ?? modelProvenance["runtime_provider"]?.displayValue
+            ?? "agent identity"
+    }
+}
+
+struct WorkbenchToolRunsResponse: Decodable, Hashable {
+    let schema: String
+    let source: String?
+    let agent: WorkbenchAgentToolsAgent?
+    let toolShelf: WorkbenchToolShelf
+    let runs: [WorkbenchToolRunRecord]
+
+    enum CodingKeys: String, CodingKey {
+        case schema, source, agent, runs
+        case toolShelf = "tool_shelf"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        schema = try c.decodeIfPresent(String.self, forKey: .schema) ?? "orca.agent-tool-runs.v1"
+        source = try c.decodeIfPresent(String.self, forKey: .source)
+        agent = try c.decodeIfPresent(WorkbenchAgentToolsAgent.self, forKey: .agent)
+        toolShelf = try c.decodeIfPresent(WorkbenchToolShelf.self, forKey: .toolShelf) ?? WorkbenchToolShelf()
+        runs = (try? c.decodeIfPresent([WorkbenchToolRunRecord].self, forKey: .runs)) ?? []
+    }
+}
+
+struct WorkbenchToolRunRecord: Decodable, Identifiable, Hashable {
+    let id: String
+    let toolId: String?
+    let toolLabel: String?
+    let status: String
+    let approvalRequired: Bool
+    let approvalState: String
+    let output: [String: AgentRunJSONValue]
+    let resource: [String: AgentRunJSONValue]
+    let modelProvenance: [String: AgentRunJSONValue]
+    let policy: [String: AgentRunJSONValue]
+    let createdAt: Date?
+    let traceId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case status, output, resource, policy
+        case id = "run_id"
+        case toolId = "tool_id"
+        case toolLabel = "tool_label"
+        case approvalRequired = "approval_required"
+        case approvalState = "approval_state"
+        case modelProvenance = "model_provenance"
+        case createdAt = "created_at"
+        case traceId = "trace_id"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        toolId = try c.decodeIfPresent(String.self, forKey: .toolId)
+        toolLabel = try c.decodeIfPresent(String.self, forKey: .toolLabel)
+        status = try c.decodeIfPresent(String.self, forKey: .status) ?? "recorded"
+        approvalRequired = try c.decodeIfPresent(Bool.self, forKey: .approvalRequired) ?? false
+        approvalState = try c.decodeIfPresent(String.self, forKey: .approvalState) ?? (approvalRequired ? "approval_required" : "not_required")
+        output = (try? c.decodeIfPresent([String: AgentRunJSONValue].self, forKey: .output)) ?? [:]
+        resource = (try? c.decodeIfPresent([String: AgentRunJSONValue].self, forKey: .resource)) ?? [:]
+        modelProvenance = (try? c.decodeIfPresent([String: AgentRunJSONValue].self, forKey: .modelProvenance)) ?? [:]
+        policy = (try? c.decodeIfPresent([String: AgentRunJSONValue].self, forKey: .policy)) ?? [:]
+        createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt)
+        traceId = try c.decodeIfPresent(String.self, forKey: .traceId)
+    }
+
+    var summary: String {
+        output["summary"]?.displayValue ?? status.replacingOccurrences(of: "_", with: " ")
+    }
+
+    var modelLabel: String {
+        modelProvenance["llm_model"]?.displayValue
+            ?? modelProvenance["runtime_provider"]?.displayValue
+            ?? "agent identity"
+    }
+}
+
+struct WorkbenchToolShelf: Decodable, Hashable {
+    let schema: String
+    let endpoint: String?
+    let historyEndpoint: String?
+    let tools: [WorkbenchToolDefinition]
+    let policy: [String: AgentRunJSONValue]
+
+    enum CodingKeys: String, CodingKey {
+        case schema, endpoint, tools, policy
+        case historyEndpoint = "history_endpoint"
+    }
+
+    init(
+        schema: String = "orca.agent-tool-shelf.v1",
+        endpoint: String? = nil,
+        historyEndpoint: String? = nil,
+        tools: [WorkbenchToolDefinition] = [],
+        policy: [String: AgentRunJSONValue] = [:]
+    ) {
+        self.schema = schema
+        self.endpoint = endpoint
+        self.historyEndpoint = historyEndpoint
+        self.tools = tools
+        self.policy = policy
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        schema = try c.decodeIfPresent(String.self, forKey: .schema) ?? "orca.agent-tool-shelf.v1"
+        endpoint = try c.decodeIfPresent(String.self, forKey: .endpoint)
+        historyEndpoint = try c.decodeIfPresent(String.self, forKey: .historyEndpoint)
+        tools = (try? c.decodeIfPresent([WorkbenchToolDefinition].self, forKey: .tools)) ?? []
+        policy = (try? c.decodeIfPresent([String: AgentRunJSONValue].self, forKey: .policy)) ?? [:]
+    }
+
+    var availableTools: [WorkbenchToolDefinition] {
+        tools.filter { $0.normalizedStatus == "available" }
+    }
+
+    var approvalTools: [WorkbenchToolDefinition] {
+        tools.filter { $0.approvalRequired || $0.normalizedStatus == "approval_required" }
+    }
+}
+
+struct WorkbenchToolDefinition: Decodable, Identifiable, Hashable {
+    let id: String
+    let label: String
+    let category: String?
+    let risk: String?
+    let status: String
+    let approvalPolicy: String?
+    let approvalRequired: Bool
+    let endpoint: String?
+    let inputSchema: [String: AgentRunJSONValue]
+    let evidenceTypes: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case id, label, category, risk, status, endpoint
+        case approvalPolicy = "approval_policy"
+        case approvalRequired = "approval_required"
+        case inputSchema = "input_schema"
+        case evidenceTypes = "evidence_types"
+    }
+
+    init(id: String) {
+        self.id = id
+        self.label = id.replacingOccurrences(of: ".", with: " ").capitalized
+        self.category = nil
+        self.risk = nil
+        self.status = "unknown"
+        self.approvalPolicy = nil
+        self.approvalRequired = false
+        self.endpoint = nil
+        self.inputSchema = [:]
+        self.evidenceTypes = []
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        label = try c.decodeIfPresent(String.self, forKey: .label)
+            ?? id.replacingOccurrences(of: ".", with: " ").capitalized
+        category = try c.decodeIfPresent(String.self, forKey: .category)
+        risk = try c.decodeIfPresent(String.self, forKey: .risk)
+        status = try c.decodeIfPresent(String.self, forKey: .status) ?? "unknown"
+        approvalPolicy = try c.decodeIfPresent(String.self, forKey: .approvalPolicy)
+        approvalRequired = try c.decodeIfPresent(Bool.self, forKey: .approvalRequired) ?? false
+        endpoint = try c.decodeIfPresent(String.self, forKey: .endpoint)
+        inputSchema = (try? c.decodeIfPresent([String: AgentRunJSONValue].self, forKey: .inputSchema)) ?? [:]
+        evidenceTypes = (try? c.decodeIfPresent([String].self, forKey: .evidenceTypes)) ?? []
+    }
+
+    var normalizedStatus: String {
+        status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+}
+
+struct WorkbenchDivisionWorkflow: Decodable, Hashable {
+    let schema: String
+    let source: String?
+    let agent: String?
+    let division: String
+    let role: String
+    let primaryCharters: [String]
+    let recurringDuties: [String]
+    let operatingLoop: [WorkbenchDivisionStep]
+    let escalationRules: [String]
+    let workflowSurfaces: [String: String]
+    let sourceRefs: [String]
+    let modelProvenanceRequired: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case schema, source, agent, division, role
+        case primaryCharters = "primary_charters"
+        case recurringDuties = "recurring_duties"
+        case operatingLoop = "operating_loop"
+        case escalationRules = "escalation_rules"
+        case workflowSurfaces = "workflow_surfaces"
+        case sourceRefs = "source_refs"
+        case modelProvenanceRequired = "model_provenance_required"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        schema = try c.decodeIfPresent(String.self, forKey: .schema) ?? "orca.agent-division-workflow.v1"
+        source = try c.decodeIfPresent(String.self, forKey: .source)
+        agent = try c.decodeIfPresent(String.self, forKey: .agent)
+        division = try c.decodeIfPresent(String.self, forKey: .division) ?? "Agent Operating Lane"
+        role = try c.decodeIfPresent(String.self, forKey: .role) ?? "assigned ORCA work lane"
+        primaryCharters = (try? c.decodeIfPresent([String].self, forKey: .primaryCharters)) ?? []
+        recurringDuties = (try? c.decodeIfPresent([String].self, forKey: .recurringDuties)) ?? []
+        operatingLoop = (try? c.decodeIfPresent([WorkbenchDivisionStep].self, forKey: .operatingLoop)) ?? []
+        escalationRules = (try? c.decodeIfPresent([String].self, forKey: .escalationRules)) ?? []
+        workflowSurfaces = (try? c.decodeIfPresent([String: String].self, forKey: .workflowSurfaces)) ?? [:]
+        sourceRefs = (try? c.decodeIfPresent([String].self, forKey: .sourceRefs)) ?? []
+        modelProvenanceRequired = try c.decodeIfPresent(Bool.self, forKey: .modelProvenanceRequired) ?? true
+    }
+}
+
+struct WorkbenchDivisionStep: Decodable, Identifiable, Hashable {
+    let id: String
+    let label: String
+    let instruction: String
 }
 
 struct WorkbenchAgentToolsProjection: Decodable, Hashable {
@@ -680,20 +1020,26 @@ struct WorkbenchHealthStrip: Decodable, Hashable {
 }
 
 struct WorkbenchBuckets: Decodable, Hashable {
+    let divisionWorkflow: WorkbenchDivisionWorkflow?
     let workQueue: WorkbenchWorkQueue?
+    let toolShelf: WorkbenchToolShelf?
     let approvals: [WorkbenchApprovalRef]
     let chatRefs: WorkbenchChatRefs?
     let controls: WorkbenchControls?
 
     enum CodingKeys: String, CodingKey {
         case approvals, controls
+        case divisionWorkflow = "division_workflow"
         case workQueue = "work_queue"
+        case toolShelf = "tool_shelf"
         case chatRefs = "chat_refs"
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        divisionWorkflow = try c.decodeIfPresent(WorkbenchDivisionWorkflow.self, forKey: .divisionWorkflow)
         workQueue = try c.decodeIfPresent(WorkbenchWorkQueue.self, forKey: .workQueue)
+        toolShelf = try c.decodeIfPresent(WorkbenchToolShelf.self, forKey: .toolShelf)
         approvals = (try? c.decodeIfPresent([WorkbenchApprovalRef].self, forKey: .approvals)) ?? []
         chatRefs = try c.decodeIfPresent(WorkbenchChatRefs.self, forKey: .chatRefs)
         controls = try c.decodeIfPresent(WorkbenchControls.self, forKey: .controls)
@@ -911,6 +1257,8 @@ struct WorkbenchChatChannelRef: Decodable, Identifiable, Hashable {
 struct WorkbenchControls: Decodable, Hashable {
     let schema: String?
     let actionsEndpoint: String?
+    let toolRunsEndpoint: String?
+    let toolRunsHistoryEndpoint: String?
     let playgroundPreviewEndpoint: String?
     let view: String?
     let objectId: String?
@@ -919,9 +1267,23 @@ struct WorkbenchControls: Decodable, Hashable {
     enum CodingKeys: String, CodingKey {
         case schema, view
         case actionsEndpoint = "actions_endpoint"
+        case toolRunsEndpoint = "tool_runs_endpoint"
+        case toolRunsHistoryEndpoint = "tool_runs_history_endpoint"
         case playgroundPreviewEndpoint = "playground_preview_endpoint"
         case objectId = "object_id"
         case supportedControls = "supported_controls"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        schema = try c.decodeIfPresent(String.self, forKey: .schema)
+        actionsEndpoint = try c.decodeIfPresent(String.self, forKey: .actionsEndpoint)
+        toolRunsEndpoint = try c.decodeIfPresent(String.self, forKey: .toolRunsEndpoint)
+        toolRunsHistoryEndpoint = try c.decodeIfPresent(String.self, forKey: .toolRunsHistoryEndpoint)
+        playgroundPreviewEndpoint = try c.decodeIfPresent(String.self, forKey: .playgroundPreviewEndpoint)
+        view = try c.decodeIfPresent(String.self, forKey: .view)
+        objectId = try c.decodeIfPresent(String.self, forKey: .objectId)
+        supportedControls = (try? c.decodeIfPresent([String].self, forKey: .supportedControls)) ?? []
     }
 }
 

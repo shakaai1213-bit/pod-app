@@ -566,6 +566,28 @@ struct LockerChatView: View {
                         .lineLimit(2)
                 }
 
+                if let division = summary.divisionName, !division.isEmpty {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(division)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppColors.textPrimary)
+                            .lineLimit(1)
+                        if let role = summary.divisionRole, !role.isEmpty {
+                            Text(role)
+                                .font(.caption2)
+                                .foregroundStyle(AppColors.textTertiary)
+                                .lineLimit(2)
+                        }
+                        if !summary.divisionLoopLabels.isEmpty {
+                            FlowLayout(horizontalSpacing: 5, verticalSpacing: 5) {
+                                ForEach(summary.divisionLoopLabels.prefix(5), id: \.self) { label in
+                                    lockerMetricChip(label, color: AppColors.accentElectric)
+                                }
+                            }
+                        }
+                    }
+                }
+
                 HStack(spacing: 8) {
                     Text(summary.chatChannelName ?? "direct:\(agent.id)")
                     Text("\(summary.chatMessageCount) msg")
