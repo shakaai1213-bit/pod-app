@@ -338,7 +338,8 @@ actor AgentChatService {
 
     func loadLockerSummary(limit: Int = 10) async throws -> LockerSummary {
         let response: AgentLockerDTO = try await APIClient.shared.get(
-            path: "/api/v1/agents/\(agent.id)/locker-cockpit?limit=\(limit)"
+            path: "/api/v1/agents/\(agent.id)/locker-cockpit?limit=\(limit)",
+            includeAgentToken: true
         )
         let workSpine = Self.workSpineSummary(from: response.workSpine)
         return LockerSummary(
@@ -373,7 +374,10 @@ actor AgentChatService {
             throw APIError(code: 0, message: "Missing project agent-packet endpoint")
         }
 
-        let response: ProjectAgentPacketDTO = try await APIClient.shared.get(path: path)
+        let response: ProjectAgentPacketDTO = try await APIClient.shared.get(
+            path: path,
+            includeAgentToken: true
+        )
         return Self.agentPacketBrief(from: response)
     }
 

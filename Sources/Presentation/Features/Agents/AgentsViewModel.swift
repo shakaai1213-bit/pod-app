@@ -467,17 +467,28 @@ extension APIClient {
     /// Request with a body (POST/PUT)
     func request<T: Decodable>(
         _ endpoint: Endpoint,
-        body: some Encodable
+        body: some Encodable,
+        includeAgentToken: Bool = false
     ) async throws -> T {
-        let request = try buildRequest(path: endpoint.path, method: endpoint.method.rawValue, body: body)
+        let request = try buildRequest(
+            path: endpoint.path,
+            method: endpoint.method.rawValue,
+            body: body,
+            includeAgentToken: includeAgentToken
+        )
         return try await perform(request)
     }
 
     /// Request without a body (GET/DELETE)
     func request<T: Decodable>(
-        _ endpoint: Endpoint
+        _ endpoint: Endpoint,
+        includeAgentToken: Bool = false
     ) async throws -> T {
-        let request = try buildRequest(path: endpoint.path, method: endpoint.method.rawValue)
+        let request = try buildRequest(
+            path: endpoint.path,
+            method: endpoint.method.rawValue,
+            includeAgentToken: includeAgentToken
+        )
         return try await perform(request)
     }
 }

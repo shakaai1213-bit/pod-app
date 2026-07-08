@@ -65,6 +65,10 @@ struct WorkView: View {
                         .padding(.horizontal, 16)
                         .padding(.bottom, 16)
 
+                    AnyView(WorkbenchCalendarCockpitSection(model: model))
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
+
                     AnyView(approvalLaneSection)
                         .padding(.horizontal, 16)
                         .padding(.bottom, 16)
@@ -534,6 +538,9 @@ struct WorkView: View {
                 }
                 if let route = item.route ?? item.room {
                     railPolicyPill("Route", value: route)
+                }
+                if let freshness = item.workbenchFreshnessLabel {
+                    railPolicyPill("When", value: freshness)
                 }
             }
 
@@ -2852,6 +2859,8 @@ private struct WorkbenchAgentToolsShelf: View {
 
 enum WorkbenchTaskLane: String, CaseIterable, Identifiable {
     case mine
+    case newest
+    case oldest
     case waiting
     case blocking
     case stale
@@ -2863,6 +2872,8 @@ enum WorkbenchTaskLane: String, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .mine: return "Mine"
+        case .newest: return "New"
+        case .oldest: return "Oldest"
         case .waiting: return "Waiting"
         case .blocking: return "Blocking"
         case .stale: return "Stale"
@@ -2874,11 +2885,258 @@ enum WorkbenchTaskLane: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .mine: return "person.crop.circle"
+        case .newest: return "sparkle.magnifyingglass"
+        case .oldest: return "clock.arrow.circlepath"
         case .waiting: return "person.badge.clock"
         case .blocking: return "exclamationmark.octagon"
         case .stale: return "clock.badge.exclamationmark"
         case .ready: return "bolt.fill"
         case .all: return "tray.full"
+        }
+    }
+}
+
+private struct WorkbenchCalendarCockpitSection: View {
+    let model: WorkViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            header
+
+            if let error = model.calendarError {
+                errorLine(error)
+            } else if model.isLoadingCalendar && model.calendarBlocks.isEmpty {
+                loadingLine("Loading calendar cockpit")
+            } else {
+                summaryStrip
+                currentBlock
+                blockList
+            }
+        }
+        .padding(14)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(AppColors.border, lineWidth: 1)
+        )
+    }
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("PLANNER")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(AppColors.textTertiary)
+                Text("Calendar cockpit")
+                    .font(.headline)
+                    .foregroundColor(AppColors.textPrimary)
+            }
+
+            Spacer()
+
+            Button {
+                Task { await model.scheduleWorkbenchFocusBlock() }
+            } label: {
+                Image(systemName: model.isMutatingCalendar ? "hourglass" : "calendar.badge.plus")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(AppColors.accentElectric)
+                    .frame(width: 30, height: 30)
+                    .background(AppColors.backgroundTertiary)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .disabled(model.isMutatingCalendar || !model.canUseCalendarCockpit)
+            .accessibilityLabel("Schedule focus block")
+
+            Button {
+                Task { await model.loadCalendarCockpit() }
+            } label: {
+                Image(systemName: model.isLoadingCalendar ? "hourglass" : "arrow.clockwise")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(AppColors.textSecondary)
+                    .frame(width: 30, height: 30)
+                    .background(AppColors.backgroundTertiary)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .disabled(model.isLoadingCalendar)
+            .accessibilityLabel("Refresh calendar cockpit")
+        }
+    }
+
+    private var summaryStrip: some View {
+        FlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+            toolPill("\(model.calendarBlocks.count) today", icon: "calendar", color: AppColors.accentElectric)
+            if let total = model.planningContext?.overdueTotal {
+                toolPill("\(total) overdue", icon: "exclamationmark.triangle.fill", color: AppColors.accentWarning)
+            }
+            toolPill("\(model.planningContext?.readyNow.count ?? 0) ready", icon: "bolt.fill", color: AppColors.accentSuccess)
+            if let current = model.currentPlanningTitle {
+                toolPill(current, icon: "play.fill", color: AppColors.accentSuccess)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var currentBlock: some View {
+        if let block = model.activeCalendarBlock {
+            calendarBlockCard(block, featured: true)
+        } else if let current = model.planningContext?.currentBlock {
+            VStack(alignment: .leading, spacing: 5) {
+                Label("Current", systemImage: "play.circle.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(AppColors.accentSuccess)
+                Text(current.titleShort ?? current.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(AppColors.textPrimary)
+                    .lineLimit(2)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(AppColors.backgroundTertiary)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+    }
+
+    private var blockList: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if model.calendarBlocks.isEmpty {
+                Text("No scheduled blocks in the current org day.")
+                    .font(.caption)
+                    .foregroundColor(AppColors.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                ForEach(model.calendarBlocks.prefix(4)) { block in
+                    calendarBlockCard(block, featured: false)
+                }
+            }
+        }
+    }
+
+    private func calendarBlockCard(_ block: WorkbenchCalendarBlock, featured: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .top, spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(calendarColor(block).opacity(0.12))
+                    Image(systemName: block.isActive ? "play.fill" : "calendar")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(calendarColor(block))
+                }
+                .frame(width: 32, height: 32)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(block.displayTitle)
+                        .font(.system(size: featured ? 15 : 13, weight: .semibold))
+                        .foregroundColor(AppColors.textPrimary)
+                        .lineLimit(2)
+                    Text("\(block.startsText)-\(block.endsText) · \(block.lane ?? block.kind ?? "block")")
+                        .font(.caption)
+                        .foregroundColor(AppColors.textSecondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 4)
+
+                Text((block.status ?? "planned").replacingOccurrences(of: "_", with: " "))
+                    .font(.caption2.weight(.bold))
+                    .foregroundColor(calendarColor(block))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(calendarColor(block).opacity(0.12))
+                    .clipShape(Capsule())
+            }
+
+            HStack(spacing: 8) {
+                if !block.isActive && !block.isClosed {
+                    Button {
+                        Task { await model.startCalendarBlock(block) }
+                    } label: {
+                        Label("Start", systemImage: "play.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(AppColors.accentSuccess)
+                    .disabled(model.isMutatingCalendar)
+                }
+
+                if block.isActive {
+                    Button {
+                        Task { await model.finishCalendarBlock(block) }
+                    } label: {
+                        Label("Finish", systemImage: "checkmark.circle.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(AppColors.accentElectric)
+                    .disabled(model.isMutatingCalendar)
+                }
+
+                if !block.isClosed {
+                    Button {
+                        Task { await model.cancelCalendarBlock(block) }
+                    } label: {
+                        Label("Cancel", systemImage: "xmark.circle")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(AppColors.textTertiary)
+                    .disabled(model.isMutatingCalendar)
+                }
+
+                Spacer()
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(featured ? AppColors.accentSuccess.opacity(0.08) : AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func toolPill(_ label: String, icon: String, color: Color) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 9, weight: .semibold))
+            Text(label)
+                .font(.caption2.weight(.semibold))
+                .lineLimit(1)
+        }
+        .foregroundColor(color)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(color.opacity(0.10))
+        .clipShape(Capsule())
+    }
+
+    private func loadingLine(_ message: String) -> some View {
+        HStack(spacing: 7) {
+            ProgressView()
+                .controlSize(.mini)
+            Text(message)
+                .font(.caption2)
+                .foregroundColor(AppColors.textTertiary)
+            Spacer()
+        }
+        .padding(10)
+        .background(AppColors.backgroundTertiary.opacity(0.65))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func errorLine(_ message: String) -> some View {
+        Label(message, systemImage: "exclamationmark.triangle.fill")
+            .font(.caption2)
+            .foregroundColor(AppColors.accentWarning)
+            .lineLimit(2)
+    }
+
+    private func calendarColor(_ block: WorkbenchCalendarBlock) -> Color {
+        switch block.status {
+        case "active": return AppColors.accentSuccess
+        case "done": return AppColors.accentElectric
+        case "cancelled": return AppColors.textTertiary
+        case "overdue": return AppColors.accentWarning
+        default: return AppColors.accentElectric
         }
     }
 }
@@ -3027,6 +3285,9 @@ private struct WorkbenchTasksSection: View {
                 }
                 if let route = item.route ?? item.room {
                     taskPill(route, color: AppColors.textTertiary)
+                }
+                if let freshness = item.workbenchFreshnessLabel {
+                    taskPill(freshness, color: AppColors.textTertiary)
                 }
                 if item.stale {
                     taskPill("stale", color: AppColors.accentDanger)
@@ -3204,6 +3465,11 @@ final class WorkViewModel {
     var workbenchViewerName: String?
     var divisionWorkflow: WorkbenchDivisionWorkflow?
     var toolShelf: WorkbenchToolShelf?
+    var calendarBlocks: [WorkbenchCalendarBlock] = []
+    var planningContext: WorkbenchPlanningContext?
+    var isLoadingCalendar = false
+    var isMutatingCalendar = false
+    var calendarError: String?
     var toolRuns: [WorkbenchToolRunRecord] = []
     var toolRunsError: String?
     var isLoadingToolRuns = false
@@ -3248,6 +3514,29 @@ final class WorkViewModel {
         workbench?.buckets.workQueue?.counts["ready_now"] ?? visibleWorkbenchRows.count
     }
 
+    var canUseCalendarCockpit: Bool {
+        calendarAgentName != nil
+    }
+
+    var activeCalendarBlock: WorkbenchCalendarBlock? {
+        calendarBlocks.first(where: { $0.isActive })
+    }
+
+    var currentPlanningTitle: String? {
+        guard let current = planningContext?.currentBlock else { return nil }
+        return current.titleShort ?? current.title
+    }
+
+    private var calendarAgentName: String? {
+        let candidate = (workbenchViewerName ?? reviewerIdentity)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !candidate.isEmpty, candidate != "pod", candidate != "captain" else {
+            return nil
+        }
+        return candidate
+    }
+
     var visibleTaskRows: [WorkbenchWorkItem] {
         taskRows(for: selectedTaskLane)
     }
@@ -3268,6 +3557,10 @@ final class WorkViewModel {
         switch lane {
         case .mine:
             return dedupedTaskRows(queue.assignedToMe)
+        case .newest:
+            return dedupedTaskRows(queue.recentlyAssigned)
+        case .oldest:
+            return dedupedTaskRows(queue.longestWaiting)
         case .waiting:
             return dedupedTaskRows(queue.waitingOnMe)
         case .blocking:
@@ -3280,6 +3573,8 @@ final class WorkViewModel {
             return dedupedTaskRows([
                 queue.readyNow,
                 queue.assignedToMe,
+                queue.recentlyAssigned,
+                queue.longestWaiting,
                 queue.waitingOnMe,
                 queue.blockingOthers,
                 queue.blockedByMe,
@@ -3307,6 +3602,8 @@ final class WorkViewModel {
         let groups = [
             queue.readyNow,
             queue.assignedToMe,
+            queue.recentlyAssigned,
+            queue.longestWaiting,
             queue.waitingOnMe,
             queue.blockedByMe,
             queue.staleOwnedWork,
@@ -3596,12 +3893,15 @@ final class WorkViewModel {
             toolShelf = envelope.buckets.toolShelf
             workbenchRows = envelope.buckets.workQueue?.assignedToMe ?? []
             await loadAgentToolsForVisibleWorkbenchRows()
+            await loadCalendarCockpit(agentName: envelope.viewer.name)
         } catch let error as APIError where error.code == 401 {
             workbench = nil
             workbenchRows = []
             workbenchViewerName = nil
             divisionWorkflow = nil
             toolShelf = nil
+            calendarBlocks = []
+            planningContext = nil
             toolProjectionsByItemKey = [:]
             loadingToolProjectionKeys = []
             toolProjectionErrorsByItemKey = [:]
@@ -3612,10 +3912,123 @@ final class WorkViewModel {
             workbenchViewerName = nil
             divisionWorkflow = nil
             toolShelf = nil
+            calendarBlocks = []
+            planningContext = nil
             toolProjectionsByItemKey = [:]
             loadingToolProjectionKeys = []
             toolProjectionErrorsByItemKey = [:]
             workbenchError = "Workbench unavailable"
+        }
+    }
+
+    @MainActor
+    func loadCalendarCockpit(agentName explicitAgentName: String? = nil) async {
+        guard let agentName = explicitAgentName?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            ?? calendarAgentName else {
+            calendarBlocks = []
+            planningContext = nil
+            calendarError = "Agent token required"
+            return
+        }
+        isLoadingCalendar = true
+        calendarError = nil
+        defer { isLoadingCalendar = false }
+        do {
+            async let blocks = WorkbenchRepository().loadCalendarToday(agentName: agentName)
+            async let context = WorkbenchRepository().loadPlanningContext(agentName: agentName)
+            calendarBlocks = try await blocks
+            planningContext = try await context
+        } catch let error as APIError {
+            calendarBlocks = []
+            planningContext = nil
+            calendarError = error.message
+        } catch {
+            calendarBlocks = []
+            planningContext = nil
+            calendarError = "Calendar unavailable"
+        }
+    }
+
+    @MainActor
+    func scheduleWorkbenchFocusBlock() async {
+        guard let agentName = calendarAgentName, !isMutatingCalendar else { return }
+        let title = visibleWorkbenchRows.first?.safeTitle
+            ?? divisionWorkflow?.recurringDuties.first
+            ?? "Workbench focus block"
+        isMutatingCalendar = true
+        calendarError = nil
+        defer { isMutatingCalendar = false }
+        do {
+            _ = try await WorkbenchRepository().scheduleCalendarBlock(agentName: agentName, title: title, minutes: 30)
+            priorityToast = PriorityToast(message: "Focus block scheduled", isError: false, retry: nil)
+            await loadCalendarCockpit(agentName: agentName)
+        } catch let error as APIError {
+            calendarError = error.message
+            priorityToast = PriorityToast(message: "Calendar action failed", isError: true, retry: nil)
+        } catch {
+            calendarError = "Calendar action failed"
+            priorityToast = PriorityToast(message: "Calendar action failed", isError: true, retry: nil)
+        }
+    }
+
+    @MainActor
+    func startCalendarBlock(_ block: WorkbenchCalendarBlock) async {
+        guard let agentName = calendarAgentName, !isMutatingCalendar else { return }
+        isMutatingCalendar = true
+        calendarError = nil
+        defer { isMutatingCalendar = false }
+        do {
+            _ = try await WorkbenchRepository().startCalendarBlock(agentName: agentName, eventId: block.eventId)
+            priorityToast = PriorityToast(message: "Calendar block started", isError: false, retry: nil)
+            await loadCalendarCockpit(agentName: agentName)
+        } catch let error as APIError {
+            calendarError = error.message
+            priorityToast = PriorityToast(message: "Start failed", isError: true, retry: nil)
+        } catch {
+            calendarError = "Start failed"
+            priorityToast = PriorityToast(message: "Start failed", isError: true, retry: nil)
+        }
+    }
+
+    @MainActor
+    func finishCalendarBlock(_ block: WorkbenchCalendarBlock) async {
+        guard let agentName = calendarAgentName, !isMutatingCalendar else { return }
+        isMutatingCalendar = true
+        calendarError = nil
+        defer { isMutatingCalendar = false }
+        do {
+            _ = try await WorkbenchRepository().finishCalendarBlock(
+                agentName: agentName,
+                eventId: block.eventId,
+                outcome: "Finished from Pod Bench calendar cockpit."
+            )
+            priorityToast = PriorityToast(message: "Calendar block finished", isError: false, retry: nil)
+            await loadCalendarCockpit(agentName: agentName)
+        } catch let error as APIError {
+            calendarError = error.message
+            priorityToast = PriorityToast(message: "Finish failed", isError: true, retry: nil)
+        } catch {
+            calendarError = "Finish failed"
+            priorityToast = PriorityToast(message: "Finish failed", isError: true, retry: nil)
+        }
+    }
+
+    @MainActor
+    func cancelCalendarBlock(_ block: WorkbenchCalendarBlock) async {
+        guard let agentName = calendarAgentName, !isMutatingCalendar else { return }
+        isMutatingCalendar = true
+        calendarError = nil
+        defer { isMutatingCalendar = false }
+        do {
+            _ = try await WorkbenchRepository().cancelCalendarBlock(agentName: agentName, eventId: block.eventId)
+            priorityToast = PriorityToast(message: "Calendar block cancelled", isError: false, retry: nil)
+            await loadCalendarCockpit(agentName: agentName)
+        } catch let error as APIError {
+            calendarError = error.message
+            priorityToast = PriorityToast(message: "Cancel failed", isError: true, retry: nil)
+        } catch {
+            calendarError = "Cancel failed"
+            priorityToast = PriorityToast(message: "Cancel failed", isError: true, retry: nil)
         }
     }
 
@@ -6100,9 +6513,34 @@ private extension KeyedDecodingContainer {
     }
 }
 
+private func workbenchCompactDuration(hours: Double) -> String {
+    if hours < 1 {
+        return "now"
+    }
+    if hours < 24 {
+        return "\(max(1, Int(hours.rounded())))h"
+    }
+    let days = max(1, Int((hours / 24).rounded()))
+    if days < 14 {
+        return "\(days)d"
+    }
+    let weeks = max(2, Int((Double(days) / 7).rounded()))
+    return "\(weeks)w"
+}
+
 private extension WorkbenchWorkItem {
     var isTaskLike: Bool {
         kind == "task" || sourceTaskId != nil
+    }
+
+    var workbenchFreshnessLabel: String? {
+        if let waitingHours {
+            return "assigned \(workbenchCompactDuration(hours: waitingHours))"
+        }
+        if let ageHours {
+            return "created \(workbenchCompactDuration(hours: ageHours))"
+        }
+        return nil
     }
 
     var effectiveTaskId: String? {

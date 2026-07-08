@@ -2691,7 +2691,8 @@ struct AgentDetailSheet: View {
         }
         do {
             let dto: AgentLockerDTO = try await APIClient.shared.request(
-                .agentLocker(name: agent.apiPathComponent, limit: 10)
+                .agentLocker(name: agent.apiPathComponent, limit: 10),
+                includeAgentToken: true
             )
             await MainActor.run {
                 self.lockerData = dto
@@ -2932,7 +2933,8 @@ struct AgentDetailSheet: View {
             let body = MemoryCandidateBody(note: note, source: "pod_locker_escalation", tags: [])
             let _: AgentLockerActionResultDTO = try await APIClient.shared.post(
                 path: "/api/v1/agents/\(agent.apiPathComponent)/locker-actions/memory-candidate",
-                body: body
+                body: body,
+                includeAgentToken: true
             )
             await MainActor.run {
                 self.memoryCandidateNote = ""
@@ -2971,7 +2973,8 @@ struct AgentDetailSheet: View {
             )
             let _: AgentLockerActionResultDTO = try await APIClient.shared.post(
                 path: "/api/v1/agents/\(agent.apiPathComponent)/locker-feedback",
-                body: body
+                body: body,
+                includeAgentToken: true
             )
             await MainActor.run {
                 self.lockerFeedbackText = ""
@@ -3120,7 +3123,8 @@ struct AgentDetailSheet: View {
                 let body = PrefsBody(pinnedTabs: newPrefs.pinnedTabs, pinnedTools: newPrefs.pinnedTools)
                 let _: [String: String] = try await APIClient.shared.put(
                     path: "/api/v1/agents/\(agent)/locker-cockpit/preferences",
-                    body: body
+                    body: body,
+                    includeAgentToken: true
                 )
                 await MainActor.run { self.refreshLocker() }
             } catch {

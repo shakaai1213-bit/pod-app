@@ -88,6 +88,210 @@ actor WorkbenchRepository {
     func executeToolRun(_ request: WorkbenchToolRunRequest) async throws -> WorkbenchToolRunReceipt {
         try await api.post(path: "/api/v1/agent/tool-runs", body: request, includeAgentToken: true)
     }
+
+    func loadCalendarToday(agentName: String) async throws -> [WorkbenchCalendarBlock] {
+        let agent = normalizedAgentName(agentName)
+        return try await api.get(path: "/api/v1/agents/\(agent)/calendar/today", includeAgentToken: true)
+    }
+
+    func loadPlanningContext(agentName: String) async throws -> WorkbenchPlanningContext {
+        let agent = normalizedAgentName(agentName)
+        return try await api.get(path: "/api/v1/agents/\(agent)/planning-context", includeAgentToken: true)
+    }
+
+    func scheduleCalendarBlock(agentName: String, title: String, minutes: Int = 30) async throws -> WorkbenchCalendarBlock {
+        let agent = normalizedAgentName(agentName)
+        let start = Date().addingTimeInterval(5 * 60)
+        let end = start.addingTimeInterval(TimeInterval(max(15, minutes) * 60))
+        let request = WorkbenchCalendarCreateRequest(
+            ownerAgent: agent,
+            kind: "task",
+            title: title,
+            startTz: ["tz": "UTC", "instant": WorkbenchCalendarBlock.isoFormatter.string(from: start)],
+            endTz: ["tz": "UTC", "instant": WorkbenchCalendarBlock.isoFormatter.string(from: end)],
+            status: "planned",
+            assignments: [WorkbenchCalendarAssignment(agent: agent, role: "owner")]
+        )
+        return try await api.post(path: "/api/v1/calendar/events", body: request, includeAgentToken: true)
+    }
+
+    func startCalendarBlock(agentName: String, eventId: String) async throws -> WorkbenchCalendarBlock {
+        let agent = normalizedAgentName(agentName)
+        return try await api.post(
+            path: "/api/v1/agents/\(agent)/calendar/blocks/\(eventId)/start",
+            body: WorkbenchEmptyBody(),
+            includeAgentToken: true
+        )
+    }
+
+    func finishCalendarBlock(agentName: String, eventId: String, outcome: String) async throws -> WorkbenchCalendarBlock {
+        let agent = normalizedAgentName(agentName)
+        return try await api.post(
+            path: "/api/v1/agents/\(agent)/calendar/blocks/\(eventId)/finish",
+            body: WorkbenchCalendarFinishRequest(outcome: outcome),
+            includeAgentToken: true
+        )
+    }
+
+    func cancelCalendarBlock(agentName: String, eventId: String) async throws -> WorkbenchCalendarBlock {
+        let agent = normalizedAgentName(agentName)
+        return try await api.post(
+            path: "/api/v1/agents/\(agent)/calendar/blocks/\(eventId)/cancel",
+            body: WorkbenchEmptyBody(),
+            includeAgentToken: true
+        )
+    }
+
+    private func normalizedAgentName(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+}
+
+private struct WorkbenchEmptyBody: Encodable {}
+
+private struct WorkbenchCalendarAssignment: Encodable, Hashable {
+    let agent: String
+    let role: String
+}
+
+private struct WorkbenchCalendarCreateRequest: Encodable {
+    let ownerAgent: String
+    let kind: String
+    let title: String
+    let startTz: [String: String]
+    let endTz: [String: String]
+    let status: String
+    let assignments: [WorkbenchCalendarAssignment]
+
+    enum CodingKeys: String, CodingKey {
+        case kind, title, status, assignments
+        case ownerAgent = "owner_agent"
+        case startTz = "start_tz"
+        case endTz = "end_tz"
+    }
+}
+
+private struct WorkbenchCalendarFinishRequest: Encodable {
+    let outcome: String
+}
+
+struct WorkbenchCalendarBlock: Decodable, Identifiable, Hashable {
+    let id: String
+    let sourceEventId: String?
+    let ownerAgent: String?
+    let kind: String?
+    let eventType: String?
+    let title: String
+    let titleShort: String?
+    let lane: String?
+    let status: String?
+    let outcome: String?
+    let instanceStart: String?
+    let instanceEnd: String?
+    let startTz: [String: String]?
+    let endTz: [String: String]?
+    let blockedOn: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, kind, title, lane, status, outcome
+        case sourceEventId = "source_event_id"
+        case ownerAgent = "owner_agent"
+        case eventType = "event_type"
+        case titleShort = "title_short"
+        case instanceStart = "instance_start"
+        case instanceEnd = "instance_end"
+        case startTz = "start_tz"
+        case endTz = "end_tz"
+        case blockedOn = "blocked_on"
+    }
+
+    var eventId: String {
+        sourceEventId ?? id
+    }
+
+    var displayTitle: String {
+        titleShort?.isEmpty == false ? titleShort ?? title : title
+    }
+
+    var startsText: String {
+        Self.compactTime(instanceStart ?? startTz?["instant"])
+    }
+
+    var endsText: String {
+        Self.compactTime(instanceEnd ?? endTz?["instant"])
+    }
+
+    var isActive: Bool {
+        status == "active"
+    }
+
+    var isClosed: Bool {
+        status == "done" || status == "cancelled"
+    }
+
+    static let isoFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private static func compactTime(_ value: String?) -> String {
+        guard let value else { return "--" }
+        let fallback = ISO8601DateFormatter()
+        let date = isoFormatter.date(from: value) ?? fallback.date(from: value)
+        guard let date else { return String(value.prefix(5)) }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        formatter.timeZone = .current
+        return formatter.string(from: date)
+    }
+}
+
+struct WorkbenchPlanningContext: Decodable, Hashable {
+    let agent: String
+    let currentBlock: WorkbenchPlanningBlock?
+    let nextBlock: WorkbenchPlanningBlock?
+    let overdue: [WorkbenchPlanningBlock]
+    let readyNow: [WorkbenchPlanningBlock]
+    let overdueTotal: Int?
+    let overdueByPriority: [String: Int]
+
+    enum CodingKeys: String, CodingKey {
+        case agent, overdue
+        case currentBlock = "current_block"
+        case nextBlock = "next_block"
+        case readyNow = "ready_now"
+        case overdueTotal = "overdue_total"
+        case overdueByPriority = "overdue_by_priority"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        agent = try c.decodeIfPresent(String.self, forKey: .agent) ?? "agent"
+        currentBlock = try c.decodeIfPresent(WorkbenchPlanningBlock.self, forKey: .currentBlock)
+        nextBlock = try c.decodeIfPresent(WorkbenchPlanningBlock.self, forKey: .nextBlock)
+        overdue = (try? c.decodeIfPresent([WorkbenchPlanningBlock].self, forKey: .overdue)) ?? []
+        readyNow = (try? c.decodeIfPresent([WorkbenchPlanningBlock].self, forKey: .readyNow)) ?? []
+        overdueTotal = try c.decodeIfPresent(Int.self, forKey: .overdueTotal)
+        overdueByPriority = (try? c.decodeIfPresent([String: Int].self, forKey: .overdueByPriority)) ?? [:]
+    }
+}
+
+struct WorkbenchPlanningBlock: Decodable, Identifiable, Hashable {
+    let id: String
+    let title: String
+    let titleShort: String?
+    let lane: String?
+    let priority: String?
+    let source: String?
+    let blockedOn: String?
+
+    enum CodingKeys: String, CodingKey {
+        case title, lane, priority, source
+        case id = "event_id"
+        case titleShort = "title_short"
+        case blockedOn = "blocked_on"
+    }
 }
 
 struct WorkbenchApprovalAttention: Decodable, Hashable {
@@ -1059,6 +1263,8 @@ struct WorkbenchWorkQueue: Decodable, Hashable {
     let readyNow: [WorkbenchWorkItem]
     let staleOwnedWork: [WorkbenchWorkItem]
     let recentChanges: [WorkbenchWorkItem]
+    let recentlyAssigned: [WorkbenchWorkItem]
+    let longestWaiting: [WorkbenchWorkItem]
     let approvals: [WorkbenchApprovalRef]
     let watching: [WorkbenchWorkItem]
     let counts: [String: Int]
@@ -1076,6 +1282,8 @@ struct WorkbenchWorkQueue: Decodable, Hashable {
         case readyNow = "ready_now"
         case staleOwnedWork = "stale_owned_work"
         case recentChanges = "recent_changes"
+        case recentlyAssigned = "recently_assigned"
+        case longestWaiting = "longest_waiting"
     }
 
     init(from decoder: Decoder) throws {
@@ -1092,6 +1300,8 @@ struct WorkbenchWorkQueue: Decodable, Hashable {
         readyNow = (try? c.decodeIfPresent([WorkbenchWorkItem].self, forKey: .readyNow)) ?? []
         staleOwnedWork = (try? c.decodeIfPresent([WorkbenchWorkItem].self, forKey: .staleOwnedWork)) ?? []
         recentChanges = (try? c.decodeIfPresent([WorkbenchWorkItem].self, forKey: .recentChanges)) ?? []
+        recentlyAssigned = (try? c.decodeIfPresent([WorkbenchWorkItem].self, forKey: .recentlyAssigned)) ?? []
+        longestWaiting = (try? c.decodeIfPresent([WorkbenchWorkItem].self, forKey: .longestWaiting)) ?? []
         approvals = (try? c.decodeIfPresent([WorkbenchApprovalRef].self, forKey: .approvals)) ?? []
         watching = (try? c.decodeIfPresent([WorkbenchWorkItem].self, forKey: .watching)) ?? []
         counts = try c.decodeIfPresent([String: Int].self, forKey: .counts) ?? [:]
@@ -1118,6 +1328,10 @@ struct WorkbenchWorkItem: Decodable, Identifiable, Hashable {
     let waitingOn: String?
     let stale: Bool
     let staleAfterHours: Int?
+    let createdAt: Date?
+    let assignedAt: Date?
+    let ageHours: Double?
+    let waitingHours: Double?
     let updatedAt: Date?
 
     enum CodingKeys: String, CodingKey {
@@ -1133,6 +1347,10 @@ struct WorkbenchWorkItem: Decodable, Identifiable, Hashable {
         case blockedOn = "blocked_on"
         case waitingOn = "waiting_on"
         case staleAfterHours = "stale_after_hours"
+        case createdAt = "created_at"
+        case assignedAt = "assigned_at"
+        case ageHours = "age_hours"
+        case waitingHours = "waiting_hours"
         case updatedAt = "updated_at"
     }
 
@@ -1156,6 +1374,10 @@ struct WorkbenchWorkItem: Decodable, Identifiable, Hashable {
         waitingOn = try c.decodeIfPresent(String.self, forKey: .waitingOn)
         stale = try c.decodeIfPresent(Bool.self, forKey: .stale) ?? false
         staleAfterHours = try c.decodeIfPresent(Int.self, forKey: .staleAfterHours)
+        createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt)
+        assignedAt = try c.decodeIfPresent(Date.self, forKey: .assignedAt)
+        ageHours = try c.decodeIfPresent(Double.self, forKey: .ageHours)
+        waitingHours = try c.decodeIfPresent(Double.self, forKey: .waitingHours)
         updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt)
     }
 
