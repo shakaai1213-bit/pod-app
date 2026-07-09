@@ -1,0 +1,370 @@
+<title>North Pod Labs · Captain's Chart</title>
+<style>
+  :root {
+    --paper: #eef2f1;
+    --card: #f7faf9;
+    --ink: #13262c;
+    --ink-2: #46595f;
+    --ink-3: #71838a;
+    --line: #d3dcda;
+    --accent: #0e7c86;
+    --accent-soft: #0e7c8618;
+    --good: #2e7d4f;      --good-bg: #2e7d4f16;
+    --watch: #a06f08;     --watch-bg: #a06f0816;
+    --alert: #b3402e;     --alert-bg: #b3402e14;
+    --hold: #5e6d74;      --hold-bg: #5e6d7418;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    --serif: "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0d191d; --card: #13232a; --ink: #e2ebe9; --ink-2: #9fb2b0;
+      --ink-3: #71858c; --line: #24383e; --accent: #43b3bd; --accent-soft: #43b3bd1c;
+      --good: #58b183; --good-bg: #58b18318; --watch: #d9a83f; --watch-bg: #d9a83f16;
+      --alert: #e07a63; --alert-bg: #e07a6316; --hold: #8ba0a8; --hold-bg: #8ba0a818;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #0d191d; --card: #13232a; --ink: #e2ebe9; --ink-2: #9fb2b0;
+    --ink-3: #71858c; --line: #24383e; --accent: #43b3bd; --accent-soft: #43b3bd1c;
+    --good: #58b183; --good-bg: #58b18318; --watch: #d9a83f; --watch-bg: #d9a83f16;
+    --alert: #e07a63; --alert-bg: #e07a6316; --hold: #8ba0a8; --hold-bg: #8ba0a818;
+  }
+  :root[data-theme="light"] {
+    --paper: #eef2f1; --card: #f7faf9; --ink: #13262c; --ink-2: #46595f;
+    --ink-3: #71838a; --line: #d3dcda; --accent: #0e7c86; --accent-soft: #0e7c8618;
+    --good: #2e7d4f; --good-bg: #2e7d4f16; --watch: #a06f08; --watch-bg: #a06f0816;
+    --alert: #b3402e; --alert-bg: #b3402e14; --hold: #5e6d74; --hold-bg: #5e6d7418;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: var(--sans); font-size: 15px; line-height: 1.45;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 24px 56px; }
+
+  /* Masthead */
+  header { border-bottom: 2px solid var(--ink); padding-bottom: 14px; margin-bottom: 8px; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent); }
+  h1 { font-family: var(--serif); font-size: clamp(26px, 4vw, 38px); margin: 4px 0 2px;
+    font-weight: 600; letter-spacing: -.01em; text-wrap: balance; }
+  .sub { color: var(--ink-2); font-family: var(--serif); font-style: italic; margin: 0; }
+  .stamp { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); margin-top: 10px; }
+  .stamp b { color: var(--ink-2); font-weight: 600; }
+
+  /* Milestone strip */
+  .mstrip { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px 0 6px;
+    border-bottom: 1px solid var(--line); margin-bottom: 22px; }
+  .mile { font-family: var(--mono); font-size: 12px; padding: 4px 10px;
+    border: 1px solid var(--line); border-radius: 3px; color: var(--ink-2);
+    background: var(--card); white-space: nowrap; }
+  .mile.done { border-color: var(--good); color: var(--good); background: var(--good-bg); }
+  .mile.next { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+  /* Summary tiles */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px; margin-bottom: 30px; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 4px;
+    padding: 14px 16px 12px; }
+  .tile .k { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--ink-3); }
+  .tile .v { font-family: var(--mono); font-size: 30px; font-weight: 700;
+    font-variant-numeric: tabular-nums; margin: 2px 0 0; line-height: 1.1; }
+  .tile .d { font-size: 12px; color: var(--ink-2); margin-top: 3px; }
+
+  /* Sections */
+  h2 { font-family: var(--serif); font-size: 19px; font-weight: 600; margin: 30px 0 4px;
+    padding-top: 8px; }
+  .sec-note { font-size: 12.5px; color: var(--ink-3); margin: 0 0 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 12px; }
+
+  /* Station cards */
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 4px;
+    padding: 14px 16px 13px; display: flex; flex-direction: column; gap: 9px; }
+  .card-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .pname { font-weight: 650; font-size: 15.5px; }
+  .owner { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); white-space: nowrap; }
+
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono);
+    font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+    padding: 3px 9px; border-radius: 999px; width: fit-content; }
+  .pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .p-good  { color: var(--good);  background: var(--good-bg); }
+  .p-watch { color: var(--watch); background: var(--watch-bg); }
+  .p-alert { color: var(--alert); background: var(--alert-bg); }
+  .p-hold  { color: var(--hold);  background: var(--hold-bg); }
+  .p-hold::before { background: transparent; border: 1.5px solid currentColor; width: 5px; height: 5px; }
+
+  /* Stage track */
+  .track { display: flex; align-items: center; gap: 0; margin-top: 1px; }
+  .step { display: flex; align-items: center; flex: 1; min-width: 0; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--ink-3);
+    background: transparent; flex: none; }
+  .step .bar { height: 1.5px; background: var(--line); flex: 1; }
+  .step:last-child .bar { display: none; }
+  .step.on .dot { background: var(--accent); border-color: var(--accent); }
+  .step.on .bar { background: var(--accent); }
+  .step.half .dot { background: transparent; border-color: var(--accent);
+    box-shadow: inset 2.5px 0 0 var(--accent); }
+  .tlabels { display: flex; justify-content: space-between; font-family: var(--mono);
+    font-size: 9px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3);
+    margin-top: 3px; }
+
+  .usage { font-family: var(--mono); font-size: 12.5px; color: var(--ink-2);
+    font-variant-numeric: tabular-nums; border-top: 1px dashed var(--line); padding-top: 8px; }
+  .usage b { color: var(--ink); font-weight: 700; }
+  .gate { font-size: 12px; color: var(--ink-2); }
+  .gate b { font-weight: 600; color: var(--accent); }
+
+  /* Router mix bar-list (magnitude, single hue) */
+  .mix { display: grid; grid-template-columns: 82px 1fr 62px; gap: 4px 10px;
+    align-items: center; font-family: var(--mono); font-size: 11.5px;
+    font-variant-numeric: tabular-nums; margin-top: 6px; }
+  .mix .lbl { color: var(--ink-2); }
+  .mix .bar-bg { height: 10px; border-radius: 2px 3px 3px 2px; background: transparent; }
+  .mix .bar-fill { height: 100%; background: var(--accent); border-radius: 2px 3px 3px 2px; min-width: 2px; }
+  .mix .num { text-align: right; color: var(--ink-2); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 26px 0 0; padding-top: 14px;
+    border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-2); }
+  footer { margin-top: 26px; padding-top: 14px; border-top: 2px solid var(--ink);
+    font-size: 12.5px; color: var(--ink-2); }
+  footer .path { font-family: var(--mono); font-size: 11.5px; }
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">North Pod Labs</div>
+  <h1>Captain's Chart</h1>
+  <p class="sub">The lab, in one map.</p>
+  <div class="stamp">v0 mockup · every number below <b>verified by value 2026-07-09 ~01:45Z (Maui 🪝)</b> · production feed: <b>/cockpit/snapshot</b> per SPEC-COCKPIT-SNAPSHOT-V1</div>
+</header>
+
+<div class="mstrip">
+  <span class="mile done">M1 writeback race ✓</span>
+  <span class="mile done">M2 wake-to-work sign ✓</span>
+  <span class="mile done">M3 fleet repaired ✓ 7/7</span>
+  <span class="mile next">M4 loop proven — next</span>
+  <span class="mile">M5 pulse monitor — specced</span>
+  <span class="mile">M6 Blackfin eval — 2/3 done</span>
+  <span class="mile">M7 sign-debt — 3 left</span>
+</div>
+
+<div class="tiles">
+  <div class="tile"><div class="k">Wake fleet · both Macs</div><div class="v">7/7</div>
+    <div class="d">was 1/7 this morning · receipts green all lanes</div></div>
+  <div class="tile"><div class="k">Arm runs accepted today</div><div class="v">2</div>
+    <div class="d">first since Jun 28 · review lane keeping pace</div></div>
+  <div class="tile"><div class="k">Claude share of routed calls</div><div class="v">1.1%</div>
+    <div class="d">298 of 26,204 lifetime — cascade discipline holds</div></div>
+  <div class="tile"><div class="k">Stuck dispatches to drain</div><div class="v">15</div>
+    <div class="d">staggered + rate-limited per A4 — M4's trigger</div></div>
+</div>
+
+<h2>The Loop — agent operating system</h2>
+<p class="sec-note">Signal → receipt → wake → claim → act → writeback → evidence</p>
+<div class="grid">
+
+  <div class="card">
+    <div class="card-top"><span class="pname">ORCA Operating Base</span><span class="owner">Coral 🪸 · Maui gate</span></div>
+    <span class="pill p-good">Steady</span>
+    <div><div class="track">
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step half"><span class="dot"></span></span>
+    </div><div class="tlabels"><span>Design</span><span>Sign</span><span>Build</span><span>Live</span><span>Instr.</span></div></div>
+    <div class="usage">Phases 1–10 closed · 11–13 building · <b>2 verified deploys tonight</b> (P0 fix + gate evidence)</div>
+    <div class="gate">Next gate: <b>11.2 DB-uniqueness migration</b> (Maui sign)</div>
+  </div>
+
+  <div class="card">
+    <div class="card-top"><span class="pname">Wake-to-Work Loop</span><span class="owner">Coral 🪸 · A1–A6</span></div>
+    <span class="pill p-good">Steady — new tonight</span>
+    <div><div class="track">
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step half"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step"><span class="dot"></span></span>
+    </div><div class="tlabels"><span>Design</span><span>Sign</span><span>Build</span><span>Live</span><span>Instr.</span></div></div>
+    <div class="usage">W0–W2 shipped in one night · <b>7/7 daemons</b> both Macs · receipts green · W6/W7 gated</div>
+    <div class="gate">Next gate: <b>backlog drain → M4 proof-of-life</b></div>
+  </div>
+
+  <div class="card">
+    <div class="card-top"><span class="pname">Locker / Agent OS</span><span class="owner">Coral 🪸 · superplan</span></div>
+    <span class="pill p-watch">Watch — adoption ramping</span>
+    <div><div class="track">
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step half"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step"><span class="dot"></span></span>
+    </div><div class="tlabels"><span>Design</span><span>Sign</span><span>Build</span><span>Live</span><span>Instr.</span></div></div>
+    <div class="usage">Was <b>0/9 agents</b> using claim/writeback for real work · receipt layer live tonight — ramp starts now</div>
+    <div class="gate">Next gate: <b>lifeline P2</b> under Maui's 4 corrections</div>
+  </div>
+
+  <div class="card">
+    <div class="card-top"><span class="pname">Schoolhouse</span><span class="owner">team · Aloha doctrine</span></div>
+    <span class="pill p-good">Steady</span>
+    <div><div class="track">
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step"><span class="dot"></span></span>
+    </div><div class="tlabels"><span>Design</span><span>Sign</span><span>Build</span><span>Live</span><span>Instr.</span></div></div>
+    <div class="usage">Activation context every session · broker audits clean · packet freshness gated by lifecycle proofs</div>
+    <div class="gate">Next gate: <b>W3 activation detail</b> (bodies, not counts)</div>
+  </div>
+</div>
+
+<h2>Compute &amp; Models</h2>
+<p class="sec-note">Buy nothing · measure everything · route ruthlessly downward</p>
+<div class="grid">
+
+  <div class="card">
+    <div class="card-top"><span class="pname">Cascade Triage / Compute Router</span><span class="owner">Maui 🪝</span></div>
+    <span class="pill p-good">Steady · up 8 days</span>
+    <div class="mix">
+      <span class="lbl">spark</span><span class="bar-bg"><span class="bar-fill" style="width:100%"></span></span><span class="num">16,503</span>
+      <span class="lbl">shadow</span><span class="bar-bg"><span class="bar-fill" style="width:34%"></span></span><span class="num">5,583</span>
+      <span class="lbl">openclaw</span><span class="bar-bg"><span class="bar-fill" style="width:16%"></span></span><span class="num">2,713</span>
+      <span class="lbl">blackfin</span><span class="bar-bg"><span class="bar-fill" style="width:6%"></span></span><span class="num">995</span>
+      <span class="lbl">premium</span><span class="bar-bg"><span class="bar-fill" style="width:1.8%"></span></span><span class="num">298</span>
+    </div>
+    <div class="gate">Next gate: <b>alarm #7</b> — windowed per-tag error rates + route-cessation</div>
+  </div>
+
+  <div class="card">
+    <div class="card-top"><span class="pname">Blackfin / Lab LLM</span><span class="owner">Maui 🪝 + Reef 🐡</span></div>
+    <span class="pill p-hold">Paused by design · V47</span>
+    <div><div class="track">
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step half"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step half"><span class="dot"></span></span>
+    </div><div class="tlabels"><span>Design</span><span>Sign</span><span>Build</span><span>Live</span><span>Instr.</span></div></div>
+    <div class="usage">EI contract signed · manifest index <b>19,152 hashes</b> · overlap checker <b>built + verified tonight</b> · serving proven 995 calls / 0 err</div>
+    <div class="gate">Unpause key: <b>M6 sealed set</b> (Maui) → clean overlap → V48</div>
+  </div>
+
+  <div class="card">
+    <div class="card-top"><span class="pname">Spark (GB10) · serving</span><span class="owner">Maui 🪝</span></div>
+    <span class="pill p-watch">Watch — memory pressure</span>
+    <div><div class="track">
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step half"><span class="dot"></span></span>
+    </div><div class="tlabels"><span>Design</span><span>Sign</span><span>Build</span><span>Live</span><span>Instr.</span></div></div>
+    <div class="usage"><b>8 containers</b> serving · 84/121 GB unified · swap 12/15 GB · watchdog active · disk 9%</div>
+    <div class="gate">Next gate: <b>serve/train lease</b> (SOTA #6) before V48 · Nemotron 3 Nano bakeoff queued behind M6 harness</div>
+  </div>
+
+  <div class="card">
+    <div class="card-top"><span class="pname">Arm Fabric</span><span class="owner">Maui 🪝 design · arms build</span></div>
+    <span class="pill p-watch">Watch — building</span>
+    <div><div class="track">
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step half"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step"><span class="dot"></span></span>
+    </div><div class="tlabels"><span>Design</span><span>Sign</span><span>Build</span><span>Live</span><span>Instr.</span></div></div>
+    <div class="usage">Rooster-signed AF-1/2 · <b>2 runs accepted tonight</b> (first since 06-28) · ~190 historical · chief-mac lane paused since 06-22</div>
+    <div class="gate">Next gate: <b>lifecycle closure states</b> + all-agent dispatch · P3 gated on M2+M5 (SC-1)</div>
+  </div>
+</div>
+
+<h2>Surfaces &amp; Immune System</h2>
+<div class="grid">
+
+  <div class="card">
+    <div class="card-top"><span class="pname">Pod</span><span class="owner">Maui 🪝 + Coral 🪸</span></div>
+    <span class="pill p-good">Steady</span>
+    <div><div class="track">
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step"><span class="dot"></span></span>
+    </div><div class="tlabels"><span>Design</span><span>Sign</span><span>Build</span><span>Live</span><span>Instr.</span></div></div>
+    <div class="usage">Workbench P0–P6 done · tool rail K0/K3–K5 · calendar cockpit shipped <b>8727def</b> tonight · sim + iPad green</div>
+    <div class="gate">Next gate: <b>Captain's Chart card</b> (this page, productionized) + K1/K2</div>
+  </div>
+
+  <div class="card">
+    <div class="card-top"><span class="pname">Loop-Liveness Monitor</span><span class="owner">Maui 🪝 · f379679a</span></div>
+    <span class="pill p-alert">Attention — not built yet</span>
+    <div><div class="track">
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step half"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step"><span class="dot"></span></span>
+    </div><div class="tlabels"><span>Design</span><span>Sign</span><span>Build</span><span>Live</span><span>Instr.</span></div></div>
+    <div class="usage"><b>7 alarm classes specced</b> from real failures: run-age · dispatch-stall · arm-idle · conformance-silence · posture-drift · gate-aging · route-cessation</div>
+    <div class="gate">Next gate: <b>arm build</b> — until live, tonight's lessons are docs, not immunity</div>
+  </div>
+
+  <div class="card">
+    <div class="card-top"><span class="pname">Cross-Mac Parity</span><span class="owner">Coral 🪸 + Reef 🐡 · Maui arch</span></div>
+    <span class="pill p-watch">Watch — CEO-signed tonight</span>
+    <div><div class="track">
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step half"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step"><span class="dot"></span></span>
+    </div><div class="tlabels"><span>Design</span><span>Sign</span><span>Build</span><span>Live</span><span>Instr.</span></div></div>
+    <div class="usage">Doctrine: identical machinery, unequal data · divergences today <b>7/day</b> → target <b>0 sustained</b></div>
+    <div class="gate">Next gate: <b>Rooster P3/P4 co-sign → Tony final</b> · P1 git-backing starts now</div>
+  </div>
+
+  <div class="card">
+    <div class="card-top"><span class="pname">Research Flywheel / Fish 🐠</span><span class="owner">Coral 🪸 · Maui sign pending</span></div>
+    <span class="pill p-alert">Attention — findings stale</span>
+    <div><div class="track">
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step half"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step"><span class="dot"></span></span>
+    </div><div class="tlabels"><span>Design</span><span>Sign</span><span>Build</span><span>Live</span><span>Instr.</span></div></div>
+    <div class="usage"><b>1,238 findings</b> indexed but going stale · fish idle · writers without readers — the exact anti-pattern Phase 14–16 fixes</div>
+    <div class="gate">Next gate: <b>Maui engineering-shape sign</b> (M7) → fish fed via Planner</div>
+  </div>
+
+  <div class="card">
+    <div class="card-top"><span class="pname">Guardian</span><span class="owner">Maui 🪝 · product</span></div>
+    <span class="pill p-hold">Waiting on Captain</span>
+    <div><div class="track">
+      <span class="step on"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step"><span class="dot"></span><span class="bar"></span></span>
+      <span class="step"><span class="dot"></span></span>
+    </div><div class="tlabels"><span>Design</span><span>Sign</span><span>Build</span><span>Live</span><span>Instr.</span></div></div>
+    <div class="usage">Architecture DDS drafted · Louie pilot scoped · E1 intake open</div>
+    <div class="gate">Next gate: <b>Tony — MH-1 question sets + MH-7 sponsor</b></div>
+  </div>
+</div>
+
+<div class="legend">
+  <span><b>Stage track:</b> Design → Sign → Build → Live → Instrumented (a product isn't done until it's alarmed)</span>
+  <span><b>Steady</b> = verified healthy · <b>Watch</b> = healthy with a named risk · <b>Attention</b> = needs work now · <b>◦ Paused/Waiting</b> = deliberate hold</span>
+</div>
+
+<footer>
+  <div>Every figure verified by value against the live estate (router stats, ORCA DB, launchctl on both Macs, arm state dirs, Reef's manifest index) — no numbers from memory.</div>
+  <div class="path" style="margin-top:6px">Production path: ORCA <b>/cockpit/snapshot</b> read model (SPEC-COCKPIT-SNAPSHOT-V1 — Maui ✅ Aloha ✅, awaiting Reef + Tony) → Pod Dashboard "Captain's Desk" card grid → this page's layout as the render spec. Health column feeds from loop-liveness monitor <span style="font-family:var(--mono)">f379679a</span> once built.</div>
+</footer>
+</div>

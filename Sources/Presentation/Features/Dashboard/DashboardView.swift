@@ -38,27 +38,30 @@ struct DashboardView: View {
                     // 2. Captain's Desk — Tony's living focus cards from ORCA.
                     CaptainsDeskSection()
 
-                    // 3. Voice room status — primary realtime chat surface.
+                    // 3. Captain's Chart — bundled product map until cockpit snapshot ships.
+                    CaptainsChartSection()
+
+                    // 4. Voice room status — primary realtime chat surface.
                     dashboardVoiceBanner
 
-                    // 4. Protected Fund visibility — read-only, no controls.
+                    // 5. Protected Fund visibility — read-only, no controls.
                     dashboardFundLandingCard
 
-                    // 5. Daily briefing — collapsible read-only note from ORCA.
+                    // 6. Daily briefing — collapsible read-only note from ORCA.
                     dailyBriefingPanel
 
-                    // 6. Tier 1 sign queue — "what needs your eyes"
+                    // 7. Tier 1 sign queue — "what needs your eyes"
                     CockpitSignQueueSection()
 
-                    // 7. Playground NATS tail — unread inbox + action-required
+                    // 8. Playground NATS tail — unread inbox + action-required
                     PlaygroundPanelView(model: playgroundModel, onChatTap: {
                         appState.navigateTo(.chat)
                     })
 
-                    // 8. Compact briefing + doctrine velocity line
+                    // 9. Compact briefing + doctrine velocity line
                     classroomBriefingLine
 
-                    // 9. Top flow card — one blocker, tap → Work
+                    // 10. Top flow card — one blocker, tap → Work
                     classroomFlowCard
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
