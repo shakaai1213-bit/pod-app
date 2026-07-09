@@ -708,7 +708,7 @@ final class DirectChatViewModel {
     }
 
     private func createSonarMemoryCandidate(ticketId: String, content: String, traceId: String, messageId: String, room: SonarRoom) async {
-        let body = SonarMemoryCandidateCreateBody(
+        let body = MemoryCandidateCreateBody(
             candidateId: "sonar-\(UUID().uuidString.lowercased())",
             sourceType: "pod_sonar",
             sourceRef: "orca://chat/messages/\(messageId)",
@@ -730,7 +730,7 @@ final class DirectChatViewModel {
             createdBy: "pod-sonar"
         )
         do {
-            let dto: SonarMemoryCandidateDTO = try await api.post(path: "/api/v1/memory/candidate-records", body: body)
+            let dto: MemoryCandidateDTO = try await api.post(path: "/api/v1/memory/candidate-records", body: body)
             roomActionMessage = "Memory candidate \(String(dto.candidateId.prefix(12))) queued for review."
         } catch let apiError as APIError {
             roomActionMessage = "Memory card recorded, but candidate was not created: \(apiError.message)"
@@ -3050,25 +3050,32 @@ final class DirectChatViewModel {
             memoryCandidateMessage = "Attach a ticket before saving memory."
             return
         }
+        let sourceAgent = selectedAgent?.id
         isSavingMemoryCandidate = true
         memoryCandidateMessage = nil
         Task {
             defer { isSavingMemoryCandidate = false }
             let traceId = continuity.latestRun?.traceId ?? Self.makeTraceId(prefix: "pod-chat-memory")
-            let body = DirectChatNoteCreateRequest(
-                targetType: "ticket",
-                targetId: ticketId,
-                noteType: "memory_candidate",
-                title: "Memory candidate from Pod chat: \(continuity.ticket.title)",
-                body: Self.memoryCandidateBody(continuity: continuity, traceId: traceId),
-                tags: ["pod", "chat", "memory-candidate", "agent-run"],
-                source: "pod.chat.memory_candidate",
-                traceId: traceId,
-                signState: "needs_review"
+            let body = MemoryCandidateCreateBody(
+                candidateId: "pod-chat-learning-\(UUID().uuidString.lowercased())",
+                sourceType: "pod_chat_learning",
+                sourceRef: Self.memoryCandidateSourceRef(ticketId: ticketId, traceId: traceId),
+                sourceAgent: sourceAgent,
+                textOriginal: Self.memoryCandidateBody(continuity: continuity, traceId: traceId),
+                textProposed: continuity.nextActionLabel,
+                sensitivityClass: Self.memoryCandidateSensitivityClass(for: continuity.ticket),
+                reviewersRequired: ["aloha", "maui"],
+                target: Self.memoryCandidateTarget(continuity: continuity),
+                provenance: Self.memoryCandidateProvenance(
+                    continuity: continuity,
+                    traceId: traceId,
+                    sourceAgent: sourceAgent
+                ),
+                createdBy: "pod-chat"
             )
             do {
-                let _: OrcaNote = try await api.post(path: "/api/v1/notes/system/global", body: body)
-                memoryCandidateMessage = "Memory candidate saved for Knowledge review."
+                let dto: MemoryCandidateDTO = try await api.post(path: "/api/v1/memory/candidate-records", body: body)
+                memoryCandidateMessage = "Learned-from-chat candidate \(String(dto.candidateId.prefix(12))) queued for review."
             } catch let apiError as APIError {
                 memoryCandidateMessage = "Couldn't save memory candidate: \(apiError.message)"
             } catch {
@@ -4021,6 +4028,92 @@ final class DirectChatViewModel {
         """
     }
 
+    private static func memoryCandidateSourceRef(ticketId: String, traceId: String) -> String {
+        "orca://tickets/\(ticketId)/chat-learning/\(traceId)"
+    }
+
+    private static func memoryCandidateSensitivityClass(for ticket: Ticket) -> String {
+        let haystack = [
+            ticket.computeTag,
+            ticket.workerLane,
+            ticket.toolPolicy,
+            ticket.approvalGate,
+            ticket.autonomyLevel,
+            ticket.title
+        ]
+            .compactMap { $0?.lowercased() }
+            .joined(separator: " ")
+        if haystack.contains("credential") || haystack.contains("security") || haystack.contains("secret") {
+            return "security"
+        }
+        if haystack.contains("fund") || haystack.contains("financial") || haystack.contains("trading") || haystack.contains("p&l") {
+            return "financial"
+        }
+        if haystack.contains("private") || haystack.contains("protected-") {
+            return "private"
+        }
+        return "normal"
+    }
+
+    private static func memoryCandidateHasOwnerGate(_ ticket: Ticket) -> Bool {
+        let haystack = [
+            ticket.approvalState,
+            ticket.approvalGate,
+            ticket.autonomyLevel,
+            ticket.workerLane,
+            ticket.toolPolicy
+        ]
+            .compactMap { $0?.lowercased() }
+            .joined(separator: " ")
+        return haystack.contains("approval")
+            || haystack.contains("waiting_for_human")
+            || haystack.contains("owner")
+            || haystack.contains("protected")
+            || haystack.contains("read_only_until_owner_approval")
+    }
+
+    private static func memoryCandidateTarget(continuity: DirectChatTicketContinuity) -> [String: String] {
+        [
+            "type": "chat_learning",
+            "ticket_id": continuity.ticket.id,
+            "ticket_title": continuity.ticket.title,
+            "review_surface": "pod_work_and_knowledge",
+            "follow_up_options": "memory_promotion,doc_update,routing_rule,ticket,regression_test"
+        ]
+    }
+
+    private static func memoryCandidateProvenance(
+        continuity: DirectChatTicketContinuity,
+        traceId: String,
+        sourceAgent: String?
+    ) -> [String: String] {
+        let ticket = continuity.ticket
+        let latestRun = continuity.latestRun
+        let ownerGated = memoryCandidateHasOwnerGate(ticket)
+        return [
+            "source": "pod.chat.learned_from_this_chat",
+            "trace_id": traceId,
+            "source_agent": sourceAgent ?? "",
+            "ticket_id": ticket.id,
+            "ticket_title": ticket.title,
+            "chat_thread_id": ticket.chatThreadId ?? "",
+            "source_chat_url": ticket.sourceChatURL ?? "",
+            "source_thread_url": ticket.sourceThreadURL ?? "",
+            "latest_run_id": latestRun?.id ?? "",
+            "latest_run_status": latestRun?.status.rawValue ?? "",
+            "latest_run_worker_lane": latestRun?.workerLane ?? "",
+            "latest_run_tool_policy": latestRun?.toolPolicy ?? "",
+            "route_packet": continuity.routePacketLabel ?? "",
+            "safe_inline": "true",
+            "owner_gated": ownerGated ? "true" : "false",
+            "split_outcome": ownerGated ? "safe_inline_plus_owner_gated" : "safe_inline_only",
+            "same_thread_return": "true",
+            "raw_chat_auto_promotion": "false",
+            "review_required": "true",
+            "review_surfaces": "schoolhouse_suggestions,pod_work,pod_knowledge"
+        ]
+    }
+
     private static func workspaceArtifactBody(
         continuity: DirectChatTicketContinuity,
         messages: [DMMessage],
@@ -4492,7 +4585,7 @@ private struct DirectChatWorkspaceToolExecuteDTO: Decodable {
     }
 }
 
-private struct SonarMemoryCandidateCreateBody: Encodable {
+private struct MemoryCandidateCreateBody: Encodable {
     let candidateId: String
     let sourceType: String
     let sourceRef: String
@@ -4520,7 +4613,7 @@ private struct SonarMemoryCandidateCreateBody: Encodable {
     }
 }
 
-private struct SonarMemoryCandidateDTO: Decodable {
+private struct MemoryCandidateDTO: Decodable {
     let id: String
     let candidateId: String
     let lifecycle: String
@@ -4587,27 +4680,6 @@ private struct DirectChatApprovalDTO: Decodable {
             createdAt: createdAt,
             resolvedAt: resolvedAt
         )
-    }
-}
-
-private struct DirectChatNoteCreateRequest: Encodable {
-    let targetType: String
-    let targetId: String?
-    let noteType: String
-    let title: String
-    let body: String
-    let tags: [String]
-    let source: String
-    let traceId: String
-    let signState: String
-
-    enum CodingKeys: String, CodingKey {
-        case title, body, tags, source
-        case targetType = "target_type"
-        case targetId = "target_id"
-        case noteType = "note_type"
-        case traceId = "trace_id"
-        case signState = "sign_state"
     }
 }
 

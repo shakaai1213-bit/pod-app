@@ -4,7 +4,15 @@ import SwiftUI
 // MARK: - Captain's Chart
 
 struct CaptainsChartSection: View {
-    @State private var model = CaptainsChartModel()
+    @EnvironmentObject private var appState: AppState
+    @State private var ownedModel: CaptainsChartModel
+    @State private var selectedProduct: CaptainsChartProduct?
+    @State private var selectedMilestone: CaptainsChartMilestone?
+    private let externalModel: CaptainsChartModel?
+
+    private var model: CaptainsChartModel {
+        externalModel ?? ownedModel
+    }
 
     private let tileColumns = [
         GridItem(.adaptive(minimum: 150), spacing: 10, alignment: .top)
@@ -13,12 +21,23 @@ struct CaptainsChartSection: View {
         GridItem(.adaptive(minimum: 300), spacing: 10, alignment: .top)
     ]
 
+    init(model: CaptainsChartModel? = nil) {
+        _ownedModel = State(initialValue: model ?? CaptainsChartModel())
+        externalModel = model
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let snapshot = model.snapshot {
                 CaptainsChartHeader(snapshot: snapshot, isLoading: model.isLoading)
 
-                CaptainsChartMilestoneStrip(milestones: snapshot.milestones)
+                CaptainsChartMilestoneStrip(milestones: snapshot.milestones) { milestone in
+                    selectedMilestone = milestone
+                }
+
+                if !snapshot.inFlight.isEmpty {
+                    CaptainsChartInFlightStrip(items: snapshot.inFlight)
+                }
 
                 LazyVGrid(columns: tileColumns, spacing: 10) {
                     ForEach(snapshot.tiles) { tile in
@@ -27,7 +46,9 @@ struct CaptainsChartSection: View {
                 }
 
                 ForEach(snapshot.sections) { section in
-                    CaptainsChartProductSection(section: section, columns: productColumns)
+                    CaptainsChartProductSection(section: section, columns: productColumns) { product in
+                        selectedProduct = product
+                    }
                 }
             } else {
                 CaptainsChartLoadingCard(isLoading: model.isLoading, errorMessage: model.errorMessage)
@@ -35,6 +56,21 @@ struct CaptainsChartSection: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .task { await model.load() }
+        .refreshable { await model.load(force: true) }
+        .sheet(item: $selectedProduct) { product in
+            CaptainsChartProductDetailSheet(
+                product: product,
+                chatAgent: CaptainsChartOwnerParser.firstChatAgent(from: product.owner)
+            ) { agent in
+                selectedProduct = nil
+                appState.pendingDirectChatAgentId = agent.id
+            }
+            .presentationDetents([.medium, .large])
+        }
+        .sheet(item: $selectedMilestone) { milestone in
+            CaptainsChartMilestoneDetailSheet(milestone: milestone)
+                .presentationDetents([.height(180), .medium])
+        }
     }
 }
 
@@ -103,6 +139,7 @@ struct CaptainsChartSnapshot: Decodable, Equatable {
     let generatedAt: String
     let verifiedBy: String
     let milestones: [CaptainsChartMilestone]
+    let inFlight: [CaptainsChartInFlightItem]
     let tiles: [CaptainsChartTileModel]
     let sections: [CaptainsChartProductGroup]
 
@@ -110,6 +147,7 @@ struct CaptainsChartSnapshot: Decodable, Equatable {
         case generatedAt = "generated_at"
         case verifiedBy = "verified_by"
         case milestones
+        case inFlight = "in_flight"
         case tiles
         case sections
     }
@@ -119,6 +157,7 @@ struct CaptainsChartSnapshot: Decodable, Equatable {
         generatedAt = try container.decodeIfPresent(String.self, forKey: .generatedAt) ?? ""
         verifiedBy = try container.decodeIfPresent(String.self, forKey: .verifiedBy) ?? ""
         milestones = try container.decodeIfPresent([CaptainsChartMilestone].self, forKey: .milestones) ?? []
+        inFlight = try container.decodeIfPresent([CaptainsChartInFlightItem].self, forKey: .inFlight) ?? []
         tiles = try container.decodeIfPresent([CaptainsChartTileModel].self, forKey: .tiles) ?? []
         sections = try container.decodeIfPresent([CaptainsChartProductGroup].self, forKey: .sections) ?? []
     }
@@ -172,6 +211,80 @@ struct CaptainsChartTileModel: Decodable, Equatable, Identifiable {
         key = try container.decodeIfPresent(String.self, forKey: .key) ?? "Metric"
         value = try container.decodeIfPresent(String.self, forKey: .value) ?? "-"
         note = try container.decodeIfPresent(String.self, forKey: .note) ?? ""
+    }
+}
+
+struct CaptainsChartInFlightItem: Decodable, Equatable, Identifiable {
+    let name: String
+    let owner: String
+    let state: CaptainsChartInFlightState
+    let note: String
+
+    var id: String { "\(name)-\(owner)-\(state.label)" }
+
+    enum CodingKeys: CodingKey {
+        case name
+        case owner
+        case state
+        case note
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? "In flight"
+        owner = try container.decodeIfPresent(String.self, forKey: .owner) ?? "Unassigned"
+        state = try container.decodeIfPresent(CaptainsChartInFlightState.self, forKey: .state) ?? .proposed
+        note = try container.decodeIfPresent(String.self, forKey: .note) ?? ""
+    }
+}
+
+enum CaptainsChartInFlightState: Decodable, Equatable {
+    case building
+    case running
+    case held
+    case proposed
+
+    init(from decoder: Decoder) throws {
+        let value = try decoder.singleValueContainer().decode(String.self)
+        let normalized = value.lowercased()
+        if normalized.contains("building") {
+            self = .building
+        } else if normalized.contains("running") {
+            self = .running
+        } else if normalized.contains("held") || normalized.contains("hold") {
+            self = .held
+        } else if normalized.contains("proposed") {
+            self = .proposed
+        } else {
+            self = .proposed
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .building: return "Building"
+        case .running: return "Running"
+        case .held: return "Held"
+        case .proposed: return "Proposed"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .building: return CaptainsChartPalette.accent
+        case .running: return CaptainsChartPalette.good
+        case .held: return CaptainsChartPalette.hold
+        case .proposed: return CaptainsChartPalette.watch
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .building: return "diamond.fill"
+        case .running: return "circle.fill"
+        case .held: return "pause.circle"
+        case .proposed: return "hexagon"
+        }
     }
 }
 
@@ -284,6 +397,14 @@ enum CaptainsChartStageState: String, Decodable, Equatable {
         let value = try decoder.singleValueContainer().decode(String.self)
         self = Self(rawValue: value.lowercased()) ?? .todo
     }
+
+    var label: String {
+        switch self {
+        case .done: return "Done"
+        case .half: return "Partial"
+        case .todo: return "Todo"
+        }
+    }
 }
 
 enum CaptainsChartStageKey: CaseIterable, Hashable {
@@ -300,6 +421,16 @@ enum CaptainsChartStageKey: CaseIterable, Hashable {
         case .build: return "Build"
         case .live: return "Live"
         case .instrumented: return "Instr."
+        }
+    }
+
+    var detailLabel: String {
+        switch self {
+        case .design: return "Design"
+        case .sign: return "Sign"
+        case .build: return "Build"
+        case .live: return "Live"
+        case .instrumented: return "Instrumented"
         }
     }
 }
@@ -393,27 +524,129 @@ private struct CaptainsChartHeader: View {
 
 private struct CaptainsChartMilestoneStrip: View {
     let milestones: [CaptainsChartMilestone]
+    let onSelect: (CaptainsChartMilestone) -> Void
 
     var body: some View {
         FlowLayout(horizontalSpacing: 7, verticalSpacing: 7) {
             ForEach(milestones) { milestone in
-                Text(milestone.label)
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(milestone.state.foregroundColor)
-                    .lineLimit(1)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(milestone.state.backgroundColor)
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 4)
-                            .strokeBorder(milestone.state.foregroundColor.opacity(0.55), lineWidth: 0.75)
-                    )
+                Button {
+                    onSelect(milestone)
+                } label: {
+                    Text(milestone.label)
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(milestone.state.foregroundColor)
+                        .lineLimit(1)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(milestone.state.backgroundColor)
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4)
+                                .strokeBorder(milestone.state.foregroundColor.opacity(0.55), lineWidth: 0.75)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Milestone \(milestone.label)")
             }
         }
         .padding(.horizontal, 14)
         .padding(.top, 1)
         .padding(.bottom, 4)
+    }
+}
+
+private struct CaptainsChartInFlightStrip: View {
+    let items: [CaptainsChartInFlightItem]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.trianglehead.2.clockwise")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(CaptainsChartPalette.accent)
+
+                Text("NOW IN FLIGHT")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .tracking(0.8)
+                    .foregroundStyle(AppColors.textTertiary)
+            }
+            .padding(.horizontal, 14)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 10) {
+                    ForEach(items) { item in
+                        CaptainsChartInFlightCard(item: item)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.bottom, 2)
+            }
+        }
+        .padding(.top, 2)
+        .padding(.bottom, 3)
+    }
+}
+
+private struct CaptainsChartInFlightCard: View {
+    let item: CaptainsChartInFlightItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .top, spacing: 8) {
+                Text(item.name)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppColors.textPrimary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: 6)
+
+                CaptainsChartInFlightStateChip(state: item.state)
+            }
+
+            Text(item.owner)
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .foregroundStyle(AppColors.textTertiary)
+                .lineLimit(1)
+
+            Text(item.note)
+                .font(.system(size: 10))
+                .foregroundStyle(AppColors.textSecondary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 10)
+        .frame(width: 218, alignment: .topLeading)
+        .frame(minHeight: 106, alignment: .topLeading)
+        .background(CaptainsChartPalette.card)
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .strokeBorder(CaptainsChartPalette.line, lineWidth: 0.75)
+        )
+    }
+}
+
+private struct CaptainsChartInFlightStateChip: View {
+    let state: CaptainsChartInFlightState
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: state.symbolName)
+                .font(.system(size: 8, weight: .bold))
+
+            Text(state.label)
+                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .tracking(0.3)
+        }
+        .foregroundStyle(state.tint)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(state.tint.opacity(0.12))
+        .clipShape(Capsule())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(state.label) state")
     }
 }
 
@@ -455,6 +688,7 @@ private struct CaptainsChartTile: View {
 private struct CaptainsChartProductSection: View {
     let section: CaptainsChartProductGroup
     let columns: [GridItem]
+    let onProductTap: (CaptainsChartProduct) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -475,14 +709,20 @@ private struct CaptainsChartProductSection: View {
 
             LazyVGrid(columns: columns, spacing: 10) {
                 ForEach(section.products) { product in
-                    CaptainsChartProductCard(product: product)
+                    Button {
+                        onProductTap(product)
+                    } label: {
+                        CaptainsChartProductCard(product: product)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(product.name), open product details")
                 }
             }
         }
     }
 
     private var sectionNote: String? {
-        switch section.title {
+        switch section.title.replacingOccurrences(of: "—", with: "-") {
         case "The Loop - agent operating system":
             return "Signal -> receipt -> wake -> claim -> act -> writeback -> evidence"
         case "Compute & Models":
@@ -540,6 +780,7 @@ private struct CaptainsChartProductCard: View {
             RoundedRectangle(cornerRadius: 4)
                 .strokeBorder(CaptainsChartPalette.line, lineWidth: 0.75)
         )
+        .contentShape(RoundedRectangle(cornerRadius: 4))
     }
 }
 
@@ -718,6 +959,177 @@ private struct CaptainsChartLoadingCard: View {
     }
 }
 
+private struct CaptainsChartProductDetailSheet: View {
+    let product: CaptainsChartProduct
+    let chatAgent: AgentInfo?
+    let onOpenChat: (AgentInfo) -> Void
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text(product.name)
+                            .font(.system(size: 24, weight: .semibold, design: .serif))
+                            .foregroundStyle(AppColors.textPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Text(product.owner)
+                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(AppColors.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    CaptainsChartHealthPill(health: product.health, note: product.healthNote)
+
+                    VStack(alignment: .leading, spacing: 9) {
+                        Text("Stage")
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundStyle(AppColors.textTertiary)
+                            .tracking(0.6)
+                            .textCase(.uppercase)
+
+                        CaptainsChartStageTrack(stage: product.stage)
+
+                        CaptainsChartStageStatusList(stage: product.stage)
+                    }
+                    .padding(12)
+                    .background(CaptainsChartPalette.card)
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .strokeBorder(CaptainsChartPalette.line, lineWidth: 0.75)
+                    )
+
+                    CaptainsChartDetailRow(label: "Usage", value: product.usage)
+                    CaptainsChartDetailRow(label: "Next gate", value: product.nextGate)
+                    CaptainsChartDetailRow(label: "Owner", value: product.owner)
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 18)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .background(AppColors.backgroundPrimary)
+            .navigationTitle("Product Detail")
+            .navigationBarTitleDisplayMode(.inline)
+            .safeAreaInset(edge: .bottom) {
+                if let chatAgent {
+                    Button {
+                        onOpenChat(chatAgent)
+                    } label: {
+                        Label("Open chat with \(chatAgent.name)", systemImage: "bubble.left.and.bubble.right.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .background(CaptainsChartPalette.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .padding(.horizontal, 18)
+                    .padding(.top, 10)
+                    .padding(.bottom, 12)
+                    .background(AppColors.backgroundPrimary.opacity(0.96))
+                }
+            }
+        }
+    }
+}
+
+private struct CaptainsChartStageStatusList: View {
+    let stage: CaptainsChartStage
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            ForEach(CaptainsChartStageKey.allCases, id: \.self) { key in
+                HStack(spacing: 8) {
+                    CaptainsChartStageDot(state: stage.value(for: key))
+
+                    Text(key.detailLabel)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(AppColors.textSecondary)
+
+                    Spacer()
+
+                    Text(stage.value(for: key).label)
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(AppColors.textTertiary)
+                        .textCase(.uppercase)
+                }
+            }
+        }
+    }
+}
+
+private struct CaptainsChartDetailRow: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(label)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .tracking(0.6)
+                .textCase(.uppercase)
+                .foregroundStyle(AppColors.textTertiary)
+
+            Text(value.isEmpty ? "-" : value)
+                .font(.system(size: 13))
+                .foregroundStyle(AppColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(CaptainsChartPalette.card)
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .strokeBorder(CaptainsChartPalette.line, lineWidth: 0.75)
+        )
+    }
+}
+
+private struct CaptainsChartMilestoneDetailSheet: View {
+    let milestone: CaptainsChartMilestone
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Milestone")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .tracking(0.6)
+                .textCase(.uppercase)
+                .foregroundStyle(AppColors.textTertiary)
+
+            Text(milestone.label)
+                .font(.system(size: 20, weight: .semibold, design: .serif))
+                .foregroundStyle(AppColors.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(milestone.state.label)
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .foregroundStyle(milestone.state.foregroundColor)
+                .textCase(.uppercase)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(AppColors.backgroundPrimary)
+    }
+}
+
+private enum CaptainsChartOwnerParser {
+    static func firstChatAgent(from owner: String) -> AgentInfo? {
+        let lowercasedOwner = owner.lowercased()
+        let candidates = AgentInfo.team.compactMap { agent -> (AgentInfo, String.Index)? in
+            let tokens = [agent.id.lowercased(), agent.name.lowercased()]
+            let matches = tokens.compactMap { lowercasedOwner.range(of: $0)?.lowerBound }
+            guard let firstMatch = matches.min() else { return nil }
+            return (agent, firstMatch)
+        }
+
+        return candidates.min { lhs, rhs in lhs.1 < rhs.1 }?.0
+    }
+}
+
 private enum CaptainsChartPalette {
     static let card = Color(hexString: "13232A")
     static let line = Color(hexString: "24383E")
@@ -730,6 +1142,14 @@ private enum CaptainsChartPalette {
 }
 
 private extension CaptainsChartMilestoneState {
+    var label: String {
+        switch self {
+        case .done: return "Done"
+        case .next: return "Next"
+        case .open: return "Open"
+        }
+    }
+
     var foregroundColor: Color {
         switch self {
         case .done: return CaptainsChartPalette.good

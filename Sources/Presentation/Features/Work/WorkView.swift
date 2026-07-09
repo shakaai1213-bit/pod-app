@@ -40,7 +40,7 @@ struct WorkView: View {
     @State private var showingCascadeDetails = false
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $directChatViewModel.navigationPath) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     pageHeader
@@ -126,7 +126,6 @@ struct WorkView: View {
             .task { await model.startFlowReviewPolling() }
             .onAppear {
                 directChatViewModel.setModelContext(modelContext)
-                directChatViewModel.navigationPath = NavigationPath()
                 directChatViewModel.startPresenceMonitoring()
                 configureReviewerIdentity()
                 model.consumePendingFlowFilter()
@@ -188,6 +187,13 @@ struct WorkView: View {
             }
             .navigationDestination(isPresented: $pushKnowledge) {
                 KnowledgeView()
+            }
+            .navigationDestination(for: AgentInfo.self) { agent in
+                LockerChatView(viewModel: directChatViewModel, agent: agent)
+                    .onAppear {
+                        directChatViewModel.setModelContext(modelContext)
+                        directChatViewModel.selectAgent(agent)
+                    }
             }
             .overlay(alignment: .bottom) {
                 if let toast = model.priorityToast {

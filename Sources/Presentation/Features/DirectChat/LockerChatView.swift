@@ -904,7 +904,7 @@ struct LockerChatView: View {
                             viewModel.saveMemoryCandidateFromChat()
                         } label: {
                             Label(
-                                viewModel.isSavingMemoryCandidate ? "Saving Memory…" : "Save Memory Candidate",
+                                viewModel.isSavingMemoryCandidate ? "Saving Lesson…" : "Learn from Chat",
                                 systemImage: "brain.head.profile"
                             )
                         }
@@ -1021,7 +1021,7 @@ struct LockerChatView: View {
 
             classroomActionButton(
                 icon: "brain.head.profile",
-                label: viewModel.isSavingMemoryCandidate ? "Saving memory" : "Save memory candidate",
+                label: viewModel.isSavingMemoryCandidate ? "Saving lesson" : "Learn from chat",
                 tint: AppColors.accentAgent,
                 isBusy: viewModel.isSavingMemoryCandidate
             ) {

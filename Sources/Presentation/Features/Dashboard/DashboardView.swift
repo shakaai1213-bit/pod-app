@@ -9,6 +9,7 @@ struct DashboardView: View {
     @State private var viewModel = DashboardViewModel()
     @State private var briefingModel = DashboardBriefingDoctrineModel()
     @State private var dailyBriefingModel = DailyBriefingPanelModel()
+    @State private var captainsChartModel = CaptainsChartModel()
     @State private var fundLandingModel = FundLandingViewModel()
     @State private var fundUniverseLoopModel = FundUniverseLoopViewModel()
     @State private var fundPredictionModel = FundPredictionBriefViewModel()
@@ -39,7 +40,7 @@ struct DashboardView: View {
                     CaptainsDeskSection()
 
                     // 3. Captain's Chart — bundled product map until cockpit snapshot ships.
-                    CaptainsChartSection()
+                    CaptainsChartSection(model: captainsChartModel)
 
                     // 4. Voice room status — primary realtime chat surface.
                     dashboardVoiceBanner
@@ -68,6 +69,9 @@ struct DashboardView: View {
                 .padding(.horizontal, Theme.md)
                 .padding(.top, Theme.sm)
                 .padding(.bottom, 100)
+            }
+            .refreshable {
+                await captainsChartModel.load(force: true)
             }
             .background(AppColors.backgroundPrimary)
             .navigationTitle("Dashboard")

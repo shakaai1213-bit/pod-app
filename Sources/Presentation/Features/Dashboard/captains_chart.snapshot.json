@@ -1,275 +1,307 @@
 {
-  "generated_at": "2026-07-09T01:45:00Z",
-  "verified_by": "value 2026-07-09 ~01:45Z (Maui 🪝)",
-  "milestones": [
+ "generated_at": "2026-07-09T15:05:00Z",
+ "verified_by": "Maui \ud83e\ude9d \u2014 by value, live estate",
+ "milestones": [
+  {
+   "id": "M1",
+   "label": "M1 writeback race",
+   "state": "done"
+  },
+  {
+   "id": "M2",
+   "label": "M2 wake-to-work sign",
+   "state": "done"
+  },
+  {
+   "id": "M3",
+   "label": "M3 fleet 7/7 both Macs",
+   "state": "done"
+  },
+  {
+   "id": "M4",
+   "label": "M4 loop proven \u2014 draining",
+   "state": "next"
+  },
+  {
+   "id": "M5",
+   "label": "M5 pulse monitor \u2014 built, load held",
+   "state": "open"
+  },
+  {
+   "id": "M6",
+   "label": "M6 Blackfin eval \u2014 COMPLETE",
+   "state": "done"
+  },
+  {
+   "id": "M7",
+   "label": "M7 sign-debt \u2014 3 left",
+   "state": "open"
+  }
+ ],
+ "tiles": [
+  {
+   "key": "Wake fleet \u00b7 both Macs",
+   "value": "7/7",
+   "note": "receipts green \u00b7 plate bell rang 15:00Z on schedule"
+  },
+  {
+   "key": "Arm runs accepted \u00b7 24h",
+   "value": "6",
+   "note": "Fund verify \u00b7 checker \u00b7 chart \u00b7 monitor \u00b7 chieffish fix \u00b7 +runner building"
+  },
+  {
+   "key": "Blackfin",
+   "value": "V48",
+   "note": "trained under EI regime \u00b7 strict 150/180 local \u00b7 sealed eval next"
+  },
+  {
+   "key": "Drain / M4",
+   "value": "1st chain",
+   "note": "33c2bcfa\u2192b3fff31d at Mermaid \u00b7 7 stale parents cancelled"
+  }
+ ],
+ "in_flight": [
+  {
+   "name": "Sealed-set eval runner",
+   "owner": "compute arm \u2192 Maui",
+   "state": "building",
+   "note": "first independent Blackfin scoring"
+  },
+  {
+   "name": "Backlog drain (A4)",
+   "owner": "Coral \ud83e\udeb8",
+   "state": "running",
+   "note": "staggered, receipt-verified"
+  },
+  {
+   "name": "Monitor load",
+   "owner": "Coral \ud83e\udeb8",
+   "state": "held \u2192 digest routing",
+   "note": "A2/A3 collector fix queued"
+  },
+  {
+   "name": "Parity P1 git-backing",
+   "owner": "Coral+Reef",
+   "state": "running",
+   "note": "divergences 7\u21926 first drop in weeks"
+  },
+  {
+   "name": "A7 amendment",
+   "owner": "Rooster+Aloha review",
+   "state": "proposed",
+   "note": "auto-sessions defer gate decisions"
+  }
+ ],
+ "sections": [
+  {
+   "title": "The Loop \u2014 agent operating system",
+   "products": [
     {
-      "id": "m1-writeback-race",
-      "label": "M1 writeback race ✓",
-      "state": "done"
+     "name": "ORCA Operating Base",
+     "owner": "Coral \ud83e\udeb8 \u00b7 Maui gate",
+     "stage": {
+      "design": "done",
+      "sign": "done",
+      "build": "done",
+      "live": "done",
+      "instrumented": "half"
+     },
+     "health": "steady",
+     "health_note": "steady",
+     "usage": "W-series complete \u00b7 Cascade gap repaired \u00b7 failover design filed",
+     "next_gate": "11.2 migration (Maui sign)"
     },
     {
-      "id": "m2-wake-to-work-sign",
-      "label": "M2 wake-to-work sign ✓",
-      "state": "done"
+     "name": "Wake-to-Work Loop",
+     "owner": "Coral \ud83e\udeb8 \u00b7 A1-A7",
+     "stage": {
+      "design": "done",
+      "sign": "done",
+      "build": "done",
+      "live": "done",
+      "instrumented": "half"
+     },
+     "health": "steady",
+     "health_note": "proven live 49s cross-Mac",
+     "usage": "7/7 daemons \u00b7 receipts green \u00b7 first wake-serviced ask today",
+     "next_gate": "A7 (defer gate decisions) \u2192 Rooster/Aloha"
     },
     {
-      "id": "m3-fleet-repaired",
-      "label": "M3 fleet repaired ✓ 7/7",
-      "state": "done"
+     "name": "Locker / Agent OS",
+     "owner": "Coral \ud83e\udeb8",
+     "stage": {
+      "design": "done",
+      "sign": "done",
+      "build": "half",
+      "live": "half",
+      "instrumented": "todo"
+     },
+     "health": "watch",
+     "health_note": "adoption ramping",
+     "usage": "cursor/claim live \u00b7 first Mermaid chain paused correctly at human gate",
+     "next_gate": "lifeline P2 under Maui corrections"
     },
     {
-      "id": "m4-loop-proven",
-      "label": "M4 loop proven - next",
-      "state": "next"
-    },
-    {
-      "id": "m5-pulse-monitor",
-      "label": "M5 pulse monitor - specced",
-      "state": "open"
-    },
-    {
-      "id": "m6-blackfin-eval",
-      "label": "M6 Blackfin eval - 2/3 done",
-      "state": "open"
-    },
-    {
-      "id": "m7-sign-debt",
-      "label": "M7 sign-debt - 3 left",
-      "state": "open"
+     "name": "Schoolhouse",
+     "owner": "team \u00b7 Aloha",
+     "stage": {
+      "design": "done",
+      "sign": "done",
+      "build": "done",
+      "live": "done",
+      "instrumented": "todo"
+     },
+     "health": "steady",
+     "health_note": "steady",
+     "usage": "activation detail (W3) live on Mini",
+     "next_gate": "packet freshness joins receipts"
     }
-  ],
-  "tiles": [
+   ]
+  },
+  {
+   "title": "Compute & Models",
+   "products": [
     {
-      "key": "Wake fleet · both Macs",
-      "value": "7/7",
-      "note": "was 1/7 this morning · receipts green all lanes"
+     "name": "Compute Router / Cascade",
+     "owner": "Maui \ud83e\ude9d",
+     "stage": {
+      "design": "done",
+      "sign": "done",
+      "build": "done",
+      "live": "done",
+      "instrumented": "half"
+     },
+     "health": "steady",
+     "health_note": "1.1% premium share",
+     "usage": "26.2k calls \u00b7 chieffish fallback fixed live (200, 3.8k chars)",
+     "next_gate": "alarm #7 windowed rates via monitor"
     },
     {
-      "key": "Arm runs accepted today",
-      "value": "2",
-      "note": "first since Jun 28 · review lane keeping pace"
+     "name": "Blackfin / Lab LLM",
+     "owner": "Maui \ud83e\ude9d + Reef \ud83d\udc21",
+     "stage": {
+      "design": "done",
+      "sign": "done",
+      "build": "done",
+      "live": "half",
+      "instrumented": "half"
+     },
+     "health": "steady",
+     "health_note": "UNPAUSED \u2014 EI-7 declared",
+     "usage": "v1 sealed 60/60 \u00b7 check clean vs 19,152 hashes \u00b7 V48 trained",
+     "next_gate": "sealed-set scorecard (Maui) \u2192 ledger traffic"
     },
     {
-      "key": "Claude share of routed calls",
-      "value": "1.1%",
-      "note": "298 of 26,204 lifetime — cascade discipline holds"
+     "name": "Spark (GB10)",
+     "owner": "Maui \ud83e\ude9d",
+     "stage": {
+      "design": "done",
+      "sign": "done",
+      "build": "done",
+      "live": "done",
+      "instrumented": "half"
+     },
+     "health": "watch",
+     "health_note": "swap pressure watch",
+     "usage": "8 containers \u00b7 V48 trained clean in envelope",
+     "next_gate": "serve/train lease (SOTA #6)"
     },
     {
-      "key": "Stuck dispatches to drain",
-      "value": "15",
-      "note": "staggered + rate-limited per A4 — M4's trigger"
+     "name": "Arm Fabric",
+     "owner": "Maui \ud83e\ude9d design \u00b7 arms build",
+     "stage": {
+      "design": "done",
+      "sign": "done",
+      "build": "half",
+      "live": "todo",
+      "instrumented": "todo"
+     },
+     "health": "watch",
+     "health_note": "6 accepted runs/24h",
+     "usage": "~190-run ledger black hole quantified (93 aged reviews)",
+     "next_gate": "lifecycle closure states + all-agent dispatch"
     }
-  ],
-  "sections": [
+   ]
+  },
+  {
+   "title": "Surfaces & Immune System",
+   "products": [
     {
-      "title": "The Loop - agent operating system",
-      "products": [
-        {
-          "name": "ORCA Operating Base",
-          "owner": "Coral 🪸 · Maui gate",
-          "stage": {
-            "design": "done",
-            "sign": "done",
-            "build": "done",
-            "live": "done",
-            "instrumented": "half"
-          },
-          "health": "steady",
-          "health_note": "",
-          "usage": "Phases 1-10 closed · 11-13 building · 2 verified deploys tonight (P0 fix + gate evidence)",
-          "next_gate": "11.2 DB-uniqueness migration (Maui sign)"
-        },
-        {
-          "name": "Wake-to-Work Loop",
-          "owner": "Coral 🪸 · A1-A6",
-          "stage": {
-            "design": "done",
-            "sign": "done",
-            "build": "done",
-            "live": "half",
-            "instrumented": "todo"
-          },
-          "health": "steady",
-          "health_note": "new tonight",
-          "usage": "W0-W2 shipped in one night · 7/7 daemons both Macs · receipts green · W6/W7 gated",
-          "next_gate": "backlog drain -> M4 proof-of-life"
-        },
-        {
-          "name": "Locker / Agent OS",
-          "owner": "Coral 🪸 · superplan",
-          "stage": {
-            "design": "done",
-            "sign": "done",
-            "build": "half",
-            "live": "todo",
-            "instrumented": "todo"
-          },
-          "health": "watch",
-          "health_note": "adoption ramping",
-          "usage": "Was 0/9 agents using claim/writeback for real work · receipt layer live tonight - ramp starts now",
-          "next_gate": "lifeline P2 under Maui's 4 corrections"
-        },
-        {
-          "name": "Schoolhouse",
-          "owner": "team · Aloha doctrine",
-          "stage": {
-            "design": "done",
-            "sign": "done",
-            "build": "done",
-            "live": "done",
-            "instrumented": "todo"
-          },
-          "health": "steady",
-          "health_note": "",
-          "usage": "Activation context every session · broker audits clean · packet freshness gated by lifecycle proofs",
-          "next_gate": "W3 activation detail (bodies, not counts)"
-        }
-      ]
+     "name": "Pod",
+     "owner": "Maui \ud83e\ude9d + Coral \ud83e\udeb8",
+     "stage": {
+      "design": "done",
+      "sign": "done",
+      "build": "done",
+      "live": "done",
+      "instrumented": "half"
+     },
+     "health": "steady",
+     "health_note": "this build!",
+     "usage": "calendar cockpit + Captain's Chart shipped \u00b7 Learn-from-Chat wired",
+     "next_gate": "live /cockpit/snapshot feed (9288fd67)"
     },
     {
-      "title": "Compute & Models",
-      "products": [
-        {
-          "name": "Cascade Triage / Compute Router",
-          "owner": "Maui 🪝",
-          "stage": {
-            "design": "done",
-            "sign": "done",
-            "build": "done",
-            "live": "done",
-            "instrumented": "half"
-          },
-          "health": "steady",
-          "health_note": "up 8 days",
-          "usage": "Routed calls: spark 16,503 · shadow 5,583 · openclaw 2,713 · blackfin 995 · premium 298",
-          "next_gate": "alarm #7 - windowed per-tag error rates + route-cessation"
-        },
-        {
-          "name": "Blackfin / Lab LLM",
-          "owner": "Maui 🪝 + Reef 🐡",
-          "stage": {
-            "design": "done",
-            "sign": "done",
-            "build": "done",
-            "live": "half",
-            "instrumented": "half"
-          },
-          "health": "hold",
-          "health_note": "Paused by design · V47",
-          "usage": "EI contract signed · manifest index 19,152 hashes · overlap checker built + verified tonight · serving proven 995 calls / 0 err",
-          "next_gate": "M6 sealed set (Maui) -> clean overlap -> V48"
-        },
-        {
-          "name": "Spark (GB10) · serving",
-          "owner": "Maui 🪝",
-          "stage": {
-            "design": "done",
-            "sign": "done",
-            "build": "done",
-            "live": "done",
-            "instrumented": "half"
-          },
-          "health": "watch",
-          "health_note": "memory pressure",
-          "usage": "8 containers serving · 84/121 GB unified · swap 12/15 GB · watchdog active · disk 9%",
-          "next_gate": "serve/train lease (SOTA #6) before V48 · Nemotron 3 Nano bakeoff queued behind M6 harness"
-        },
-        {
-          "name": "Arm Fabric",
-          "owner": "Maui 🪝 design · arms build",
-          "stage": {
-            "design": "done",
-            "sign": "done",
-            "build": "half",
-            "live": "todo",
-            "instrumented": "todo"
-          },
-          "health": "watch",
-          "health_note": "building",
-          "usage": "Rooster-signed AF-1/2 · 2 runs accepted tonight (first since 06-28) · ~190 historical · chief-mac lane paused since 06-22",
-          "next_gate": "lifecycle closure states + all-agent dispatch · P3 gated on M2+M5 (SC-1)"
-        }
-      ]
+     "name": "Loop-Liveness Monitor",
+     "owner": "Maui \ud83e\ude9d / Coral ops",
+     "stage": {
+      "design": "done",
+      "sign": "done",
+      "build": "done",
+      "live": "half",
+      "instrumented": "todo"
+     },
+     "health": "watch",
+     "health_note": "built \u00b7 load held for digest routing",
+     "usage": "dry-run found 93 aged reviews + correct A1 trip",
+     "next_gate": "A2/A3 collector fix (arm) \u2192 load"
     },
     {
-      "title": "Surfaces & Immune System",
-      "products": [
-        {
-          "name": "Pod",
-          "owner": "Maui 🪝 + Coral 🪸",
-          "stage": {
-            "design": "done",
-            "sign": "done",
-            "build": "done",
-            "live": "done",
-            "instrumented": "todo"
-          },
-          "health": "steady",
-          "health_note": "",
-          "usage": "Workbench P0-P6 done · tool rail K0/K3-K5 · calendar cockpit shipped 8727def tonight · sim + iPad green",
-          "next_gate": "Captain's Chart card (this page, productionized) + K1/K2"
-        },
-        {
-          "name": "Loop-Liveness Monitor",
-          "owner": "Maui 🪝 · f379679a",
-          "stage": {
-            "design": "done",
-            "sign": "half",
-            "build": "todo",
-            "live": "todo",
-            "instrumented": "todo"
-          },
-          "health": "attention",
-          "health_note": "not built yet",
-          "usage": "7 alarm classes specced from real failures: run-age · dispatch-stall · arm-idle · conformance-silence · posture-drift · gate-aging · route-cessation",
-          "next_gate": "arm build - until live, tonight's lessons are docs, not immunity"
-        },
-        {
-          "name": "Cross-Mac Parity",
-          "owner": "Coral 🪸 + Reef 🐡 · Maui arch",
-          "stage": {
-            "design": "done",
-            "sign": "half",
-            "build": "todo",
-            "live": "todo",
-            "instrumented": "todo"
-          },
-          "health": "watch",
-          "health_note": "CEO-signed tonight",
-          "usage": "Doctrine: identical machinery, unequal data · divergences today 7/day -> target 0 sustained",
-          "next_gate": "Rooster P3/P4 co-sign -> Tony final · P1 git-backing starts now"
-        },
-        {
-          "name": "Research Flywheel / Fish 🐠",
-          "owner": "Coral 🪸 · Maui sign pending",
-          "stage": {
-            "design": "done",
-            "sign": "half",
-            "build": "todo",
-            "live": "todo",
-            "instrumented": "todo"
-          },
-          "health": "attention",
-          "health_note": "findings stale",
-          "usage": "1,238 findings indexed but going stale · fish idle · writers without readers - the exact anti-pattern Phase 14-16 fixes",
-          "next_gate": "Maui engineering-shape sign (M7) -> fish fed via Planner"
-        },
-        {
-          "name": "Guardian",
-          "owner": "Maui 🪝 · product",
-          "stage": {
-            "design": "done",
-            "sign": "todo",
-            "build": "todo",
-            "live": "todo",
-            "instrumented": "todo"
-          },
-          "health": "hold",
-          "health_note": "Waiting on Captain",
-          "usage": "Architecture DDS drafted · Louie pilot scoped · E1 intake open",
-          "next_gate": "Tony - MH-1 question sets + MH-7 sponsor"
-        }
-      ]
+     "name": "Cross-Mac Parity",
+     "owner": "Coral+Reef \u00b7 Maui arch",
+     "stage": {
+      "design": "done",
+      "sign": "half",
+      "build": "half",
+      "live": "todo",
+      "instrumented": "todo"
+     },
+     "health": "watch",
+     "health_note": "divergences 7\u21926",
+     "usage": "P1 git-backing live \u00b7 Shaka signed SC-1..3",
+     "next_gate": "Rooster P3/P4 \u2192 Tony final"
+    },
+    {
+     "name": "Research Flywheel / Fish",
+     "owner": "Coral \ud83e\udeb8 \u00b7 Maui sign",
+     "stage": {
+      "design": "done",
+      "sign": "half",
+      "build": "todo",
+      "live": "todo",
+      "instrumented": "todo"
+     },
+     "health": "watch",
+     "health_note": "5 loops up \u00b7 chieffish healed",
+     "usage": "consumption gap remains \u2014 findings await readers",
+     "next_gate": "Maui Phase 14-16 shape sign (M7)"
+    },
+    {
+     "name": "Guardian",
+     "owner": "Maui \ud83e\ude9d",
+     "stage": {
+      "design": "done",
+      "sign": "todo",
+      "build": "todo",
+      "live": "todo",
+      "instrumented": "todo"
+     },
+     "health": "hold",
+     "health_note": "waiting on Captain",
+     "usage": "E1 intake open",
+     "next_gate": "Tony MH-1/MH-7"
     }
-  ]
+   ]
+  }
+ ]
 }
