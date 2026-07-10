@@ -13,11 +13,12 @@ import UIKit
 struct LockerChatView: View {
     let viewModel: DirectChatViewModel
     let agent: AgentInfo
+    let reservesAppTabBarSpace: Bool
 
     @EnvironmentObject private var voiceCoordinator: VoiceCoordinator
     @Environment(\.horizontalSizeClass) private var sizeClass
     @FocusState private var isTextFieldFocused: Bool
-    @State private var tabBarPadding: CGFloat = 83
+    @State private var tabBarPadding: CGFloat
     @State private var showingTicketConfirmation = false
     @State private var showingAttachTicketSheet = false
     @State private var showingTriageSheet = false
@@ -32,6 +33,17 @@ struct LockerChatView: View {
     @State private var isShowingVoiceRoom = false
 
     private static let recentMessageLimit = 40
+
+    init(
+        viewModel: DirectChatViewModel,
+        agent: AgentInfo,
+        reservesAppTabBarSpace: Bool = true
+    ) {
+        self.viewModel = viewModel
+        self.agent = agent
+        self.reservesAppTabBarSpace = reservesAppTabBarSpace
+        _tabBarPadding = State(initialValue: reservesAppTabBarSpace ? 83 : 0)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -166,7 +178,9 @@ struct LockerChatView: View {
             withAnimation(.easeOut(duration: 0.25)) { tabBarPadding = 0 }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-            withAnimation(.easeOut(duration: 0.25)) { tabBarPadding = 83 }
+            withAnimation(.easeOut(duration: 0.25)) {
+                tabBarPadding = reservesAppTabBarSpace ? 83 : 0
+            }
         }
         .toolbarBackground(AppColors.backgroundSecondary, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)

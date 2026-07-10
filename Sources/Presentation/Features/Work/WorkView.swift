@@ -38,6 +38,7 @@ struct WorkView: View {
     @State private var showingBoardsArchitecture = false
     @State private var showingBoardDrift = false
     @State private var showingCascadeDetails = false
+    @State private var conversationWorkspaceAgent: AgentInfo?
 
     var body: some View {
         NavigationStack(path: $directChatViewModel.navigationPath) {
@@ -55,7 +56,10 @@ struct WorkView: View {
                     AnyView(
                         WorkbenchAgentCockpitSection(
                             directChatViewModel: directChatViewModel,
-                            modelContext: modelContext
+                            modelContext: modelContext,
+                            onOpenWorkspace: { agent in
+                                conversationWorkspaceAgent = agent
+                            }
                         )
                     )
                         .padding(.horizontal, 16)
@@ -173,6 +177,13 @@ struct WorkView: View {
                     onRefresh: {
                         Task { await boardsModel.load(force: true) }
                     }
+                )
+            }
+            .fullScreenCover(item: $conversationWorkspaceAgent) { agent in
+                WorkDirectConversationWorkspace(
+                    directChatViewModel: directChatViewModel,
+                    modelContext: modelContext,
+                    initialAgent: agent
                 )
             }
             // Hidden navigation links for full-list push
@@ -2172,8 +2183,10 @@ struct WorkView: View {
 }
 
 private struct WorkbenchAgentCockpitSection: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Bindable var directChatViewModel: DirectChatViewModel
     let modelContext: ModelContext
+    let onOpenWorkspace: (AgentInfo) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -2200,6 +2213,22 @@ private struct WorkbenchAgentCockpitSection: View {
                         .accessibilityLabel("\(totalUnreadCount) unread direct messages")
                 }
 
+                if sizeClass == .regular, let firstAgent = agents.first {
+                    Button {
+                        onOpenWorkspace(directChatViewModel.selectedAgent ?? firstAgent)
+                    } label: {
+                        Image(systemName: "rectangle.split.2x1")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(AppColors.accentElectric)
+                            .frame(width: 30, height: 30)
+                            .background(AppColors.backgroundTertiary)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open direct conversation workspace")
+                    .help("Open direct conversation workspace")
+                }
+
                 Button {
                     directChatViewModel.refreshSonarSurface()
                 } label: {
@@ -2218,27 +2247,10 @@ private struct WorkbenchAgentCockpitSection: View {
             if agents.isEmpty {
                 emptyState
             } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        ForEach(agents) { agent in
-                            NavigationLink {
-                                AnyView(
-                                    LockerChatView(viewModel: directChatViewModel, agent: agent)
-                                        .onAppear {
-                                            directChatViewModel.setModelContext(modelContext)
-                                            directChatViewModel.selectAgent(agent)
-                                        }
-                                )
-                            } label: {
-                                agentCard(agent)
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(!directChatViewModel.canStartChat(with: agent))
-                            .opacity(directChatViewModel.canStartChat(with: agent) ? 1 : 0.45)
-                        }
+                LazyVGrid(columns: overviewColumns, alignment: .leading, spacing: 0) {
+                    ForEach(agents) { agent in
+                        conversationLink(agent)
                     }
-                    .padding(.horizontal, 2)
-                    .padding(.vertical, 2)
                 }
             }
         }
@@ -2281,6 +2293,16 @@ private struct WorkbenchAgentCockpitSection: View {
         agents.reduce(0) { $0 + directChatViewModel.unreadCount(for: $1) }
     }
 
+    private var overviewColumns: [GridItem] {
+        if sizeClass == .regular {
+            return [
+                GridItem(.flexible(), spacing: 18, alignment: .leading),
+                GridItem(.flexible(), spacing: 18, alignment: .leading)
+            ]
+        }
+        return [GridItem(.flexible(), alignment: .leading)]
+    }
+
     private var emptyState: some View {
         HStack(spacing: 10) {
             Image(systemName: "person.crop.circle.badge.questionmark")
@@ -2293,96 +2315,341 @@ private struct WorkbenchAgentCockpitSection: View {
         .padding(14)
     }
 
-    private func agentCard(_ agent: AgentInfo) -> some View {
+    @ViewBuilder
+    private func conversationLink(_ agent: AgentInfo) -> some View {
+        if sizeClass == .regular {
+            Button {
+                directChatViewModel.setModelContext(modelContext)
+                directChatViewModel.selectAgent(agent)
+                onOpenWorkspace(agent)
+            } label: {
+                conversationRow(agent)
+            }
+            .buttonStyle(.plain)
+            .disabled(!directChatViewModel.canStartChat(with: agent))
+            .opacity(directChatViewModel.canStartChat(with: agent) ? 1 : 0.45)
+        } else {
+            NavigationLink {
+                LockerChatView(viewModel: directChatViewModel, agent: agent)
+                    .onAppear {
+                        directChatViewModel.setModelContext(modelContext)
+                        directChatViewModel.selectAgent(agent)
+                    }
+            } label: {
+                conversationRow(agent)
+            }
+            .buttonStyle(.plain)
+            .disabled(!directChatViewModel.canStartChat(with: agent))
+            .opacity(directChatViewModel.canStartChat(with: agent) ? 1 : 0.45)
+        }
+    }
+
+    private func conversationRow(_ agent: AgentInfo) -> some View {
         let tint = Color(hexString: agent.color)
         let presence = directChatViewModel.presence(for: agent)
         let preview = directChatViewModel.lastMessagePreview(for: agent)
         let unread = directChatViewModel.unreadCount(for: agent)
         let canStart = directChatViewModel.canStartChat(with: agent)
 
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 9) {
-                ZStack(alignment: .bottomTrailing) {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(tint.opacity(0.18))
-                        .frame(width: 42, height: 42)
-                    Image(systemName: agent.icon)
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(tint)
-                    Circle()
-                        .fill(presence.state.color)
-                        .frame(width: 9, height: 9)
-                        .overlay(Circle().stroke(AppColors.backgroundSecondary, lineWidth: 1.5))
-                        .offset(x: 2, y: 2)
-                }
+        return HStack(spacing: 10) {
+            ZStack(alignment: .bottomTrailing) {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(tint.opacity(0.18))
+                    .frame(width: 40, height: 40)
+                Image(systemName: agent.icon)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(tint)
+                Circle()
+                    .fill(presence.state.color)
+                    .frame(width: 9, height: 9)
+                    .overlay(Circle().stroke(AppColors.backgroundSecondary, lineWidth: 1.5))
+                    .offset(x: 2, y: 2)
+            }
 
-                VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
                     Text(agent.name)
-                        .font(.subheadline.weight(.semibold))
+                        .font(.subheadline.weight(unread > 0 ? .bold : .semibold))
                         .foregroundColor(AppColors.textPrimary)
                         .lineLimit(1)
-                    Text(canStart ? directChatViewModel.rosterBadgeText(for: agent) : "Unavailable")
+
+                    Text(presence.state.label)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundColor(presence.state.color)
+                        .lineLimit(1)
+                }
+
+                Text(preview.text)
+                    .font(.caption)
+                    .foregroundColor(unread > 0 ? AppColors.textPrimary : AppColors.textSecondary)
+                    .lineLimit(1)
+
+                Text(canStart ? directChatViewModel.rosterBadgeText(for: agent) : "Unavailable")
+                    .font(.caption2)
+                    .foregroundColor(AppColors.textTertiary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+
+            VStack(alignment: .trailing, spacing: 5) {
+                if let recency = recencyLabel(preview.date) {
+                    Text(recency)
                         .font(.caption2)
                         .foregroundColor(AppColors.textTertiary)
                         .lineLimit(1)
                 }
 
-                Spacer(minLength: 0)
+                if unread > 0 {
+                    Text("\(unread)")
+                        .font(.caption2.weight(.bold))
+                        .foregroundColor(.white)
+                        .frame(minWidth: 20, minHeight: 20)
+                        .background(AppColors.accentElectric)
+                        .clipShape(Circle())
+                } else {
+                    Image(systemName: sizeClass == .regular ? "rectangle.split.2x1" : "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundColor(AppColors.textTertiary)
+                }
+            }
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
+        .contentShape(Rectangle())
+        .overlay(
+            Rectangle()
+                .fill(AppColors.border.opacity(0.7))
+                .frame(height: 0.5),
+            alignment: .bottom
+        )
+    }
 
-                VStack(alignment: .trailing, spacing: 3) {
-                    if unread > 0 {
-                        Text("\(unread)")
-                            .font(.caption2.weight(.bold))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(AppColors.accentElectric)
-                            .clipShape(Capsule())
+    private func presenceRank(_ state: AgentPresence.State) -> Int {
+        switch state {
+        case .active: return 0
+        case .idle: return 1
+        case .offline: return 2
+        }
+    }
+
+    private func recencyLabel(_ date: Date?) -> String? {
+        guard let date else { return nil }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
+}
+
+private struct WorkDirectConversationWorkspace: View {
+    @Environment(\.dismiss) private var dismiss
+    @Bindable var directChatViewModel: DirectChatViewModel
+    let modelContext: ModelContext
+    let initialAgent: AgentInfo
+    @State private var searchText = ""
+
+    var body: some View {
+        NavigationSplitView {
+            conversationSidebar
+                .navigationSplitViewColumnWidth(min: 300, ideal: 350, max: 420)
+        } detail: {
+            conversationDetail
+        }
+        .navigationSplitViewStyle(.balanced)
+        .background(AppColors.backgroundPrimary)
+        .onAppear {
+            directChatViewModel.setModelContext(modelContext)
+            if directChatViewModel.selectedAgent?.id != initialAgent.id {
+                directChatViewModel.selectAgent(initialAgent)
+            }
+            directChatViewModel.startPresenceMonitoring()
+        }
+        .task {
+            await directChatViewModel.loadAgentRegistry()
+            await directChatViewModel.loadAgentPresence()
+            await directChatViewModel.loadORCAChannelSummaries()
+        }
+        .onDisappear {
+            directChatViewModel.stopPresenceMonitoring()
+        }
+    }
+
+    private var conversationSidebar: some View {
+        List {
+            Section {
+                ForEach(filteredAgents) { agent in
+                    Button {
+                        directChatViewModel.selectAgent(agent)
+                    } label: {
+                        sidebarRow(agent)
                     }
+                    .buttonStyle(.plain)
+                    .disabled(!directChatViewModel.canStartChat(with: agent))
+                    .opacity(directChatViewModel.canStartChat(with: agent) ? 1 : 0.45)
+                    .listRowBackground(
+                        directChatViewModel.selectedAgent?.id == agent.id
+                            ? AppColors.accentElectric.opacity(0.14)
+                            : Color.clear
+                    )
+                }
+            } header: {
+                HStack {
+                    Text("1:1 INBOX")
+                    Spacer()
+                    if totalUnreadCount > 0 {
+                        Text("\(totalUnreadCount) unread")
+                    }
+                }
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(AppColors.backgroundPrimary)
+        .navigationTitle("Conversations")
+        .navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $searchText, prompt: "Search conversations")
+        .toolbarBackground(AppColors.backgroundSecondary, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Done") { dismiss() }
+            }
+
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    directChatViewModel.refreshSonarSurface()
+                } label: {
+                    Image(systemName: directChatViewModel.isLoadingRooms ? "hourglass" : "arrow.clockwise")
+                }
+                .disabled(directChatViewModel.isLoadingRooms)
+                .accessibilityLabel("Refresh direct conversations")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var conversationDetail: some View {
+        if let agent = directChatViewModel.selectedAgent {
+            LockerChatView(
+                viewModel: directChatViewModel,
+                agent: agent,
+                reservesAppTabBarSpace: false
+            )
+            .id("work-conversation-\(agent.id)")
+        } else {
+            VStack(spacing: 12) {
+                Image(systemName: "bubble.left.and.bubble.right")
+                    .font(.system(size: 32, weight: .semibold))
+                    .foregroundStyle(AppColors.accentElectric)
+                Text("Select a conversation")
+                    .font(.headline)
+                    .foregroundStyle(AppColors.textPrimary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(AppColors.backgroundPrimary)
+        }
+    }
+
+    private var agents: [AgentInfo] {
+        directChatViewModel.directChatAgents
+            .filter { $0.lane != .dormantAdvisor }
+            .sorted { lhs, rhs in
+                let lhsUnread = directChatViewModel.unreadCount(for: lhs)
+                let rhsUnread = directChatViewModel.unreadCount(for: rhs)
+                if lhsUnread != rhsUnread { return lhsUnread > rhsUnread }
+
+                let lhsDate = directChatViewModel.lastMessagePreview(for: lhs).date ?? .distantPast
+                let rhsDate = directChatViewModel.lastMessagePreview(for: rhs).date ?? .distantPast
+                if lhsDate != rhsDate { return lhsDate > rhsDate }
+
+                let lhsPresence = presenceRank(directChatViewModel.presence(for: lhs).state)
+                let rhsPresence = presenceRank(directChatViewModel.presence(for: rhs).state)
+                if lhsPresence != rhsPresence { return lhsPresence < rhsPresence }
+
+                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            }
+    }
+
+    private var filteredAgents: [AgentInfo] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return agents }
+        return agents.filter { agent in
+            let preview = directChatViewModel.lastMessagePreview(for: agent).text
+            return agent.name.localizedCaseInsensitiveContains(query)
+                || agent.role.localizedCaseInsensitiveContains(query)
+                || preview.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    private var totalUnreadCount: Int {
+        agents.reduce(0) { $0 + directChatViewModel.unreadCount(for: $1) }
+    }
+
+    private func sidebarRow(_ agent: AgentInfo) -> some View {
+        let tint = Color(hexString: agent.color)
+        let presence = directChatViewModel.presence(for: agent)
+        let preview = directChatViewModel.lastMessagePreview(for: agent)
+        let unread = directChatViewModel.unreadCount(for: agent)
+
+        return HStack(alignment: .top, spacing: 11) {
+            ZStack(alignment: .bottomTrailing) {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(tint.opacity(0.18))
+                    .frame(width: 42, height: 42)
+                Image(systemName: agent.icon)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(tint)
+                Circle()
+                    .fill(presence.state.color)
+                    .frame(width: 9, height: 9)
+                    .overlay(Circle().stroke(AppColors.backgroundSecondary, lineWidth: 1.5))
+                    .offset(x: 2, y: 2)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(agent.name)
+                        .font(.subheadline.weight(unread > 0 ? .bold : .semibold))
+                        .foregroundStyle(AppColors.textPrimary)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 4)
 
                     if let recency = recencyLabel(preview.date) {
                         Text(recency)
                             .font(.caption2)
-                            .foregroundColor(AppColors.textTertiary)
+                            .foregroundStyle(AppColors.textTertiary)
                             .lineLimit(1)
                     }
                 }
-            }
 
-            Text(preview.text)
-                .font(.caption)
-                .foregroundColor(AppColors.textSecondary)
-                .lineLimit(2)
-                .frame(height: 34, alignment: .topLeading)
+                Text(preview.text)
+                    .font(.caption)
+                    .foregroundStyle(unread > 0 ? AppColors.textPrimary : AppColors.textSecondary)
+                    .lineLimit(2)
 
-            HStack(spacing: 6) {
-                pill(presence.state.label, color: presence.state.color)
-                if let channel = directChatViewModel.shortChannelId(for: agent) {
-                    pill(channel, color: AppColors.textTertiary)
-                } else {
-                    pill(agent.defaultDeliveryMode.displayLabel, color: AppColors.textTertiary)
+                HStack(spacing: 6) {
+                    Text(presence.state.label)
+                        .foregroundStyle(presence.state.color)
+                    Text(directChatViewModel.shortChannelId(for: agent) ?? agent.defaultDeliveryMode.displayLabel)
+                        .foregroundStyle(AppColors.textTertiary)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    if unread > 0 {
+                        Text("\(unread)")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.white)
+                            .frame(minWidth: 20, minHeight: 20)
+                            .background(AppColors.accentElectric)
+                            .clipShape(Circle())
+                    }
                 }
+                .font(.caption2.weight(.semibold))
             }
         }
-        .padding(12)
-        .frame(width: 210, height: 150, alignment: .topLeading)
-        .background(AppColors.backgroundTertiary)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(AppColors.border, lineWidth: 1)
-        )
-    }
-
-    private func pill(_ text: String, color: Color) -> some View {
-        Text(text)
-            .font(.caption2.weight(.semibold))
-            .foregroundColor(color)
-            .lineLimit(1)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(color.opacity(0.12))
-            .clipShape(Capsule())
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
     }
 
     private func presenceRank(_ state: AgentPresence.State) -> Int {
