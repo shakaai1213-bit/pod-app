@@ -518,7 +518,7 @@ private struct CaptainsChartHeader: View {
     private var stampText: String {
         let generated = snapshot.generatedAt.isEmpty ? "bundled stub" : snapshot.generatedAt
         let verifier = snapshot.verifiedBy.isEmpty ? "snapshot resource" : snapshot.verifiedBy
-        return "generated \(generated) - verified by \(verifier) - feed /cockpit/snapshot"
+        return "map \(generated) - verified by \(verifier) - bundled topology snapshot"
     }
 }
 

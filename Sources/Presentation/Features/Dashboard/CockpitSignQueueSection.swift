@@ -11,6 +11,11 @@ import SwiftUI
 struct CockpitSignQueueSection: View {
     @State private var model = CockpitSignQueueModel()
     @State private var detailItem: CockpitSignItem?
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var visibleItemLimit: Int {
+        horizontalSizeClass == .compact ? 2 : 5
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -24,7 +29,7 @@ struct CockpitSignQueueSection: View {
                 } else if model.items.isEmpty {
                     emptyRow
                 } else {
-                    ForEach(Array(model.items.prefix(5).enumerated()), id: \.element.id) { idx, item in
+                    ForEach(Array(model.items.prefix(visibleItemLimit).enumerated()), id: \.element.id) { idx, item in
                         VStack(spacing: 0) {
                             if idx > 0 {
                                 Divider()
@@ -35,10 +40,10 @@ struct CockpitSignQueueSection: View {
                         }
                     }
 
-                    if model.items.count > 5 {
+                    if model.items.count > visibleItemLimit {
                         Divider().background(AppColors.border)
                         HStack {
-                            Text("+\(model.items.count - 5) more pending")
+                            Text("+\(model.items.count - visibleItemLimit) more pending")
                                 .font(.system(size: 12))
                                 .foregroundColor(AppColors.textTertiary)
                             Spacer()

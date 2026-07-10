@@ -9,16 +9,12 @@ struct DashboardView: View {
     @State private var viewModel = DashboardViewModel()
     @State private var briefingModel = DashboardBriefingDoctrineModel()
     @State private var dailyBriefingModel = DailyBriefingPanelModel()
-    @State private var captainsChartModel = CaptainsChartModel()
     @State private var fundLandingModel = FundLandingViewModel()
-    @State private var fundUniverseLoopModel = FundUniverseLoopViewModel()
-    @State private var fundPredictionModel = FundPredictionBriefViewModel()
     @State private var selectedAgent: Agent?
     @State private var selectedBriefingSheet: DashboardBriefingSheetKind?
     @State private var isDailyBriefingExpanded = false
     @State private var expandedDailyBriefingSections: Set<DailyBriefingSection> = []
     @State private var isGeneratingBriefing = false
-    @State private var showingFundLanding = false
     @State private var showingVoiceRoom = false
     @State private var showingSettings = false
     @State private var playgroundModel = PlaygroundPanelModel()
@@ -33,26 +29,26 @@ struct DashboardView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.md) {
-                    // 1. Agent status strip — fast lab pulse before owner-action queues.
+                    // 1. Agent status strip — fast organization pulse.
                     agentStatusStrip
 
-                    // 2. Captain's Desk — Tony's living focus cards from ORCA.
+                    // 2. Owner-action queue — what needs the Captain now.
+                    CockpitSignQueueSection()
+
+                    // 3. Current execution blocker — routes into Work.
+                    classroomFlowCard
+
+                    // 4. Captain's Desk — living focus cards from ORCA.
                     CaptainsDeskSection()
 
-                    // 3. Captain's Chart — bundled product map until cockpit snapshot ships.
-                    CaptainsChartSection(model: captainsChartModel)
-
-                    // 4. Voice room status — primary realtime chat surface.
-                    dashboardVoiceBanner
-
-                    // 5. Protected Fund visibility — read-only, no controls.
+                    // 5. Protected Fund pulse — one ORCA-backed path into the full cockpit.
                     dashboardFundLandingCard
 
                     // 6. Daily briefing — collapsible read-only note from ORCA.
                     dailyBriefingPanel
 
-                    // 7. Tier 1 sign queue — "what needs your eyes"
-                    CockpitSignQueueSection()
+                    // 7. Voice room status — realtime team surface.
+                    dashboardVoiceBanner
 
                     // 8. Playground NATS tail — unread inbox + action-required
                     PlaygroundPanelView(model: playgroundModel, onChatTap: {
@@ -62,8 +58,6 @@ struct DashboardView: View {
                     // 9. Compact briefing + doctrine velocity line
                     classroomBriefingLine
 
-                    // 10. Top flow card — one blocker, tap → Work
-                    classroomFlowCard
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, Theme.md)
@@ -71,7 +65,11 @@ struct DashboardView: View {
                 .padding(.bottom, 100)
             }
             .refreshable {
-                await captainsChartModel.load(force: true)
+                await viewModel.loadDashboard()
+                await briefingModel.load(force: true)
+                await dailyBriefingModel.load(force: true)
+                await fundLandingModel.load()
+                await playgroundModel.load()
             }
             .background(AppColors.backgroundPrimary)
             .navigationTitle("Dashboard")
@@ -84,8 +82,6 @@ struct DashboardView: View {
                             await briefingModel.load(force: true)
                             await dailyBriefingModel.load(force: true)
                             await fundLandingModel.load()
-                            await fundUniverseLoopModel.load()
-                            await fundPredictionModel.load()
                             await playgroundModel.load()
                         }
                     } label: {
@@ -116,16 +112,6 @@ struct DashboardView: View {
             .sheet(isPresented: $showingSettings) {
                 SettingsView()
             }
-            .sheet(isPresented: $showingFundLanding) {
-                FundLandingDetailSheet(
-                    landing: fundLandingModel.landing,
-                    universeLoop: fundUniverseLoopModel.response,
-                    predictionBrief: fundPredictionModel.brief,
-                    predictionError: fundPredictionModel.errorMessage,
-                    predictionsLoading: fundPredictionModel.isLoading
-                )
-                    .presentationDetents([.medium, .large])
-            }
             .sheet(isPresented: $showingVoiceRoom) {
                 VoiceCompanionView(viewModel: voiceCoordinator.viewModel)
             }
@@ -134,8 +120,6 @@ struct DashboardView: View {
                 await briefingModel.load()
                 await dailyBriefingModel.load()
                 await fundLandingModel.load()
-                await fundUniverseLoopModel.load()
-                await fundPredictionModel.load()
                 await playgroundModel.load()
             }
             .task {
@@ -285,7 +269,7 @@ struct DashboardView: View {
 
     private var dashboardFundLandingCard: some View {
         Button {
-            showingFundLanding = true
+            appState.navigateTo(.fund)
         } label: {
             VStack(alignment: .leading, spacing: 9) {
                 HStack(spacing: 8) {
@@ -293,7 +277,7 @@ struct DashboardView: View {
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(AppColors.accentWarning)
 
-                    Text("FUND")
+                    Text("FUND · ORCA")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(AppColors.textTertiary)
                         .tracking(0.5)
@@ -304,9 +288,12 @@ struct DashboardView: View {
                         ProgressView()
                             .scaleEffect(0.65)
                     } else if let landing = fundLandingModel.landing {
+                        let status = landing.sourceFresh
+                            ? "FRESH"
+                            : (landing.verifiedFinancialDataAvailable ? "STALE" : "DEGRADED")
                         dashboardFundStatusPill(
-                            landing.isAvailable ? "LIVE" : "DEGRADED",
-                            color: landing.isAvailable ? AppColors.accentSuccess : AppColors.accentWarning
+                            status,
+                            color: landing.sourceFresh ? AppColors.accentSuccess : AppColors.accentWarning
                         )
                     } else {
                         dashboardFundStatusPill("WAITING", color: AppColors.textTertiary)
@@ -330,7 +317,7 @@ struct DashboardView: View {
                         dashboardFundMetric("Sharpe", dashboardNumber(landing.sharpe))
                     }
 
-                    Text("ORCA \(landing.route) · \(landing.freshnessLabel) · read-only")
+                    Text("ORCA \(landing.route) · \(landing.freshnessLabel) · read-only · open cockpit")
                         .font(.system(size: 10))
                         .foregroundColor(AppColors.textTertiary)
                         .lineLimit(1)

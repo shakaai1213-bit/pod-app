@@ -65,13 +65,14 @@ struct PrivacyControl: Identifiable {
 
 // MARK: - ViewModel
 
+@MainActor
 @Observable
 final class SettingsViewModel {
     // MARK: Profile
     var avatarImage: UIImage?
-    var userName: String = "Maui"
-    var userRole: String = "Head of Engineering"
-    var userEmail: String = "maui@orca.ai"
+    var userName: String = "Captain"
+    var userRole: String = "Captain"
+    var userEmail: String = ""
     var userStatus: UserStatus = .online
 
     // MARK: Appearance
@@ -164,6 +165,25 @@ final class SettingsViewModel {
         checkGatewayStatus()
     }
 
+    func loadViewer(fallbackName: String?) async {
+        let fallback = fallbackName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let fallback, !fallback.isEmpty {
+            userName = fallback
+            userRole = fallback.caseInsensitiveCompare("Captain") == .orderedSame ? "Captain" : "Authenticated user"
+        }
+
+        do {
+            let viewer: SettingsViewerDTO = try await APIClient.shared.get(path: "/api/v1/users/me")
+            let resolvedName = viewer.preferredName ?? viewer.name ?? fallback ?? "Captain"
+            userName = resolvedName
+            userRole = viewer.role
+                ?? (resolvedName.caseInsensitiveCompare("Captain") == .orderedSame ? "Captain" : "Authenticated user")
+            userEmail = viewer.email ?? ""
+        } catch {
+            userEmail = ""
+        }
+    }
+
     func checkGatewayStatus() {
         gatewayCheckTask?.cancel()
         gatewayCheckTask = Task {
@@ -201,6 +221,7 @@ final class SettingsViewModel {
 // MARK: - View
 
 struct SettingsView: View {
+    @EnvironmentObject private var appState: AppState
     @State private var viewModel = SettingsViewModel()
     @State private var showingProfileEditor = false
     @State private var showingAgentPicker = false
@@ -223,6 +244,11 @@ struct SettingsView: View {
             .listStyle(.insetGrouped)
             .navigationTitle("Settings")
             .preferredColorScheme(colorScheme)
+        }
+        .task {
+            await viewModel.loadViewer(
+                fallbackName: appState.currentUser?.name ?? appState.authManager.currentUser?.name
+            )
         }
     }
 
@@ -256,9 +282,11 @@ struct SettingsView: View {
                     Text(viewModel.userRole)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    Text(viewModel.userEmail)
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+                    if !viewModel.userEmail.isEmpty {
+                        Text(viewModel.userEmail)
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
                 }
 
                 Spacer()
@@ -610,5 +638,18 @@ extension View {
 
 #Preview {
     SettingsView()
+        .environmentObject(AppState())
         .preferredColorScheme(.dark)
+}
+
+private struct SettingsViewerDTO: Decodable {
+    let email: String?
+    let name: String?
+    let preferredName: String?
+    let role: String?
+
+    enum CodingKeys: String, CodingKey {
+        case email, name, role
+        case preferredName = "preferred_name"
+    }
 }

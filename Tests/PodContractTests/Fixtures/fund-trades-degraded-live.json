@@ -1,0 +1,9 @@
+{
+  "status": "degraded",
+  "quality": "unavailable",
+  "stale": false,
+  "as_of": null,
+  "staleness_seconds": null,
+  "degraded_reason": "artifact unavailable: FileNotFoundError",
+  "data": null
+}

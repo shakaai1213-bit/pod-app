@@ -1,5 +1,6 @@
 OpenClaw-Backup-pod-2026-03-*/
 build/
+.build/
 
 # Local secrets — never commit (M1 security per Rooster review 2026-05-07)
 # Template at AgentSecrets.swift.template is committed; real file is local-only

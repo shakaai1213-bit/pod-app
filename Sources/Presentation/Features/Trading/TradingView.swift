@@ -2,34 +2,57 @@ import SwiftUI
 
 // MARK: - Trading View
 
+private enum FundSurfaceMode: String, CaseIterable, Identifiable {
+    case overview
+    case trades
+    case research
+    case predictions
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .overview: return "Overview"
+        case .trades: return "Trades"
+        case .research: return "Research"
+        case .predictions: return "Predictions"
+        }
+    }
+}
+
 struct TradingView: View {
 
     @State private var viewModel = TradingViewModel()
+    @State private var selectedMode: FundSurfaceMode = .overview
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: Theme.lg) {
-                    pnlSection
-                    researchSection
-                    earningsQualitySection
-                    predictionsSection
-                    oracleSection
-                    earningsSection
-                    macroSection
+                VStack(alignment: .leading, spacing: Theme.md) {
+                    fundStatusHeader
+                    fundModePicker
+                    fundModeContent
                 }
                 .padding(.horizontal, Theme.md)
-                .padding(.bottom, Theme.xxl)
+                .padding(.top, Theme.sm)
+                .padding(.bottom, 110)
             }
             .background(AppColors.backgroundPrimary)
-            .navigationTitle("Trading")
+            .navigationTitle("Fund")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     if viewModel.isLoading {
                         ProgressView()
                             .tint(AppColors.accentElectric)
                     } else {
-                        refreshedBadge
+                        Button {
+                            Task { await viewModel.loadData() }
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(AppColors.accentElectric)
+                        }
                     }
                 }
             }
@@ -42,20 +65,94 @@ struct TradingView: View {
         }
     }
 
+    private var fundStatusHeader: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack(alignment: .top, spacing: Theme.sm) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("CHIEF'S FUND")
+                        .podTextStyle(.label, color: AppColors.textTertiary)
+                    Text(viewModel.landing?.headline ?? "Waiting for verified ORCA Fund truth.")
+                        .podTextStyle(.title2, color: AppColors.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+                refreshedBadge
+            }
+
+            HStack(spacing: Theme.xs) {
+                fundStatusPill(
+                    (viewModel.landing?.mode ?? "unknown").uppercased(),
+                    color: AppColors.accentElectric
+                )
+                fundStatusPill(
+                    (viewModel.landing?.readiness ?? "waiting").uppercased(),
+                    color: viewModel.landing?.gateReady == true ? AppColors.accentSuccess : AppColors.accentWarning
+                )
+                fundStatusPill("READ ONLY", color: AppColors.accentWarning)
+            }
+
+            Text(fundSourceLine)
+                .podTextStyle(.caption, color: AppColors.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, Theme.sm)
+        .overlay(Divider().background(AppColors.border), alignment: .bottom)
+    }
+
+    private var fundSourceLine: String {
+        guard let landing = viewModel.landing else {
+            return "ORCA /api/v1/fund/landing · verified financial data unavailable"
+        }
+        let generated = landing.generatedAt ?? landing.sourceMtime ?? "timestamp unavailable"
+        return "Data as of \(generated) · \(landing.freshnessLabel) · ORCA read model"
+    }
+
+    private var fundModePicker: some View {
+        Picker("Fund view", selection: $selectedMode) {
+            ForEach(FundSurfaceMode.allCases) { mode in
+                Text(mode.title).tag(mode)
+            }
+        }
+        .pickerStyle(.segmented)
+    }
+
+    @ViewBuilder
+    private var fundModeContent: some View {
+        switch selectedMode {
+        case .overview:
+            pnlSection
+        case .trades:
+            FundTradesCard()
+        case .research:
+            earningsQualitySection
+        case .predictions:
+            predictionsSection
+        }
+    }
+
     // MARK: - Refreshed Badge
 
     private var refreshedBadge: some View {
-        HStack(spacing: 5) {
+        let landing = viewModel.landing
+        let color: Color = landing?.sourceFresh == true
+            ? AppColors.accentSuccess
+            : (landing?.verifiedFinancialDataAvailable == true ? AppColors.accentWarning : AppColors.accentDanger)
+        let label = landing?.sourceFresh == true
+            ? "FRESH"
+            : (landing?.verifiedFinancialDataAvailable == true ? "STALE" : "UNAVAILABLE")
+
+        return HStack(spacing: 5) {
             Circle()
-                .fill(viewModel.isSnapshot ? AppColors.accentWarning : AppColors.accentSuccess)
+                .fill(color)
                 .frame(width: 7, height: 7)
-            Text(viewModel.isSnapshot ? "ORCA OFFLINE" : "ORCA FUND")
+            Text(label)
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(viewModel.isSnapshot ? AppColors.accentWarning : AppColors.accentSuccess)
+                .foregroundStyle(color)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
-        .background((viewModel.isSnapshot ? AppColors.accentWarning : AppColors.accentSuccess).opacity(0.12))
+        .background(color.opacity(0.12))
         .clipShape(Capsule())
     }
 
@@ -63,25 +160,83 @@ struct TradingView: View {
 
     private var pnlSection: some View {
         VStack(alignment: .leading, spacing: Theme.sm) {
-            tradingSectionHeader("P&L Overview", icon: "chart.bar.fill", color: AppColors.accentElectric)
+            tradingSectionHeader("Verified Overview", icon: "chart.bar.fill", color: AppColors.accentElectric)
 
-            if let note = viewModel.errorMessage {
-                offlineBanner(note)
-            } else {
-                protectedBanner
-            }
+            if let landing = viewModel.landing, landing.verifiedFinancialDataAvailable {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 0) {
+                        researchStat(label: "Account", value: fundMoney(landing.accountUsd), color: AppColors.textPrimary)
+                        statDivider
+                        researchStat(label: "Net P&L", value: fundMoney(landing.netPnlUsd), color: (landing.netPnlUsd ?? 0) >= 0 ? AppColors.accentSuccess : AppColors.accentDanger)
+                        statDivider
+                        researchStat(label: "Closed", value: landing.closedTrades.map { String($0) } ?? "-", color: AppColors.accentElectric)
+                        statDivider
+                        researchStat(label: "Sharpe", value: fundNumber(landing.sharpe), color: AppColors.accentWarning)
+                    }
+                    .padding(.vertical, Theme.md)
 
-            VStack(spacing: Theme.sm) {
-                if viewModel.dashboard.bots.isEmpty {
-                    emptyState("No ORCA Fund landing metrics are available.")
-                } else {
-                    ForEach(viewModel.dashboard.bots) { bot in
-                        BotCard(bot: bot)
+                    Divider().background(AppColors.border)
+
+                    VStack(spacing: Theme.xs) {
+                        fundFactRow("Performance gate", value: landing.gateReady == true ? "ready" : "not ready", color: landing.gateReady == true ? AppColors.accentSuccess : AppColors.accentWarning)
+                        fundFactRow("Kill switch", value: landing.killSwitchStatus ?? "unknown", color: landing.killSwitchStatus == "ok" ? AppColors.accentSuccess : AppColors.accentWarning)
+                        fundFactRow("Promotion", value: landing.promotionDecision ?? "not decided", color: landing.promotionDecision == "promote" ? AppColors.accentSuccess : AppColors.accentWarning)
+                        fundFactRow("Algo control", value: landing.algoControlStatus ?? "unknown", color: landing.algoControlStatus == "ok" ? AppColors.accentSuccess : AppColors.accentWarning)
+                    }
+                    .padding(Theme.md)
+
+                    if !landing.blockers.isEmpty {
+                        Divider().background(AppColors.border)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("CURRENT BLOCKERS")
+                                .podTextStyle(.label, color: AppColors.textTertiary)
+                            ForEach(landing.blockers.prefix(4), id: \.self) { blocker in
+                                Label(blocker, systemImage: "exclamationmark.circle")
+                                    .podTextStyle(.caption, color: AppColors.textSecondary)
+                            }
+                        }
+                        .padding(Theme.md)
                     }
                 }
+                .podCard(padding: 0)
+
+                protectedBanner
+            } else {
+                emptyState(viewModel.errorMessage ?? "No verified ORCA Fund landing metrics are available.")
             }
         }
         .padding(.top, Theme.md)
+    }
+
+    private func fundFactRow(_ label: String, value: String, color: Color) -> some View {
+        HStack(spacing: Theme.sm) {
+            Text(label)
+                .podTextStyle(.caption, color: AppColors.textSecondary)
+            Spacer(minLength: 0)
+            Text(value.replacingOccurrences(of: "_", with: " ").uppercased())
+                .podTextStyle(.label, color: color)
+                .lineLimit(1)
+        }
+    }
+
+    private func fundStatusPill(_ label: String, color: Color) -> some View {
+        Text(label)
+            .podTextStyle(.label, color: color)
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(color.opacity(0.11))
+            .clipShape(Capsule())
+    }
+
+    private func fundMoney(_ value: Double?) -> String {
+        guard let value else { return "-" }
+        return value.formatted(.currency(code: "USD").precision(.fractionLength(2)))
+    }
+
+    private func fundNumber(_ value: Double?) -> String {
+        guard let value else { return "-" }
+        return value.formatted(.number.precision(.fractionLength(3)))
     }
 
     private var protectedBanner: some View {

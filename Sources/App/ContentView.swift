@@ -4,8 +4,6 @@ struct ContentView: View {
     @EnvironmentObject private var appState: AppState
     // Persistent ViewModels — survive tab switches
     @State private var directChatViewModel = DirectChatViewModel()
-    // Use @State to track selected tab - force SwiftUI to see changes
-    @State private var selectedTab: AppTab = .dashboard
     // Observation token to force refresh
     @State private var tabChangeCounter: Int = 0
     // Force SwiftUI to recompose when auth state changes
@@ -81,7 +79,7 @@ struct ContentView: View {
             }
             // Direct 1:1 chat now lives inside Workbench; keep the old Playground
             // shell routable, but route current deep links to the operating cockpit.
-            withAnimation(.easeInOut(duration: 0.15)) { selectedTab = .work }
+            withAnimation(.easeInOut(duration: 0.15)) { appState.navigateTo(.work) }
             if agentInfo.isReachable {
                 directChatViewModel.navigationPath = NavigationPath()
                 directChatViewModel.selectAgent(agentInfo)
@@ -99,7 +97,7 @@ struct ContentView: View {
                 appState.pendingDirectChatChannelId = nil
                 return
             }
-            withAnimation(.easeInOut(duration: 0.15)) { selectedTab = .work }
+            withAnimation(.easeInOut(duration: 0.15)) { appState.navigateTo(.work) }
             directChatViewModel.continueWithTicket(
                 ticketId: ticketId,
                 ticketTitle: appState.pendingDirectChatTicketTitle ?? ticketId,
@@ -112,40 +110,42 @@ struct ContentView: View {
             appState.pendingDirectChatChannelId = nil
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("pod.openWorkFlowFilter"))) { _ in
-            withAnimation(.easeInOut(duration: 0.15)) { selectedTab = .work }
+            withAnimation(.easeInOut(duration: 0.15)) { appState.navigateTo(.work) }
         }
     }
 
     @ViewBuilder
     private var tabContent: some View {
-        // MARK: Primary 7-tab structure (L1 revamp 2026-W22)
-        if selectedTab == .dashboard {
+        // MARK: Primary 8-tab structure (L1 revamp + Fund amendment 2026-W22)
+        if appState.selectedTab == .dashboard {
             DashboardView()
-        } else if selectedTab == .chat {
+        } else if appState.selectedTab == .chat {
             SonarView(viewModel: directChatViewModel)
-        } else if selectedTab == .work {
+        } else if appState.selectedTab == .work {
             WorkView(directChatViewModel: directChatViewModel)
-        } else if selectedTab == .crew {
+        } else if appState.selectedTab == .fund {
+            TradingView()
+        } else if appState.selectedTab == .crew {
             // L2: Crew tab = CrewTabView with 2-segment picker.
-            // Agents segment: Focus + Agents + Workers + Protected Fund (via AgentsView).
+            // Agents segment: Focus + Agents + Workers (via AgentsView).
             // Arms segment: 8 arm cards + TEAM strip (via ArmsTabView).
             CrewTabView()
-        } else if selectedTab == .knowledge {
+        } else if appState.selectedTab == .knowledge {
             KnowledgeView()
-        } else if selectedTab == .lab {
+        } else if appState.selectedTab == .lab {
             LabView()
-        } else if selectedTab == .runtime {
+        } else if appState.selectedTab == .runtime {
             RuntimeView()
-        } else if selectedTab == .maker {
+        } else if appState.selectedTab == .maker {
             MakerView()
-        } else if selectedTab == .system {
+        } else if appState.selectedTab == .system {
             SystemView()
         // MARK: Legacy aliases — routable via deep-link for 30-day dwell period
-        } else if selectedTab == .arms {
+        } else if appState.selectedTab == .arms {
             ArmsTabView()
-        } else if selectedTab == .agents {
+        } else if appState.selectedTab == .agents {
             AgentsView()
-        } else if selectedTab == .captainsLog {
+        } else if appState.selectedTab == .captainsLog {
             CaptainsLogView()
         } else {
             Color.clear
@@ -172,14 +172,14 @@ struct ContentView: View {
 
     private var visibleTabs: [AppTab] {
         // Legacy cases excluded from bar (still deep-linkable).
-        [.dashboard, .work, .crew, .knowledge, .lab, .runtime, .maker]
+        [.dashboard, .work, .fund, .crew, .knowledge, .lab, .runtime, .maker]
     }
 
     private func tabBarButton(for tab: AppTab) -> some View {
-        let isSelected = selectedTab == tab
+        let isSelected = appState.selectedTab == tab
         return Button {
             withAnimation(.easeInOut(duration: 0.15)) {
-                selectedTab = tab
+                appState.navigateTo(tab)
             }
         } label: {
             VStack(spacing: 4) {
@@ -399,6 +399,7 @@ private struct RuntimeView: View {
         case .data:
             dataSourcesSection
         case .system:
+            CaptainsChartSection()
             LabSystemContent()
         case .tags:
             summaryStrip

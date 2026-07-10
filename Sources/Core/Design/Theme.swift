@@ -224,13 +224,13 @@ struct PodReviewCard: View {
                 Label(item.status, systemImage: isBusy ? "clock.arrow.circlepath" : "checkmark.seal")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(item.statusColor)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 4)
                     .background(item.statusColor.opacity(0.10))
                     .clipShape(Capsule())
-
-                Spacer(minLength: 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                 if !item.actions.isEmpty {
                     ForEach(visibleActions) { action in

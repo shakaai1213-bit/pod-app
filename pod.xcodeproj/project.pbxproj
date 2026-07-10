@@ -42,6 +42,11 @@
 		48DC0D4A902E5E25D14427FF /* ShimmerModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8974E1454949E877F3566950 /* ShimmerModifier.swift */; };
 		50CCE7E17C21A642DDA65C63 /* ChiefFundContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E565B81C093C4FF46686662 /* ChiefFundContent.swift */; };
 		50D5FB832D3F748D484A7DA6 /* OfflineQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2314FFEFA469FFDCDA8BCB0 /* OfflineQueue.swift */; };
+		F10000000000000000000001 /* FundTradesDTO.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000002 /* FundTradesDTO.swift */; };
+		F10000000000000000000003 /* FundTradesRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000004 /* FundTradesRepository.swift */; };
+		F10000000000000000000005 /* FundTradesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000006 /* FundTradesViewModel.swift */; };
+		F10000000000000000000007 /* FundTradesCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000008 /* FundTradesCard.swift */; };
+		C20000000000000000000001 /* MakerDTO.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000002 /* MakerDTO.swift */; };
 		59202E155A36185F02416841 /* ChannelRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC9A4A64DB751E8953D363DF /* ChannelRepository.swift */; };
 		5E8CE5D256DC98E4F893A8CE /* AgentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D18D78CE9147C58BF929B8A0 /* AgentsView.swift */; };
 		607BA9DB490B1693ECB1033C /* KnowledgeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F92E1097762048180C6B3C9E /* KnowledgeViewModel.swift */; };
@@ -178,6 +183,11 @@
 		538A3B3487E3FD106CCB6B2F /* SearchSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchSheet.swift; sourceTree = "<group>"; };
 		53BA388CD44F256C597D3FF1 /* ArmsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArmsViewModel.swift; sourceTree = "<group>"; };
 		55C5EA92AF78A2BD257AA7E1 /* TaskSafeSleep.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskSafeSleep.swift; sourceTree = "<group>"; };
+		F10000000000000000000008 /* FundTradesCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FundTradesCard.swift; sourceTree = "<group>"; };
+		F10000000000000000000002 /* FundTradesDTO.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FundTradesDTO.swift; sourceTree = "<group>"; };
+		F10000000000000000000004 /* FundTradesRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FundTradesRepository.swift; sourceTree = "<group>"; };
+		F10000000000000000000006 /* FundTradesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FundTradesViewModel.swift; sourceTree = "<group>"; };
+		C20000000000000000000002 /* MakerDTO.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MakerDTO.swift; sourceTree = "<group>"; };
 		5662C577757D6A7B9B15C8B8 /* DirectChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DirectChatView.swift; sourceTree = "<group>"; };
 		574CFE0B1AC9C1B0155DA6F7 /* NotificationRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationRouter.swift; sourceTree = "<group>"; };
 		5A4D73E8F029459D920B7C43 /* CaptainsDeskSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptainsDeskSection.swift; sourceTree = "<group>"; };
@@ -294,6 +304,8 @@
 				A28A4672374ACF545BD664A8 /* APIClient.swift */,
 				6FF5F53FAD59A5AB311C5FAA /* DTOs.swift */,
 				12D22773AD8CA83A56A417C3 /* Endpoints.swift */,
+				F10000000000000000000002 /* FundTradesDTO.swift */,
+				C20000000000000000000002 /* MakerDTO.swift */,
 				2036DE57828AAAECDE776245 /* NotificationAction.swift */,
 				574CFE0B1AC9C1B0155DA6F7 /* NotificationRouter.swift */,
 				2BEE8E77C2965FB511A49166 /* PushNotificationService.swift */,
@@ -536,6 +548,7 @@
 				0C828D5C39A08FAA8E8C6F7E /* AgentRepository.swift */,
 				E253A244EAB68FD7087A05E0 /* BoardRepository.swift */,
 				DC9A4A64DB751E8953D363DF /* ChannelRepository.swift */,
+				F10000000000000000000004 /* FundTradesRepository.swift */,
 				928284E5D88714A670BD7542 /* ProjectRepository.swift */,
 				7ED4159151441CB032A8460F /* ResearchRepository.swift */,
 				3AB0691F93E9F5494A3A79B1 /* StandardRepository.swift */,
@@ -693,6 +706,8 @@
 		CEFC1D1CDAAAE7311D0D8B4D /* Trading */ = {
 			isa = PBXGroup;
 			children = (
+				F10000000000000000000008 /* FundTradesCard.swift */,
+				F10000000000000000000006 /* FundTradesViewModel.swift */,
 				B176EE740BDAAB1D3841B4F7 /* TradingView.swift */,
 				A893BBA804C06676605D8A94 /* TradingViewModel.swift */,
 			);
@@ -886,6 +901,11 @@
 				243D55106B17E4849250CCA5 /* DirectChatViewModel.swift in Sources */,
 				CDB89B8862BF3230B668C3FC /* Endpoints.swift in Sources */,
 				A38EF93421E11165DA34063C /* FlowLayout.swift in Sources */,
+				F10000000000000000000007 /* FundTradesCard.swift in Sources */,
+				F10000000000000000000001 /* FundTradesDTO.swift in Sources */,
+				F10000000000000000000003 /* FundTradesRepository.swift in Sources */,
+				F10000000000000000000005 /* FundTradesViewModel.swift in Sources */,
+				C20000000000000000000001 /* MakerDTO.swift in Sources */,
 				A6EEECD6FF6A452A07AC3969 /* Knowledge.swift in Sources */,
 				710AEB8A57C35177AD7DB6F6 /* KnowledgeView.swift in Sources */,
 				607BA9DB490B1693ECB1033C /* KnowledgeViewModel.swift in Sources */,

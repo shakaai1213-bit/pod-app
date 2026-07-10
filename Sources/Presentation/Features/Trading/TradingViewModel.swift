@@ -210,10 +210,10 @@ struct TradingDashboard {
 final class TradingViewModel {
 
     var dashboard: TradingDashboard = TradingDashboard.empty
+    var landing: FundLanding? = nil
     var isLoading: Bool = false
     var lastUpdated: Date? = nil
     var errorMessage: String? = nil
-    var isSnapshot: Bool = true
     var earningsQuality: EarningsQualitySurface? = nil
     var earningsQualityError: String? = nil
     var marketPredictionBrief: MarketPredictionBrief? = nil
@@ -232,17 +232,18 @@ final class TradingViewModel {
 
         do {
             let landing: FundLanding = try await APIClient.shared.get(path: "/api/v1/fund/landing")
-            guard landing.isAvailable else {
-                throw APIError(code: 503, message: landing.degradedReason ?? "Fund landing degraded")
+            self.landing = landing
+            guard landing.verifiedFinancialDataAvailable else {
+                throw APIError(code: 503, message: landing.degradedReason ?? "Verified Fund data unavailable")
             }
-            let fetched = TradingDashboard.fundLanding(landing)
-            dashboard = fetched
-            isSnapshot = false
+            // The landing is an approved ORCA read model. Keep verified stale values
+            // visible as stale rather than coercing them into synthetic dashboard fields.
+            dashboard = .empty
             lastUpdated = Date()
         } catch {
-            errorMessage = "ORCA Fund landing unavailable. Pod is not showing direct Chief data or snapshot financials."
+            landing = nil
+            errorMessage = "Verified Fund landing data is unavailable from ORCA."
             dashboard = TradingDashboard.empty
-            isSnapshot = true
             lastUpdated = Date()
         }
 
@@ -304,40 +305,6 @@ extension TradingDashboard {
             earnings: [],
             macro: []
         )
-    }
-
-    static func fundLanding(_ landing: FundLanding) -> TradingDashboard {
-        let bot = TradingBot(
-            id: "chief-fund",
-            name: "Chief Fund",
-            version: landing.schemaVersion,
-            balance: landing.accountUsd ?? 0,
-            pnl: landing.netPnlUsd ?? 0,
-            winRate: landing.sharpe ?? 0,
-            openPositions: 0,
-            status: landing.gateReady == true ? .running : .paused,
-            regime: landing.gateReady == true ? .bull : .caution,
-            tradesTotal: landing.closedTrades
-        )
-
-        let oracle = OracleState(
-            score: landing.gateReady == true ? 1 : -1,
-            modelVersion: landing.schemaVersion,
-            predictionCount: 0,
-            statusNote: landing.headline ?? landing.readiness ?? "Fund landing available from ORCA.",
-            predictions: []
-        )
-
-        let research = ResearchSummary(
-            activeArms: 1,
-            experimentsToday: landing.closedTrades ?? 0,
-            bestScore: landing.sharpe ?? 0,
-            bestExperiment: 0,
-            arms: [],
-            queueNote: landing.blockers.isEmpty ? "No blockers reported by Fund landing." : landing.blockers.joined(separator: " · ")
-        )
-
-        return TradingDashboard(bots: [bot], oracle: oracle, research: research, earnings: [], macro: [])
     }
 }
 

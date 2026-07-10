@@ -1,0 +1,22 @@
+[
+  {
+    "id": "ba3dc93e-dc03-4b0f-afac-c10cbab52725",
+    "title": "Real-time cascade stage badge in Work tab",
+    "summary": "Show live cascade progress without refreshing.",
+    "discovery": {
+      "scope": "Add a live stage badge.",
+      "dependencies": ["Work tab UI", "Cascade API"],
+      "prior_art": ["Existing stage tracker"],
+      "risks": ["Polling cost"],
+      "effort_estimate": "M",
+      "discovered_at": "2026-06-15T18:09:55.780006"
+    },
+    "assessment": {
+      "verdict": "real",
+      "rationale": "The queue needs visible progress.",
+      "questions": ["What cadence should refresh use?"],
+      "assessed_at": "2026-06-15T17:58:48.789121"
+    },
+    "created_at": "2026-06-15T17:58:39.883190"
+  }
+]

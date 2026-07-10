@@ -19,7 +19,8 @@ final class StandardRepository {
         defer { isLoading = false }
 
         do {
-            let fetched: [Standard] = try await api.get(path: "/api/v1/standards")
+            let response: StandardListResponse = try await api.get(path: "/api/v1/standards")
+            let fetched = response.items
             standards = fetched
             await cache.syncStandards(fetched)
         } catch {
@@ -37,9 +38,10 @@ final class StandardRepository {
         defer { isLoading = false }
 
         do {
-            let fetched: [Standard] = try await api.get(
+            let response: StandardListResponse = try await api.get(
                 path: "/api/v1/standards?category=\(category.rawValue)"
             )
+            let fetched = response.items
 
             // Merge: replace matching IDs, append new ones
             for item in fetched {
@@ -86,7 +88,8 @@ final class StandardRepository {
         let cached = cache.fetchFavorites().map { $0.toStandard() }
 
         do {
-            let fetched: [Standard] = try await api.get(path: "/api/v1/standards?favorites=true")
+            let response: StandardListResponse = try await api.get(path: "/api/v1/standards?favorites=true")
+            let fetched = response.items
             await cache.syncStandards(fetched)
             standards = fetched
         } catch {

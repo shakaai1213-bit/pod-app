@@ -1,0 +1,67 @@
+{
+  "status": "ok",
+  "quality": "available",
+  "stale": false,
+  "as_of": "2026-07-09T23:00:00Z",
+  "staleness_seconds": 30,
+  "data": {
+    "schema_version": "fund_routes_trades/v0",
+    "route": "fund.trades",
+    "generated_at": "2026-07-09T23:00:00Z",
+    "live_trading": false,
+    "runtime_integration": "read_only",
+    "trading_actionable": false,
+    "status": "ok",
+    "blocked_controls": [
+      "orders"
+    ],
+    "payload": {
+      "as_of": "2026-07-09T23:00:00Z",
+      "desks": {
+        "stitch": {
+          "open_count": 1,
+          "closed_count": 1,
+          "strategies": [
+            {
+              "strategy": "test_alpha",
+              "trades": 1,
+              "wins": 1,
+              "pnl_usd": 2.5,
+              "win_rate_pct": 100.0
+            }
+          ]
+        },
+        "lilo": {
+          "open_count": 0,
+          "closed_count": 0,
+          "strategies": []
+        }
+      },
+      "open_positions": [
+        {
+          "desk": "stitch",
+          "symbol": "TEST",
+          "algo": "test_alpha",
+          "direction": "long",
+          "size_dollars": 25.0,
+          "entry_price": 10.0,
+          "entry_time": "2026-07-09T22:00:00Z",
+          "stop_loss": 9.5,
+          "take_profit": 11.0
+        }
+      ],
+      "closed_recent": [
+        {
+          "desk": "stitch",
+          "symbol": "TEST",
+          "algo": "test_alpha",
+          "entry_time": "2026-07-09T20:00:00Z",
+          "exit_time": "2026-07-09T21:00:00Z",
+          "exit_reason": "target",
+          "pnl_pct": 0.1,
+          "pnl_usd": 2.5
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "generated_at": "2026-07-09T22:45:17.337988",
+  "window_hours": 24,
+  "status": "needs_attention",
+  "signal_count": 2,
+  "signals": [],
+  "sections": {
+    "activation": {
+      "total_agents": 11,
+      "compliant_agents": 5,
+      "required_attention_count": 2,
+      "items": []
+    },
+    "compute": {
+      "status": "degraded",
+      "run_count": 322,
+      "failure_count": 84,
+      "by_status": {"succeeded": 238, "failed": 84}
+    }
+  }
+}

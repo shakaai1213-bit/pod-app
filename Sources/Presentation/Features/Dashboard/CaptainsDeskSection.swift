@@ -182,7 +182,7 @@ private struct CaptainsDeskCard: View {
         if isExpanded {
             return lines.isEmpty ? ["No description yet."] : lines
         }
-        return Array((lines.isEmpty ? ["No description yet."] : lines).prefix(6))
+        return Array((lines.isEmpty ? ["No description yet."] : lines).prefix(1))
     }
 
     private func cleanMarkdownLine(_ line: String) -> String {

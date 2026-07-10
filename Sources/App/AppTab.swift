@@ -3,15 +3,16 @@ import Foundation
 // MARK: - App Tab
 
 // L1 Layout Revamp 2026-W22 (SPEC-POD-LAYOUT-REVAMP-2026-W22):
-// Visible tab bar: dashboard, workbench, crew, library, lab, runtime
+// Visible tab bar: dashboard, workbench, fund, crew, library, lab, runtime, maker
 // Legacy cases (.captainsLog, .arms, .agents, .system) kept for deep-link and nav-state compat.
 // They are not shown in the tab bar but remain routable.
 
 enum AppTab: String, CaseIterable, Hashable {
-    // MARK: Visible (7 tabs — ordered as shown in tab bar)
+    // MARK: Visible (8 tabs — ordered as shown in tab bar)
     case dashboard
     case chat           // legacy/routable Playground shell; not shown in primary tab bar
     case work
+    case fund           // protected read-only Fund cockpit, sourced through ORCA
     case crew           // NEW — merges Agents + Arms+Team + Focus
     case knowledge
     case lab
@@ -29,6 +30,7 @@ enum AppTab: String, CaseIterable, Hashable {
         case .dashboard:   return "Dashboard"
         case .chat:        return "Playground"
         case .work:        return "Workbench"
+        case .fund:        return "Fund"
         case .crew:        return "Crew"
         case .knowledge:   return "Library"
         case .lab:         return "Lab"
@@ -46,7 +48,7 @@ enum AppTab: String, CaseIterable, Hashable {
         switch self {
         case .dashboard: return "Home"
         case .chat:      return "Play"
-        case .work:      return "Bench"
+        case .work:      return "Work"
         default:         return title
         }
     }
@@ -56,6 +58,7 @@ enum AppTab: String, CaseIterable, Hashable {
         case .dashboard:   return "house.fill"
         case .chat:        return "gamecontroller.fill"
         case .work:        return "square.stack.3d.up.fill"
+        case .fund:        return "chart.line.uptrend.xyaxis"
         case .crew:        return "person.3.sequence.fill"
         case .knowledge:   return "books.vertical.fill"
         case .lab:         return "flask.fill"

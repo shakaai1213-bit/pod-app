@@ -23,7 +23,7 @@ final class AppState: ObservableObject {
     @Published var errorDetails: String?
     @Published var authDiagnostics: [String] = []
     @Published var currentUser: TeamMember?
-    var selectedTab: AppTab = .dashboard
+    @Published var selectedTab: AppTab = .dashboard
     @Published var navigationState: NavigationState = .dashboard
     @Published var showApprovalSheet = false
     @Published var pendingApprovalId: UUID?
@@ -353,6 +353,7 @@ final class AppState: ObservableObject {
         case .system: navigationState = .dashboard
         case .chat: navigationState = .chat(channelId: nil)
         case .work: navigationState = .projects(taskId: nil)
+        case .fund: navigationState = .dashboard
         case .captainsLog: navigationState = .dashboard  // legacy alias
         case .lab: navigationState = .dashboard
         case .crew: navigationState = .agents(agentId: nil)  // Crew = merged Agents+Arms

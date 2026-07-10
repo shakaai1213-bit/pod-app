@@ -11,24 +11,6 @@ private enum MakerMode: String, CaseIterable {
 
 // MARK: - Pipeline Models
 
-struct ReadyIdea: Decodable, Identifiable {
-    let id: String
-    let title: String
-    let summary: String?
-    let discovery: [String: String?]?
-    let assessment: [String: String?]?
-    let createdAt: String
-
-    enum CodingKeys: String, CodingKey {
-        case id, title, summary, discovery, assessment
-        case createdAt = "created_at"
-    }
-
-    var scope: String? { discovery?["scope"] ?? nil }
-    var effortEstimate: String? { discovery?["effort_estimate"] ?? nil }
-    var rationale: String? { assessment?["rationale"] ?? nil }
-}
-
 struct PromoteResponse: Decodable {
     let id: String
     let status: String
