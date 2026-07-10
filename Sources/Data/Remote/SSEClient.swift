@@ -549,6 +549,8 @@ public struct MessageNewPayload: Codable, Sendable {
     public let messageType: String?
     public let deliveryMode: String?
     public let provenance: String?
+    public let provider: String?
+    public let model: String?
     public let responseState: String?
     public let deliveryError: String?
     public let deliveryFailedHop: String?
@@ -570,7 +572,7 @@ public struct MessageNewPayload: Codable, Sendable {
         case replyToId = "reply_to_id"
         case isThreadReply = "is_thread_reply"
         case traceId = "trace_id"
-        case source, lane, provenance
+        case source, lane, provenance, provider, model
         case messageType = "message_type"
         case deliveryMode = "delivery_mode"
         case responseState = "response_state"
@@ -621,6 +623,8 @@ public struct MessageNewPayload: Codable, Sendable {
         messageType = try container.decodeIfPresent(String.self, forKey: .messageType)
         deliveryMode = try container.decodeIfPresent(String.self, forKey: .deliveryMode)
         provenance = try container.decodeIfPresent(String.self, forKey: .provenance)
+        provider = try container.decodeIfPresent(String.self, forKey: .provider)
+        model = try container.decodeIfPresent(String.self, forKey: .model)
         responseState = try container.decodeIfPresent(String.self, forKey: .responseState)
         triageId = try container.decodeIfPresent(String.self, forKey: .triageId)
         triageTraceId = try container.decodeIfPresent(String.self, forKey: .triageTraceId)
@@ -655,6 +659,8 @@ public struct MessageNewPayload: Codable, Sendable {
         try container.encodeIfPresent(messageType, forKey: .messageType)
         try container.encodeIfPresent(deliveryMode, forKey: .deliveryMode)
         try container.encodeIfPresent(provenance, forKey: .provenance)
+        try container.encodeIfPresent(provider, forKey: .provider)
+        try container.encodeIfPresent(model, forKey: .model)
         try container.encodeIfPresent(responseState, forKey: .responseState)
         try container.encodeIfPresent(deliveryError, forKey: .deliveryError)
         try container.encodeIfPresent(deliveryFailedHop, forKey: .deliveryFailedHop)
@@ -673,6 +679,17 @@ public struct MessageNewPayload: Codable, Sendable {
                 ),
                 forKey: .metadata
             )
+        }
+    }
+
+    public var attributionLabel: String? {
+        let cleanProvider = provider?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanModel = model?.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch (cleanProvider?.isEmpty == false ? cleanProvider : nil, cleanModel?.isEmpty == false ? cleanModel : nil) {
+        case let (provider?, model?): return "\(provider) · \(model)"
+        case let (provider?, nil): return provider
+        case let (nil, model?): return model
+        default: return nil
         }
     }
 }

@@ -3523,6 +3523,9 @@ struct DMBubble: View {
         if deliveryState == .agentUnresponsive {
             return "Agent unresponsive"
         }
+        if deliveryState == .fallbackPresented, provenance == .timeoutFallback {
+            return "Superseded by \(agent.name)"
+        }
         return deliveryState?.displayLabel ?? ""
     }
 
@@ -3753,6 +3756,15 @@ private struct MessageDeliveryLedger: View {
         DMDeliveryMode.parse(message.deliveryMode) ?? .compute
     }
 
+    private var provenance: DMResponseProvenance {
+        DMResponseProvenance.parse(message.provenance)
+            ?? DMResponseProvenance(
+                deliveryMode: message.deliveryMode,
+                source: message.source,
+                lane: message.lane
+            )
+    }
+
     private var steps: [(title: String, icon: String, state: StepState)] {
         let failed = deliveryState == .failed
             || deliveryState == .deliveryNatsFailed
@@ -3836,7 +3848,9 @@ private struct MessageDeliveryLedger: View {
         case .agentUnresponsive:
             return "Not delivered - agent unreachable"
         case .fallbackPresented:
-            return "Local fallback, not agent reply"
+            return provenance == .timeoutFallback
+                ? "Helper draft superseded by \(agent.name)"
+                : "Local fallback, not agent reply"
         case .failed:
             return "Route failed"
         case .timedOut:
@@ -3849,8 +3863,7 @@ private struct MessageDeliveryLedger: View {
     }
 
     private var provenanceText: String {
-        switch DMResponseProvenance.parse(message.provenance)
-            ?? DMResponseProvenance(deliveryMode: message.deliveryMode, source: message.source, lane: message.lane) {
+        switch provenance {
         case .coordinationReview:
             return "\(agent.name) coordination review"
         case .timeoutFallback:

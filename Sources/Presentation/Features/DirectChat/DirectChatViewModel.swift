@@ -1675,17 +1675,45 @@ final class DirectChatViewModel {
         guard selectedAgent?.id == agent.id,
               let ctx = modelContext,
               payload.id != acknowledgedMessageId,
-              Self.isImportableRemoteMessage(
-                  senderAgentId: payload.senderAgentId,
-                messageType: payload.messageType,
-                source: payload.source,
-                responseState: payload.responseState
-              ),
               minimumCreatedAt.map({ timestamp >= $0 }) ?? true,
-              !payload.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              !hasImportedRemoteMessage(id: payload.id, content: payload.content, timestamp: timestamp, role: role) else {
+              !payload.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return
         }
+
+        if let existing = currentMessages.first(where: { $0.remoteMessageId == payload.id }) {
+            existing.content = payload.content
+            existing.timestamp = timestamp
+            existing.source = payload.source ?? existing.source
+            existing.lane = payload.lane ?? existing.lane
+            existing.deliveryMode = payload.deliveryMode ?? existing.deliveryMode
+            existing.provenance = payload.provenance ?? existing.provenance
+            existing.deliveryState = Self.effectiveDeliveryState(
+                content: payload.content,
+                deliveryMode: payload.deliveryMode,
+                provenance: payload.provenance,
+                source: payload.source,
+                lane: payload.lane,
+                responseState: payload.responseState
+            ) ?? existing.deliveryState
+            existing.modelUsed = payload.attributionLabel ?? existing.modelUsed
+            existing.traceId = payload.traceId ?? existing.traceId
+            existing.triageId = payload.triageId ?? existing.triageId
+            existing.triageTraceId = payload.triageTraceId ?? existing.triageTraceId
+            try? ctx.save()
+            return
+        }
+
+        guard Self.isImportableRemoteMessage(
+            senderAgentId: payload.senderAgentId,
+            messageType: payload.messageType,
+            source: payload.source,
+            responseState: payload.responseState
+        ), !hasImportedRemoteMessage(
+            id: payload.id,
+            content: payload.content,
+            timestamp: timestamp,
+            role: role
+        ) else { return }
 
         let conversation = getOrCreateConversation(for: agent)
         conversation.orcaChannelId = channelId
@@ -1710,6 +1738,7 @@ final class DirectChatViewModel {
         message.deliveryError = payload.deliveryError
         message.deliveryFailedHop = payload.deliveryFailedHop
         message.deliveryEvidence = payload.deliveryEvidence
+        message.modelUsed = payload.attributionLabel
         message.traceId = payload.traceId
         message.remoteMessageId = payload.id
         message.triageId = payload.triageId
@@ -1793,6 +1822,7 @@ final class DirectChatViewModel {
                 message.deliveryError = reply.deliveryError
                 message.deliveryFailedHop = reply.deliveryFailedHop
                 message.deliveryEvidence = reply.deliveryEvidence
+                message.modelUsed = reply.attributionLabel
                 message.traceId = reply.traceId
                 message.remoteMessageId = reply.id
                 message.triageId = reply.triageId
@@ -1878,7 +1908,7 @@ final class DirectChatViewModel {
                             responseState: existing.deliveryState ?? remote.deliveryState ?? remote.responseState
                         ).rawValue
                     }
-                    existing.modelUsed = remote.computeAttributionLabel ?? existing.modelUsed
+                    existing.modelUsed = remote.attributionLabel ?? existing.modelUsed
                     existing.traceId = remote.traceId ?? existing.traceId
                     existing.triageId = remote.triageId ?? existing.triageId
                     existing.triageTraceId = remote.triageTraceId ?? existing.triageTraceId
@@ -1932,7 +1962,7 @@ final class DirectChatViewModel {
                             responseState: localMatch.deliveryState ?? remote.deliveryState ?? remote.responseState
                         ).rawValue
                     }
-                    localMatch.modelUsed = localMatch.modelUsed ?? remote.computeAttributionLabel
+                    localMatch.modelUsed = localMatch.modelUsed ?? remote.attributionLabel
                     localMatch.traceId = localMatch.traceId ?? remote.traceId
                     localMatch.triageId = localMatch.triageId ?? remote.triageId
                     localMatch.triageTraceId = localMatch.triageTraceId ?? remote.triageTraceId
@@ -1969,7 +1999,7 @@ final class DirectChatViewModel {
                         responseState: message.deliveryState
                     ).rawValue
                 }
-                message.modelUsed = remote.computeAttributionLabel
+                message.modelUsed = remote.attributionLabel
                 message.traceId = remote.traceId
                 message.remoteMessageId = remote.id
                 message.triageId = remote.triageId
@@ -4962,14 +4992,19 @@ struct DirectChatORCAMessageDTO: Decodable {
         return provenance
     }
 
-    var computeAttributionLabel: String? {
-        guard let computeProvider else { return nil }
-        let providerLabel = computeProvider.capitalized
+    var attributionLabel: String? {
+        let cleanProvider = provider?.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanModel = model?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let cleanModel, !cleanModel.isEmpty {
-            return "\(providerLabel) · \(cleanModel)"
+        switch (cleanProvider?.isEmpty == false ? cleanProvider : nil, cleanModel?.isEmpty == false ? cleanModel : nil) {
+        case let (provider?, model?):
+            return "\(provider.capitalized) · \(model)"
+        case let (provider?, nil):
+            return provider.capitalized
+        case let (nil, model?):
+            return model
+        default:
+            return nil
         }
-        return providerLabel
     }
 }
 
