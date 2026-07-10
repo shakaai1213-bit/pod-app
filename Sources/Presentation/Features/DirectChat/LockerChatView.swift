@@ -25,7 +25,7 @@ struct LockerChatView: View {
     @State private var toolRequestName = "agent_workspace_task"
     @State private var toolRequestInstruction = ""
     @State private var toolRequestReason = ""
-    @State private var isContextExpanded = false
+    @State private var isShowingContext = false
     @State private var areOlderMessagesExpanded = false
     @State private var selectedEvidenceMessage: DMMessage?
     @State private var selectedAgentPacketProject: AgentChatService.LockerWorkSpineProject?
@@ -73,6 +73,10 @@ struct LockerChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 12) {
+                        if viewModel.currentMessages.isEmpty {
+                            emptyConversationState
+                        }
+
                         if shouldCompactMessages {
                             PlaygroundHistoryToggle(
                                 hiddenCount: hiddenMessageCount,
@@ -203,6 +207,11 @@ struct LockerChatView: View {
             .task {
                 await viewModel.loadAttachableTickets()
             }
+        }
+        .sheet(isPresented: $isShowingContext) {
+            conversationContextSheet
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showingTriageSheet) {
             if let preview = viewModel.latestTriagePreview {
@@ -372,17 +381,7 @@ struct LockerChatView: View {
     }
 
     private var chatContextSurface: some View {
-        VStack(spacing: 0) {
-            compactContextBar
-
-            if isContextExpanded {
-                ticketContextBar
-                ticketContinuityBar
-                lockerCockpitPanel
-                workClassroomPanel
-                routeDecisionBar
-            }
-        }
+        compactContextBar
     }
 
     private var compactContextBar: some View {
@@ -469,16 +468,14 @@ struct LockerChatView: View {
             }
 
             Button {
-                withAnimation(.easeInOut(duration: 0.18)) {
-                    isContextExpanded.toggle()
-                }
+                isShowingContext = true
             } label: {
-                Image(systemName: isContextExpanded ? "chevron.up.circle.fill" : "chevron.down.circle")
+                Image(systemName: "slider.horizontal.3")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(AppColors.accentElectric)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(isContextExpanded ? "Hide chat context" : "Show chat context")
+            .accessibilityLabel("Show conversation context")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 9)
@@ -489,6 +486,103 @@ struct LockerChatView: View {
                 .frame(height: 0.5),
             alignment: .bottom
         )
+    }
+
+    private var conversationContextSheet: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 0) {
+                    contextSheetSummary
+                    ticketContextBar
+                    ticketContinuityBar
+                    lockerCockpitPanel
+                    workClassroomPanel
+                    routeDecisionBar
+                }
+            }
+            .background(AppColors.backgroundPrimary)
+            .navigationTitle("Conversation context")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        viewModel.refreshCurrentChannel()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .disabled(viewModel.currentChannelId(for: agent) == nil)
+                    .accessibilityLabel("Refresh conversation context")
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        isShowingContext = false
+                    }
+                }
+            }
+        }
+    }
+
+    private var contextSheetSummary: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: contextSummaryIcon)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(contextSummaryColor)
+                .frame(width: 30, height: 30)
+                .background(contextSummaryColor.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(contextSummaryTitle)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppColors.textPrimary)
+
+                Text(contextSummaryDetail)
+                    .font(.caption)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+
+            if let summary = lockerSummary {
+                lockerPolicyBadge(summary)
+            }
+        }
+        .padding(16)
+        .background(AppColors.backgroundSecondary)
+        .overlay(
+            Rectangle()
+                .fill(AppColors.border)
+                .frame(height: 0.5),
+            alignment: .bottom
+        )
+    }
+
+    private var emptyConversationState: some View {
+        VStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(Color(hexString: agent.color).opacity(0.14))
+                    .frame(width: 52, height: 52)
+                Image(systemName: agent.icon)
+                    .font(.system(size: 21, weight: .semibold))
+                    .foregroundStyle(Color(hexString: agent.color))
+            }
+
+            Text("Start a conversation with \(agent.name)")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppColors.textPrimary)
+
+            Text("Messages use the \(deliveryLabel(for: viewModel.selectedDeliveryMode).lowercased()) route. Delivery and evidence status will appear here.")
+                .font(.caption)
+                .foregroundStyle(AppColors.textTertiary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 360)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 64)
     }
 
     private var contextSummaryTitle: String {

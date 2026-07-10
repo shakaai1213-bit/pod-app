@@ -2179,15 +2179,26 @@ private struct WorkbenchAgentCockpitSection: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("1:1 LANES")
+                    Text("1:1")
                         .font(.caption.weight(.semibold))
                         .foregroundColor(AppColors.textTertiary)
-                    Text("Agent cockpit")
+                    Text("Direct conversations")
                         .font(.headline)
                         .foregroundColor(AppColors.textPrimary)
                 }
 
                 Spacer()
+
+                if totalUnreadCount > 0 {
+                    Text("\(totalUnreadCount)")
+                        .font(.caption.weight(.bold))
+                        .foregroundColor(.white)
+                        .frame(minWidth: 22, minHeight: 22)
+                        .padding(.horizontal, 2)
+                        .background(AppColors.accentElectric)
+                        .clipShape(Capsule())
+                        .accessibilityLabel("\(totalUnreadCount) unread direct messages")
+                }
 
                 Button {
                     directChatViewModel.refreshSonarSurface()
@@ -2247,11 +2258,27 @@ private struct WorkbenchAgentCockpitSection: View {
         directChatViewModel.directChatAgents
             .filter { $0.lane != .dormantAdvisor }
             .sorted { lhs, rhs in
+                let lhsUnread = directChatViewModel.unreadCount(for: lhs)
+                let rhsUnread = directChatViewModel.unreadCount(for: rhs)
+                if lhsUnread != rhsUnread { return lhsUnread > rhsUnread }
+
+                let lhsDate = directChatViewModel.lastMessagePreview(for: lhs).date ?? .distantPast
+                let rhsDate = directChatViewModel.lastMessagePreview(for: rhs).date ?? .distantPast
+                if lhsDate != rhsDate { return lhsDate > rhsDate }
+
+                let lhsPresence = presenceRank(directChatViewModel.presence(for: lhs).state)
+                let rhsPresence = presenceRank(directChatViewModel.presence(for: rhs).state)
+                if lhsPresence != rhsPresence { return lhsPresence < rhsPresence }
+
                 let lhsRank = lhs.lane == .main ? 0 : 1
                 let rhsRank = rhs.lane == .main ? 0 : 1
                 if lhsRank != rhsRank { return lhsRank < rhsRank }
                 return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
             }
+    }
+
+    private var totalUnreadCount: Int {
+        agents.reduce(0) { $0 + directChatViewModel.unreadCount(for: $1) }
     }
 
     private var emptyState: some View {
@@ -2302,14 +2329,23 @@ private struct WorkbenchAgentCockpitSection: View {
 
                 Spacer(minLength: 0)
 
-                if unread > 0 {
-                    Text("\(unread)")
-                        .font(.caption2.weight(.bold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(AppColors.accentElectric)
-                        .clipShape(Capsule())
+                VStack(alignment: .trailing, spacing: 3) {
+                    if unread > 0 {
+                        Text("\(unread)")
+                            .font(.caption2.weight(.bold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(AppColors.accentElectric)
+                            .clipShape(Capsule())
+                    }
+
+                    if let recency = recencyLabel(preview.date) {
+                        Text(recency)
+                            .font(.caption2)
+                            .foregroundColor(AppColors.textTertiary)
+                            .lineLimit(1)
+                    }
                 }
             }
 
@@ -2347,6 +2383,21 @@ private struct WorkbenchAgentCockpitSection: View {
             .padding(.vertical, 3)
             .background(color.opacity(0.12))
             .clipShape(Capsule())
+    }
+
+    private func presenceRank(_ state: AgentPresence.State) -> Int {
+        switch state {
+        case .active: return 0
+        case .idle: return 1
+        case .offline: return 2
+        }
+    }
+
+    private func recencyLabel(_ date: Date?) -> String? {
+        guard let date else { return nil }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 }
 
