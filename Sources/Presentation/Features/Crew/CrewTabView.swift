@@ -32,12 +32,20 @@ final class LeadPlateViewModel {
         do {
             let response: PaginatedResponse<AgentDTO> = try await apiClient.get(path: Endpoint.agents.path)
             roster = response.items
-                .filter { AgentRosterPolicy.isActiveOrSupport($0.name) }
-                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+                .filter {
+                    AgentRosterPolicy.isActiveOrSupport($0.name)
+                        || $0.name.lowercased().hasPrefix("shaka")
+                }
+                .sorted {
+                    let lhsIsShaka = $0.name.lowercased().hasPrefix("shaka")
+                    let rhsIsShaka = $1.name.lowercased().hasPrefix("shaka")
+                    if lhsIsShaka != rhsIsShaka { return lhsIsShaka }
+                    return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+                }
 
-            if selectedLeadId.isEmpty, let maui = roster.first(where: { $0.name.lowercased() == "maui" }) ?? roster.first {
-                selectedLeadId = maui.id
-                draftLeadId = maui.id
+            if selectedLeadId.isEmpty, let lead = roster.first(where: { $0.name.lowercased().hasPrefix("shaka") }) ?? roster.first {
+                selectedLeadId = lead.id
+                draftLeadId = lead.id
             }
         } catch {
             errorMessage = "Lead roster unavailable: \(Self.message(for: error))"
@@ -78,7 +86,7 @@ final class LeadPlateViewModel {
             plate = try await apiClient.get(path: Endpoint.leadPlate(leadId: leadId).path)
         } catch {
             plate = nil
-            errorMessage = "Lead plate unavailable: \(Self.message(for: error))"
+            errorMessage = "Lead load unavailable: \(Self.message(for: error))"
         }
     }
 
@@ -102,7 +110,7 @@ struct CrewTabView: View {
         var title: String {
             switch self {
             case .agents: return "Agents · Focus · Workers"
-            case .leadPlate: return "Lead Plate"
+            case .leadPlate: return "Lead Load"
             case .planning: return "Planning"
             case .arms:   return "Arm Dispatch"
             }
@@ -111,7 +119,7 @@ struct CrewTabView: View {
         var shortTitle: String {
             switch self {
             case .agents: return "Agents"
-            case .leadPlate: return "Plate"
+            case .leadPlate: return "Load"
             case .planning: return "Plan"
             case .arms:   return "Dispatch"
             }
@@ -240,10 +248,10 @@ private struct LeadPlateView: View {
     private var pageHeader: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Lead Plate")
+                Text("Lead Load")
                     .font(.system(size: 28, weight: .bold))
                     .foregroundColor(AppColors.textPrimary)
-                Text("Read-only workload, pressure, and time-ledger view for lead-owned reports.")
+                Text("Read-only ORCA workload, pressure, and time ledger for direct reports in the selected lead's canonical scope.")
                     .font(.system(size: 14))
                     .foregroundColor(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -263,13 +271,13 @@ private struct LeadPlateView: View {
             }
             .buttonStyle(.plain)
             .disabled(viewModel.isLoadingPlate || viewModel.selectedLeadId.isEmpty)
-            .accessibilityLabel("Refresh Lead Plate")
+            .accessibilityLabel("Refresh Lead Load")
         }
     }
 
     private var leadSelector: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("LEAD", count: viewModel.roster.count, suffix: "candidates")
+            sectionHeader("LEAD SCOPE", count: viewModel.roster.count, suffix: "agents")
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
@@ -320,7 +328,7 @@ private struct LeadPlateView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(viewModel.isLoadingPlate)
-                .accessibilityLabel("Load Lead Plate")
+                .accessibilityLabel("Load lead scope")
             }
         }
         .podCard(padding: 12)
@@ -524,7 +532,7 @@ private struct LeadPlateView: View {
         VStack(spacing: 10) {
             ProgressView()
                 .tint(AppColors.accentElectric)
-            Text("Loading lead plate")
+            Text("Loading lead load")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(AppColors.textSecondary)
         }
@@ -535,7 +543,7 @@ private struct LeadPlateView: View {
 
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("No lead plate loaded")
+            Text("No lead load available")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundColor(AppColors.textPrimary)
             Text("Choose an agent lead or enter a lead id to load the read-only plate.")

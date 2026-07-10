@@ -473,6 +473,7 @@ struct AgentsView: View {
                 if let agent {
                     focusStatusPill(agent)
                 }
+                focusSourcePill(card)
                 Spacer(minLength: 8)
                 if let unread = agent.map({ viewModel.unreadCount(for: $0.name) }), unread > 0 {
                     Text("\(unread)")
@@ -494,6 +495,12 @@ struct AgentsView: View {
                 .foregroundColor(AppColors.textSecondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
+
+            Text(card.sourceRef ?? card.statusDetail ?? "No ORCA focus snapshot")
+                .font(.system(size: 10))
+                .foregroundColor(AppColors.textTertiary)
+                .lineLimit(1)
+                .truncationMode(.middle)
 
             if let agent {
                 HStack(spacing: 6) {
@@ -623,7 +630,7 @@ struct AgentsView: View {
                             }
                         }
                     } else {
-                        pendingORCARow("Morning log not published")
+                        pendingORCARow(card.sourceState.emptyMessage)
                     }
                 }
                 Spacer(minLength: 8)
@@ -684,6 +691,16 @@ struct AgentsView: View {
         .padding(.vertical, 3)
         .background(agent.status.color.opacity(0.12))
         .clipShape(Capsule())
+    }
+
+    private func focusSourcePill(_ card: AgentFocusCard) -> some View {
+        Text(card.sourceState.label)
+            .font(.system(size: 9, weight: .bold))
+            .foregroundColor(card.sourceState.color)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(card.sourceState.color.opacity(0.12))
+            .clipShape(Capsule())
     }
 
     private var deputyStrip: some View {
@@ -1501,6 +1518,40 @@ private struct AgentFocusFishFeed: Hashable {
     )
 }
 
+private enum AgentFocusSourceState: String, Hashable {
+    case current
+    case stale
+    case missing
+
+    init(apiValue: String?) {
+        self = AgentFocusSourceState(rawValue: apiValue ?? "") ?? .missing
+    }
+
+    var label: String {
+        switch self {
+        case .current: return "ORCA LIVE"
+        case .stale: return "STALE"
+        case .missing: return "MISSING"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .current: return AppColors.accentSuccess
+        case .stale: return AppColors.accentWarning
+        case .missing: return AppColors.textTertiary
+        }
+    }
+
+    var emptyMessage: String {
+        switch self {
+        case .current: return "Priorities not published"
+        case .stale: return "Latest priorities are stale"
+        case .missing: return "Priorities not published"
+        }
+    }
+}
+
 // L7c reshape (SPEC-POD-AGENT-FOCUS-CARDS v1, Tony 2026-05-25):
 // Card = STRETCH (3 aspirational items) + ROADMAP (30d/60d/90d) + THIS WEEK + Fish + Today's 3.
 
@@ -1539,6 +1590,9 @@ private struct AgentFocusCard: Identifiable, Hashable {
     let fish: AgentFocusFish
     let lastLogExcerpt: String?
     let lastUpdated: Date?
+    let sourceState: AgentFocusSourceState
+    let sourceRef: String?
+    let statusDetail: String?
     let isSkeleton: Bool
     let hasStretch: Bool
     let hasRoadmap: Bool
@@ -1584,6 +1638,9 @@ private struct AgentFocusCard: Identifiable, Hashable {
             fish: AgentFocusFish(name: "—", icon: "—", feed: nil),
             lastLogExcerpt: nil,
             lastUpdated: nil,
+            sourceState: .missing,
+            sourceRef: nil,
+            statusDetail: "Loading ORCA focus snapshot",
             isSkeleton: true,
             hasStretch: false,
             hasRoadmap: false,
@@ -1613,126 +1670,6 @@ private enum AgentFocusDefaults {
         "shaka": ("Shaka", "🤙", "CEO / Decision proxy / Cross-team coordination")
     ]
 
-    static let fallbackCards: [String: AgentFocusCard] = Dictionary(
-        uniqueKeysWithValues: fallbackCardList.map { ($0.id, $0) }
-    )
-
-    private static let fallbackCardList: [AgentFocusCard] = [
-        staticCard(
-            agentId: "maui",
-            stretch: ["speed of build", "architectural taste", "Codex orchestration mastery"],
-            roadmap: AgentRoadmap(
-                d30: "Pod classroom V1 LIVE",
-                d60: "Memory Spine V2 + Project Automation v1.0",
-                d90: "Voice surface Phase 1 + Jarvis Arms autonomous"
-            ),
-            research: ["AI coding agent orchestration patterns", "mobile classroom UX", "SwiftUI compose performance"],
-            fish: AgentFocusFish(name: "Starfish", icon: "⭐", feed: .unknown)
-        ),
-        staticCard(
-            agentId: "aloha",
-            stretch: ["crisp communication", "organized team", "ORCA standards"],
-            roadmap: AgentRoadmap(
-                d30: "wiki→Pod auto-pairing fully closed",
-                d60: "doc-ledger drives weekly retro signal",
-                d90: "agent_focus_card as ORCA entity"
-            ),
-            research: ["doctrine + governance patterns in agentic teams", "pattern languages for org structure", "measurement loops in autonomous systems"],
-            fish: AgentFocusFish(name: "—", icon: "—", feed: nil)
-        ),
-        staticCard(
-            agentId: "chief",
-            stretch: ["disciplined trading conviction", "funding velocity", "learning loop compounding"],
-            roadmap: AgentRoadmap(
-                d30: "funding-squeeze v1.4 LIVE",
-                d60: "live capital deployment gate passed",
-                d90: "Strategy Journal becomes source of forward bets"
-            ),
-            research: ["funding-squeeze regime patterns", "pre-stop signals", "walk-forward validation methods"],
-            fish: AgentFocusFish(name: "Chieffish", icon: "🐟", feed: .unknown)
-        ),
-        staticCard(
-            agentId: "rooster",
-            stretch: ["security posture", "adversarial thinking", "research depth"],
-            roadmap: AgentRoadmap(
-                d30: "harm-gate doctrine LIVE + first MCP server shipped",
-                d60: "Guardian Phase 2 + 2 more MCP/skills",
-                d90: "security telemetry on Pod Dashboard"
-            ),
-            research: ["adversarial prompt injection", "CVE feeds", "MCP server design patterns"],
-            fish: AgentFocusFish(name: "Roosterfish", icon: "🐔", feed: .unknown)
-        ),
-        staticCard(
-            agentId: "coral",
-            stretch: ["operational invisibility", "cold-tier mastery", "storage charter readiness"],
-            roadmap: AgentRoadmap(
-                d30: "hygiene petal in stable cadence",
-                d60: "cold-prune Q1 complete",
-                d90: "promotable to charter primary on Storage"
-            ),
-            research: ["cold-tier storage patterns", "quarantine UX in ops tooling", "weekly retro cadence design"],
-            fish: AgentFocusFish(name: "—", icon: "—", feed: nil)
-        ),
-        staticCard(
-            agentId: "reef",
-            stretch: ["substrate reliability", "tools maturity", "zero-friction watchdog ops"],
-            roadmap: AgentRoadmap(
-                d30: "MCP registry health real-time",
-                d60: "watchdog fleet self-heals",
-                d90: "promotable to charter primary on Watchdogs"
-            ),
-            research: ["MCP registry health patterns", "tool-tier observability", "self-healing system design"],
-            fish: AgentFocusFish(name: "—", icon: "—", feed: nil)
-        ),
-        staticCard(
-            agentId: "shaka",
-            stretch: ["Keep work moving without Tony", "Batch Tony's plate", "Cross-lane unblocking reflex"],
-            roadmap: AgentRoadmap(
-                d30: "lead-view LIVE in Pod",
-                d60: "Fix Program closed GATE1 passed",
-                d90: "daily briefing fully Schoolhouse-native"
-            ),
-            research: ["agentic coordination patterns", "lead-managed ticket plates", "OPC model"],
-            fish: AgentFocusFish(name: "—", icon: "—", feed: nil)
-        )
-    ]
-
-    static func fallbackCard(agentId: String) -> AgentFocusCard {
-        fallbackCards[agentId] ?? AgentFocusCard.skeleton(agentId: agentId)
-    }
-
-    private static func staticCard(
-        agentId: String,
-        stretch: [String],
-        roadmap: AgentRoadmap,
-        research: [String],
-        fish: AgentFocusFish
-    ) -> AgentFocusCard {
-        let meta = mainAgentMeta[agentId]!
-        return AgentFocusCard(
-            agentId: agentId,
-            displayName: meta.name,
-            emoji: meta.emoji,
-            charter: meta.charter,
-            stretch: stretch,
-            roadmap: roadmap,
-            research: research,
-            thisWeek: nil,
-            focusAreas: [
-                AgentFocusArea(id: "1", label: "", evidenceRef: nil),
-                AgentFocusArea(id: "2", label: "", evidenceRef: nil),
-                AgentFocusArea(id: "3", label: "", evidenceRef: nil)
-            ],
-            fish: fish,
-            lastLogExcerpt: nil,
-            lastUpdated: nil,
-            isSkeleton: false,
-            hasStretch: true,
-            hasRoadmap: true,
-            hasFish: fish.name != "—" || fish.icon != "—",
-            hasFocusAreas: false
-        )
-    }
 }
 
 @MainActor
@@ -1779,7 +1716,7 @@ private final class AgentFocusCardsModel {
         }()
 
         let (dto, weeklyPlan) = await (focusCardResult, weeklyPlanResult)
-        guard let dto else { return AgentFocusDefaults.fallbackCard(agentId: agentId) }
+        guard let dto else { return AgentFocusCard.skeleton(agentId: agentId) }
         return dto.toDomain(fallbackId: agentId, weeklyPlan: weeklyPlan)
     }
 }
@@ -1796,6 +1733,9 @@ private struct AgentFocusCardDTO: Decodable {
     let roadmap: RoadmapDTO?
     let research: [String]?
     let thisWeek: [WeeklyMilestone]?
+    let sourceState: String?
+    let sourceRef: String?
+    let statusDetail: String?
 
     enum CodingKeys: String, CodingKey {
         case charter, fish, stretch, roadmap, research
@@ -1805,6 +1745,9 @@ private struct AgentFocusCardDTO: Decodable {
         case lastLogExcerpt = "last_log_excerpt"
         case lastUpdated = "last_updated"
         case thisWeek = "this_week"
+        case sourceState = "source_state"
+        case sourceRef = "source_ref"
+        case statusDetail = "status_detail"
     }
 
     func toDomain(fallbackId: String, weeklyPlan: [WeeklyMilestone]? = nil) -> AgentFocusCard {
@@ -1831,8 +1774,7 @@ private struct AgentFocusCardDTO: Decodable {
                 feed: $0.feed?.toDomain()
             )
         } ?? AgentFocusFish(name: "—", icon: "—", feed: nil)
-        let fallback = AgentFocusDefaults.fallbackCard(agentId: fallbackId)
-        let researchValue = research?.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? fallback.research
+        let researchValue = research?.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? []
 
         // weekly-plan endpoint takes precedence; DTO field is fallback; nil = endpoint not live yet.
         let thisWeekValue = weeklyPlan ?? thisWeek
@@ -1845,8 +1787,8 @@ private struct AgentFocusCardDTO: Decodable {
             displayName: displayName.replacingOccurrences(of: meta.emoji, with: "").trimmingCharacters(in: .whitespacesAndNewlines),
             emoji: meta.emoji,
             charter: charter.isEmpty ? meta.charter : charter,
-            stretch: stretchValues.isEmpty ? fallback.stretch : stretchValues,
-            roadmap: hasRoadmap ? roadmapValue : fallback.roadmap,
+            stretch: stretchValues,
+            roadmap: roadmapValue,
             research: researchValue,
             thisWeek: thisWeekValue,
             focusAreas: paddedAreas,
@@ -1855,9 +1797,12 @@ private struct AgentFocusCardDTO: Decodable {
                 : fishValue,
             lastLogExcerpt: lastLogExcerpt,
             lastUpdated: lastUpdated,
+            sourceState: AgentFocusSourceState(apiValue: sourceState),
+            sourceRef: sourceRef,
+            statusDetail: statusDetail,
             isSkeleton: false,
-            hasStretch: !stretchValues.isEmpty || fallback.hasStretch,
-            hasRoadmap: hasRoadmap || fallback.hasRoadmap,
+            hasStretch: !stretchValues.isEmpty,
+            hasRoadmap: hasRoadmap,
             hasFish: hasFish,
             hasFocusAreas: hasFocusAreas
         )
