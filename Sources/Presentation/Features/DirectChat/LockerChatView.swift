@@ -85,7 +85,7 @@ struct LockerChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 12) {
-                        if viewModel.currentMessages.isEmpty {
+                        if conversationMessages.isEmpty {
                             emptyConversationState
                         }
 
@@ -115,7 +115,7 @@ struct LockerChatView: View {
                 .onAppear {
                     scrollToLatestMessage(proxy, animated: false)
                 }
-                .onChange(of: viewModel.currentMessages.count) { _, _ in
+                .onChange(of: conversationMessages.count) { _, _ in
                     scrollToLatestMessage(proxy, animated: true)
                 }
                 .onChange(of: viewModel.streamingContent) { _, _ in
@@ -322,22 +322,29 @@ struct LockerChatView: View {
     }
 
     private var shouldCompactMessages: Bool {
-        viewModel.currentMessages.count > Self.recentMessageLimit
+        conversationMessages.count > Self.recentMessageLimit
     }
 
     private var hiddenMessageCount: Int {
-        max(0, viewModel.currentMessages.count - Self.recentMessageLimit)
+        max(0, conversationMessages.count - Self.recentMessageLimit)
+    }
+
+    private var conversationMessages: [DMMessage] {
+        viewModel.currentMessages.filter { message in
+            message.deliveryMode != DMDeliveryMode.system.rawValue
+                && message.lane != "schoolhouse_status"
+        }
     }
 
     private var displayedMessages: [DMMessage] {
         guard shouldCompactMessages, !areOlderMessagesExpanded else {
-            return viewModel.currentMessages
+            return conversationMessages
         }
-        return Array(viewModel.currentMessages.suffix(Self.recentMessageLimit))
+        return Array(conversationMessages.suffix(Self.recentMessageLimit))
     }
 
     private func scrollToLatestMessage(_ proxy: ScrollViewProxy, animated: Bool) {
-        guard let last = viewModel.currentMessages.last else { return }
+        guard let last = conversationMessages.last else { return }
         let scroll = {
             proxy.scrollTo(last.id, anchor: .bottom)
         }
