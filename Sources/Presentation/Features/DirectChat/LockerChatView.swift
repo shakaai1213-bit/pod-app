@@ -1595,8 +1595,12 @@ struct LockerChatView: View {
 
     private func workspaceToolReviewItem(for request: DirectChatWorkspaceToolRequest) -> PodReviewItem {
         let normalizedStatus = request.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let canExecute = normalizedStatus == "waiting_for_human" || normalizedStatus == "queued"
-        let statusLabel = normalizedStatus.replacingOccurrences(of: "_", with: " ").capitalized
+        let approvalState = request.approvalState.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let isWaiting = normalizedStatus == "waiting_for_human" || normalizedStatus == "queued"
+        let canExecute = isWaiting && approvalState == "approved" && request.approvalId != nil
+        let statusLabel = canExecute
+            ? "Approved · ready"
+            : approvalState.replacingOccurrences(of: "_", with: " ").capitalized
         var provenance = [
             request.toolName,
             request.createdAt.formatted(date: .abbreviated, time: .shortened)
@@ -1610,8 +1614,8 @@ struct LockerChatView: View {
             eyebrow: "Workspace tool request",
             title: request.instructionPreview.isEmpty ? request.toolName : request.instructionPreview,
             detail: canExecute
-                ? "Owner approval materializes this as a bounded ORCA workspace artifact."
-                : "Recorded in ORCA for ticket workspace review.",
+                ? "The linked approval releases one observe-only ORCA artifact."
+                : "No action runs until the linked ORCA approval is approved.",
             status: statusLabel.isEmpty ? "Unknown" : statusLabel,
             statusColor: workspaceToolStatusColor(normalizedStatus),
             provenance: provenance,

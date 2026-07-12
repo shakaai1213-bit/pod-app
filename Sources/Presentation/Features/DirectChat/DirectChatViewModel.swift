@@ -668,7 +668,8 @@ final class DirectChatViewModel {
             toolName: "agent_workspace_task",
             instruction: content,
             reason: "Requested from Sonar room for ticket \(ticketId).",
-            source: "pod.sonar.tool_request"
+            source: "pod.sonar.tool_request",
+            idempotencyKey: "pod-sonar-tool-\(UUID().uuidString.lowercased())"
         )
         do {
             let dto: DirectChatWorkspaceToolRequestCreateDTO = try await api.post(path: "/api/v1/workspaces/tickets/\(ticketId)/tool-requests", body: body)
@@ -3087,6 +3088,7 @@ final class DirectChatViewModel {
                 let _: DirectChatApprovalDTO = try await api.patch(path: "/api/v1/tickets/\(ticketId)/approvals/\(approval.id)", body: body)
                 approvalActionMessage = approved ? "Approval \(approval.id) approved." : "Approval \(approval.id) rejected."
                 await loadApprovals(ticketId: ticketId)
+                await loadWorkspaceContext(ticketId: ticketId)
                 await loadAttachedTicketContinuity(ticketId: ticketId)
             } catch let apiError as APIError {
                 approvalActionMessage = "Couldn't resolve approval: \(apiError.message)"
@@ -3203,11 +3205,12 @@ final class DirectChatViewModel {
                 reason: reason?.isEmpty == false
                     ? reason
                     : "Requested from Pod chat for attached ticket \(ticketId).",
-                source: "pod.chat.tool_request"
+                source: "pod.chat.tool_request",
+                idempotencyKey: "pod-chat-tool-\(UUID().uuidString.lowercased())"
             )
             do {
                 let dto: DirectChatWorkspaceToolRequestCreateDTO = try await api.post(path: "/api/v1/workspaces/tickets/\(ticketId)/tool-requests", body: body)
-                workspaceToolMessage = dto.message
+                workspaceToolMessage = "\(dto.message) Approval \(String(dto.approvalId.prefix(8))) is waiting."
                 await loadWorkspaceContext(ticketId: ticketId)
                 await loadAgentToolsForActiveTicket()
                 await loadAttachedTicketContinuity(ticketId: ticketId)
@@ -3228,12 +3231,17 @@ final class DirectChatViewModel {
             workspaceToolMessage = "Tool request is not waiting for execution."
             return
         }
+        guard request.approvalState == "approved", let approvalId = request.approvalId else {
+            workspaceToolMessage = "Approve the linked ORCA approval before execution."
+            return
+        }
         guard !executingWorkspaceToolRunIds.contains(request.runId) else { return }
         executingWorkspaceToolRunIds.insert(request.runId)
         workspaceToolMessage = nil
         Task {
             defer { executingWorkspaceToolRunIds.remove(request.runId) }
             let body = DirectChatWorkspaceToolExecuteBody(
+                approvalId: approvalId,
                 approvalNote: "Approved from Pod chat classroom.",
                 source: "pod.chat.tool_execute"
             )
@@ -4460,6 +4468,8 @@ struct DirectChatWorkspaceFile: Identifiable, Sendable, Hashable {
 
 struct DirectChatWorkspaceToolRequest: Identifiable, Sendable, Hashable {
     let runId: String
+    let approvalId: String?
+    let approvalState: String
     let status: String
     let toolName: String
     let instructionPreview: String
@@ -4509,6 +4519,8 @@ private struct DirectChatWorkspaceContextDTO: Decodable {
 
 private struct DirectChatWorkspaceToolRequestSummaryDTO: Decodable {
     let runId: String
+    let approvalId: String?
+    let approvalState: String
     let status: String
     let toolName: String
     let instructionPreview: String
@@ -4518,6 +4530,8 @@ private struct DirectChatWorkspaceToolRequestSummaryDTO: Decodable {
     enum CodingKeys: String, CodingKey {
         case status, reason
         case runId = "run_id"
+        case approvalId = "approval_id"
+        case approvalState = "approval_state"
         case toolName = "tool_name"
         case instructionPreview = "instruction_preview"
         case createdAt = "created_at"
@@ -4526,6 +4540,8 @@ private struct DirectChatWorkspaceToolRequestSummaryDTO: Decodable {
     func toDomain() -> DirectChatWorkspaceToolRequest {
         DirectChatWorkspaceToolRequest(
             runId: runId,
+            approvalId: approvalId,
+            approvalState: approvalState,
             status: status,
             toolName: toolName,
             instructionPreview: instructionPreview,
@@ -4596,31 +4612,37 @@ private struct DirectChatWorkspaceToolRequestBody: Encodable {
     let instruction: String
     let reason: String?
     let source: String
+    let idempotencyKey: String
 
     enum CodingKeys: String, CodingKey {
         case instruction, reason, source
         case toolName = "tool_name"
+        case idempotencyKey = "idempotency_key"
     }
 }
 
 private struct DirectChatWorkspaceToolRequestCreateDTO: Decodable {
     let ok: Bool
     let runId: String
+    let approvalId: String
     let status: String
     let message: String
 
     enum CodingKeys: String, CodingKey {
         case ok, status, message
         case runId = "run_id"
+        case approvalId = "approval_id"
     }
 }
 
 private struct DirectChatWorkspaceToolExecuteBody: Encodable {
+    let approvalId: String
     let approvalNote: String
     let source: String
 
     enum CodingKeys: String, CodingKey {
         case source
+        case approvalId = "approval_id"
         case approvalNote = "approval_note"
     }
 }
