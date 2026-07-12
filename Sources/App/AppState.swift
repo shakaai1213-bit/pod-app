@@ -66,6 +66,14 @@ final class AppState: ObservableObject {
             print("[AppState] Cleared ALL stale auth tokens (UserDefaults + Keychain)")
         }
         self.authManager = AuthManager(backendURL: Self.backendURL)
+
+        #if DEBUG
+        if let argumentIndex = CommandLine.arguments.firstIndex(of: "--start-tab"),
+           CommandLine.arguments.indices.contains(argumentIndex + 1),
+           let tab = AppTab(rawValue: CommandLine.arguments[argumentIndex + 1]) {
+            selectedTab = tab
+        }
+        #endif
     }
 
     // MARK: - Auto Login
@@ -282,16 +290,8 @@ final class AppState: ObservableObject {
 
     private func prepareNotifications() async {
         let service = PushNotificationService.shared
-        let granted: Bool
-        if service.isAuthorized {
-            granted = true
-        } else {
-            granted = await service.requestAuthorization()
-        }
-        guard granted else {
-            print("[AppState] Notifications not authorized")
-            return
-        }
+        await service.checkAuthorizationStatus()
+        guard service.isAuthorized else { return }
         service.registerForRemoteNotifications()
     }
 

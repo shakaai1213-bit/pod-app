@@ -1284,11 +1284,11 @@ struct DashboardView: View {
     private var captainInboxSection: some View {
         VStack(alignment: .leading, spacing: Theme.sm) {
             HStack(spacing: 8) {
-                sectionHeader("Captain Inbox", count: viewModel.captainInbox?.count)
+                sectionHeader("Captain Inbox", count: viewModel.captainInbox?.displayItems.count)
 
                 if let inbox = viewModel.captainInbox {
                     Circle()
-                        .fill(inbox.items.isEmpty ? AppColors.accentSuccess : AppColors.accentWarning)
+                        .fill(inbox.displayItems.isEmpty ? AppColors.accentSuccess : AppColors.accentWarning)
                         .frame(width: 7, height: 7)
                 }
 
@@ -1302,7 +1302,7 @@ struct DashboardView: View {
             }
 
             if let inbox = viewModel.captainInbox {
-                if inbox.items.isEmpty {
+                if inbox.displayItems.isEmpty {
                     HStack(spacing: 8) {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundColor(AppColors.accentSuccess)
@@ -1314,15 +1314,15 @@ struct DashboardView: View {
                     .padding(.vertical, 10)
                 } else {
                     VStack(spacing: 6) {
-                        ForEach(Array(inbox.items.prefix(6))) { item in
+                        ForEach(Array(inbox.displayItems.prefix(6))) { item in
                             captainInboxRow(item)
                         }
                     }
 
-                    if inbox.items.count > 6 {
+                    if inbox.count > 6 {
                         Button { appState.navigateTo(.work) } label: {
                             HStack {
-                                Text("\(inbox.items.count - 6) more in Work")
+                                Text("Open all \(inbox.count) ORCA records in Work")
                                     .font(.system(size: 11, weight: .semibold))
                                 Spacer()
                                 Image(systemName: "arrow.right")

@@ -76,7 +76,9 @@ struct KnowledgeView: View {
                     ScrollView {
                         VStack(spacing: Theme.lg) {
                             searchBar
-                            knowledgePacketSearchSection
+                            if shouldShowKnowledgePacketSearch {
+                                knowledgePacketSearchSection
+                            }
                             knowledgeChipContent
                         }
                         .padding(.horizontal, Theme.md)
@@ -260,6 +262,13 @@ struct KnowledgeView: View {
 
     // MARK: - Search Bar
 
+    private var shouldShowKnowledgePacketSearch: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || viewModel.isLoadingKnowledgePackets
+            || viewModel.knowledgePacketErrorMessage != nil
+            || !viewModel.knowledgePacketResults.isEmpty
+    }
+
     private var searchBar: some View {
         HStack(spacing: Theme.xs) {
             Image(systemName: "magnifyingglass")
@@ -335,19 +344,7 @@ struct KnowledgeView: View {
                 }
             }
 
-            if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text("Ask what the team has already learned.")
-                    .font(.caption)
-                    .foregroundColor(AppColors.textTertiary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(Theme.sm)
-                    .background(AppColors.backgroundSecondary)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Theme.radiusMedium)
-                            .stroke(AppColors.border, lineWidth: 1)
-                    )
-            } else if let error = viewModel.knowledgePacketErrorMessage {
+            if let error = viewModel.knowledgePacketErrorMessage {
                 Text(error)
                     .font(.caption)
                     .foregroundColor(AppColors.accentWarning)

@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 // MARK: - Enums & Types
 
@@ -35,19 +36,6 @@ enum AppColorScheme: String, CaseIterable {
     }
 }
 
-struct NotificationChannel: Identifiable, Hashable {
-    let id: String
-    let name: String
-    let icon: String
-    var enabled: Bool
-}
-
-struct NotificationEvent: Identifiable, Hashable {
-    let id: String
-    let name: String
-    var enabled: Bool
-}
-
 struct AgentPreference: Identifiable, Hashable {
     let id: String
     let name: String
@@ -77,21 +65,6 @@ final class SettingsViewModel {
 
     // MARK: Appearance
     var colorScheme: AppColorScheme = .dark
-
-    // MARK: Notifications
-    var channels: [NotificationChannel] = [
-        NotificationChannel(id: "general",  name: "General",   icon: "bubble.left.fill",      enabled: true),
-        NotificationChannel(id: "projects", name: "Projects",  icon: "folder.fill",            enabled: true),
-        NotificationChannel(id: "research", name: "Research",  icon: "magnifyingglass",        enabled: false),
-        NotificationChannel(id: "alerts",   name: "Alerts",    icon: "bell.badge.fill",       enabled: true),
-    ]
-
-    var events: [NotificationEvent] = [
-        NotificationEvent(id: "task_assigned",      name: "Task assigned",        enabled: true),
-        NotificationEvent(id: "approval_requested", name: "Approval requested",    enabled: true),
-        NotificationEvent(id: "agent_error",       name: "Agent error",           enabled: true),
-        NotificationEvent(id: "mentioned",          name: "Mentioned",            enabled: true),
-    ]
 
     // MARK: Organization
     var orgName: String = "ORCA AI"
@@ -223,6 +196,7 @@ final class SettingsViewModel {
 struct SettingsView: View {
     @EnvironmentObject private var appState: AppState
     @State private var viewModel = SettingsViewModel()
+    @State private var pushService = PushNotificationService.shared
     @State private var showingProfileEditor = false
     @State private var showingAgentPicker = false
 
@@ -249,6 +223,7 @@ struct SettingsView: View {
             await viewModel.loadViewer(
                 fallbackName: appState.currentUser?.name ?? appState.authManager.currentUser?.name
             )
+            await pushService.checkAuthorizationStatus()
         }
     }
 
@@ -336,30 +311,54 @@ struct SettingsView: View {
     private var notificationsSection: some View {
         Group {
             Section {
-                ForEach($viewModel.channels) { $channel in
-                    Toggle(isOn: $channel.enabled) {
-                        Label(channel.name, systemImage: channel.icon)
-                    }
-                    .tint(.blue)
+                HStack(spacing: Theme.sm) {
+                    Label("Push alerts", systemImage: "bell.badge")
+                    Spacer()
+                    Text(notificationStatusLabel)
+                        .foregroundStyle(notificationStatusColor)
                 }
-            } header: {
-                Text("Channels")
-            } footer: {
-                Text("Choose which channels send push notifications.")
-            }
 
-            Section {
-                ForEach($viewModel.events) { $event in
-                    Toggle(isOn: $event.enabled) {
-                        Text(event.name)
+                if pushService.authorizationStatus == .notDetermined {
+                    Button {
+                        Task {
+                            if await pushService.requestAuthorization() {
+                                pushService.registerForRemoteNotifications()
+                            }
+                        }
+                    } label: {
+                        Label("Enable Push Alerts", systemImage: "bell.badge.fill")
                     }
-                    .tint(.blue)
+                } else if pushService.authorizationStatus == .denied {
+                    Button {
+                        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                        UIApplication.shared.open(url)
+                    } label: {
+                        Label("Open iOS Settings", systemImage: "gear")
+                    }
                 }
             } header: {
-                Text("Events")
+                Text("Notifications")
             } footer: {
-                Text("Get notified for these events across all channels.")
+                Text("Pod requests permission only when you choose to enable alerts. ORCA remains the source for alert routing.")
             }
+        }
+    }
+
+    private var notificationStatusLabel: String {
+        switch pushService.authorizationStatus {
+        case .authorized, .provisional, .ephemeral: return "Enabled"
+        case .denied: return "Off"
+        case .notDetermined: return "Not set"
+        @unknown default: return "Unknown"
+        }
+    }
+
+    private var notificationStatusColor: Color {
+        switch pushService.authorizationStatus {
+        case .authorized, .provisional, .ephemeral: return AppColors.accentSuccess
+        case .denied: return AppColors.accentWarning
+        case .notDetermined: return AppColors.textTertiary
+        @unknown default: return AppColors.textTertiary
         }
     }
 

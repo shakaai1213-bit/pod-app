@@ -337,6 +337,30 @@ struct DashboardCaptainInbox: Decodable {
         case windowHours = "window_hours"
         case countsByKind = "counts_by_kind"
     }
+
+    var displayItems: [DashboardCaptainInboxItem] {
+        let unreadTargets = Set(
+            items
+                .filter { $0.kind == "unread_direct_chat" }
+                .compactMap(\.endpoint)
+        )
+        var seenActionTargets = Set<String>()
+        var seenPointerSummaries = Set<String>()
+
+        return items.filter { item in
+            guard item.kind == "action_required", let endpoint = item.endpoint else {
+                return true
+            }
+            guard !unreadTargets.contains(endpoint) else { return false }
+            guard seenActionTargets.insert(endpoint).inserted else { return false }
+
+            if item.bodyPolicy == "pointer_only" {
+                let summaryKey = "\(item.title)|\(item.agentSlug ?? "")"
+                return seenPointerSummaries.insert(summaryKey).inserted
+            }
+            return true
+        }
+    }
 }
 
 struct DashboardCaptainInboxItem: Decodable, Identifiable {

@@ -7,6 +7,7 @@ final class PushNotificationService {
     static let shared = PushNotificationService()
 
     var isAuthorized: Bool = false
+    var authorizationStatus: UNAuthorizationStatus = .notDetermined
     var deviceToken: String?
     var pendingNotifications: [PendingNotification] = []
 
@@ -23,7 +24,11 @@ final class PushNotificationService {
         let center = UNUserNotificationCenter.current()
         do {
             let granted = try await center.requestAuthorization(options: [.alert, .badge, .sound])
-            await MainActor.run { isAuthorized = granted }
+            let settings = await center.notificationSettings()
+            await MainActor.run {
+                authorizationStatus = settings.authorizationStatus
+                isAuthorized = granted
+            }
             return granted
         } catch {
             return false
@@ -33,7 +38,12 @@ final class PushNotificationService {
     func checkAuthorizationStatus() async {
         let center = UNUserNotificationCenter.current()
         let settings = await center.notificationSettings()
-        await MainActor.run { isAuthorized = settings.authorizationStatus == .authorized }
+        await MainActor.run {
+            authorizationStatus = settings.authorizationStatus
+            isAuthorized = settings.authorizationStatus == .authorized
+                || settings.authorizationStatus == .provisional
+                || settings.authorizationStatus == .ephemeral
+        }
     }
 
     // MARK: - Registration
