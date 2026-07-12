@@ -32,8 +32,8 @@ struct DashboardView: View {
                     // 1. Agent status strip — fast organization pulse.
                     agentStatusStrip
 
-                    // 2. Owner-action queue — what needs the Captain now.
-                    CockpitSignQueueSection()
+                    // 2. One ORCA-backed queue for everything needing the Captain.
+                    captainInboxSection
 
                     // 3. Current execution blocker — routes into Work.
                     classroomFlowCard
@@ -1280,6 +1280,185 @@ struct DashboardView: View {
     }
 
     // MARK: - Agent Status Strip
+
+    private var captainInboxSection: some View {
+        VStack(alignment: .leading, spacing: Theme.sm) {
+            HStack(spacing: 8) {
+                sectionHeader("Captain Inbox", count: viewModel.captainInbox?.count)
+
+                if let inbox = viewModel.captainInbox {
+                    Circle()
+                        .fill(inbox.items.isEmpty ? AppColors.accentSuccess : AppColors.accentWarning)
+                        .frame(width: 7, height: 7)
+                }
+
+                Spacer(minLength: 0)
+
+                if let generatedAt = viewModel.captainInbox?.generatedAt {
+                    Text(generatedAt, style: .relative)
+                        .font(.system(size: 10))
+                        .foregroundColor(AppColors.textTertiary)
+                }
+            }
+
+            if let inbox = viewModel.captainInbox {
+                if inbox.items.isEmpty {
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(AppColors.accentSuccess)
+                        Text("No Captain action is waiting in ORCA")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(AppColors.textSecondary)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.vertical, 10)
+                } else {
+                    VStack(spacing: 6) {
+                        ForEach(Array(inbox.items.prefix(6))) { item in
+                            captainInboxRow(item)
+                        }
+                    }
+
+                    if inbox.items.count > 6 {
+                        Button { appState.navigateTo(.work) } label: {
+                            HStack {
+                                Text("\(inbox.items.count - 6) more in Work")
+                                    .font(.system(size: 11, weight: .semibold))
+                                Spacer()
+                                Image(systemName: "arrow.right")
+                                    .font(.system(size: 10, weight: .bold))
+                            }
+                            .foregroundColor(AppColors.accentElectric)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            } else if viewModel.isLoading {
+                HStack(spacing: 8) {
+                    ProgressView().scaleEffect(0.7)
+                    Text("Loading Captain Inbox from ORCA")
+                        .font(.system(size: 12))
+                        .foregroundColor(AppColors.textSecondary)
+                }
+                .padding(.vertical, 10)
+            } else {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(AppColors.accentWarning)
+                    Text(viewModel.captainInboxError ?? "Captain Inbox unavailable")
+                        .font(.system(size: 12))
+                        .foregroundColor(AppColors.textSecondary)
+                    Spacer(minLength: 0)
+                    Button {
+                        Task { await viewModel.loadDashboard() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(AppColors.accentElectric)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Retry Captain Inbox")
+                }
+                .padding(.vertical, 10)
+            }
+        }
+    }
+
+    private func captainInboxRow(_ item: DashboardCaptainInboxItem) -> some View {
+        Button { openCaptainInboxItem(item) } label: {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: captainInboxIcon(item.kind))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(captainInboxColor(item.severity))
+                    .frame(width: 20, height: 20)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(item.title)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(AppColors.textPrimary)
+                            .lineLimit(2)
+
+                        Spacer(minLength: 4)
+
+                        Text(item.occurredAt, style: .relative)
+                            .font(.system(size: 9))
+                            .foregroundColor(AppColors.textTertiary)
+                            .lineLimit(1)
+                    }
+
+                    Text(item.summary)
+                        .font(.system(size: 11))
+                        .foregroundColor(AppColors.textSecondary)
+                        .lineLimit(2)
+
+                    HStack(spacing: 5) {
+                        Text(item.kind.replacingOccurrences(of: "_", with: " ").uppercased())
+                        if let agent = item.agentSlug {
+                            Text("· \(agent.uppercased())")
+                        }
+                    }
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(captainInboxColor(item.severity))
+                }
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(AppColors.textTertiary)
+                    .padding(.top, 4)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 9)
+            .background(AppColors.backgroundSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: 7))
+            .overlay(
+                RoundedRectangle(cornerRadius: 7)
+                    .strokeBorder(captainInboxColor(item.severity).opacity(0.18), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func openCaptainInboxItem(_ item: DashboardCaptainInboxItem) {
+        if let ticketId = item.ticketId {
+            appState.pendingDirectChatTicketTitle = item.title
+            appState.pendingDirectChatAgentId = item.agentSlug ?? "maui"
+            appState.pendingDirectChatChannelId = item.channelId
+            appState.pendingDirectChatTicketId = ticketId
+            return
+        }
+
+        if item.kind == "unread_direct_chat", let agent = item.agentSlug {
+            appState.pendingDirectChatChannelId = item.channelId
+            appState.pendingDirectChatAgentId = agent
+            return
+        }
+
+        if let approvalId = item.approvalId.flatMap(UUID.init(uuidString:)) {
+            appState.pendingApprovalId = approvalId
+        }
+        appState.navigateTo(.work)
+    }
+
+    private func captainInboxIcon(_ kind: String) -> String {
+        switch kind {
+        case "approval": return "checkmark.shield.fill"
+        case "blocked_ticket": return "exclamationmark.octagon.fill"
+        case "run_review": return "checkmark.circle.badge.questionmark"
+        case "unread_direct_chat": return "bubble.left.and.bubble.right.fill"
+        default: return "bell.badge.fill"
+        }
+    }
+
+    private func captainInboxColor(_ severity: String) -> Color {
+        switch severity {
+        case "critical": return AppColors.accentDanger
+        case "warning": return AppColors.accentWarning
+        default: return AppColors.accentElectric
+        }
+    }
 
     private var agentStatusStrip: some View {
         VStack(alignment: .leading, spacing: Theme.sm) {

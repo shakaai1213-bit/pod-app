@@ -12,6 +12,8 @@ final class DashboardViewModel {
     var projects: [Project] = []
     var activities: [ActivityItem] = []
     var attentionItems: [AttentionItem] = []
+    var captainInbox: DashboardCaptainInbox?
+    var captainInboxError: String?
     var tickets: [TicketDTO] = []
     var stateTags: [StateTagDTO] = []
     var chiefProtectionTags: [StateTagDTO] = []
@@ -96,6 +98,17 @@ final class DashboardViewModel {
         isLoading = true
         error = nil
         var loadErrors: [String] = []
+
+        do {
+            captainInbox = try await apiClient.get(
+                path: "/api/v1/control-room/captain-inbox?window_hours=48&limit=80"
+            )
+            captainInboxError = nil
+        } catch {
+            captainInbox = nil
+            captainInboxError = "Captain Inbox unavailable"
+            loadErrors.append("Captain Inbox: \(error.localizedDescription)")
+        }
 
         // Fetch agents
         do {
@@ -306,6 +319,59 @@ final class DashboardViewModel {
         return DashboardPresenceRollup(active: active, idle: idle, offline: offline)
     }
 
+}
+
+struct DashboardCaptainInbox: Decodable {
+    let generatedAt: Date
+    let windowHours: Int
+    let status: String
+    let count: Int
+    let countsByKind: [String: Int]
+    let items: [DashboardCaptainInboxItem]
+    let source: String
+    let cursor: String
+
+    enum CodingKeys: String, CodingKey {
+        case status, count, items, source, cursor
+        case generatedAt = "generated_at"
+        case windowHours = "window_hours"
+        case countsByKind = "counts_by_kind"
+    }
+}
+
+struct DashboardCaptainInboxItem: Decodable, Identifiable {
+    let id: String
+    let kind: String
+    let title: String
+    let summary: String
+    let status: String
+    let severity: String
+    let occurredAt: Date
+    let source: String
+    let sourceId: String
+    let endpoint: String?
+    let agentSlug: String?
+    let ticketId: String?
+    let channelId: String?
+    let approvalId: String?
+    let runId: String?
+    let traceId: String?
+    let unreadCount: Int?
+    let bodyPolicy: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, kind, title, summary, status, severity, source, endpoint
+        case occurredAt = "occurred_at"
+        case sourceId = "source_id"
+        case agentSlug = "agent_slug"
+        case ticketId = "ticket_id"
+        case channelId = "channel_id"
+        case approvalId = "approval_id"
+        case runId = "run_id"
+        case traceId = "trace_id"
+        case unreadCount = "unread_count"
+        case bodyPolicy = "body_policy"
+    }
 }
 
 private struct DashboardTicketFlowReviewDTO: Decodable {
