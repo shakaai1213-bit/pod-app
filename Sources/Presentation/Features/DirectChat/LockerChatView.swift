@@ -3626,6 +3626,7 @@ struct DMBubble: View {
         case .agentRunRunning: return "bolt.circle.fill"
         case .waitingForLiveAgent: return "hourglass"
         case .claimedByAgent: return "hand.raised"
+        case .working: return "gearshape.2.fill"
         case .responseReceived: return "checkmark.circle"
         case .deliveryNatsFailed: return "antenna.radiowaves.left.and.right.slash"
         case .agentUnresponsive: return "person.crop.circle.badge.exclamationmark"
@@ -3638,7 +3639,7 @@ struct DMBubble: View {
 
     private var deliveryStateColor: Color {
         switch deliveryState {
-        case .sending, .routing, .computeRunning, .agentRunQueued, .agentRunRunning, .waitingForLiveAgent, .claimedByAgent:
+        case .sending, .routing, .computeRunning, .agentRunQueued, .agentRunRunning, .waitingForLiveAgent, .claimedByAgent, .working:
             return AppColors.accentElectric
         case .responseReceived:
             return AppColors.accentSuccess
@@ -3777,6 +3778,7 @@ private struct MessageDeliveryLedger: View {
             || deliveryState == .agentRunQueued
             || deliveryState == .agentRunRunning
             || deliveryState == .claimedByAgent
+            || deliveryState == .working
         let handlerTitle: String
         let handlerIcon: String
         switch deliveryMode {
@@ -3837,6 +3839,8 @@ private struct MessageDeliveryLedger: View {
             return "\(agent.name) inbox accepted; waiting"
         case .claimedByAgent:
             return "\(agent.name) claimed the inbox"
+        case .working:
+            return "\(agent.name) is working through ORCA"
         case .agentRunQueued:
             return "Agent Run queued"
         case .agentRunRunning:

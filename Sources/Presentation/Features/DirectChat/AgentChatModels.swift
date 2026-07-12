@@ -314,6 +314,7 @@ enum DMDeliveryState: String, Codable, Sendable {
     case agentRunRunning = "agent_run_running"
     case waitingForLiveAgent = "waiting_for_live_agent"
     case claimedByAgent = "claimed_by_agent"
+    case working
     case responseReceived = "response_received"
     case deliveryNatsFailed = "delivery_nats_failed"
     case agentUnresponsive = "agent_unresponsive"
@@ -353,6 +354,7 @@ enum DMDeliveryState: String, Codable, Sendable {
         case .agentRunRunning: return "Agent Run running"
         case .waitingForLiveAgent: return "Live inbox accepted; waiting"
         case .claimedByAgent: return "Live agent claimed"
+        case .working: return "Live agent working"
         case .responseReceived: return "Final reply received"
         case .deliveryNatsFailed: return "Not delivered - NATS failed"
         case .agentUnresponsive: return "Not delivered - agent unreachable"

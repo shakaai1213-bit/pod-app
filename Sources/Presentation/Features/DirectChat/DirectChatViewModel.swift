@@ -1749,7 +1749,9 @@ final class DirectChatViewModel {
         currentMessages.append(message)
         conversation.lastMessageText = payload.content
         conversation.lastMessageDate = timestamp
-        liveChatStatus = nil
+        if !applyCentralProgressState(payload.responseState, agent: agent) {
+            liveChatStatus = nil
+        }
         if Self.shouldResolvePendingAsync(
             senderAgentId: payload.senderAgentId,
             messageType: payload.messageType,
@@ -1834,7 +1836,9 @@ final class DirectChatViewModel {
                 conversation.lastMessageText = reply.content
                 conversation.lastMessageDate = reply.createdAt
             }
-            liveChatStatus = nil
+            if !applyCentralProgressState(liveReplies.last?.responseState, agent: agent) {
+                liveChatStatus = nil
+            }
             for reply in liveReplies where Self.shouldResolvePendingAsync(
                 senderAgentId: reply.senderAgentId,
                 messageType: reply.messageType,
@@ -2051,6 +2055,7 @@ final class DirectChatViewModel {
             || parsedState == .computeRunning
             || parsedState == .waitingForLiveAgent
             || parsedState == .claimedByAgent
+            || parsedState == .working
             || parsedState == .deliveryNatsFailed
             || parsedState == .agentUnresponsive {
             return true
@@ -2079,6 +2084,22 @@ final class DirectChatViewModel {
         return senderAgentId == nil ? nil : DMDeliveryMode.liveInbox.rawValue
     }
 
+    @discardableResult
+    private func applyCentralProgressState(_ rawState: String?, agent: AgentInfo) -> Bool {
+        switch DMDeliveryState.parse(rawState) {
+        case .claimedByAgent:
+            liveChatStatus = "\(agent.name) claimed the ORCA route."
+            routeProgressSteps = Self.routeProgressSteps(for: .liveInbox, stage: .waitingLive)
+            return true
+        case .working:
+            liveChatStatus = "\(agent.name) is working through the ORCA route."
+            routeProgressSteps = Self.routeProgressSteps(for: .liveInbox, stage: .computeRunning)
+            return true
+        default:
+            return false
+        }
+    }
+
     private static func isSystemRemoteMessage(messageType: String?, source: String?, responseState: String?) -> Bool {
         let normalizedType = messageType?.lowercased()
         let normalizedSource = source?.lowercased() ?? ""
@@ -2089,6 +2110,7 @@ final class DirectChatViewModel {
             || parsedState == .computeRunning
             || parsedState == .waitingForLiveAgent
             || parsedState == .claimedByAgent
+            || parsedState == .working
             || parsedState == .deliveryNatsFailed
             || parsedState == .agentUnresponsive
     }
@@ -2108,7 +2130,7 @@ final class DirectChatViewModel {
             return .failed
         case .responseReceived:
             return .sent
-        case .computeRunning, .waitingForLiveAgent, .claimedByAgent, .agentRunQueued, .agentRunRunning, .timedOut:
+        case .computeRunning, .waitingForLiveAgent, .claimedByAgent, .working, .agentRunQueued, .agentRunRunning, .timedOut:
             return .accepted
         case .sending, .routing:
             return .sending
@@ -2165,7 +2187,7 @@ final class DirectChatViewModel {
 
     private static func isPendingAsyncDeliveryState(_ raw: String?) -> Bool {
         switch DMDeliveryState.parse(raw) {
-        case .waitingForLiveAgent, .computeRunning, .claimedByAgent, .agentRunQueued, .agentRunRunning:
+        case .waitingForLiveAgent, .computeRunning, .claimedByAgent, .working, .agentRunQueued, .agentRunRunning:
             return true
         default:
             return false
@@ -2191,7 +2213,8 @@ final class DirectChatViewModel {
         }
         if parsedState == .waitingForLiveAgent
             || parsedState == .computeRunning
-            || parsedState == .claimedByAgent {
+            || parsedState == .claimedByAgent
+            || parsedState == .working {
             return false
         }
         if senderAgentId == nil {
