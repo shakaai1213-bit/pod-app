@@ -33,6 +33,7 @@ struct WorkView: View {
     @State private var flowCommentText: String = ""
     @State private var workbenchActionComment: String = ""
     @State private var isPostingComment = false
+    @State private var captainBoardModel = CaptainBoardPlanViewModel()
     @State private var boardsModel = WorkBoardsModel()
     @State private var selectedBoard: WorkBoardSummary?
     @State private var showingBoardsArchitecture = false
@@ -52,6 +53,10 @@ struct WorkView: View {
                     AnyView(WorkHealthStripView(model: model))
                         .padding(.horizontal, 16)
                         .padding(.bottom, 12)
+
+                    CaptainBoardPlanView(model: captainBoardModel)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 20)
 
                     AnyView(
                         WorkbenchAgentCockpitSection(
@@ -77,22 +82,11 @@ struct WorkView: View {
                         .padding(.horizontal, 16)
                         .padding(.bottom, 16)
 
-                    AnyView(ticketsSection)
+                    AnyView(parkingLotSection)
                         .padding(.horizontal, 16)
                         .padding(.bottom, 16)
 
-                    AnyView(
-                        WorkbenchTasksSection(
-                            model: model,
-                            onOpenTicket: { ticketId in
-                                pushTicketId = ticketId
-                                pushTickets = true
-                            },
-                            onComment: { item in
-                                selectedWorkbenchItem = item
-                            }
-                        )
-                    )
+                    AnyView(ticketsSection)
                         .padding(.horizontal, 16)
                         .padding(.bottom, 16)
 
@@ -104,10 +98,6 @@ struct WorkView: View {
                         .padding(.horizontal, 16)
                         .padding(.bottom, 16)
 
-                    AnyView(boardsSection)
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 16)
-
                     AnyView(projectsSection)
                         .padding(.horizontal, 16)
                         .padding(.bottom, 80)
@@ -116,11 +106,11 @@ struct WorkView: View {
             .background(AppColors.backgroundPrimary.ignoresSafeArea())
             .refreshable {
                 await model.load()
-                await boardsModel.load(force: true)
+                await captainBoardModel.load(force: true)
             }
             .task {
                 await model.load()
-                await boardsModel.load()
+                await captainBoardModel.load()
             }
             .task {
                 await directChatViewModel.loadAgentRegistry()
@@ -268,6 +258,43 @@ struct WorkView: View {
                 .font(.system(size: 14))
                 .foregroundColor(AppColors.textSecondary)
         }
+    }
+
+    private var parkingLotSection: some View {
+        NavigationLink {
+            ParkingLotView()
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "parkingsign.circle.fill")
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(AppColors.accentElectric)
+                    .frame(width: 38, height: 38)
+                    .background(AppColors.accentElectric.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("PARKING LOT")
+                        .font(.system(size: 11, weight: .bold))
+                        .kerning(0.5)
+                        .foregroundStyle(AppColors.textTertiary)
+                    Text("Capture now. Decide deliberately later.")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AppColors.textPrimary)
+                    Text("Review new, parked, promoted, and dropped ideas.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(AppColors.textSecondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AppColors.textTertiary)
+            }
+            .padding(14)
+            .background(AppColors.backgroundSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+            .overlay(RoundedRectangle(cornerRadius: Theme.radiusMedium).strokeBorder(AppColors.border, lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open Parking Lot")
     }
 
     // MARK: - Approval Lane

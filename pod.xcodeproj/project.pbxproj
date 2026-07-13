@@ -83,6 +83,7 @@
 		A089DB778E746D317E0D14B9 /* AgentChatModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C4B07E8E58F2CC0B52E73D1 /* AgentChatModels.swift */; };
 		A0B1C2D3E4F5061728394A5C /* LiveKitVoiceConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0B1C2D3E4F5061728394A5B /* LiveKitVoiceConnection.swift */; };
 		A0B1C2D3E4F5061728394A5D /* LiveKit in Frameworks */ = {isa = PBXBuildFile; productRef = A0B1C2D3E4F5061728394A60 /* LiveKit */; };
+		A1B2C3D4E5F60718293A4B5C /* ParkingLotView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5D /* ParkingLotView.swift */; };
 		A119987125AF2585A9FF89CC /* OnboardingPageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAC3FB7EBC81243BD3E32D8F /* OnboardingPageView.swift */; };
 		A166B4991DC01428DE7A9CFA /* OrcaSecrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = E16586DBFA6CCC43DCBA1DD5 /* OrcaSecrets.swift */; };
 		A181B4D7C45780A5CA3ECDA0 /* AppShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05ADDFC32BFD813663C896B5 /* AppShortcuts.swift */; };
@@ -105,6 +106,8 @@
 		BD475140A9DD7F94BCD62AAD /* ScanSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 802C03DADDC0952CE2E3ABAC /* ScanSheet.swift */; };
 		BFAA01EF640B83F68B6F31B7 /* TaskDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BC89BE77403D8AA46EA84D4 /* TaskDetailSheet.swift */; };
 		C034834CB36EB1EC8B5AEE25 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49A69CF51ACDCD9D554A9BA5 /* DashboardView.swift */; };
+		CA7100000000000000000001 /* ManagementDTOs.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA7100000000000000000002 /* ManagementDTOs.swift */; };
+		CA7100000000000000000003 /* CaptainManagementViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA7100000000000000000004 /* CaptainManagementViews.swift */; };
 		C1744CDD1E4C10DF18842364 /* OrcaSecrets.swift.template in Resources */ = {isa = PBXBuildFile; fileRef = 6926026E5B2BDECA7D7A5B96 /* OrcaSecrets.swift.template */; };
 		C0DEC0DE0000000000000002 /* captains_chart.snapshot.json in Resources */ = {isa = PBXBuildFile; fileRef = C0DEC0DE0000000000000004 /* captains_chart.snapshot.json */; };
 		C2595E99C59F93D07A054964 /* Navigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 187E28435D0A3606280B6AD0 /* Navigation.swift */; };
@@ -203,6 +206,8 @@
 		6DACC05C307AB5FA9A895001 /* SIWASignInService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SIWASignInService.swift; sourceTree = "<group>"; };
 		6E32CA807B88458FAED25ED6 /* StatusBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBadge.swift; sourceTree = "<group>"; };
 		6FF5F53FAD59A5AB311C5FAA /* DTOs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DTOs.swift; sourceTree = "<group>"; };
+		CA7100000000000000000002 /* ManagementDTOs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagementDTOs.swift; sourceTree = "<group>"; };
+		CA7100000000000000000004 /* CaptainManagementViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptainManagementViews.swift; sourceTree = "<group>"; };
 		703523736226500B2CD58309 /* ResearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResearchView.swift; sourceTree = "<group>"; };
 		70E23BCCE4D9D3289B7D1F13 /* CrewTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrewTabView.swift; sourceTree = "<group>"; };
 		735FA1C6191ED5B60CF8DC15 /* ORCAProjectsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ORCAProjectsViewModel.swift; sourceTree = "<group>"; };
@@ -223,6 +228,7 @@
 		928284E5D88714A670BD7542 /* ProjectRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectRepository.swift; sourceTree = "<group>"; };
 		952F2ED4468BC7A6FAAEF442 /* AgentDetailSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentDetailSheet.swift; sourceTree = "<group>"; };
 		A0B1C2D3E4F5061728394A5B /* LiveKitVoiceConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveKitVoiceConnection.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A4B5D /* ParkingLotView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkingLotView.swift; sourceTree = "<group>"; };
 		A28A4672374ACF545BD664A8 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		A2D290EE8D7D2034F520F37F /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		AA2000000000000000000001 /* VoiceCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCoordinator.swift; sourceTree = "<group>"; };
@@ -303,6 +309,7 @@
 			children = (
 				A28A4672374ACF545BD664A8 /* APIClient.swift */,
 				6FF5F53FAD59A5AB311C5FAA /* DTOs.swift */,
+				CA7100000000000000000002 /* ManagementDTOs.swift */,
 				12D22773AD8CA83A56A417C3 /* Endpoints.swift */,
 				F10000000000000000000002 /* FundTradesDTO.swift */,
 				C20000000000000000000002 /* MakerDTO.swift */,
@@ -483,6 +490,14 @@
 			path = Crew;
 			sourceTree = "<group>";
 		};
+		CA7100000000000000000005 /* Management */ = {
+			isa = PBXGroup;
+			children = (
+				CA7100000000000000000004 /* CaptainManagementViews.swift */,
+			);
+			path = Management;
+			sourceTree = "<group>";
+		};
 		50EBC1984C434E43EC37D857 /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -527,7 +542,9 @@
 				77FA0EDA0B80A8D68A29E712 /* DirectChat */,
 				A6E7E3008A95F3BE6110EF3B /* Knowledge */,
 				7912C0F055619CC69590E8F0 /* Lab */,
+				CA7100000000000000000005 /* Management */,
 				D114A0ADC8FA6522DD87B69D /* Onboarding */,
+				A1B2C3D4E5F60718293A4B5E /* ParkingLot */,
 				9A8ADEE59E8F3FF33C20B1D0 /* Projects */,
 				11E553AE2F9ACF951DE1505E /* Research */,
 				2A71724B379D59F2E608C6AE /* Sonar */,
@@ -701,6 +718,14 @@
 				B5BA65A8F11D4EA87426C002 /* WorkView.swift */,
 			);
 			path = Work;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F60718293A4B5E /* ParkingLot */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F60718293A4B5D /* ParkingLotView.swift */,
+			);
+			path = ParkingLot;
 			sourceTree = "<group>";
 		};
 		CEFC1D1CDAAAE7311D0D8B4D /* Trading */ = {
@@ -896,6 +921,8 @@
 				18F645EA249CF451ED676BCD /* DTOs.swift in Sources */,
 				CFF57AE057292CF740B0644F /* DashboardModels.swift in Sources */,
 				C034834CB36EB1EC8B5AEE25 /* DashboardView.swift in Sources */,
+				CA7100000000000000000001 /* ManagementDTOs.swift in Sources */,
+				CA7100000000000000000003 /* CaptainManagementViews.swift in Sources */,
 				D96AB4256A47F86B36F2E110 /* DashboardViewModel.swift in Sources */,
 				1E83142C767119564497000A /* DirectChatView.swift in Sources */,
 				243D55106B17E4849250CCA5 /* DirectChatViewModel.swift in Sources */,
@@ -923,6 +950,7 @@
 				50D5FB832D3F748D484A7DA6 /* OfflineQueue.swift in Sources */,
 				A119987125AF2585A9FF89CC /* OnboardingPageView.swift in Sources */,
 				7220D0BB4926EC9516B9ADC5 /* OnboardingView.swift in Sources */,
+				A1B2C3D4E5F60718293A4B5C /* ParkingLotView.swift in Sources */,
 				115714EE9EE458D6F1609B08 /* OnboardingViewModel.swift in Sources */,
 				2E01CCD350BCB92DC2E85AF9 /* OpenClawClient.swift in Sources */,
 				A166B4991DC01428DE7A9CFA /* OrcaSecrets.swift in Sources */,

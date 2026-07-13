@@ -15,6 +15,7 @@ final class DirectChatViewModel {
     var selectedAgent: AgentInfo?
     var composedMessage: String = ""
     var isStreaming: Bool = false
+    var isCapturingParkingLot: Bool = false
     var streamingContent: String = ""
     var error: String?
     var errorIsDestructive: Bool = false
@@ -1031,14 +1032,55 @@ final class DirectChatViewModel {
     func sendMessage() {
         guard let agent = selectedAgent,
               !isStreaming,
+              !isCapturingParkingLot,
               !composedMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+        let text = composedMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let parkingLotIdea = Self.parkingLotIdea(from: text) {
+            guard !parkingLotIdea.isEmpty else {
+                error = "Add an idea after “parking lot:”."
+                return
+            }
+            composedMessage = ""
+            error = nil
+            isCapturingParkingLot = true
+            Task {
+                defer { isCapturingParkingLot = false }
+                do {
+                    _ = try await ParkingLotService.shared.capture(
+                        parkingLotIdea,
+                        itemKind: .idea,
+                        capturedBy: "pod-chat"
+                    )
+                    appendLocalMessage(
+                        role: "assistant",
+                        content: "Captured in Parking Lot — not sent to \(agent.name) and no work dispatched:\n“parking lot: \(parkingLotIdea)”",
+                        for: agent,
+                        deliveryMode: .system,
+                        provenance: .system,
+                        lane: "parking_lot_capture"
+                    )
+                } catch {
+                    composedMessage = text
+                    appendLocalMessage(
+                        role: "assistant",
+                        content: "Parking Lot capture failed. The text was restored to the composer and was not sent to \(agent.name).",
+                        for: agent,
+                        deliveryMode: .system,
+                        provenance: .system,
+                        lane: "parking_lot_capture_failed"
+                    )
+                    self.error = error.localizedDescription
+                }
+            }
+            return
+        }
 
         guard canStartChat(with: agent) else {
             error = "ORCA registry has disabled direct chat routing for \(agent.name). Create or attach a ticket instead."
             return
         }
 
-        let text = composedMessage.trimmingCharacters(in: .whitespacesAndNewlines)
         var deliveryMode = selectedDeliveryMode
         composedMessage = ""
         error = nil
@@ -1294,6 +1336,13 @@ final class DirectChatViewModel {
                 loadConversations()
             }
         }
+    }
+
+    private static func parkingLotIdea(from text: String) -> String? {
+        let prefix = "parking lot:"
+        guard text.lowercased().hasPrefix(prefix) else { return nil }
+        let boundary = text.index(text.startIndex, offsetBy: prefix.count)
+        return String(text[boundary...]).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     func retryMessage(_ message: DMMessage) {

@@ -127,19 +127,20 @@ struct CrewTabView: View {
     }
 
     @State private var segment: Segment = .agents
+    @State private var managementModel = AgentManagementViewModel()
 
     var body: some View {
         ZStack(alignment: .bottom) {
             Group {
                 switch segment {
                 case .agents:
-                    AgentsView()
+                    AgentManagementRosterView(model: managementModel, mode: .focus)
                 case .leadPlate:
-                    LeadPlateView()
+                    AgentManagementRosterView(model: managementModel, mode: .load)
                 case .planning:
-                    PlanningView()
+                    AgentManagementRosterView(model: managementModel, mode: .plan)
                 case .arms:
-                    ArmsTabView()
+                    AgentManagementRosterView(model: managementModel, mode: .dispatch)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

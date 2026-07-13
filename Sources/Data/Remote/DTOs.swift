@@ -1163,6 +1163,7 @@ struct AgentLockerDTO: Decodable, Hashable {
         let nextCheckpoint: String?
         let staleThreshold: String?
         let lastSleepProof: String?
+        let manualWake: ManualWake
 
         enum CodingKeys: String, CodingKey {
             case status, blocker
@@ -1174,9 +1175,25 @@ struct AgentLockerDTO: Decodable, Hashable {
             case nextCheckpoint = "next_checkpoint"
             case staleThreshold = "stale_threshold"
             case lastSleepProof = "last_sleep_proof"
+            case manualWake = "manual_wake"
         }
 
-        init(status: String? = nil, currentSessionId: String? = nil, lastHeartbeatAt: String? = nil, awakeAt: String? = nil, sleepAt: String? = nil, currentWork: String? = nil, blocker: String? = nil, nextCheckpoint: String? = nil, staleThreshold: String? = nil, lastSleepProof: String? = nil) {
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            status = try container.decodeIfPresent(String.self, forKey: .status)
+            currentSessionId = try container.decodeIfPresent(String.self, forKey: .currentSessionId)
+            lastHeartbeatAt = try container.decodeIfPresent(String.self, forKey: .lastHeartbeatAt)
+            awakeAt = try container.decodeIfPresent(String.self, forKey: .awakeAt)
+            sleepAt = try container.decodeIfPresent(String.self, forKey: .sleepAt)
+            currentWork = try container.decodeIfPresent(String.self, forKey: .currentWork)
+            blocker = try container.decodeIfPresent(String.self, forKey: .blocker)
+            nextCheckpoint = try container.decodeIfPresent(String.self, forKey: .nextCheckpoint)
+            staleThreshold = try container.decodeIfPresent(String.self, forKey: .staleThreshold)
+            lastSleepProof = try container.decodeIfPresent(String.self, forKey: .lastSleepProof)
+            manualWake = try container.decodeIfPresent(ManualWake.self, forKey: .manualWake) ?? ManualWake()
+        }
+
+        init(status: String? = nil, currentSessionId: String? = nil, lastHeartbeatAt: String? = nil, awakeAt: String? = nil, sleepAt: String? = nil, currentWork: String? = nil, blocker: String? = nil, nextCheckpoint: String? = nil, staleThreshold: String? = nil, lastSleepProof: String? = nil, manualWake: ManualWake = ManualWake()) {
             self.status = status
             self.currentSessionId = currentSessionId
             self.lastHeartbeatAt = lastHeartbeatAt
@@ -1187,6 +1204,29 @@ struct AgentLockerDTO: Decodable, Hashable {
             self.nextCheckpoint = nextCheckpoint
             self.staleThreshold = staleThreshold
             self.lastSleepProof = lastSleepProof
+            self.manualWake = manualWake
+        }
+
+        struct ManualWake: Decodable, Hashable {
+            let allowed: Bool
+            let state: String?
+            let endpoint: String?
+            let requiresConfirmation: Bool
+            let blockedReason: String?
+
+            enum CodingKeys: String, CodingKey {
+                case allowed, state, endpoint
+                case requiresConfirmation = "requires_confirmation"
+                case blockedReason = "blocked_reason"
+            }
+
+            init(allowed: Bool = false, state: String? = nil, endpoint: String? = nil, requiresConfirmation: Bool = false, blockedReason: String? = nil) {
+                self.allowed = allowed
+                self.state = state
+                self.endpoint = endpoint
+                self.requiresConfirmation = requiresConfirmation
+                self.blockedReason = blockedReason
+            }
         }
     }
 
@@ -2351,6 +2391,53 @@ struct ProjectCreateRequest: Encodable {
         case name, goal, description, priority, stage
         case dueDate = "due_date"
         case boardId = "board_id"
+    }
+}
+
+// MARK: - Cascade Control Plane
+
+struct CascadeDecisionListDTO: Decodable {
+    let total: Int
+    let unreviewed: Int
+    let reviewed: Int
+    let items: [CascadeDecisionDTO]
+}
+
+struct CascadeDecisionDTO: Decodable, Identifiable, Hashable {
+    let id: String
+    let envelopeId: String?
+    let sender: String?
+    let targetAgent: String?
+    let wakeReceiptId: String?
+    let agentRunId: String?
+    let action: String
+    let route: String?
+    let reason: String?
+    let actualTier: String?
+    let actualBackend: String?
+    let policyVersion: String?
+    let ruleId: String?
+    let wakeDepth: String?
+    let executionStatus: String?
+    let attemptNumber: Int
+    let outcomeRef: String?
+    let occurredAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, sender, action, route, reason
+        case envelopeId = "envelope_id"
+        case targetAgent = "target_agent"
+        case wakeReceiptId = "wake_receipt_id"
+        case agentRunId = "agent_run_id"
+        case actualTier = "actual_tier"
+        case actualBackend = "actual_backend"
+        case policyVersion = "policy_version"
+        case ruleId = "rule_id"
+        case wakeDepth = "wake_depth"
+        case executionStatus = "execution_status"
+        case attemptNumber = "attempt_number"
+        case outcomeRef = "outcome_ref"
+        case occurredAt = "occurred_at"
     }
 }
 

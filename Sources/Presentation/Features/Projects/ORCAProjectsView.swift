@@ -1013,10 +1013,8 @@ struct ORCAProjectDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.lg) {
                     projectInfo
-                    commandRoomSection
-                    decisionQueueSection
+                    ProjectEvidenceLadderView(projectId: activeProject.id)
                     workSummarySection
-                    agentSupportSection
                     proposedMilestonesSection
                     notesSection
                     tasksSection

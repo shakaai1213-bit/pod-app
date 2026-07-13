@@ -49,6 +49,12 @@ struct AgentDetailSheet: View {
     @State private var isPostingMemoryCandidate = false
     @State private var memoryCandidateMessage: String?
     @State private var isRuntimeExpanded = false
+    @State private var showingWakeConfirmation = false
+    @State private var isSendingWake = false
+    @State private var wakeActionMessage: String?
+    @State private var cascadeDecisions: [CascadeDecisionDTO] = []
+    @State private var isLoadingCascade = false
+    @State private var cascadeError: String?
 
     // POD-5 (c797ada1): non-destructive inbox tail, fetched on appear.
     @State private var inboxTail: InboxTailDTO?
@@ -80,6 +86,7 @@ struct AgentDetailSheet: View {
                     responsibilitySection
                     activationContextSection
                     runtimeSection
+                    cascadeSection
                     workNotesSection
                     inboxSection                  // POD-5 (c797ada1)
                     statusSection
@@ -94,6 +101,7 @@ struct AgentDetailSheet: View {
                     await loadResponsibility()
                     await loadLocker()
                     await loadActivationContext()
+                    await loadCascadeDecisions()
                     await loadWorkNotes()
                 }
             }
@@ -129,6 +137,18 @@ struct AgentDetailSheet: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This will terminate the current session and start a fresh instance.")
+            }
+            .confirmationDialog(
+                "Wake \(agent.name)",
+                isPresented: $showingWakeConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Wake \(agent.name)") {
+                    Task { await sendManualWake() }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("The agent will open Locker and continue its current assigned work.")
             }
             .sheet(isPresented: $showingConfigureSheet) {
                 AgentConfigureSheet(agent: agent)
@@ -346,6 +366,25 @@ struct AgentDetailSheet: View {
 
             // Status control actions
             if !AgentRosterPolicy.isDormantOrArchived(agent) {
+                if lockerData?.heartbeat.manualWake.allowed == true {
+                    actionButton(
+                        icon: isSendingWake ? "hourglass" : "bolt.fill",
+                        label: isSendingWake ? "Waking" : "Wake Agent",
+                        color: AppColors.accentElectric
+                    ) {
+                        guard !isSendingWake else { return }
+                        showingWakeConfirmation = true
+                    }
+                }
+
+                if let wakeActionMessage {
+                    Text(wakeActionMessage)
+                        .podTextStyle(
+                            .caption,
+                            color: wakeActionMessage == "Wake sent" ? AppColors.accentSuccess : AppColors.accentDanger
+                        )
+                }
+
                 HStack(spacing: Theme.sm) {
                     actionButton(
                         icon: "pause.circle.fill",
@@ -2285,6 +2324,117 @@ struct AgentDetailSheet: View {
         }
     }
 
+    private var cascadeSection: some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            sectionHeader("Cascade", count: cascadeDecisions.count)
+
+            VStack(alignment: .leading, spacing: Theme.sm) {
+                if isLoadingCascade && cascadeDecisions.isEmpty {
+                    HStack(spacing: Theme.sm) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Loading routing evidence")
+                            .podTextStyle(.body, color: AppColors.textSecondary)
+                    }
+                } else if let cascadeError, cascadeDecisions.isEmpty {
+                    Label(cascadeError, systemImage: "exclamationmark.triangle.fill")
+                        .podTextStyle(.body, color: AppColors.accentWarning)
+                } else if cascadeDecisions.isEmpty {
+                    Label("No authoritative routes yet", systemImage: "point.3.connected.trianglepath.dotted")
+                        .podTextStyle(.body, color: AppColors.textTertiary)
+                } else {
+                    ForEach(Array(cascadeDecisions.prefix(5).enumerated()), id: \.element.id) { index, decision in
+                        cascadeDecisionRow(decision)
+                        if index < min(cascadeDecisions.count, 5) - 1 {
+                            Divider().background(AppColors.border)
+                        }
+                    }
+                }
+            }
+            .padding(Theme.md)
+            .podCard()
+        }
+    }
+
+    private func cascadeDecisionRow(_ decision: CascadeDecisionDTO) -> some View {
+        VStack(alignment: .leading, spacing: Theme.xs) {
+            HStack(spacing: Theme.xs) {
+                Image(systemName: cascadeRouteIcon(decision.route ?? decision.action))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(cascadeRouteColor(decision.route ?? decision.action))
+
+                Text(runtimeDisplay(decision.route ?? decision.action))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppColors.textPrimary)
+
+                if let status = decision.executionStatus?.nilIfBlank {
+                    runtimeBadge(runtimeDisplay(status), color: cascadeRouteColor(status))
+                }
+
+                Spacer()
+
+                if decision.attemptNumber > 0 {
+                    Text("Attempt \(decision.attemptNumber)")
+                        .podTextStyle(.label, color: AppColors.textTertiary)
+                }
+            }
+
+            if let reason = decision.reason?.nilIfBlank {
+                Text(reason)
+                    .font(.caption)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: Theme.sm) {
+                cascadeEvidenceLabel("Decision", value: decision.id)
+                cascadeEvidenceLabel("Receipt", value: decision.wakeReceiptId)
+                cascadeEvidenceLabel("Run", value: decision.agentRunId)
+            }
+
+            HStack(spacing: Theme.sm) {
+                if let policy = decision.policyVersion?.nilIfBlank {
+                    Label(policy, systemImage: "checkmark.shield")
+                }
+                if let room = decision.wakeDepth?.nilIfBlank {
+                    Label(runtimeDisplay(room), systemImage: "door.left.hand.open")
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(AppColors.textTertiary)
+        }
+    }
+
+    private func cascadeEvidenceLabel(_ label: String, value: String?) -> some View {
+        let shortValue = value.map { String($0.prefix(8)) } ?? "none"
+        return Text("\(label) \(shortValue)")
+            .font(.system(size: 10, weight: .medium, design: .monospaced))
+            .foregroundStyle(AppColors.textTertiary)
+            .lineLimit(1)
+    }
+
+    private func cascadeRouteIcon(_ value: String) -> String {
+        switch value.lowercased() {
+        case "claude", "frontier", "running": return "brain.head.profile"
+        case "spark", "respond", "succeeded": return "bolt.fill"
+        case "kimi": return "bubble.left.and.text.bubble.right.fill"
+        case "blocked", "failed": return "exclamationmark.octagon.fill"
+        case "suppress", "none": return "bell.slash.fill"
+        default: return "arrow.triangle.branch"
+        }
+    }
+
+    private func cascadeRouteColor(_ value: String) -> Color {
+        switch value.lowercased() {
+        case "succeeded", "spark", "respond": return AppColors.accentSuccess
+        case "blocked", "failed": return AppColors.accentDanger
+        case "claude", "frontier", "running": return AppColors.accentElectric
+        case "kimi": return AppColors.accentAgent
+        default: return AppColors.textTertiary
+        }
+    }
+
     private var lastAwakeLabel: String {
         guard let lastAwakeProofAt = agent.lastAwakeProofAt else { return "Never" }
         return "Active \(lastAwakeProofAt.relativeFormatted)"
@@ -2709,6 +2859,65 @@ struct AgentDetailSheet: View {
             await MainActor.run {
                 self.isLoadingLocker = false
                 self.lockerError = errorMessage
+            }
+        }
+    }
+
+    private func loadCascadeDecisions() async {
+        await MainActor.run {
+            isLoadingCascade = true
+            cascadeError = nil
+        }
+        let encodedAgent = agent.apiPathComponent.addingPercentEncoding(
+            withAllowedCharacters: .urlQueryAllowed
+        ) ?? agent.apiPathComponent
+        do {
+            let response: CascadeDecisionListDTO = try await APIClient.shared.get(
+                path: "/api/v1/schoolhouse/cascade/triage-decisions?status=all&target_agent=\(encodedAgent)&limit=10"
+            )
+            await MainActor.run {
+                cascadeDecisions = response.items
+                isLoadingCascade = false
+            }
+        } catch {
+            await MainActor.run {
+                cascadeError = "Routing evidence unavailable"
+                isLoadingCascade = false
+            }
+        }
+    }
+
+    private func sendManualWake() async {
+        guard let endpoint = lockerData?.heartbeat.manualWake.endpoint else { return }
+        await MainActor.run {
+            isSendingWake = true
+            wakeActionMessage = nil
+        }
+        do {
+            let body = AgentManualWakeBody(
+                targetAgent: agent.apiPathComponent,
+                text: "Manual wake requested from Pod Locker. Open Locker and continue current assigned work.",
+                type: "request",
+                priority: "high",
+                headline: "Pod manual wake",
+                actionRequired: true,
+                wakeOnArrival: true,
+                domain: "schoolhouse"
+            )
+            let _: AgentLockerActionResultDTO = try await APIClient.shared.post(
+                path: endpoint,
+                body: body,
+                includeAgentToken: true
+            )
+            await MainActor.run {
+                wakeActionMessage = "Wake sent"
+                isSendingWake = false
+            }
+            await loadLocker()
+        } catch {
+            await MainActor.run {
+                wakeActionMessage = "Wake failed"
+                isSendingWake = false
             }
         }
     }
@@ -3220,6 +3429,24 @@ private struct AgentLockerActionResultDTO: Decodable {
     let id: String?
     let status: String?
     let detail: String?
+}
+
+private struct AgentManualWakeBody: Encodable {
+    let targetAgent: String
+    let text: String
+    let type: String
+    let priority: String
+    let headline: String
+    let actionRequired: Bool
+    let wakeOnArrival: Bool
+    let domain: String
+
+    enum CodingKeys: String, CodingKey {
+        case text, type, priority, headline, domain
+        case targetAgent = "target_agent"
+        case actionRequired = "action_required"
+        case wakeOnArrival = "wake_on_arrival"
+    }
 }
 
 private enum AgentLockerTab: String, CaseIterable, Identifiable {

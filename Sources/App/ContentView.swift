@@ -18,7 +18,13 @@ struct ContentView: View {
 
             // Use authStateKey to force SwiftUI to treat as new identity on change
             // This prevents the LoginView from "sticking" during render cycles
-            if appState.isAuthenticated {
+            if ProcessInfo.processInfo.arguments.contains("--parking-lot-evidence") {
+                if ProcessInfo.processInfo.arguments.contains("--parking-lot-scenario=chat") {
+                    ParkingLotChatEvidenceView(viewModel: directChatViewModel)
+                } else {
+                    NavigationStack { ParkingLotView() }
+                }
+            } else if appState.isAuthenticated {
                 mainTabView
                     .id("main-\(authStateKey)")
             } else {
@@ -288,6 +294,72 @@ struct ContentView: View {
         .presentationDetents([.medium])
     }
 }
+
+#if DEBUG
+private struct ParkingLotChatEvidenceView: View {
+    @Bindable var viewModel: DirectChatViewModel
+    @Environment(\.modelContext) private var modelContext
+    @State private var submitted = false
+
+    private var agent: AgentInfo { AgentInfo.find("maui") ?? AgentInfo.team[0] }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Image(systemName: "message.fill")
+                    .foregroundStyle(AppColors.accentElectric)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Direct chat · \(agent.name)")
+                        .font(.headline)
+                        .foregroundStyle(AppColors.textPrimary)
+                    Text("Parking Lot interception evidence")
+                        .font(.caption)
+                        .foregroundStyle(AppColors.textSecondary)
+                }
+                Spacer()
+            }
+            .padding(16)
+            .background(AppColors.backgroundSecondary)
+
+            Spacer()
+
+            if let message = viewModel.currentMessages.last(where: { $0.lane == "parking_lot_capture" }) {
+                DMBubble(message: message, agent: agent)
+                    .padding(.horizontal, 16)
+            } else {
+                ProgressView("Intercepting test capture…")
+                    .foregroundStyle(AppColors.textSecondary)
+            }
+
+            Spacer()
+
+            HStack(spacing: 10) {
+                TextField("Message \(agent.name) lane…", text: $viewModel.composedMessage)
+                    .textFieldStyle(.plain)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(AppColors.backgroundTertiary)
+                    .clipShape(Capsule())
+                Button { viewModel.sendMessage() } label: {
+                    Image(systemName: "arrow.up.circle.fill").font(.system(size: 32))
+                }
+                .accessibilityLabel("Send")
+            }
+            .padding(12)
+            .background(AppColors.backgroundSecondary)
+        }
+        .background(AppColors.backgroundPrimary.ignoresSafeArea())
+        .onAppear {
+            guard !submitted else { return }
+            submitted = true
+            viewModel.setModelContext(modelContext)
+            viewModel.selectAgent(agent)
+            viewModel.composedMessage = "parking lot: [TEST] Synthetic intercepted chat idea"
+            viewModel.sendMessage()
+        }
+    }
+}
+#endif
 
 private enum RuntimeSurfaceMode: String, CaseIterable {
     case overview

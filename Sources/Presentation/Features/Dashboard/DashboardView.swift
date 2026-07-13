@@ -18,6 +18,7 @@ struct DashboardView: View {
     @State private var showingVoiceRoom = false
     @State private var showingSettings = false
     @State private var playgroundModel = PlaygroundPanelModel()
+    @State private var loopAtlasModel = LoopAtlasViewModel()
     @AppStorage("orca_display_name") private var displayName: String = "Captain"
 
     // MARK: - Body
@@ -29,11 +30,11 @@ struct DashboardView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.md) {
-                    // 1. Agent status strip — fast organization pulse.
-                    agentStatusStrip
+                    // 1. Evidence-backed loop health and the strict Captain queue.
+                    LoopGaugeView(model: loopAtlasModel)
 
-                    // 2. One ORCA-backed queue for everything needing the Captain.
-                    captainInboxSection
+                    // 2. Agent status strip — fast organization pulse.
+                    agentStatusStrip
 
                     // 3. Current execution blocker — routes into Work.
                     classroomFlowCard
@@ -70,6 +71,7 @@ struct DashboardView: View {
                 await dailyBriefingModel.load(force: true)
                 await fundLandingModel.load()
                 await playgroundModel.load()
+                await loopAtlasModel.load(force: true)
             }
             .background(AppColors.backgroundPrimary)
             .navigationTitle("Dashboard")
@@ -83,6 +85,7 @@ struct DashboardView: View {
                             await dailyBriefingModel.load(force: true)
                             await fundLandingModel.load()
                             await playgroundModel.load()
+                            await loopAtlasModel.load(force: true)
                         }
                     } label: {
                         Image(systemName: viewModel.isLoading ? "hourglass" : "arrow.clockwise")
@@ -121,6 +124,7 @@ struct DashboardView: View {
                 await dailyBriefingModel.load()
                 await fundLandingModel.load()
                 await playgroundModel.load()
+                await loopAtlasModel.load()
             }
             .task {
                 await viewModel.startFlowReviewPolling()
