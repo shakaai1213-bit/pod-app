@@ -1347,11 +1347,20 @@ struct WorkView: View {
             }
 
             HStack(spacing: 10) {
-                productMetric("\(board.activeCount)", "active")
-                productMetric("\(board.projectCount)", "projects")
-                productMetric("\(board.ticketCount)", "open")
-                if board.blockedCount > 0 {
-                    productMetric("\(board.blockedCount)", "blocked", color: AppColors.accentDanger)
+                if board.isProtectedBoard {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(AppColors.accentCaptain)
+                    Text("Protected detail remains in Fund")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(AppColors.textSecondary)
+                } else {
+                    productMetric("\(board.activeCount)", "active")
+                    productMetric("\(board.projectCount)", "projects")
+                    productMetric("\(board.ticketCount)", "open")
+                    if board.blockedCount > 0 {
+                        productMetric("\(board.blockedCount)", "blocked", color: AppColors.accentDanger)
+                    }
                 }
                 Spacer(minLength: 0)
             }
@@ -1359,7 +1368,7 @@ struct WorkView: View {
             Divider().background(AppColors.border)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(board.improvementKind == nil ? "CURRENT STATE" : "\(board.improvementKind!.uppercased()) IN FOCUS")
+                Text(board.isProtectedBoard ? "PROTECTED WORKSPACE" : (board.improvementKind == nil ? "CURRENT STATE" : "\(board.improvementKind!.uppercased()) IN FOCUS"))
                     .font(.system(size: 9, weight: .bold))
                     .foregroundColor(AppColors.textTertiary)
                 Text(board.improvementTitle ?? "No active improvement work recorded")
@@ -1402,6 +1411,7 @@ struct WorkView: View {
         switch state {
         case "Improving": return AppColors.accentSuccess
         case "Blocked": return AppColors.accentDanger
+        case "Protected": return AppColors.accentCaptain
         case "At risk", "Planned": return AppColors.accentWarning
         default: return AppColors.textTertiary
         }
@@ -5815,6 +5825,8 @@ private struct WorkBoardSummary: Identifiable, Hashable {
             || ["campwatch", "guardian", "tiki"].contains(slug)
     }
 
+    var isProtectedBoard: Bool { slug == "fund" }
+
     var architectureLayer: String {
         if isProductBoard { return "Products" }
         switch slug {
@@ -5828,6 +5840,7 @@ private struct WorkBoardSummary: Identifiable, Hashable {
     }
 
     var deliveryState: String {
+        if isProtectedBoard { return "Protected" }
         if blockedCount > 0, inProgressCount > 0 { return "At risk" }
         if blockedCount > 0 { return "Blocked" }
         if inProgressCount > 0 { return "Improving" }
@@ -5836,7 +5849,8 @@ private struct WorkBoardSummary: Identifiable, Hashable {
     }
 
     var activityScore: Int {
-        activeCount * 100 + blockedCount * 75 + inProgressCount * 20 + ticketCount
+        if isProtectedBoard { return 1_000_000 }
+        return activeCount * 100 + blockedCount * 75 + inProgressCount * 20 + ticketCount
     }
 
     static let orderedSlugs = [
@@ -5897,13 +5911,20 @@ private final class WorkBoardsModel {
             async let projectsLoad = loadAllProjects()
             async let ticketsLoad = loadAllTickets()
             let (projectResult, ticketResult) = await (projectsLoad, ticketsLoad)
+            let protectedBoardID = response.items.first(where: { $0.slug == "fund" })?.id.lowercased()
 
             boards = Self.ordered(response.items.map { board in
                 let summary = board.summary
-                let projects = projectResult.items.filter { project in
-                    Self.boardIDs(for: project).contains(summary.id.lowercased())
+                let projects = summary.isProtectedBoard ? [] : projectResult.items.filter { project in
+                    let boardIDs = Self.boardIDs(for: project)
+                    let belongsToBoard = boardIDs.contains(summary.id.lowercased())
+                    let belongsToProtectedBoard = protectedBoardID.map(boardIDs.contains) ?? false
+                    return belongsToBoard && !belongsToProtectedBoard
                 }
-                let tickets = ticketResult.items.filter { $0.boardId?.lowercased() == summary.id.lowercased() }
+                let tickets = summary.isProtectedBoard ? [] : ticketResult.items.filter {
+                    $0.boardId?.lowercased() == summary.id.lowercased()
+                        && $0.isSafeForGenericWorkSurface
+                }
                 return Self.enrich(summary, projects: projects, tickets: tickets)
             })
             sourceLabel = "ORCA"
@@ -5968,6 +5989,23 @@ private final class WorkBoardsModel {
         projects: [ProjectDTO],
         tickets: [WorkBoardTicketSummary]
     ) -> WorkBoardSummary {
+        if board.isProtectedBoard {
+            return WorkBoardSummary(
+                id: board.id,
+                slug: board.slug,
+                name: board.name,
+                layer: board.layer,
+                component: board.component,
+                boardDescription: board.boardDescription,
+                projectCount: 0,
+                activeCount: 0,
+                ticketCount: 0,
+                inProgressCount: 0,
+                blockedCount: 0,
+                improvementTitle: "Fund detail is isolated from generic Work",
+                improvementKind: "Protected"
+            )
+        }
         let terminal = Set(["done", "archived", "completed", "cancelled", "closed", "resolved"])
         let activeProjects = projects.filter { !terminal.contains($0.status.lowercased()) }
         let workingProjectStates = Set(["active", "in_progress", "in-progress", "building", "build", "implementation"])
@@ -6203,6 +6241,15 @@ private struct WorkBoardTicketSummary: Identifiable, Decodable {
     let status: String
     let priority: String?
     let boardId: String?
+    let computeTag: String?
+    let autonomyLevel: String?
+
+    var isSafeForGenericWorkSurface: Bool {
+        let tag = computeTag?.lowercased()
+        return tag != "financial"
+            && tag != "security"
+            && autonomyLevel?.lowercased() != "protected_approval_required"
+    }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -6212,11 +6259,15 @@ private struct WorkBoardTicketSummary: Identifiable, Decodable {
         status = try container.decodeWorkFlexibleStringIfPresent(forKey: .status) ?? "open"
         priority = try container.decodeWorkFlexibleStringIfPresent(forKey: .priority)
         boardId = try container.decodeWorkFlexibleStringIfPresent(forKey: .boardId)
+        computeTag = try container.decodeWorkFlexibleStringIfPresent(forKey: .computeTag)
+        autonomyLevel = try container.decodeWorkFlexibleStringIfPresent(forKey: .autonomyLevel)
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, title, description, status, priority
         case boardId = "board_id"
+        case computeTag = "compute_tag"
+        case autonomyLevel = "autonomy_level"
     }
 }
 
@@ -6311,6 +6362,13 @@ private final class WorkBoardDetailModel {
         error = nil
         defer { isLoading = false }
 
+        if board.isProtectedBoard {
+            projects = []
+            tasks = []
+            directTickets = []
+            return
+        }
+
         async let projectsTask = loadProjects(board: board)
         async let tasksTask = loadTasks(board: board)
         async let ticketsTask = loadTickets(board: board)
@@ -6325,12 +6383,16 @@ private final class WorkBoardDetailModel {
 
     private func loadProjects(board: WorkBoardSummary) async -> (projects: [ProjectDTO], error: String?) {
         do {
-            let response: WorkBoardProjectListResponse = try await APIClient.shared.get(path: "/api/v1/projects?limit=200")
+            async let projectsResponse: WorkBoardProjectListResponse = APIClient.shared.get(path: "/api/v1/projects?limit=200")
+            async let boardsResponse: WorkBoardListResponse = APIClient.shared.get(path: "/api/v1/boards")
+            let (response, boards) = try await (projectsResponse, boardsResponse)
             let boardId = board.id.lowercased()
+            let protectedBoardID = boards.items.first(where: { $0.slug == "fund" })?.id.lowercased()
             let projects = response.items.filter { project in
                 let ids = (project.boardIds ?? []).map { $0.uuidString.lowercased() }
                     + [project.boardId?.uuidString.lowercased()].compactMap { $0 }
-                return ids.contains(boardId)
+                let belongsToProtectedBoard = protectedBoardID.map(ids.contains) ?? false
+                return ids.contains(boardId) && !belongsToProtectedBoard
             }
             return (projects, nil)
         } catch {
@@ -6350,7 +6412,7 @@ private final class WorkBoardDetailModel {
     private func loadTickets(board: WorkBoardSummary) async -> (tickets: [WorkBoardTicketSummary], error: String?) {
         do {
             let response: WorkBoardTicketListResponse = try await APIClient.shared.get(path: "/api/v1/boards/\(board.id)/tickets")
-            return (response.items, nil)
+            return (response.items.filter(\.isSafeForGenericWorkSurface), nil)
         } catch {
             return ([], "Direct tickets unavailable.")
         }
@@ -6771,14 +6833,23 @@ private struct WorkBoardsArchitectureView: View {
             }
 
             HStack(spacing: 5) {
-                architecturePill("\(board.projectCount)p")
-                architecturePill("\(board.activeCount)a")
-                if board.ticketCount > 0 {
-                    architecturePill("\(board.ticketCount)t")
+                if board.isProtectedBoard {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(AppColors.accentCaptain)
+                    Text("Protected")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(AppColors.accentCaptain)
+                } else {
+                    architecturePill("\(board.projectCount)p")
+                    architecturePill("\(board.activeCount)a")
+                    if board.ticketCount > 0 {
+                        architecturePill("\(board.ticketCount)t")
+                    }
+                    Text(board.deliveryState)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(deliveryStateColor(board.deliveryState))
                 }
-                Text(board.deliveryState)
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundColor(deliveryStateColor(board.deliveryState))
                 Spacer(minLength: 0)
             }
         }
@@ -6792,6 +6863,7 @@ private struct WorkBoardsArchitectureView: View {
     private func deliveryStateColor(_ state: String) -> Color {
         switch state {
         case "Blocked": return AppColors.accentDanger
+        case "Protected": return AppColors.accentCaptain
         case "At risk", "Planned": return AppColors.accentWarning
         case "Improving": return AppColors.accentSuccess
         default: return AppColors.textTertiary
@@ -6906,6 +6978,9 @@ private struct WorkBoardDetailView: View {
                 }
             }
             .task {
+                if board.isProtectedBoard {
+                    selectedSection = .overview
+                }
                 await model.load(board: board)
                 if board.slug != "fund", let boardId = UUID(uuidString: board.id) {
                     await boardPlanModel.load(boardId: boardId)
@@ -6921,9 +6996,13 @@ private struct WorkBoardDetailView: View {
     private var selectedBoardContent: some View {
         switch selectedSection {
         case .overview:
-            boardOverviewGrid
-            boardCurrentImprovement
-            boardBreakdowns
+            if board.isProtectedBoard {
+                protectedBoardOverview
+            } else {
+                boardOverviewGrid
+                boardCurrentImprovement
+                boardBreakdowns
+            }
         case .plan:
             CaptainBoardPlanView(model: boardPlanModel, allowsBoardSelection: false)
         case .projects:
@@ -6936,7 +7015,7 @@ private struct WorkBoardDetailView: View {
     }
 
     private var availableSections: [WorkBoardDetailSection] {
-        WorkBoardDetailSection.allCases.filter { board.slug != "fund" || $0 != .plan }
+        board.isProtectedBoard ? [.overview] : WorkBoardDetailSection.allCases
     }
 
     private var boardSectionPicker: some View {
@@ -7013,7 +7092,7 @@ private struct WorkBoardDetailView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Text("Board command window")
+            Text(board.isProtectedBoard ? "Protected board boundary" : "Board command window")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundColor(accent)
                 .padding(.horizontal, 8)
@@ -7036,6 +7115,36 @@ private struct WorkBoardDetailView: View {
                 ))
         }
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppColors.border, lineWidth: 0.5))
+    }
+
+    private var protectedBoardOverview: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "lock.shield.fill")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(AppColors.accentWarning)
+                .frame(width: 40, height: 40)
+                .background(AppColors.accentWarning.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("PROTECTED WORKSPACE")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(AppColors.accentWarning)
+                Text("Fund detail is isolated from generic Work")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(AppColors.textPrimary)
+                Text("Use Fund for its projects, tasks, tickets, and financial activity. Work shows the product boundary without copying protected detail into the lab-wide feed.")
+                    .font(.system(size: 12))
+                    .foregroundColor(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppColors.accentWarning.opacity(0.45), lineWidth: 0.5))
     }
 
     private var boardOverviewGrid: some View {
