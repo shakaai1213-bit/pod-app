@@ -35,6 +35,7 @@
 		3A579D796D053AEF7F48A93B /* Typography.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0905CC7645A277BCFB4D4211 /* Typography.swift */; };
 		3AB34F50F3630DA8760A6CFA /* Colors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A10B6FE95332F160D3E227C /* Colors.swift */; };
 		3C135990C2E55C1E5079A33C /* CockpitSignQueueSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4E4C855478DA5C9D41034E0 /* CockpitSignQueueSection.swift */; };
+		3CBDC75F194CB5E34B2A60AC /* AgentTokenManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A491A719857042CDC29EDAD6 /* AgentTokenManager.swift */; };
 		3ED4207280106986AA84BE72 /* LockerChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADFE23926127563B96F166CC /* LockerChatView.swift */; };
 		3FF7F4F2966A2B3337C97B8E /* AuthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E75CB63EBA420B1C8624C8 /* AuthManager.swift */; };
 		42F9E02E32203C7EF152DCB2 /* SonarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C67EF1DD90F4E3DDF038BDE /* SonarView.swift */; };
@@ -246,6 +247,7 @@
 		952F2ED4468BC7A6FAAEF442 /* AgentDetailSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentDetailSheet.swift; sourceTree = "<group>"; };
 		A28A4672374ACF545BD664A8 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		A2D290EE8D7D2034F520F37F /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		A491A719857042CDC29EDAD6 /* AgentTokenManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentTokenManager.swift; sourceTree = "<group>"; };
 		A4E4C855478DA5C9D41034E0 /* CockpitSignQueueSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CockpitSignQueueSection.swift; sourceTree = "<group>"; };
 		A555838FA2C96A3ADB7AB1C3 /* TicketsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TicketsViewModel.swift; sourceTree = "<group>"; };
 		A671A61727D2A6622982C99A /* PriorityBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PriorityBadge.swift; sourceTree = "<group>"; };
@@ -514,6 +516,7 @@
 		609C6B3063815BD3F9318B67 /* Auth */ = {
 			isa = PBXGroup;
 			children = (
+				A491A719857042CDC29EDAD6 /* AgentTokenManager.swift */,
 				C1E75CB63EBA420B1C8624C8 /* AuthManager.swift */,
 				6DACC05C307AB5FA9A895001 /* SIWASignInService.swift */,
 				CBD062EB03F1386CFB3A77D5 /* User.swift */,
@@ -891,6 +894,7 @@
 				C8BA82A7E103175379551AB4 /* AgentRepository.swift in Sources */,
 				7B3C12FECEB78F9D71D4AC06 /* AgentSecrets.swift in Sources */,
 				F9774DEACCFE1CAE257BAB9E /* AgentStatusCard.swift in Sources */,
+				3CBDC75F194CB5E34B2A60AC /* AgentTokenManager.swift in Sources */,
 				99367A8E3BC0E7405588837A /* Agents.swift in Sources */,
 				5E8CE5D256DC98E4F893A8CE /* AgentsView.swift in Sources */,
 				BB77E2B8C7E1D40AF2F8F601 /* AgentsViewModel.swift in Sources */,

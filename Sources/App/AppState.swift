@@ -78,6 +78,25 @@ final class AppState: ObservableObject {
 
     // MARK: - Auto Login
 
+    /// Loads the device-bound agent credential before agent-scoped surfaces start.
+    /// A signed deployment may provide POD_AGENT_TOKEN once; subsequent launches
+    /// read only the Keychain copy.
+    func prepareRuntimeCredentials() async {
+        let manager = AgentTokenManager()
+        let bootstrap = ProcessInfo.processInfo.environment["POD_AGENT_TOKEN"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        do {
+            if let bootstrap, !bootstrap.isEmpty {
+                try await manager.storeToken(bootstrap)
+                await APIClient.shared.setAgentToken(bootstrap)
+            } else if let stored = try await manager.getToken() {
+                await APIClient.shared.setAgentToken(stored)
+            }
+        } catch {
+            print("[AppState] Agent credential unavailable: \(error)")
+        }
+    }
+
     /// Attempts to auto-login using stored Keychain token. Call on app launch.
     func attemptAutoLogin() async {
         let success = await authManager.attemptAutoLogin()

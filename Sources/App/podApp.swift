@@ -58,6 +58,7 @@ struct podApp: App {
                     }
                     if !isUnitTesting {
                         Task { @MainActor in
+                            await appState.prepareRuntimeCredentials()
                             await appState.attemptAutoLogin()
                         }
                     }

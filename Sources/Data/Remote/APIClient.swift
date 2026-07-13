@@ -40,6 +40,7 @@ actor APIClient {
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
     private let keychainTokenProvider: @Sendable () async -> String?
+    private let keychainAgentTokenProvider: @Sendable () async -> String?
 
     private var authToken: String?
     private var agentToken: String?
@@ -54,10 +55,19 @@ actor APIClient {
             } catch {
                 return nil
             }
+        },
+        keychainAgentTokenProvider: @escaping @Sendable () async -> String? = {
+            let tokenManager = AgentTokenManager()
+            do {
+                return try tokenManager.getToken()
+            } catch {
+                return nil
+            }
         }
     ) {
         self.baseURL = baseURL
         self.keychainTokenProvider = keychainTokenProvider
+        self.keychainAgentTokenProvider = keychainAgentTokenProvider
         if let session {
             self.session = session
         } else {
@@ -92,8 +102,9 @@ actor APIClient {
         return await keychainTokenProvider()
     }
 
-    func currentAgentToken() -> String? {
-        agentToken
+    func currentAgentToken() async -> String? {
+        if let agentToken { return agentToken }
+        return await keychainAgentTokenProvider()
     }
 
     /// Atomically sets the token and verifies it by fetching agents.
@@ -149,20 +160,29 @@ actor APIClient {
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        // Persisted bearer credentials come only from Keychain via TokenManager.
-        let currentToken: String?
-        if let authToken = self.authToken {
-            currentToken = authToken
+        if includeAgentToken {
+            // Strict agent routes receive only the named-agent credential.
+            let currentAgentToken: String?
+            if let agentToken = self.agentToken {
+                currentAgentToken = agentToken
+            } else {
+                currentAgentToken = await keychainAgentTokenProvider()
+            }
+            if let token = currentAgentToken {
+                request.setValue(token, forHTTPHeaderField: "X-Agent-Token")
+            }
         } else {
-            currentToken = await keychainTokenProvider()
-        }
-        if let token = currentToken {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            request.setValue(token, forHTTPHeaderField: "X-Api-Key")
-        }
-
-        if includeAgentToken, let token = self.agentToken {
-            request.setValue(token, forHTTPHeaderField: "X-Agent-Token")
+            // Persisted bearer credentials come only from Keychain via TokenManager.
+            let currentToken: String?
+            if let authToken = self.authToken {
+                currentToken = authToken
+            } else {
+                currentToken = await keychainTokenProvider()
+            }
+            if let token = currentToken {
+                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                request.setValue(token, forHTTPHeaderField: "X-Api-Key")
+            }
         }
 
         if let body = body {

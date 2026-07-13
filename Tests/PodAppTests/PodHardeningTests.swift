@@ -5,6 +5,7 @@ import XCTest
 final class PodHardeningTests: XCTestCase {
     override func tearDown() {
         UserDefaults.standard.removeObject(forKey: "orca_auth_token")
+        UserDefaults.standard.removeObject(forKey: "orca_agent_token")
         MockURLProtocol.handler = nil
         super.tearDown()
     }
@@ -41,6 +42,24 @@ final class PodHardeningTests: XCTestCase {
         }
     }
 
+    func testStrictAgentRequestUsesKeychainAgentTokenOnly() async throws {
+        UserDefaults.standard.set("plaintext-agent-token", forKey: "orca_agent_token")
+        let client = makeClient(
+            keychainToken: "keychain-bearer-token",
+            keychainAgentToken: "keychain-agent-token"
+        )
+
+        let request = try await client.buildRequest(
+            path: "/api/v1/agent/workbench",
+            includeAgentToken: true
+        )
+
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Agent-Token"), "keychain-agent-token")
+        XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+        XCTAssertNil(request.value(forHTTPHeaderField: "X-Api-Key"))
+        XCTAssertFalse(request.allHTTPHeaderFields?.values.contains("plaintext-agent-token") ?? false)
+    }
+
     func testWorkbenchWritesAlwaysEncodeStableIdempotencyKeys() throws {
         let action = WorkbenchAgentActionRequest(action: "ticket_comment", ticketId: "ticket-1")
         let actionKey = try encodedString(action, key: "idempotency_key")
@@ -71,13 +90,54 @@ final class PodHardeningTests: XCTestCase {
         XCTAssertEqual(peak, 4)
     }
 
-    private func makeClient(keychainToken: String) -> APIClient {
+    func testLoopAtlasDecodesLiveORCAPayloadShape() async throws {
+        MockURLProtocol.handler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let body = #"""
+            {
+              "computed_at":"2026-07-13T23:09:56.183641",
+              "gauge":[{
+                "key":"sense","title":"Sense","status":"green","value":832.0,
+                "unit":"wake receipts/day","freshness_at":"2026-07-13T23:09:56.099562Z",
+                "cause":"Wake and intake freshness","source_ref":"/api/v1/lab/velocity#wake_receipts_per_day",
+                "drill_ref":"/api/v1/management/agents"
+              }],
+              "lanes":[{
+                "key":"intake","title":"Intake","status":"green","count":75,
+                "freshness_at":"2026-07-13T23:09:56.183641","cause":"Open canonical intake",
+                "drill_refs":["/api/v1/tickets"]
+              }],
+              "captain_queue":[],
+              "source_refs":["/api/v1/lab/velocity","/api/v1/tickets"]
+            }
+            """#
+            return (response, Data(body.utf8))
+        }
+        let client = makeClient(keychainToken: "keychain-token")
+
+        let atlas: LoopAtlasResponseDTO = try await client.get(path: "/api/v1/management/loop-atlas")
+
+        XCTAssertEqual(atlas.gauge.map(\.key), ["sense"])
+        XCTAssertEqual(atlas.lanes.map(\.key), ["intake"])
+        XCTAssertTrue(atlas.captainQueue.isEmpty)
+    }
+
+    private func makeClient(
+        keychainToken: String,
+        keychainAgentToken: String? = nil
+    ) -> APIClient {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [MockURLProtocol.self]
         return APIClient(
             baseURL: "https://pod-tests.invalid",
             session: URLSession(configuration: configuration),
-            keychainTokenProvider: { keychainToken }
+            keychainTokenProvider: { keychainToken },
+            keychainAgentTokenProvider: { keychainAgentToken }
         )
     }
 
