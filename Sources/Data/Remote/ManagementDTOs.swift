@@ -167,6 +167,7 @@ struct AgentLoadDTO: Decodable, Hashable {
     let blocked: Int
     let stale: Int
     let capacity: Int?
+    let capacityUnits: Int?
     let pressurePct: Double?
     let status: String
     let reason: String
@@ -177,6 +178,7 @@ struct AgentLoadDTO: Decodable, Hashable {
         case activeTasks = "active_tasks"
         case plannerItems = "planner_items"
         case activeRuns = "active_runs"
+        case capacityUnits = "capacity_units"
         case pressurePct = "pressure_pct"
     }
 }
@@ -302,6 +304,7 @@ struct ProjectMilestoneManagementDTO: Decodable, Identifiable, Hashable {
     let ownerAgentId: UUID?
     let ownerName: String?
     let waitReason: String?
+    let dependencyIds: [String]?
     let acceptanceCriteria: [String]
     let linkedTicketIds: [UUID]
     let linkedTaskIds: [UUID]
@@ -316,6 +319,7 @@ struct ProjectMilestoneManagementDTO: Decodable, Identifiable, Hashable {
         case ownerAgentId = "owner_agent_id"
         case ownerName = "owner_name"
         case waitReason = "wait_reason"
+        case dependencyIds = "dependency_ids"
         case acceptanceCriteria = "acceptance_criteria"
         case linkedTicketIds = "linked_ticket_ids"
         case linkedTaskIds = "linked_task_ids"

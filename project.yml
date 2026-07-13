@@ -30,6 +30,11 @@ settings:
     TARGETED_DEVICE_FAMILY: "1,2"
     SWIFT_EMIT_LOC_STRINGS: YES
 
+packages:
+  LiveKit:
+    url: https://github.com/livekit/client-sdk-swift-xcframework.git
+    exactVersion: 2.14.1
+
 targets:
   pod:
     type: application
@@ -39,6 +44,8 @@ targets:
     sources:
       - path: Sources
         type: group
+    dependencies:
+      - package: LiveKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.orcamc.pod
@@ -47,3 +54,36 @@ targets:
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: "5H23S6WPV2"
         SWIFT_STRICT_CONCURRENCY: minimal
+  podTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget:
+      iOS: "17.0"
+    sources:
+      - path: Tests/PodAppTests
+        type: group
+    dependencies:
+      - target: pod
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.orcamc.pod.tests
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: ""
+        SWIFT_STRICT_CONCURRENCY: minimal
+
+schemes:
+  pod:
+    build:
+      targets:
+        pod: all
+        podTests: [test]
+    run:
+      config: Debug
+      debugEnabled: false
+    test:
+      config: Debug
+      debugEnabled: false
+      environmentVariables:
+        POD_UNIT_TESTS: "1"
+      targets:
+        - podTests

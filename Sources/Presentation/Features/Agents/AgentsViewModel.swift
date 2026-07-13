@@ -240,16 +240,18 @@ final class AgentsViewModel {
     // MARK: - SSE Subscription
 
     func subscribeToAgentState() {
-        // d87ed975: fix dead /events/agents → real /agents/stream endpoint
-        let token = UserDefaults.standard.string(forKey: "orca_auth_token") ?? ""
-        #if targetEnvironment(simulator)
-        sseClient = LocalSSEClient(baseURL: "http://127.0.0.1:19002")
-        #else
-        sseClient = LocalSSEClient(baseURL: "http://100.76.196.40:8000")
-        #endif
-        sseClient?.connect(to: "/api/v1/agents/stream", token: token) { [weak self] event in
-            Task { @MainActor in
-                self?.onAgentStateUpdate(event)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let token = await apiClient.currentToken() ?? ""
+            #if targetEnvironment(simulator)
+            sseClient = LocalSSEClient(baseURL: "http://127.0.0.1:19002")
+            #else
+            sseClient = LocalSSEClient(baseURL: "http://100.76.196.40:8000")
+            #endif
+            sseClient?.connect(to: "/api/v1/agents/stream", token: token) { [weak self] event in
+                Task { @MainActor in
+                    self?.onAgentStateUpdate(event)
+                }
             }
         }
     }
@@ -470,7 +472,7 @@ extension APIClient {
         body: some Encodable,
         includeAgentToken: Bool = false
     ) async throws -> T {
-        let request = try buildRequest(
+        let request = try await buildRequest(
             path: endpoint.path,
             method: endpoint.method.rawValue,
             body: body,
@@ -484,7 +486,7 @@ extension APIClient {
         _ endpoint: Endpoint,
         includeAgentToken: Bool = false
     ) async throws -> T {
-        let request = try buildRequest(
+        let request = try await buildRequest(
             path: endpoint.path,
             method: endpoint.method.rawValue,
             includeAgentToken: includeAgentToken

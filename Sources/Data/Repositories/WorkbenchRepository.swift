@@ -397,7 +397,7 @@ struct WorkbenchPlaygroundPreview: Decodable, Hashable {
 
 struct WorkbenchAgentActionRequest: Encodable, Hashable {
     let action: String
-    let idempotencyKey: String?
+    let idempotencyKey: String
     let boardId: String?
     let taskId: String?
     let ticketId: String?
@@ -412,7 +412,7 @@ struct WorkbenchAgentActionRequest: Encodable, Hashable {
 
     init(
         action: String,
-        idempotencyKey: String? = nil,
+        idempotencyKey: String = "pod-workbench-action-\(UUID().uuidString.lowercased())",
         boardId: String? = nil,
         taskId: String? = nil,
         ticketId: String? = nil,
@@ -556,7 +556,7 @@ struct WorkbenchToolRunRequest: Encodable, Hashable {
     let ticketId: String?
     let taskId: String?
     let approvalId: String?
-    let idempotencyKey: String?
+    let idempotencyKey: String
     let traceId: String?
     let runtimeSurface: String?
     let runtimeProvider: String?
@@ -571,7 +571,7 @@ struct WorkbenchToolRunRequest: Encodable, Hashable {
         ticketId: String? = nil,
         taskId: String? = nil,
         approvalId: String? = nil,
-        idempotencyKey: String? = nil,
+        idempotencyKey: String = "pod-workbench-tool-\(UUID().uuidString.lowercased())",
         traceId: String? = nil,
         runtimeSurface: String? = "pod.workbench",
         runtimeProvider: String? = nil,

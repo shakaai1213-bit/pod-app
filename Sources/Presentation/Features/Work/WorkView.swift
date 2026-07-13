@@ -4569,13 +4569,50 @@ final class WorkViewModel {
     private func loadAgentToolsForVisibleWorkbenchRows() async {
         let candidates = Array((displayedTaskRows + displayedWorkbenchRows).prefix(12))
         var seen = Set<String>()
+        var requests: [ToolProjectionRequest] = []
         for item in candidates {
-            guard let key = toolProjectionKey(for: item),
-                  seen.insert(key).inserted,
-                  toolProjectionsByItemKey[key] == nil else {
+            guard let request = toolProjectionRequest(for: item),
+                  seen.insert(request.key).inserted,
+                  toolProjectionsByItemKey[request.key] == nil,
+                  !loadingToolProjectionKeys.contains(request.key) else {
                 continue
             }
-            await loadAgentTools(for: item, key: key)
+            loadingToolProjectionKeys.insert(request.key)
+            toolProjectionErrorsByItemKey[request.key] = nil
+            requests.append(request)
+        }
+
+        let results = await boundedConcurrentMap(requests, limit: 4) { request in
+            do {
+                let projection = try await WorkbenchRepository().loadAgentTools(
+                    agentName: request.agentName,
+                    ticketId: request.ticketId,
+                    taskId: request.taskId
+                )
+                return ToolProjectionLoadResult(
+                    key: request.key,
+                    projection: projection,
+                    errorMessage: nil
+                )
+            } catch let apiError as APIError {
+                return ToolProjectionLoadResult(
+                    key: request.key,
+                    projection: nil,
+                    errorMessage: apiError.message
+                )
+            } catch {
+                return ToolProjectionLoadResult(
+                    key: request.key,
+                    projection: nil,
+                    errorMessage: "Tool projection unavailable"
+                )
+            }
+        }
+
+        for result in results {
+            loadingToolProjectionKeys.remove(result.key)
+            toolProjectionsByItemKey[result.key] = result.projection
+            toolProjectionErrorsByItemKey[result.key] = result.errorMessage
         }
     }
 
@@ -4605,11 +4642,17 @@ final class WorkViewModel {
         }
     }
 
-    private struct ToolProjectionRequest {
+    private struct ToolProjectionRequest: Sendable {
         let key: String
         let agentName: String
         let ticketId: String?
         let taskId: String?
+    }
+
+    private struct ToolProjectionLoadResult: @unchecked Sendable {
+        let key: String
+        let projection: WorkbenchAgentToolsProjection?
+        let errorMessage: String?
     }
 
     private func toolProjectionRequest(for item: WorkbenchWorkItem) -> ToolProjectionRequest? {

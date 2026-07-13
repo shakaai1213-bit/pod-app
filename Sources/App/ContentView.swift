@@ -1901,7 +1901,7 @@ private struct ComputeRouteChip: View {
 
 struct LoginView: View {
     @EnvironmentObject private var appState: AppState
-    @State private var token: String = UserDefaults.standard.string(forKey: "orca_auth_token") ?? AppState.localBearerTokenFallback() ?? ""
+    @State private var token: String = AppState.localBearerTokenFallback() ?? ""
     @State private var networkStatus: String = ""   // live network diagnostic
     @FocusState private var isTokenFocused: Bool
 

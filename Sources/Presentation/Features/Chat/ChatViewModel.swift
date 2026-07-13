@@ -207,9 +207,9 @@ final class ChatViewModel {
 
     private func startSSEStreaming() {
         guard let channelId = selectedChannel?.id else { return }
-        guard let token = UserDefaults.standard.string(forKey: "orca_auth_token") else { return }
 
         sseListenTask = Task { @MainActor in
+            guard let token = await APIClient.shared.currentToken(), !token.isEmpty else { return }
             var backoffNanos: UInt64 = 2_000_000_000  // start at 2s
 
             while !Task.isCancelled {

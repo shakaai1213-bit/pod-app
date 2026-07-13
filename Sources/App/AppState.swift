@@ -85,7 +85,6 @@ final class AppState: ObservableObject {
             // Bridge the Keychain token into APIClient so all ViewModels can make authenticated requests
             if let token = await authManager.getActiveAccessToken() {
                 await APIClient.shared.setToken(token)
-                UserDefaults.standard.set(token, forKey: "orca_auth_token")
             }
             currentUser = TeamMember(id: user.id, name: user.name, avatarColor: "#6B46C1")
             isAuthenticated = true
@@ -181,7 +180,6 @@ final class AppState: ObservableObject {
             // Set both at once — no delay, avoids SwiftUI render timing issues
             // Set token BEFORE isAuthenticated=true so ChatViewModel has it when it loads
             await APIClient.shared.setToken(token)
-            UserDefaults.standard.set(token, forKey: "orca_auth_token")
             isLoading = false
             loadingMessage = nil
             isAuthenticated = true
@@ -405,18 +403,9 @@ final class AppState: ObservableObject {
 
     // MARK: - Token Storage
 
-    private let tokenKey = "orca_auth_token"
-
-    private func storeToken(_ token: String) {
-        UserDefaults.standard.set(token, forKey: tokenKey)
-    }
-
-    private func loadStoredToken() -> String? {
-        UserDefaults.standard.string(forKey: tokenKey)
-    }
-
     private func clearToken() {
-        UserDefaults.standard.removeObject(forKey: tokenKey)
+        // Migration cleanup only. New bearer tokens are persisted in Keychain.
+        UserDefaults.standard.removeObject(forKey: "orca_auth_token")
         Task { await APIClient.shared.setToken(nil) }
     }
 }

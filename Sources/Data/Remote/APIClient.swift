@@ -35,19 +35,37 @@ struct EmptyResponse: Codable {}
 actor APIClient {
     static let shared = APIClient()
 
-    private let baseURL = AppConfig.backendURL
+    private let baseURL: String
     private let session: URLSession
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
+    private let keychainTokenProvider: @Sendable () async -> String?
 
     private var authToken: String?
     private var agentToken: String?
 
-    private init() {
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 30
-        config.timeoutIntervalForResource = 60
-        self.session = URLSession(configuration: config)
+    init(
+        baseURL: String = AppConfig.backendURL,
+        session: URLSession? = nil,
+        keychainTokenProvider: @escaping @Sendable () async -> String? = {
+            let tokenManager = TokenManager()
+            do {
+                return try tokenManager.getActiveToken()?.token.accessToken
+            } catch {
+                return nil
+            }
+        }
+    ) {
+        self.baseURL = baseURL
+        self.keychainTokenProvider = keychainTokenProvider
+        if let session {
+            self.session = session
+        } else {
+            let config = URLSessionConfiguration.default
+            config.timeoutIntervalForRequest = 30
+            config.timeoutIntervalForResource = 60
+            self.session = URLSession(configuration: config)
+        }
 
         self.decoder = JSONDecoder()
         self.decoder.dateDecodingStrategy = .custom { decoder in
@@ -69,12 +87,13 @@ actor APIClient {
         self.agentToken = token
     }
 
-    func currentToken() -> String? {
-        authToken ?? UserDefaults.standard.string(forKey: "orca_auth_token")
+    func currentToken() async -> String? {
+        if let authToken { return authToken }
+        return await keychainTokenProvider()
     }
 
     func currentAgentToken() -> String? {
-        agentToken ?? UserDefaults.standard.string(forKey: "orca_agent_token")
+        agentToken
     }
 
     /// Atomically sets the token and verifies it by fetching agents.
@@ -103,7 +122,7 @@ actor APIClient {
         request.setValue(token, forHTTPHeaderField: "X-Api-Key")
 
         let (data, response) = try await session.data(for: request)
-        try validateResponse(response)
+        try validateResponse(response, data: data)
 
         self.authToken = token
         return try decoder.decode(AuthResponse.self, from: data)
@@ -117,7 +136,7 @@ actor APIClient {
         body: Encodable? = nil,
         queryItems: [URLQueryItem]? = nil,
         includeAgentToken: Bool = false
-    ) throws -> URLRequest {
+    ) async throws -> URLRequest {
         var components = URLComponents(string: "\(baseURL)\(path)")
         if let queryItems = queryItems, !queryItems.isEmpty {
             components?.queryItems = queryItems
@@ -130,14 +149,19 @@ actor APIClient {
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        // Read token from actor state, fall back to UserDefaults if not set in memory
-        let currentToken = self.authToken ?? UserDefaults.standard.string(forKey: "orca_auth_token")
+        // Persisted bearer credentials come only from Keychain via TokenManager.
+        let currentToken: String?
+        if let authToken = self.authToken {
+            currentToken = authToken
+        } else {
+            currentToken = await keychainTokenProvider()
+        }
         if let token = currentToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             request.setValue(token, forHTTPHeaderField: "X-Api-Key")
         }
 
-        if includeAgentToken, let token = self.agentToken ?? UserDefaults.standard.string(forKey: "orca_agent_token") {
+        if includeAgentToken, let token = self.agentToken {
             request.setValue(token, forHTTPHeaderField: "X-Agent-Token")
         }
 
@@ -148,32 +172,50 @@ actor APIClient {
         return request
     }
 
-    private func validateResponse(_ response: URLResponse) throws {
+    private func validateResponse(_ response: URLResponse, data: Data) throws {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.unknown
         }
 
+        guard !(200...299).contains(httpResponse.statusCode) else { return }
+        let fallback: String
         switch httpResponse.statusCode {
-        case 200...299:
-            return
-        case 401:
-            throw APIError.unauthorized
-        case 500...599:
-            throw APIError.serverError
-        default:
-            throw APIError(code: httpResponse.statusCode, message: "Request failed with status \(httpResponse.statusCode)")
+        case 401: fallback = APIError.unauthorized.message
+        case 500...599: fallback = APIError.serverError.message
+        default: fallback = "Request failed with status \(httpResponse.statusCode)"
         }
+        throw APIError(
+            code: httpResponse.statusCode,
+            message: Self.serverErrorMessage(from: data) ?? fallback
+        )
+    }
+
+    static func serverErrorMessage(from data: Data) -> String? {
+        guard !data.isEmpty else { return nil }
+        if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            for key in ["detail", "message", "error"] {
+                if let value = object[key] as? String, !value.isEmpty { return value }
+            }
+            if let error = object["error"] as? [String: Any],
+               let message = error["message"] as? String,
+               !message.isEmpty {
+                return message
+            }
+        }
+        let text = String(data: data.prefix(500), encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (text?.isEmpty == false) ? text : nil
     }
 
     // MARK: - Public API Methods
 
     func get<T: Decodable>(path: String, includeAgentToken: Bool = false) async throws -> T {
-        let request = try buildRequest(path: path, method: "GET", includeAgentToken: includeAgentToken)
+        let request = try await buildRequest(path: path, method: "GET", includeAgentToken: includeAgentToken)
         return try await perform(request)
     }
 
     func post<T: Decodable>(path: String, body: some Encodable, includeAgentToken: Bool = false) async throws -> T {
-        let request = try buildRequest(path: path, method: "POST", body: AnyEncodable(body), includeAgentToken: includeAgentToken)
+        let request = try await buildRequest(path: path, method: "POST", body: AnyEncodable(body), includeAgentToken: includeAgentToken)
         return try await perform(request)
     }
 
@@ -195,28 +237,28 @@ actor APIClient {
     }
 
     func put<T: Decodable>(path: String, body: some Encodable, includeAgentToken: Bool = false) async throws -> T {
-        let request = try buildRequest(path: path, method: "PUT", body: AnyEncodable(body), includeAgentToken: includeAgentToken)
+        let request = try await buildRequest(path: path, method: "PUT", body: AnyEncodable(body), includeAgentToken: includeAgentToken)
         return try await perform(request)
     }
 
     func patch<T: Decodable>(path: String, body: some Encodable, includeAgentToken: Bool = false) async throws -> T {
-        let request = try buildRequest(path: path, method: "PATCH", body: AnyEncodable(body), includeAgentToken: includeAgentToken)
+        let request = try await buildRequest(path: path, method: "PATCH", body: AnyEncodable(body), includeAgentToken: includeAgentToken)
         return try await perform(request)
     }
 
     func delete(path: String) async throws {
-        let request = try buildRequest(path: path, method: "DELETE")
+        let request = try await buildRequest(path: path, method: "DELETE")
         let _: EmptyResponse = try await perform(request)
     }
 
     func postVoid(path: String, body: some Encodable) async throws {
-        let request = try buildRequest(path: path, method: "POST", body: AnyEncodable(body))
+        let request = try await buildRequest(path: path, method: "POST", body: AnyEncodable(body))
         let _: EmptyResponse = try await perform(request)
     }
 
     func perform<T: Decodable>(_ request: URLRequest) async throws -> T {
         let (data, response) = try await session.data(for: request)
-        try validateResponse(response)
+        try validateResponse(response, data: data)
 
         if data.isEmpty, T.self == EmptyResponse.self {
             return EmptyResponse() as! T

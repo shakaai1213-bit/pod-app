@@ -1301,7 +1301,6 @@ final class DirectChatViewModel {
                 routeProgressSteps = Self.routeProgressSteps(for: deliveryMode, stage: .failed)
 
                 if Self.isUnauthorized(error) {
-                    UserDefaults.standard.removeObject(forKey: "orca_auth_token")
                     await APIClient.shared.setToken(nil)
                     NotificationCenter.default.post(name: .orcaAuthTokenInvalidated, object: nil)
                 }

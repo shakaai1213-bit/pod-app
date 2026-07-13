@@ -52,13 +52,16 @@ struct podApp: App {
                 .preferredColorScheme(.dark)
                 .onAppear {
                     configureAppearance()
+                    let isUnitTesting = ProcessInfo.processInfo.environment["POD_UNIT_TESTS"] == "1"
                     if CommandLine.arguments.contains("--work-evidence") {
                         appState.navigateTo(.work)
                     }
-                    Task { @MainActor in
-                        await appState.attemptAutoLogin()
+                    if !isUnitTesting {
+                        Task { @MainActor in
+                            await appState.attemptAutoLogin()
+                        }
                     }
-                    if CommandLine.arguments.contains("--auto-login") {
+                    if !isUnitTesting, CommandLine.arguments.contains("--auto-login") {
                         // SEC-007 remediation 2026-05-08: token sourced from
                         // OrcaSecrets.swift (gitignored) instead of hardcoded literal.
                         let testToken = OrcaSecrets.bearerToken

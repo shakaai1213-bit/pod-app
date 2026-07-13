@@ -578,12 +578,22 @@ private struct AgentManagementCardView: View {
                 metric("Runs", agent.load.activeRuns)
             }
             HStack {
-                Label("\(agent.load.blocked) blocked", systemImage: "exclamationmark.triangle")
+                Label(
+                    "\(agent.load.capacityUnits ?? 0) WIP",
+                    systemImage: "gauge.with.dots.needle.67percent"
+                )
                 Spacer()
-                Text(agent.load.capacity.map { "\(agent.load.pressurePct ?? 0, specifier: "%.0f")% of \($0)" } ?? "Capacity unknown")
+                Text(agent.load.capacity.map {
+                    "\(agent.load.pressurePct ?? 0, specifier: "%.0f")% of \($0)"
+                } ?? "Capacity unknown")
             }
             .font(.caption2)
             .foregroundStyle(managementColor(agent.load.status))
+            if agent.load.blocked > 0 {
+                Label("\(agent.load.blocked) blocked", systemImage: "exclamationmark.triangle")
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.accentWarning)
+            }
             Text(agent.load.reason)
                 .font(.caption2)
                 .foregroundStyle(AppColors.textTertiary)
@@ -941,6 +951,7 @@ final class ProjectCommandRoomViewModel {
 
 struct ProjectEvidenceLadderView: View {
     let projectId: UUID
+    @EnvironmentObject private var appState: AppState
     @State private var model = ProjectCommandRoomViewModel()
 
     var body: some View {
@@ -1015,11 +1026,28 @@ struct ProjectEvidenceLadderView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 7) {
                     Text(milestone.state.replacingOccurrences(of: "_", with: " ").capitalized)
-                    if let owner = milestone.ownerName { Text(owner.capitalized) }
+                    if let owner = milestone.ownerName {
+                        Button {
+                            appState.pendingDirectChatAgentId = owner.lowercased()
+                        } label: {
+                            Label(owner.capitalized, systemImage: "message.fill")
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(AppColors.accentElectric)
+                        .accessibilityLabel("Open \(owner.capitalized) 1 to 1")
+                    }
                     Text("\(milestone.evidenceRefs.count) evidence")
                 }
                 .font(.caption2)
                 .foregroundStyle(AppColors.textTertiary)
+                if let dependencies = milestone.dependencyIds, !dependencies.isEmpty {
+                    Label(
+                        "Depends on \(dependencies.count) milestone\(dependencies.count == 1 ? "" : "s")",
+                        systemImage: "arrow.triangle.branch"
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.textTertiary)
+                }
                 if let wait = milestone.waitReason {
                     Label(wait, systemImage: "hourglass")
                         .font(.caption2)
