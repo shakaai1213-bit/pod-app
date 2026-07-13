@@ -154,6 +154,7 @@ struct CrewTabView: View {
     private var segmentDock: some View {
         segmentPicker
             .padding(.horizontal, AppTheme.spacingMD)
+            .frame(maxWidth: .infinity)
             .padding(.top, AppTheme.spacingXS)
             .padding(.bottom, AppTheme.spacingMD)
             .background(
@@ -176,6 +177,7 @@ struct CrewTabView: View {
                 segmentButton(for: seg)
             }
         }
+        .frame(maxWidth: .infinity)
         .padding(AppTheme.spacingXS)
         .background(AppColors.backgroundSecondary)
         .clipShape(RoundedRectangle(cornerRadius: AppTheme.radiusMedium))
@@ -184,18 +186,18 @@ struct CrewTabView: View {
     private func segmentButton(for seg: Segment) -> some View {
         let isSelected = segment == seg
         return Button {
-            withAnimation(.easeInOut(duration: 0.15)) { segment = seg }
+            segment = seg
         } label: {
             Text(seg.shortTitle)
                 .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
                 .foregroundColor(isSelected ? AppColors.accentElectric : AppColors.textSecondary)
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: 44)
+                .frame(maxWidth: .infinity, minHeight: 44)
                 .background(
                     RoundedRectangle(cornerRadius: AppTheme.radiusMedium)
                         .fill(isSelected ? AppColors.backgroundPrimary : Color.clear)
                 )
         }
+        .frame(maxWidth: .infinity)
         .buttonStyle(.plain)
         .accessibilityLabel(seg.title)
     }
