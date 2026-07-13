@@ -471,7 +471,6 @@ private struct RuntimeView: View {
         case .data:
             dataSourcesSection
         case .system:
-            CaptainsChartSection()
             LabSystemContent()
         case .tags:
             summaryStrip
