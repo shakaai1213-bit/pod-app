@@ -52,6 +52,9 @@ struct podApp: App {
                 .preferredColorScheme(.dark)
                 .onAppear {
                     configureAppearance()
+                    if CommandLine.arguments.contains("--work-evidence") {
+                        appState.navigateTo(.work)
+                    }
                     Task { @MainActor in
                         await appState.attemptAutoLogin()
                     }
@@ -77,6 +80,7 @@ struct podApp: App {
         if url.host == "workbench" || url.host == "bench" || url.host == "work" {
             print("[podApp] Workbench URL received")
             Task { @MainActor in
+                appState.navigateTo(.work)
                 NotificationCenter.default.post(name: Notification.Name("pod.openWorkFlowFilter"), object: nil)
             }
             return

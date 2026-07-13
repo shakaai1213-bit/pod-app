@@ -37,9 +37,9 @@ final class CaptainBoardPlanViewModel {
         self.apiClient = apiClient
     }
 
-    func load(force: Bool = false) async {
+    func load(boardId: UUID? = nil, force: Bool = false) async {
         guard !isLoading else { return }
-        if !force, plan != nil { return }
+        if !force, plan != nil, boardId == nil || boardId == selectedBoardId { return }
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
@@ -53,7 +53,9 @@ final class CaptainBoardPlanViewModel {
                     if rhs.slug == "pod" { return false }
                     return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
                 }
-            if selectedBoardId == nil || !boards.contains(where: { $0.id == selectedBoardId }) {
+            if let boardId, boards.contains(where: { $0.id == boardId }) {
+                selectedBoardId = boardId
+            } else if selectedBoardId == nil || !boards.contains(where: { $0.id == selectedBoardId }) {
                 selectedBoardId = boards.first(where: { $0.slug == "pod" })?.id ?? boards.first?.id
             }
             await loadSelectedBoard()
@@ -116,6 +118,7 @@ final class CaptainBoardPlanViewModel {
 
 struct CaptainBoardPlanView: View {
     @Bindable var model: CaptainBoardPlanViewModel
+    var allowsBoardSelection = true
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var selectedCard: BoardPlanCardDTO?
 
@@ -159,24 +162,26 @@ struct CaptainBoardPlanView: View {
 
             Spacer(minLength: Theme.sm)
 
-            Menu {
-                ForEach(model.boards) { board in
-                    Button {
-                        Task { await model.select(board) }
-                    } label: {
-                        if board.id == model.selectedBoardId {
-                            Label(board.name, systemImage: "checkmark")
-                        } else {
-                            Text(board.name)
+            if allowsBoardSelection {
+                Menu {
+                    ForEach(model.boards) { board in
+                        Button {
+                            Task { await model.select(board) }
+                        } label: {
+                            if board.id == model.selectedBoardId {
+                                Label(board.name, systemImage: "checkmark")
+                            } else {
+                                Text(board.name)
+                            }
                         }
                     }
+                } label: {
+                    Label("Board", systemImage: "rectangle.3.group")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppColors.accentElectric)
                 }
-            } label: {
-                Label("Board", systemImage: "rectangle.3.group")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(AppColors.accentElectric)
+                .help("Choose ORCA board")
             }
-            .help("Choose ORCA board")
 
             Button {
                 Task { await model.loadSelectedBoard() }

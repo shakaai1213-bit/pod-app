@@ -6,12 +6,18 @@ import SwiftUI
 
 private func boardAccentColor(_ slug: String) -> Color {
     switch slug {
-    case "products":
+    case "products", "guardian", "schoolhouse":
         return AppColors.accentSuccess
-    case "platform":
+    case "platform", "pod", "surfaces", "campwatch":
         return AppColors.accentElectric
-    case "operations":
+    case "operations", "compute", "tools":
         return AppColors.accentWarning
+    case "fund":
+        return AppColors.accentCaptain
+    case "memory", "jarvis", "tiki":
+        return AppColors.accentAgent
+    case "nerve":
+        return AppColors.accentDanger
     default:
         return AppColors.textTertiary
     }
@@ -33,7 +39,6 @@ struct WorkView: View {
     @State private var flowCommentText: String = ""
     @State private var workbenchActionComment: String = ""
     @State private var isPostingComment = false
-    @State private var captainBoardModel = CaptainBoardPlanViewModel()
     @State private var boardsModel = WorkBoardsModel()
     @State private var selectedBoard: WorkBoardSummary?
     @State private var showingBoardsArchitecture = false
@@ -54,7 +59,7 @@ struct WorkView: View {
                         .padding(.horizontal, 16)
                         .padding(.bottom, 12)
 
-                    CaptainBoardPlanView(model: captainBoardModel)
+                    AnyView(productPortfolioSection)
                         .padding(.horizontal, 16)
                         .padding(.bottom, 20)
 
@@ -106,11 +111,12 @@ struct WorkView: View {
             .background(AppColors.backgroundPrimary.ignoresSafeArea())
             .refreshable {
                 await model.load()
-                await captainBoardModel.load(force: true)
+                await boardsModel.load(force: true)
             }
             .task {
                 await model.load()
-                await captainBoardModel.load()
+                await boardsModel.load()
+                applyBoardEvidenceRoute()
             }
             .task {
                 await directChatViewModel.loadAgentRegistry()
@@ -1237,23 +1243,25 @@ struct WorkView: View {
         return actions
     }
 
-    // MARK: - Boards Section
+    // MARK: - Product Portfolio
 
-    private var boardsSection: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("BOARDS · \(boardsModel.boards.count)")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(AppColors.textTertiary)
-                    .kerning(0.5)
-                Spacer()
-                Text(boardsModel.sourceLabel)
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundColor(boardsModel.sourceLabel == "ORCA" ? AppColors.accentSuccess : AppColors.textTertiary)
+    private var productPortfolioSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("MAIN PRODUCTS")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(AppColors.textTertiary)
+                        .kerning(0.5)
+                    Text("\(boardsModel.featuredProducts.count) highlighted · \(boardsModel.boards.count) boards")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(AppColors.textSecondary)
+                }
+                Spacer(minLength: 8)
                 Button {
                     showingBoardsArchitecture = true
                 } label: {
-                    Text("View all")
+                    Label("Show all boards", systemImage: "rectangle.grid.2x2")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(AppColors.accentElectric)
                 }
@@ -1264,36 +1272,35 @@ struct WorkView: View {
                     Image(systemName: boardsModel.isLoading ? "hourglass" : "arrow.clockwise")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(AppColors.accentElectric)
+                        .frame(width: 30, height: 30)
                 }
                 .buttonStyle(.plain)
                 .disabled(boardsModel.isLoading)
+                .accessibilityLabel("Refresh product boards")
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    if boardsModel.boards.isEmpty && !boardsModel.isLoading {
-                        boardsUnavailableTile
-                    } else {
-                        ForEach(boardsModel.boards) { board in
-                            Button {
-                                selectedBoard = board
-                            } label: {
-                                workBoardTile(board)
-                            }
-                            .buttonStyle(.plain)
+            if boardsModel.featuredProducts.isEmpty {
+                if boardsModel.isLoading {
+                    ProgressView()
+                        .tint(AppColors.accentElectric)
+                        .frame(maxWidth: .infinity, minHeight: 120)
+                } else {
+                    boardsUnavailableTile
+                }
+            } else {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 280, maximum: 420), spacing: 8)],
+                    spacing: 8
+                ) {
+                    ForEach(boardsModel.featuredProducts) { board in
+                        Button {
+                            selectedBoard = board
+                        } label: {
+                            productBoardCard(board)
                         }
-                    }
-
-                    if boardsModel.isLoading {
-                        ProgressView()
-                            .scaleEffect(0.7)
-                            .frame(width: 44, height: 52)
+                        .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal, 10)
-                .padding(.bottom, boardsModel.error == nil ? 10 : 6)
             }
 
             boardNeedsHomeStrip
@@ -1303,16 +1310,112 @@ struct WorkView: View {
                     .font(.system(size: 10))
                     .foregroundColor(AppColors.textTertiary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 10)
             }
         }
+    }
+
+    private func productBoardCard(_ board: WorkBoardSummary) -> some View {
+        let stateColor = productStateColor(board.deliveryState)
+
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 8) {
+                Text(board.icon)
+                    .font(.system(size: 22))
+                    .frame(width: 32, height: 32)
+                    .background(boardAccentColor(board.slug).opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(board.displayName)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(AppColors.textPrimary)
+                        .lineLimit(1)
+                    Text(board.slug)
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .foregroundColor(AppColors.textTertiary)
+                }
+                Spacer(minLength: 6)
+                Text(board.deliveryState)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(stateColor)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(stateColor.opacity(0.12))
+                    .clipShape(Capsule())
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(AppColors.textTertiary)
+            }
+
+            HStack(spacing: 10) {
+                productMetric("\(board.activeCount)", "active")
+                productMetric("\(board.projectCount)", "projects")
+                productMetric("\(board.ticketCount)", "open")
+                if board.blockedCount > 0 {
+                    productMetric("\(board.blockedCount)", "blocked", color: AppColors.accentDanger)
+                }
+                Spacer(minLength: 0)
+            }
+
+            Divider().background(AppColors.border)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(board.improvementKind == nil ? "CURRENT STATE" : "\(board.improvementKind!.uppercased()) IN FOCUS")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(AppColors.textTertiary)
+                Text(board.improvementTitle ?? "No active improvement work recorded")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(board.improvementTitle == nil ? AppColors.textTertiary : AppColors.textPrimary)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, minHeight: 30, alignment: .topLeading)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
+        .padding(12)
         .background(AppColors.backgroundSecondary)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.radiusMedium)
-                .strokeBorder(AppColors.border, lineWidth: 0.5)
-        )
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(boardAccentColor(board.slug))
+                .frame(height: 3)
+                .clipShape(UnevenRoundedRectangle(
+                    topLeadingRadius: 8,
+                    bottomLeadingRadius: 0,
+                    bottomTrailingRadius: 0,
+                    topTrailingRadius: 8
+                ))
+        }
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppColors.border, lineWidth: 0.5))
+    }
+
+    private func productMetric(_ value: String, _ label: String, color: Color = AppColors.textSecondary) -> some View {
+        HStack(spacing: 3) {
+            Text(value)
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .foregroundColor(color)
+            Text(label)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(AppColors.textTertiary)
+        }
+    }
+
+    private func productStateColor(_ state: String) -> Color {
+        switch state {
+        case "Improving": return AppColors.accentSuccess
+        case "Blocked": return AppColors.accentDanger
+        case "At risk", "Planned": return AppColors.accentWarning
+        default: return AppColors.textTertiary
+        }
+    }
+
+    private func applyBoardEvidenceRoute() {
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--all-boards-evidence") {
+            showingBoardsArchitecture = true
+            return
+        }
+        guard let argument = arguments.first(where: { $0.hasPrefix("--board-evidence=") }) else { return }
+        let slug = String(argument.dropFirst("--board-evidence=".count))
+        selectedBoard = boardsModel.boards.first { $0.slug == slug }
     }
 
     @ViewBuilder
@@ -1393,53 +1496,6 @@ struct WorkView: View {
         }
         .lineLimit(1)
         .minimumScaleFactor(0.8)
-    }
-
-    private func workBoardTile(_ board: WorkBoardSummary) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 5) {
-                Text(board.icon)
-                    .font(.system(size: 14))
-                Text(board.displayName)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(AppColors.textPrimary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-
-            HStack(spacing: 5) {
-                Text("\(board.projectCount)p")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundColor(AppColors.textSecondary)
-                Text("\(board.activeCount)a")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundColor(AppColors.accentElectric)
-                if board.ticketCount > 0 {
-                    Text("\(board.ticketCount)t")
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .foregroundColor(AppColors.textTertiary)
-                }
-            }
-        }
-        .frame(width: 92, height: 52, alignment: .topLeading)
-        .padding(8)
-        .background(AppColors.backgroundPrimary)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(boardAccentColor(board.slug))
-                .frame(height: 3)
-                .clipShape(UnevenRoundedRectangle(
-                    topLeadingRadius: 8,
-                    bottomLeadingRadius: 0,
-                    bottomTrailingRadius: 0,
-                    topTrailingRadius: 8
-                ))
-        }
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(AppColors.border, lineWidth: 0.5)
-        )
     }
 
     // MARK: - Projects Section
@@ -5730,6 +5786,10 @@ private struct WorkBoardSummary: Identifiable, Hashable {
     let projectCount: Int
     let activeCount: Int
     let ticketCount: Int
+    let inProgressCount: Int
+    let blockedCount: Int
+    let improvementTitle: String?
+    let improvementKind: String?
 
     var icon: String { Self.iconMap[slug] ?? "📋" }
 
@@ -5748,6 +5808,37 @@ private struct WorkBoardSummary: Identifiable, Hashable {
             .joined(separator: " · ")
     }
 
+    var isProductBoard: Bool {
+        let description = boardDescription?.lowercased() ?? ""
+        return description.contains("[product")
+            || description.contains("product vertical")
+            || ["campwatch", "guardian", "tiki"].contains(slug)
+    }
+
+    var architectureLayer: String {
+        if isProductBoard { return "Products" }
+        switch slug {
+        case "north-star": return "Strategy"
+        case "platform": return "Platform"
+        case "operations": return "Operations"
+        default:
+            guard let layer, !layer.isEmpty else { return "Other" }
+            return layer.capitalized
+        }
+    }
+
+    var deliveryState: String {
+        if blockedCount > 0, inProgressCount > 0 { return "At risk" }
+        if blockedCount > 0 { return "Blocked" }
+        if inProgressCount > 0 { return "Improving" }
+        if activeCount > 0 || ticketCount > 0 { return "Planned" }
+        return "Quiet"
+    }
+
+    var activityScore: Int {
+        activeCount * 100 + blockedCount * 75 + inProgressCount * 20 + ticketCount
+    }
+
     static let orderedSlugs = [
         "north-star", "pod", "surfaces", "orca", "memory", "compute", "nerve",
         "governance", "jarvis", "schoolhouse", "fund", "products", "tools"
@@ -5756,14 +5847,18 @@ private struct WorkBoardSummary: Identifiable, Hashable {
     static let iconMap: [String: String] = [
         "north-star": "⭐", "pod": "📱", "surfaces": "💬", "orca": "🐋", "memory": "🧠",
         "compute": "🧮", "nerve": "⚡", "governance": "⚖️", "jarvis": "🧭",
-        "schoolhouse": "🏫", "fund": "🔒", "products": "🧩", "tools": "🛠️"
+        "schoolhouse": "🏫", "fund": "🔒", "products": "🧩", "tools": "🛠️",
+        "guardian": "🛡️", "campwatch": "📡", "tiki": "💠", "platform": "🏗️",
+        "operations": "⚙️"
     ]
 
     static let displayNameMap: [String: String] = [
         "north-star": "north-star", "pod": "pod", "surfaces": "surfaces", "orca": "orca", "memory": "memory",
         "compute": "compute", "nerve": "nerve", "governance": "governance",
         "jarvis": "Jarvis", "schoolhouse": "Schoolhouse", "fund": "Fund",
-        "products": "Products", "tools": "Tools"
+        "products": "Products", "tools": "Tools", "guardian": "Guardian",
+        "campwatch": "CampWatch", "tiki": "Tiki", "platform": "Platform",
+        "operations": "Infrastructure"
     ]
 }
 
@@ -5777,6 +5872,18 @@ private final class WorkBoardsModel {
     private(set) var drift: WorkBoardDriftResponse?
     private(set) var driftError: String?
 
+    var featuredProducts: [WorkBoardSummary] {
+        Array(
+            boards
+                .filter { $0.isProductBoard && $0.slug != "products" }
+                .sorted {
+                    if $0.activityScore != $1.activityScore { return $0.activityScore > $1.activityScore }
+                    return $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+                }
+                .prefix(6)
+        )
+    }
+
     func load(force: Bool = false) async {
         if isLoading { return }
         if !force && sourceLabel == "ORCA" && !boards.isEmpty { return }
@@ -5787,8 +5894,21 @@ private final class WorkBoardsModel {
 
         do {
             let response: WorkBoardListResponse = try await APIClient.shared.get(path: "/api/v1/boards")
-            boards = Self.ordered(response.items.map(\.summary))
+            async let projectsLoad = loadAllProjects()
+            async let ticketsLoad = loadAllTickets()
+            let (projectResult, ticketResult) = await (projectsLoad, ticketsLoad)
+
+            boards = Self.ordered(response.items.map { board in
+                let summary = board.summary
+                let projects = projectResult.items.filter { project in
+                    Self.boardIDs(for: project).contains(summary.id.lowercased())
+                }
+                let tickets = ticketResult.items.filter { $0.boardId?.lowercased() == summary.id.lowercased() }
+                return Self.enrich(summary, projects: projects, tickets: tickets)
+            })
             sourceLabel = "ORCA"
+            let loadErrors = [projectResult.error, ticketResult.error].compactMap { $0 }
+            error = loadErrors.isEmpty ? nil : loadErrors.joined(separator: " ")
         } catch {
             sourceLabel = "ORCA"
             self.error = boards.isEmpty
@@ -5796,6 +5916,24 @@ private final class WorkBoardsModel {
                 : "ORCA boards refresh unavailable; showing last loaded boards."
         }
         await loadDrift()
+    }
+
+    private func loadAllProjects() async -> (items: [ProjectDTO], error: String?) {
+        do {
+            let response: WorkBoardProjectListResponse = try await APIClient.shared.get(path: "/api/v1/projects?limit=200")
+            return (response.items, nil)
+        } catch {
+            return ([], "Project counts unavailable.")
+        }
+    }
+
+    private func loadAllTickets() async -> (items: [WorkBoardTicketSummary], error: String?) {
+        do {
+            let response: WorkBoardTicketListResponse = try await APIClient.shared.get(path: "/api/v1/tickets?limit=200")
+            return (response.items, nil)
+        } catch {
+            return ([], "Ticket counts unavailable.")
+        }
     }
 
     private func loadDrift() async {
@@ -5815,6 +5953,77 @@ private final class WorkBoardsModel {
             if lhsIndex != rhsIndex { return lhsIndex < rhsIndex }
             return lhs.displayName < rhs.displayName
         }
+    }
+
+    private static func boardIDs(for project: ProjectDTO) -> Set<String> {
+        var ids = Set((project.boardIds ?? []).map { $0.uuidString.lowercased() })
+        if let boardId = project.boardId {
+            ids.insert(boardId.uuidString.lowercased())
+        }
+        return ids
+    }
+
+    private static func enrich(
+        _ board: WorkBoardSummary,
+        projects: [ProjectDTO],
+        tickets: [WorkBoardTicketSummary]
+    ) -> WorkBoardSummary {
+        let terminal = Set(["done", "archived", "completed", "cancelled", "closed", "resolved"])
+        let activeProjects = projects.filter { !terminal.contains($0.status.lowercased()) }
+        let workingProjectStates = Set(["active", "in_progress", "in-progress", "building", "build", "implementation"])
+        let workingTicketStates = Set(["in_progress", "in-progress", "review", "working"])
+        let blockedStates = Set(["blocked", "waiting_on", "failed"])
+        let workingProjects = activeProjects.filter { workingProjectStates.contains($0.status.lowercased()) }
+        let workingTickets = tickets.filter { workingTicketStates.contains($0.status.lowercased()) }
+        let blockedProjects = activeProjects.filter { blockedStates.contains($0.status.lowercased()) }
+        let blockedTickets = tickets.filter { blockedStates.contains($0.status.lowercased()) }
+
+        let projectCandidate = activeProjects.sorted {
+            if $0.priority != $1.priority { return $0.priority < $1.priority }
+            if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
+            return $0.name < $1.name
+        }.first
+        let ticketCandidate = tickets.sorted {
+            let lhsRank = ticketRank($0)
+            let rhsRank = ticketRank($1)
+            if lhsRank != rhsRank { return lhsRank < rhsRank }
+            return $0.title < $1.title
+        }.first
+
+        return WorkBoardSummary(
+            id: board.id,
+            slug: board.slug,
+            name: board.name,
+            layer: board.layer,
+            component: board.component,
+            boardDescription: board.boardDescription,
+            projectCount: projects.count,
+            activeCount: activeProjects.count,
+            ticketCount: tickets.count,
+            inProgressCount: workingProjects.count + workingTickets.count,
+            blockedCount: blockedProjects.count + blockedTickets.count,
+            improvementTitle: projectCandidate?.name ?? ticketCandidate?.title,
+            improvementKind: projectCandidate == nil && ticketCandidate != nil ? "Ticket" : (projectCandidate == nil ? nil : "Project")
+        )
+    }
+
+    private static func ticketRank(_ ticket: WorkBoardTicketSummary) -> Int {
+        let statusRank: Int
+        switch ticket.status.lowercased() {
+        case "in_progress", "in-progress", "working": statusRank = 0
+        case "review": statusRank = 1
+        case "blocked", "waiting_on": statusRank = 2
+        default: statusRank = 3
+        }
+        let priorityRank: Int
+        switch ticket.priority?.lowercased() {
+        case "critical", "urgent": priorityRank = 0
+        case "high": priorityRank = 1
+        case "medium": priorityRank = 2
+        case "low": priorityRank = 3
+        default: priorityRank = 4
+        }
+        return statusRank * 10 + priorityRank
     }
 }
 
@@ -5927,7 +6136,11 @@ private struct WorkBoardDTO: Decodable {
             boardDescription: description,
             projectCount: projectCount ?? projectsCount ?? totalProjects ?? 0,
             activeCount: activeCount ?? activeProjects ?? activeProjectCount ?? 0,
-            ticketCount: ticketCount ?? ticketsCount ?? directTicketCount ?? 0
+            ticketCount: ticketCount ?? ticketsCount ?? directTicketCount ?? 0,
+            inProgressCount: 0,
+            blockedCount: 0,
+            improvementTitle: nil,
+            improvementKind: nil
         )
     }
 
@@ -5986,18 +6199,25 @@ private struct WorkBoardProjectListResponse: Decodable {
 private struct WorkBoardTicketSummary: Identifiable, Decodable {
     let id: String
     let title: String
+    let description: String?
     let status: String
     let priority: String?
+    let boardId: String?
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decodeWorkFlexibleString(forKey: .id)
         title = try container.decodeWorkFlexibleStringIfPresent(forKey: .title) ?? "Untitled ticket"
+        description = try container.decodeWorkFlexibleStringIfPresent(forKey: .description)
         status = try container.decodeWorkFlexibleStringIfPresent(forKey: .status) ?? "open"
         priority = try container.decodeWorkFlexibleStringIfPresent(forKey: .priority)
+        boardId = try container.decodeWorkFlexibleStringIfPresent(forKey: .boardId)
     }
 
-    private enum CodingKeys: String, CodingKey { case id, title, status, priority }
+    private enum CodingKeys: String, CodingKey {
+        case id, title, description, status, priority
+        case boardId = "board_id"
+    }
 }
 
 private struct WorkBoardTicketListResponse: Decodable {
@@ -6019,10 +6239,30 @@ private struct WorkBoardTicketListResponse: Decodable {
     private enum CodingKeys: String, CodingKey { case items }
 }
 
+private struct WorkBoardTaskListResponse: Decodable {
+    let items: [TaskDTO]
+
+    init(from decoder: Decoder) throws {
+        if var unkeyed = try? decoder.unkeyedContainer() {
+            var values: [TaskDTO] = []
+            while !unkeyed.isAtEnd {
+                values.append(try unkeyed.decode(TaskDTO.self))
+            }
+            items = values
+            return
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        items = try container.decode([TaskDTO].self, forKey: .items)
+    }
+
+    private enum CodingKeys: String, CodingKey { case items }
+}
+
 @MainActor
 @Observable
 private final class WorkBoardDetailModel {
     private(set) var projects: [ProjectDTO] = []
+    private(set) var tasks: [TaskDTO] = []
     private(set) var directTickets: [WorkBoardTicketSummary] = []
     private(set) var isLoading = false
     private(set) var error: String?
@@ -6041,12 +6281,28 @@ private final class WorkBoardDetailModel {
         })
     }
 
+    var activeTasks: [TaskDTO] {
+        let terminal = Set(["done", "completed", "cancelled", "closed", "resolved"])
+        return tasks.filter { !terminal.contains(($0.status ?? "inbox").lowercased()) }
+    }
+
+    var taskStatusBreakdown: [WorkBoardBreakdownItem] {
+        breakdown(tasks.map { ($0.status?.isEmpty == false ? $0.status : nil) ?? "inbox" })
+    }
+
     var ticketStatusBreakdown: [WorkBoardBreakdownItem] {
         breakdown(directTickets.map { $0.status.isEmpty ? "open" : $0.status })
     }
 
     var ticketPriorityBreakdown: [WorkBoardBreakdownItem] {
         breakdown(directTickets.map { ($0.priority?.isEmpty == false ? $0.priority : nil) ?? "normal" })
+    }
+
+    var blockedWorkCount: Int {
+        let blocked = Set(["blocked", "waiting_on", "failed"])
+        return projects.filter { blocked.contains($0.status.lowercased()) }.count
+            + tasks.filter { blocked.contains(($0.status ?? "").lowercased()) }.count
+            + directTickets.filter { blocked.contains($0.status.lowercased()) }.count
     }
 
     func load(board: WorkBoardSummary) async {
@@ -6056,26 +6312,38 @@ private final class WorkBoardDetailModel {
         defer { isLoading = false }
 
         async let projectsTask = loadProjects(board: board)
+        async let tasksTask = loadTasks(board: board)
         async let ticketsTask = loadTickets(board: board)
-        let (loadedProjects, loadedTickets) = await (projectsTask, ticketsTask)
+        let (loadedProjects, loadedTasks, loadedTickets) = await (projectsTask, tasksTask, ticketsTask)
 
-        projects = loadedProjects.projects
-        directTickets = loadedTickets.tickets
-        error = [loadedProjects.error, loadedTickets.error].compactMap { $0 }.joined(separator: " ")
+        projects = loadedProjects.projects.sorted(by: projectSort)
+        tasks = loadedTasks.tasks.sorted(by: taskSort)
+        directTickets = loadedTickets.tickets.sorted(by: ticketSort)
+        error = [loadedProjects.error, loadedTasks.error, loadedTickets.error].compactMap { $0 }.joined(separator: " ")
         if error?.isEmpty == true { error = nil }
     }
 
     private func loadProjects(board: WorkBoardSummary) async -> (projects: [ProjectDTO], error: String?) {
         do {
-            let response: WorkBoardProjectListResponse = try await APIClient.shared.get(path: "/api/v1/boards/\(board.id)/projects")
+            let response: WorkBoardProjectListResponse = try await APIClient.shared.get(path: "/api/v1/projects?limit=200")
+            let boardId = board.id.lowercased()
+            let projects = response.items.filter { project in
+                let ids = (project.boardIds ?? []).map { $0.uuidString.lowercased() }
+                    + [project.boardId?.uuidString.lowercased()].compactMap { $0 }
+                return ids.contains(boardId)
+            }
+            return (projects, nil)
+        } catch {
+            return ([], "Projects unavailable.")
+        }
+    }
+
+    private func loadTasks(board: WorkBoardSummary) async -> (tasks: [TaskDTO], error: String?) {
+        do {
+            let response: WorkBoardTaskListResponse = try await APIClient.shared.get(path: "/api/v1/boards/\(board.id)/tasks")
             return (response.items, nil)
         } catch {
-            do {
-                let response: WorkBoardProjectListResponse = try await APIClient.shared.get(path: "/api/v1/projects?board_id=\(board.id)")
-                return (response.items, nil)
-            } catch {
-                return ([], "Projects unavailable.")
-            }
+            return ([], "Tasks unavailable.")
         }
     }
 
@@ -6095,6 +6363,52 @@ private final class WorkBoardDetailModel {
                 if $0.count == $1.count { return $0.label < $1.label }
                 return $0.count > $1.count
             }
+    }
+
+    private func projectSort(_ lhs: ProjectDTO, _ rhs: ProjectDTO) -> Bool {
+        let lhsRank = projectStatusRank(lhs.status)
+        let rhsRank = projectStatusRank(rhs.status)
+        if lhsRank != rhsRank { return lhsRank < rhsRank }
+        if lhs.priority != rhs.priority { return lhs.priority < rhs.priority }
+        if lhs.updatedAt != rhs.updatedAt { return lhs.updatedAt > rhs.updatedAt }
+        return lhs.name < rhs.name
+    }
+
+    private func taskSort(_ lhs: TaskDTO, _ rhs: TaskDTO) -> Bool {
+        let lhsRank = taskStatusRank(lhs.status)
+        let rhsRank = taskStatusRank(rhs.status)
+        if lhsRank != rhsRank { return lhsRank < rhsRank }
+        return lhs.title < rhs.title
+    }
+
+    private func ticketSort(_ lhs: WorkBoardTicketSummary, _ rhs: WorkBoardTicketSummary) -> Bool {
+        let lhsRank = taskStatusRank(lhs.status)
+        let rhsRank = taskStatusRank(rhs.status)
+        if lhsRank != rhsRank { return lhsRank < rhsRank }
+        return lhs.title < rhs.title
+    }
+
+    private func projectStatusRank(_ status: String) -> Int {
+        switch status.lowercased() {
+        case "active", "in_progress", "in-progress", "building", "build", "implementation": return 0
+        case "review": return 1
+        case "blocked", "waiting_on", "failed": return 2
+        case "done", "completed", "closed", "resolved": return 8
+        case "archived", "cancelled": return 9
+        default: return 3
+        }
+    }
+
+    private func taskStatusRank(_ status: String?) -> Int {
+        switch status?.lowercased() {
+        case "in_progress", "in-progress", "working": return 0
+        case "review": return 1
+        case "blocked", "waiting_on", "failed": return 2
+        case "inbox", "open", "backlog", "planned", nil: return 3
+        case "done", "completed", "closed", "resolved": return 8
+        case "archived", "cancelled": return 9
+        default: return 4
+        }
     }
 }
 
@@ -6319,15 +6633,14 @@ private struct WorkBoardsArchitectureView: View {
     @Environment(\.dismiss) private var dismiss
 
     private var groupedBoards: [(layer: String, boards: [WorkBoardSummary])] {
-        let grouped = Dictionary(grouping: boards) { board in
-            let raw = board.layer?.trimmingCharacters(in: .whitespacesAndNewlines)
-            return raw?.isEmpty == false ? raw! : "uncategorized"
-        }
+        let grouped = Dictionary(grouping: boards, by: \.architectureLayer)
+        let order = ["Products", "Platform", "Operations", "Strategy", "Other"]
         return grouped
             .map { (layer: $0.key, boards: $0.value.sorted { $0.displayName < $1.displayName }) }
             .sorted {
-                if $0.layer == "uncategorized" { return false }
-                if $1.layer == "uncategorized" { return true }
+                let lhs = order.firstIndex(of: $0.layer) ?? Int.max
+                let rhs = order.firstIndex(of: $1.layer) ?? Int.max
+                if lhs != rhs { return lhs < rhs }
                 return $0.layer < $1.layer
             }
     }
@@ -6386,7 +6699,7 @@ private struct WorkBoardsArchitectureView: View {
                     .foregroundColor(sourceLabel == "ORCA" ? AppColors.accentSuccess : AppColors.textTertiary)
             }
 
-            Text("Boards grouped by ORCA architecture layer. Tap any board to open its projects and direct tickets.")
+            Text("Tap a board for its plan, associated projects, tasks, and direct tickets.")
                 .font(.system(size: 13))
                 .foregroundColor(AppColors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -6400,9 +6713,9 @@ private struct WorkBoardsArchitectureView: View {
     private var totalsGrid: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
             architectureMetric("Boards", "\(boards.count)")
-            architectureMetric("Projects", "\(totalProjects)")
-            architectureMetric("Active", "\(totalActive)")
-            architectureMetric("Tickets", "\(totalTickets)")
+            architectureMetric("Project links", "\(totalProjects)")
+            architectureMetric("Active links", "\(totalActive)")
+            architectureMetric("Board tickets", "\(totalTickets)")
         }
     }
 
@@ -6463,6 +6776,9 @@ private struct WorkBoardsArchitectureView: View {
                 if board.ticketCount > 0 {
                     architecturePill("\(board.ticketCount)t")
                 }
+                Text(board.deliveryState)
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(deliveryStateColor(board.deliveryState))
                 Spacer(minLength: 0)
             }
         }
@@ -6471,6 +6787,15 @@ private struct WorkBoardsArchitectureView: View {
         .background(AppColors.backgroundSecondary)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppColors.border, lineWidth: 0.5))
+    }
+
+    private func deliveryStateColor(_ state: String) -> Color {
+        switch state {
+        case "Blocked": return AppColors.accentDanger
+        case "At risk", "Planned": return AppColors.accentWarning
+        case "Improving": return AppColors.accentSuccess
+        default: return AppColors.textTertiary
+        }
     }
 
     private func architectureMetric(_ title: String, _ value: String) -> some View {
@@ -6501,9 +6826,39 @@ private struct WorkBoardsArchitectureView: View {
     }
 }
 
+private enum WorkBoardDetailSection: String, CaseIterable, Identifiable {
+    case overview = "Overview"
+    case plan = "Plan"
+    case projects = "Projects"
+    case tasks = "Tasks"
+    case tickets = "Tickets"
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .overview: return "chart.bar.xaxis"
+        case .plan: return "rectangle.3.group"
+        case .projects: return "square.stack.3d.up"
+        case .tasks: return "checklist"
+        case .tickets: return "ticket"
+        }
+    }
+
+    static var evidenceSelection: WorkBoardDetailSection {
+        guard let argument = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("--board-section=") }) else {
+            return .overview
+        }
+        let value = String(argument.dropFirst("--board-section=".count))
+        return allCases.first { $0.rawValue.lowercased() == value.lowercased() } ?? .overview
+    }
+}
+
 private struct WorkBoardDetailView: View {
     let board: WorkBoardSummary
     @State private var model = WorkBoardDetailModel()
+    @State private var boardPlanModel = CaptainBoardPlanViewModel()
+    @State private var selectedSection = WorkBoardDetailSection.evidenceSelection
     @State private var selectedProject: ProjectDTO?
     @State private var projectsViewModel = ORCAProjectsViewModel()
     @Environment(\.dismiss) private var dismiss
@@ -6513,10 +6868,8 @@ private struct WorkBoardDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     boardHero
-                    boardOverviewGrid
-                    boardBreakdowns
-                    boardProjects
-                    boardTickets
+                    boardSectionPicker
+                    selectedBoardContent
                     if let error = model.error {
                         Text(error)
                             .font(.system(size: 11))
@@ -6540,7 +6893,12 @@ private struct WorkBoardDetailView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        Task { await model.load(board: board) }
+                        Task {
+                            await model.load(board: board)
+                            if board.slug != "fund", let boardId = UUID(uuidString: board.id) {
+                                await boardPlanModel.load(boardId: boardId, force: true)
+                            }
+                        }
                     } label: {
                         Image(systemName: model.isLoading ? "hourglass" : "arrow.clockwise")
                     }
@@ -6549,10 +6907,76 @@ private struct WorkBoardDetailView: View {
             }
             .task {
                 await model.load(board: board)
+                if board.slug != "fund", let boardId = UUID(uuidString: board.id) {
+                    await boardPlanModel.load(boardId: boardId)
+                }
             }
             .sheet(item: $selectedProject) { project in
                 ORCAProjectDetailView(project: project, viewModel: projectsViewModel)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var selectedBoardContent: some View {
+        switch selectedSection {
+        case .overview:
+            boardOverviewGrid
+            boardCurrentImprovement
+            boardBreakdowns
+        case .plan:
+            CaptainBoardPlanView(model: boardPlanModel, allowsBoardSelection: false)
+        case .projects:
+            boardProjects
+        case .tasks:
+            boardTasks
+        case .tickets:
+            boardTickets
+        }
+    }
+
+    private var availableSections: [WorkBoardDetailSection] {
+        WorkBoardDetailSection.allCases.filter { board.slug != "fund" || $0 != .plan }
+    }
+
+    private var boardSectionPicker: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(availableSections) { section in
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            selectedSection = section
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: section.icon)
+                                .font(.system(size: 11, weight: .semibold))
+                            Text(sectionTitle(section))
+                                .font(.system(size: 11, weight: .semibold))
+                                .lineLimit(1)
+                        }
+                        .foregroundColor(selectedSection == section ? AppColors.textPrimary : AppColors.textSecondary)
+                        .padding(.horizontal, 10)
+                        .frame(height: 34)
+                        .background(selectedSection == section ? AppColors.accentElectric.opacity(0.18) : AppColors.backgroundSecondary)
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 7)
+                                .stroke(selectedSection == section ? AppColors.accentElectric.opacity(0.7) : AppColors.border, lineWidth: 0.5)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func sectionTitle(_ section: WorkBoardDetailSection) -> String {
+        switch section {
+        case .overview, .plan: return section.rawValue
+        case .projects: return "Projects \(model.projects.count)"
+        case .tasks: return "Tasks \(model.tasks.count)"
+        case .tickets: return "Tickets \(model.directTickets.count)"
         }
     }
 
@@ -6615,23 +7039,62 @@ private struct WorkBoardDetailView: View {
     }
 
     private var boardOverviewGrid: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 145), spacing: 8)], spacing: 8) {
             boardMetricCard(title: "Projects", value: "\(model.projects.isEmpty ? board.projectCount : model.projects.count)", detail: "\(model.activeProjects.count) active")
-            boardMetricCard(title: "Tickets", value: "\(model.directTickets.isEmpty ? board.ticketCount : model.directTickets.count)", detail: "direct to board")
+            boardMetricCard(title: "Tasks", value: "\(model.tasks.count)", detail: "\(model.activeTasks.count) active")
+            boardMetricCard(title: "Tickets", value: "\(model.directTickets.isEmpty ? board.ticketCount : model.directTickets.count)", detail: "open on board")
+            boardMetricCard(title: "Blocked", value: "\(model.blockedWorkCount)", detail: "across work")
             boardMetricCard(title: "Stages", value: "\(model.projectStageBreakdown.count)", detail: "project lanes")
             boardMetricCard(title: "Source", value: model.isLoading ? "..." : "ORCA", detail: "live breakdown")
         }
     }
 
+    private var boardCurrentImprovement: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "scope")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(AppColors.accentElectric)
+                .frame(width: 30, height: 30)
+                .background(AppColors.accentElectric.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+            VStack(alignment: .leading, spacing: 3) {
+                Text("CURRENT IMPROVEMENT")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(AppColors.textTertiary)
+                Text(board.improvementTitle ?? "No active improvement work recorded")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(board.improvementTitle == nil ? AppColors.textTertiary : AppColors.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            if board.blockedCount > 0 {
+                Text("\(board.blockedCount) blocked")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(AppColors.accentDanger)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(AppColors.accentDanger.opacity(0.12))
+                    .clipShape(Capsule())
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppColors.border, lineWidth: 0.5))
+    }
+
     private var boardBreakdowns: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("BREAKDOWN", count: model.projectStageBreakdown.count + model.ticketStatusBreakdown.count)
+            sectionTitle("BREAKDOWN", count: model.projectStageBreakdown.count + model.taskStatusBreakdown.count + model.ticketStatusBreakdown.count)
 
             VStack(alignment: .leading, spacing: 12) {
                 breakdownGroup(title: "Project stages", items: model.projectStageBreakdown, empty: "No project stages yet.")
+                breakdownGroup(title: "Task status", items: model.taskStatusBreakdown, empty: "No board task statuses yet.")
                 breakdownGroup(title: "Ticket status", items: model.ticketStatusBreakdown, empty: "No direct ticket statuses yet.")
                 breakdownGroup(title: "Ticket priority", items: model.ticketPriorityBreakdown, empty: "No direct ticket priorities yet.")
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
             .background(AppColors.backgroundSecondary)
             .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -6661,6 +7124,17 @@ private struct WorkBoardDetailView: View {
                     Divider().background(AppColors.border)
                 }
                 ticketBreakdownRow(ticket)
+            }
+        }
+    }
+
+    private var boardTasks: some View {
+        boardListSection(title: "TASKS", count: model.tasks.count, empty: "No tasks on this board yet.") {
+            ForEach(Array(model.tasks.enumerated()), id: \.element.id) { idx, task in
+                if idx > 0 {
+                    Divider().background(AppColors.border)
+                }
+                taskBreakdownRow(task)
             }
         }
     }
@@ -6719,6 +7193,39 @@ private struct WorkBoardDetailView: View {
                 boardPill(ticket.status)
                 if let priority = ticket.priority {
                     boardPill(priority)
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+    }
+
+    private func taskBreakdownRow(_ task: TaskDTO) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .top, spacing: 8) {
+                Text(task.title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(AppColors.textPrimary)
+                    .lineLimit(2)
+                Spacer(minLength: 0)
+                Text(String(task.id.replacingOccurrences(of: "-", with: "").prefix(6)))
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundColor(AppColors.textTertiary)
+            }
+            if let description = task.description, !description.isEmpty {
+                Text(description)
+                    .font(.system(size: 12))
+                    .foregroundColor(AppColors.textSecondary)
+                    .lineLimit(2)
+            }
+            HStack(spacing: 6) {
+                boardPill(task.status ?? "inbox")
+                if let priority = task.priority, !priority.isEmpty {
+                    boardPill(priority)
+                }
+                if let dueAt = task.dueAt ?? task.dueDate {
+                    boardPill(dueAt.formatted(date: .abbreviated, time: .omitted))
                 }
                 Spacer(minLength: 0)
             }
