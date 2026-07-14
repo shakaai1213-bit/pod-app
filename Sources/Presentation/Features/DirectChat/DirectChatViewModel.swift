@@ -92,6 +92,9 @@ final class DirectChatViewModel {
     var agentToolsProjection: WorkbenchAgentToolsProjection?
     var isLoadingAgentTools: Bool = false
     var agentToolsError: String?
+    var centralAgentHealth: CentralAgentHealth?
+    var centralAgentHealthError: String?
+    var isLoadingCentralAgentHealth: Bool = false
 
     // Conversation data from SwiftData
     var conversations: [DMConversation] = []
@@ -110,6 +113,7 @@ final class DirectChatViewModel {
     private var agentRunRefreshTask: Task<Void, Never>?
     private var roomAutoRefreshTask: Task<Void, Never>?
     private var presenceRefreshTask: Task<Void, Never>?
+    private var centralAgentHealthTask: Task<Void, Never>?
     private var pendingTicketContinuation: (ticketId: String, ticketTitle: String, agentId: String, channelId: String?)?
 
     // MARK: - Setup
@@ -770,6 +774,7 @@ final class DirectChatViewModel {
     // MARK: - Select Agent
 
     func selectAgent(_ agent: AgentInfo) {
+        stopCentralAgentHealthMonitoring()
         selectedAgent = agent
         selectedRoom = nil
         stopRoomAutoRefresh()
@@ -792,6 +797,7 @@ final class DirectChatViewModel {
         loadMessages(for: agent)
         loadTicketContext(for: agent)
         Task { await loadAgentLocker(for: agent) }
+        startCentralAgentHealthMonitoring(for: agent)
         applyPendingTicketContinuationIfNeeded(for: agent)
         guard modelContext != nil else {
             currentMessages = []
@@ -821,6 +827,7 @@ final class DirectChatViewModel {
     }
 
     func clearSelection() {
+        stopCentralAgentHealthMonitoring()
         selectedAgent = nil
         currentService = nil
         liveRefreshTask?.cancel()
@@ -854,6 +861,49 @@ final class DirectChatViewModel {
         isLoadingAgentPacket = false
         agentPacketError = nil
         stopRoomAutoRefresh()
+    }
+
+    func loadCentralAgentHealth() async {
+        guard selectedAgent?.id == "coral" else { return }
+        isLoadingCentralAgentHealth = centralAgentHealth == nil
+        defer { isLoadingCentralAgentHealth = false }
+
+        do {
+            let health: CentralAgentHealth = try await api.get(
+                path: "/api/v1/control-room/central-agent-health"
+            )
+            guard selectedAgent?.id == "coral" else { return }
+            centralAgentHealth = health
+            centralAgentHealthError = nil
+        } catch let apiError as APIError {
+            guard selectedAgent?.id == "coral" else { return }
+            centralAgentHealthError = apiError.message
+        } catch {
+            guard selectedAgent?.id == "coral" else { return }
+            centralAgentHealthError = "Runtime evidence unavailable"
+        }
+    }
+
+    private func startCentralAgentHealthMonitoring(for agent: AgentInfo) {
+        centralAgentHealth = nil
+        centralAgentHealthError = nil
+        guard agent.id == "coral" else { return }
+
+        centralAgentHealthTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled, self.selectedAgent?.id == agent.id {
+                await self.loadCentralAgentHealth()
+                await TaskSafeSleep.sleep(seconds: 20)
+            }
+        }
+    }
+
+    private func stopCentralAgentHealthMonitoring() {
+        centralAgentHealthTask?.cancel()
+        centralAgentHealthTask = nil
+        centralAgentHealth = nil
+        centralAgentHealthError = nil
+        isLoadingCentralAgentHealth = false
     }
 
     func loadAgentLocker(for agent: AgentInfo) async {

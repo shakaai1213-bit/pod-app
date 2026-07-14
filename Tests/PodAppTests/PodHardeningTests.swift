@@ -127,6 +127,27 @@ final class PodHardeningTests: XCTestCase {
         XCTAssertTrue(atlas.captainQueue.isEmpty)
     }
 
+    func testCentralAgentHealthDecodesRuntimeEvidence() throws {
+        let payload = #"""
+        {
+          "generated_at":"2026-07-14T00:28:55.115402",
+          "status":"needs_attention",
+          "checks":{
+            "controller_runtime":{"status":"ok","state":"active","active_lease_count":1,"agents":["coral"]},
+            "codex_worker":{"status":"warning","state":"no_completed_run_evidence","completed_count":0,"stuck_count":0},
+            "durable_arrival":{"status":"ok","state":"traffic_observed","messages_observed":4,"missing_count":0}
+          }
+        }
+        """#
+
+        let health = try JSONDecoder().decode(CentralAgentHealth.self, from: Data(payload.utf8))
+
+        XCTAssertTrue(health.controllerIsLive)
+        XCTAssertFalse(health.hasCompletedCodexProof)
+        XCTAssertTrue(health.needsAttention)
+        XCTAssertEqual(health.compactSummary, "Controller live · Codex awaiting proof · 4 arrivals")
+    }
+
     private func makeClient(
         keychainToken: String,
         keychainAgentToken: String? = nil

@@ -48,6 +48,9 @@ struct LockerChatView: View {
     var body: some View {
         VStack(spacing: 0) {
             chatContextSurface
+            if agent.id == "coral" {
+                centralAgentRuntimeBar
+            }
             if !viewModel.routeProgressSteps.isEmpty {
                 RouteProgressStrip(steps: viewModel.routeProgressSteps)
             }
@@ -507,6 +510,48 @@ struct LockerChatView: View {
                 .frame(height: 0.5),
             alignment: .bottom
         )
+    }
+
+    private var centralAgentRuntimeBar: some View {
+        let health = viewModel.centralAgentHealth
+        let hasError = viewModel.centralAgentHealthError != nil
+        let needsAttention = health?.needsAttention == true || hasError
+        let color = needsAttention ? AppColors.accentWarning : AppColors.accentSuccess
+        let title: String
+        if let health {
+            title = health.compactSummary
+        } else if viewModel.isLoadingCentralAgentHealth {
+            title = "Checking Coral runtime"
+        } else {
+            title = "Runtime evidence unavailable"
+        }
+
+        return HStack(spacing: 8) {
+            Circle()
+                .fill(color)
+                .frame(width: 7, height: 7)
+
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(color)
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+
+            Button {
+                Task { await viewModel.loadCentralAgentHealth() }
+            } label: {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(color)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Refresh Coral runtime health")
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 28)
+        .background(color.opacity(0.08))
+        .overlay(Rectangle().fill(AppColors.border).frame(height: 0.5), alignment: .bottom)
     }
 
     private var conversationContextSheet: some View {

@@ -102,6 +102,17 @@ extension AgentInfo {
             guardrail: "Maui should be decisive on engineering implementation, but must keep work tied to ORCA tickets, document meaningful changes in the chronogram, and avoid destructive operations."
         ),
         AgentInfo(
+            id: "shaka",
+            name: "Shaka",
+            role: "CEO coordination lane for the operating picture, priorities, and cross-agent alignment",
+            icon: "scope",
+            color: "8B5CF6",
+            endpoint: .init(baseURL: computeGateway, authToken: ""),
+            isReachable: true,
+            lane: .main,
+            guardrail: "Shaka is an agent lane, not Tony himself. Keep the operating picture grounded in ORCA, Schoolhouse, Locker, and Team-Wiki evidence. Never imply Tony approval or protected Chief/Fund authority without the recorded gate."
+        ),
+        AgentInfo(
             id: "chief",
             name: "Chief",
             role: "Protected Fund and trading research lead",
@@ -126,13 +137,13 @@ extension AgentInfo {
         AgentInfo(
             id: "coral",
             name: "Coral",
-            role: "Support-runtime for Shaka Mac watchdogs, daemons, compute observability",
+            role: "Operations manager for Pod runtime, surfaces, watchdogs, and compute observability",
             icon: "circle.hexagongrid",
             color: "06B6D4",
             endpoint: .init(baseURL: computeGateway, authToken: ""),
             isReachable: true,
             lane: .supportRuntime,
-            guardrail: "Coral is support-runtime for Shaka Mac watchdogs, daemons, runtime health, compute observability, and support triage. This Pod chat is not the live Coral runtime and cannot inspect logs, restart daemons, query Chroma, or mutate ORCA by itself. For execution, create or attach an ORCA ticket and route through Agent Runs."
+            guardrail: "This is Coral's live central Pod lane. Conversation uses Coral's continuity context; bounded repository work may dispatch through an attached ORCA ticket and returns as Agent Run evidence. Never claim an isolated worktree was merged or deployed, and never cross credentials, Chief/Fund, or other protected boundaries without the recorded gate."
         ),
         AgentInfo(
             id: "reef",
@@ -167,7 +178,7 @@ extension AgentInfo {
     }
 
     var defaultDeliveryMode: DMDeliveryMode {
-        if ["aloha", "maui", "coral", "chief", "rooster", "reef"].contains(id) {
+        if ["aloha", "maui", "shaka", "coral", "chief", "rooster", "reef"].contains(id) {
             return .liveInbox
         }
         return .compute
@@ -179,6 +190,10 @@ extension AgentInfo {
             return "Aloha inbox is the live handoff path for real coordination. Use Helper draft only when you want a quick non-live answer."
         case "maui":
             return "Maui inbox is the live engineering handoff path. Real implementation still belongs on tickets, runs, commits, and verification."
+        case "shaka":
+            return "Shaka's live coordination lane reads the ORCA operating picture; human approval remains Tony's alone."
+        case "coral":
+            return "Live Coral controller. Conversation stays in ORCA; bounded Codex work returns as Agent Run evidence without automatic merge or deploy."
         case "chief":
             return "Protected read-only lane. No live P&L, positions, wallets, orders, Chief memory, or trading actions from Pod chat."
         default:
@@ -191,6 +206,100 @@ extension AgentInfo {
 
     static func find(_ id: String) -> AgentInfo? {
         team.first { $0.id == id }
+    }
+}
+
+// MARK: - Central Agent Runtime
+
+struct CentralAgentHealth: Decodable, Sendable, Equatable {
+    let generatedAt: String
+    let status: String
+    let checks: Checks
+
+    struct Checks: Decodable, Sendable, Equatable {
+        let controllerRuntime: ControllerRuntime
+        let codexWorker: CodexWorker
+        let durableArrival: DurableArrival
+
+        enum CodingKeys: String, CodingKey {
+            case controllerRuntime = "controller_runtime"
+            case codexWorker = "codex_worker"
+            case durableArrival = "durable_arrival"
+        }
+    }
+
+    struct ControllerRuntime: Decodable, Sendable, Equatable {
+        let status: String
+        let state: String
+        let activeLeaseCount: Int
+        let agents: [String]
+
+        enum CodingKeys: String, CodingKey {
+            case status, state, agents
+            case activeLeaseCount = "active_lease_count"
+        }
+    }
+
+    struct CodexWorker: Decodable, Sendable, Equatable {
+        let status: String
+        let state: String
+        let completedCount: Int
+        let stuckCount: Int
+
+        enum CodingKeys: String, CodingKey {
+            case status, state
+            case completedCount = "completed_count"
+            case stuckCount = "stuck_count"
+        }
+    }
+
+    struct DurableArrival: Decodable, Sendable, Equatable {
+        let status: String
+        let state: String
+        let messagesObserved: Int
+        let missingCount: Int
+
+        enum CodingKeys: String, CodingKey {
+            case status, state
+            case messagesObserved = "messages_observed"
+            case missingCount = "missing_count"
+        }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case generatedAt = "generated_at"
+        case status, checks
+    }
+
+    var controllerIsLive: Bool {
+        checks.controllerRuntime.status == "ok"
+            && checks.controllerRuntime.activeLeaseCount > 0
+            && checks.controllerRuntime.agents.contains("coral")
+    }
+
+    var hasCompletedCodexProof: Bool {
+        checks.codexWorker.status == "ok" && checks.codexWorker.completedCount > 0
+    }
+
+    var needsAttention: Bool {
+        !controllerIsLive
+            || !hasCompletedCodexProof
+            || checks.codexWorker.stuckCount > 0
+            || checks.durableArrival.missingCount > 0
+    }
+
+    var compactSummary: String {
+        let controller = controllerIsLive ? "Controller live" : "Controller down"
+        let worker: String
+        if checks.codexWorker.stuckCount > 0 {
+            worker = "Codex stalled"
+        } else if hasCompletedCodexProof {
+            worker = "Codex proven"
+        } else {
+            worker = "Codex awaiting proof"
+        }
+        let arrivals = "\(checks.durableArrival.messagesObserved) arrivals"
+        return [controller, worker, arrivals].joined(separator: " · ")
     }
 }
 
