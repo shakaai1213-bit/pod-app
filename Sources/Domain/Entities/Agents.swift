@@ -90,8 +90,8 @@ enum AgentRosterLane: String, Codable, CaseIterable {
 }
 
 enum AgentRosterPolicy {
-    static let activeDisplayOrder = ["maui", "aloha", "chief", "rooster", "coral", "reef"]
-    static let dormantDisplayOrder = ["aurora", "shaka-agent", "shaka", "luna"]
+    static let activeDisplayOrder = ["maui", "aloha", "shaka", "chief", "rooster", "coral", "reef"]
+    static let dormantDisplayOrder = ["aurora", "shaka-agent", "luna"]
     static let supportRuntimeNames: Set<String> = ["coral", "reef"]
 
     private static let activeNames = Set(activeDisplayOrder)

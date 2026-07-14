@@ -186,6 +186,16 @@ final class PodHardeningTests: XCTestCase {
         )
     }
 
+    func testShakaRuntimeIsActiveWhileLegacyShakaAgentRemainsArchived() {
+        XCTAssertTrue(AgentRosterPolicy.isActiveOrSupport("shaka"))
+        XCTAssertFalse(AgentRosterPolicy.isDormantOrArchived("shaka"))
+        XCTAssertEqual(AgentRosterPolicy.defaultLane(for: "shaka"), .activeMain)
+
+        XCTAssertFalse(AgentRosterPolicy.isActiveOrSupport("shaka-agent"))
+        XCTAssertTrue(AgentRosterPolicy.isDormantOrArchived("shaka-agent"))
+        XCTAssertEqual(AgentRosterPolicy.defaultLane(for: "shaka-agent"), .dormantArchive)
+    }
+
     private func makeClient(
         keychainToken: String,
         keychainAgentToken: String? = nil
