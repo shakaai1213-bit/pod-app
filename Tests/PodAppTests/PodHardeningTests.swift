@@ -148,6 +148,44 @@ final class PodHardeningTests: XCTestCase {
         XCTAssertEqual(health.compactSummary, "Controller live · Codex awaiting proof · 4 arrivals")
     }
 
+    func testNamedAgentProvenanceWinsOverSparkSubstrate() throws {
+        let payload = #"""
+        {
+          "id":"message-1",
+          "sender_agent_id":"coral-agent",
+          "sender_name":"coral",
+          "sender_type":"agent",
+          "content":"POD_AUTHORITY_LIVE_OK",
+          "message_type":"text",
+          "delivery_mode":"agent_inbox",
+          "provenance":"live_inbox",
+          "provider":"spark",
+          "model":"Qwen/Qwen3-8B",
+          "response_state":"response_received",
+          "created_at":"2026-07-14T00:48:32Z"
+        }
+        """#
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let dto = try decoder.decode(DirectChatORCAMessageDTO.self, from: Data(payload.utf8))
+        let roomMessage = SonarRoomMessage(dto: dto)
+
+        XCTAssertEqual(dto.normalizedProvenance, DMResponseProvenance.liveInbox.rawValue)
+        XCTAssertEqual(roomMessage.provenance, DMResponseProvenance.liveInbox.rawValue)
+        XCTAssertEqual(roomMessage.statusLabel, "Coral replied")
+        XCTAssertEqual(
+            DMBubble.resolvedProvenance(
+                explicit: dto.normalizedProvenance,
+                deliveryMode: dto.deliveryMode,
+                source: dto.source,
+                lane: dto.lane,
+                model: dto.attributionLabel
+            ),
+            .liveInbox
+        )
+    }
+
     private func makeClient(
         keychainToken: String,
         keychainAgentToken: String? = nil

@@ -5002,11 +5002,15 @@ private struct DirectChatFallbackMetadataDTO: Decodable {
     }
 
     var normalizedProvenance: String {
+        if let provenance,
+           !provenance.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return provenance
+        }
         if let backend,
            ["spark", "kimi", "openclaw"].contains(backend.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) {
             return DMResponseProvenance.compute.rawValue
         }
-        return provenance ?? DMResponseProvenance.compute.rawValue
+        return DMResponseProvenance.compute.rawValue
     }
 }
 
@@ -5128,11 +5132,15 @@ struct DirectChatORCAMessageDTO: Decodable {
     }
 
     var normalizedProvenance: String? {
-        if computeProvider != nil { return DMResponseProvenance.compute.rawValue }
+        if let provenance,
+           !provenance.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return provenance
+        }
         if let surfaceEventProvenance, !surfaceEventProvenance.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return surfaceEventProvenance
         }
-        return provenance
+        if computeProvider != nil { return DMResponseProvenance.compute.rawValue }
+        return nil
     }
 
     var attributionLabel: String? {
@@ -5804,7 +5812,8 @@ struct SonarRoomMessage: Identifiable, Hashable {
     }
 
     var computeDraftLabel: String? {
-        guard let computeProvider else { return nil }
+        guard DMResponseProvenance.parse(provenance) == .compute,
+              let computeProvider else { return nil }
         let providerLabel = computeProvider.capitalized
         return "\(providerLabel) draft in \(agentDisplayName)'s voice — live agent offline"
     }

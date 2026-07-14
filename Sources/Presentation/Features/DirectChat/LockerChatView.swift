@@ -3532,13 +3532,29 @@ struct DMBubble: View {
     }
 
     private var provenance: DMResponseProvenance {
-        if hasComputeAttribution {
-            return .compute
-        }
-        if let value = DMResponseProvenance.parse(message.provenance) {
+        Self.resolvedProvenance(
+            explicit: message.provenance,
+            deliveryMode: message.deliveryMode,
+            source: message.source,
+            lane: message.lane,
+            model: message.modelUsed
+        )
+    }
+
+    static func resolvedProvenance(
+        explicit: String?,
+        deliveryMode: String?,
+        source: String?,
+        lane: String?,
+        model: String?
+    ) -> DMResponseProvenance {
+        if let value = DMResponseProvenance.parse(explicit) {
             return value
         }
-        return DMResponseProvenance(deliveryMode: message.deliveryMode, source: message.source, lane: message.lane)
+        if modelHasComputeAttribution(model) {
+            return .compute
+        }
+        return DMResponseProvenance(deliveryMode: deliveryMode, source: source, lane: lane)
     }
 
     private var visibleProvenanceLabel: String {
@@ -3546,7 +3562,9 @@ struct DMBubble: View {
             return computeDraftLabel
         }
         if provenance == .liveInbox, deliveryState == .responseReceived {
-            return "\(agent.name) replied"
+            return hasComputeAttribution
+                ? "\(agent.name) replied · \(computeProviderName)"
+                : "\(agent.name) replied"
         }
         return provenance.displayLabel
     }
@@ -3652,7 +3670,11 @@ struct DMBubble: View {
     }
 
     private var hasComputeAttribution: Bool {
-        guard let model = message.modelUsed?.lowercased(), !model.isEmpty else { return false }
+        Self.modelHasComputeAttribution(message.modelUsed)
+    }
+
+    private static func modelHasComputeAttribution(_ rawModel: String?) -> Bool {
+        guard let model = rawModel?.lowercased(), !model.isEmpty else { return false }
         return model.contains("spark")
             || model.contains("kimi")
             || model.contains("openclaw")
@@ -3660,7 +3682,7 @@ struct DMBubble: View {
     }
 
     private var computeDraftLabel: String? {
-        guard hasComputeAttribution else { return nil }
+        guard provenance == .compute, hasComputeAttribution else { return nil }
         let provider = computeProviderName
         return "\(provider) draft in \(agent.name)'s voice — live agent offline"
     }
