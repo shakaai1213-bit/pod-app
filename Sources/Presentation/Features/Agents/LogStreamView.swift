@@ -351,11 +351,7 @@ final class LogStreamViewModel: @unchecked Sendable {
 
     @MainActor
     func connect() async {
-        #if targetEnvironment(simulator)
-        let urlString = "http://127.0.0.1:19002/api/v1/agents/\(agentId.uuidString)/logs/stream"
-        #else
-        let urlString = "http://100.76.196.40:8000/api/v1/agents/\(agentId.uuidString)/logs/stream"
-        #endif
+        let urlString = "\(AppConfig.backendURL)/api/v1/agents/\(agentId.uuidString)/logs/stream"
         guard let url = URL(string: urlString) else {
             streamState = .unavailable
             return

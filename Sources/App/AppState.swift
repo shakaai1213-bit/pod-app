@@ -2,11 +2,13 @@ import Foundation
 import SwiftUI
 
 enum AppConfig {
+    static let canonicalBackendURL = "http://100.104.72.62:8000"
+
     #if targetEnvironment(simulator)
     static let backendURL = "http://127.0.0.1:19002"
     static let computeURL = "http://127.0.0.1:8890"
     #else
-    static let backendURL = "http://100.76.196.40:8000"
+    static let backendURL = canonicalBackendURL
     static let computeURL = "http://100.76.196.40:8890"
     #endif
 }

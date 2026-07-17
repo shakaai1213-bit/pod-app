@@ -21,6 +21,11 @@ final class PodHardeningTests: XCTestCase {
         XCTAssertFalse(request.allHTTPHeaderFields?.values.contains("plaintext-token") ?? false)
     }
 
+    func testPhysicalPodUsesCanonicalORCAMiniBackend() {
+        XCTAssertEqual(AppConfig.canonicalBackendURL, "http://100.104.72.62:8000")
+        XCTAssertNotEqual(AppConfig.canonicalBackendURL, "http://100.76.196.40:8000")
+    }
+
     func testAPIClientPreservesStructuredServerErrorBody() async throws {
         MockURLProtocol.handler = { request in
             let response = HTTPURLResponse(

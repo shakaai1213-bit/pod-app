@@ -246,12 +246,6 @@ final class AuthManager {
     private let tokenManager = TokenManager()
     private let backendURL: String
 
-    #if targetEnvironment(simulator)
-    private let baseURL = "http://127.0.0.1:19002"
-    #else
-    private let baseURL = "http://100.76.196.40:8000"
-    #endif
-
     // MARK: - Initialization
 
     init(backendURL: String? = nil) {
@@ -260,11 +254,7 @@ final class AuthManager {
     }
 
     private static var defaultBackendURL: String {
-        #if targetEnvironment(simulator)
-        return "http://127.0.0.1:19002"
-        #else
-        return "http://100.76.196.40:8000"
-        #endif
+        AppConfig.backendURL
     }
 
     // MARK: - Load Stored Users (for user switcher)

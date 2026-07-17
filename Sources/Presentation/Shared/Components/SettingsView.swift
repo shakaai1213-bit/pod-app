@@ -160,11 +160,7 @@ final class SettingsViewModel {
     func checkGatewayStatus() {
         gatewayCheckTask?.cancel()
         gatewayCheckTask = Task {
-            #if targetEnvironment(simulator)
-            guard let url = URL(string: "http://127.0.0.1:19002/health") else { return }
-            #else
-            guard let url = URL(string: "http://100.76.196.40:8000/health") else { return }
-            #endif
+            guard let url = URL(string: "\(AppConfig.backendURL)/health") else { return }
             var request = URLRequest(url: url)
             request.timeoutInterval = 5
             do {

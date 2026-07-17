@@ -243,11 +243,7 @@ final class AgentsViewModel {
         Task { @MainActor [weak self] in
             guard let self else { return }
             let token = await apiClient.currentToken() ?? ""
-            #if targetEnvironment(simulator)
-            sseClient = LocalSSEClient(baseURL: "http://127.0.0.1:19002")
-            #else
-            sseClient = LocalSSEClient(baseURL: "http://100.76.196.40:8000")
-            #endif
+            sseClient = LocalSSEClient(baseURL: AppConfig.backendURL)
             sseClient?.connect(to: "/api/v1/agents/stream", token: token) { [weak self] event in
                 Task { @MainActor in
                     self?.onAgentStateUpdate(event)
