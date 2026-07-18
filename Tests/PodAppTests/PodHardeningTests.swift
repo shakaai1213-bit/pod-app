@@ -26,6 +26,29 @@ final class PodHardeningTests: XCTestCase {
         XCTAssertNotEqual(AppConfig.canonicalBackendURL, "http://100.76.196.40:8000")
     }
 
+    func testUserFacingBackendClientsUseAppConfigInsteadOfLegacyShakaProxy() throws {
+        let sourceRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources")
+        let clientPaths = [
+            "Core/Auth/AuthManager.swift",
+            "Presentation/Features/Agents/AgentsViewModel.swift",
+            "Presentation/Features/Agents/LogStreamView.swift",
+            "Presentation/Shared/Components/SettingsView.swift",
+        ]
+
+        for clientPath in clientPaths {
+            let source = try String(
+                contentsOf: sourceRoot.appendingPathComponent(clientPath),
+                encoding: .utf8
+            )
+            XCTAssertTrue(source.contains("AppConfig.backendURL"), clientPath)
+            XCTAssertFalse(source.contains("http://100.76.196.40:8000"), clientPath)
+        }
+    }
+
     func testAPIClientPreservesStructuredServerErrorBody() async throws {
         MockURLProtocol.handler = { request in
             let response = HTTPURLResponse(
