@@ -1398,8 +1398,23 @@ struct DashboardView: View {
                         .foregroundColor(AppColors.textSecondary)
                         .lineLimit(2)
 
+                    if let nextAction = item.nextAction, !nextAction.isEmpty {
+                        HStack(alignment: .firstTextBaseline, spacing: 5) {
+                            Text("NEXT")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundColor(AppColors.accentElectric)
+                            Text(nextAction)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(AppColors.textPrimary)
+                                .lineLimit(2)
+                        }
+                    }
+
                     HStack(spacing: 5) {
                         Text(item.kind.replacingOccurrences(of: "_", with: " ").uppercased())
+                        if let targetType = item.targetType {
+                            Text("· \(targetType.replacingOccurrences(of: "_", with: " ").uppercased())")
+                        }
                         if let agent = item.agentSlug {
                             Text("· \(agent.uppercased())")
                         }
@@ -1426,6 +1441,13 @@ struct DashboardView: View {
     }
 
     private func openCaptainInboxItem(_ item: DashboardCaptainInboxItem) {
+        if item.kind == "approval",
+           let approvalId = item.approvalId.flatMap(UUID.init(uuidString:)) {
+            appState.pendingApprovalId = approvalId
+            appState.navigateTo(.work)
+            return
+        }
+
         if let ticketId = item.ticketId {
             appState.pendingDirectChatTicketTitle = item.title
             appState.pendingDirectChatAgentId = item.agentSlug ?? "maui"
@@ -1440,9 +1462,6 @@ struct DashboardView: View {
             return
         }
 
-        if let approvalId = item.approvalId.flatMap(UUID.init(uuidString:)) {
-            appState.pendingApprovalId = approvalId
-        }
         appState.navigateTo(.work)
     }
 

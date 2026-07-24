@@ -378,9 +378,19 @@ struct DashboardCaptainInboxItem: Decodable, Identifiable {
     let ticketId: String?
     let channelId: String?
     let approvalId: String?
+    let boardId: String?
+    let taskId: String?
+    let projectId: String?
+    let plannerItemId: String?
     let runId: String?
     let traceId: String?
     let unreadCount: Int?
+    let targetType: String?
+    let targetRef: String?
+    let targetTitle: String?
+    let canonicalRef: String?
+    let nextAction: String?
+    let decisionAuthority: String?
     let bodyPolicy: String
 
     enum CodingKeys: String, CodingKey {
@@ -391,9 +401,19 @@ struct DashboardCaptainInboxItem: Decodable, Identifiable {
         case ticketId = "ticket_id"
         case channelId = "channel_id"
         case approvalId = "approval_id"
+        case boardId = "board_id"
+        case taskId = "task_id"
+        case projectId = "project_id"
+        case plannerItemId = "planner_item_id"
         case runId = "run_id"
         case traceId = "trace_id"
         case unreadCount = "unread_count"
+        case targetType = "target_type"
+        case targetRef = "target_ref"
+        case targetTitle = "target_title"
+        case canonicalRef = "canonical_ref"
+        case nextAction = "next_action"
+        case decisionAuthority = "decision_authority"
         case bodyPolicy = "body_policy"
     }
 }
