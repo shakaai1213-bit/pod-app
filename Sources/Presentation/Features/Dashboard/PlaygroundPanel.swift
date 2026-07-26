@@ -70,8 +70,7 @@ final class PlaygroundPanelModel {
         for agent in AgentInfo.team where agent.isReachable {
             do {
                 let locker: AgentLockerDTO = try await APIClient.shared.get(
-                    path: Endpoint.agentLocker(name: agent.id, limit: 4).path,
-                    includeAgentToken: true
+                    path: Endpoint.agentLocker(name: agent.id, limit: 4).path
                 )
                 nextAgents.append(PlaygroundAgentReadiness(agent: agent, locker: locker))
             } catch {

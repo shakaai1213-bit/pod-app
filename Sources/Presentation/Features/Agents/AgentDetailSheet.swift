@@ -2841,8 +2841,7 @@ struct AgentDetailSheet: View {
         }
         do {
             let dto: AgentLockerDTO = try await APIClient.shared.request(
-                .agentLocker(name: agent.apiPathComponent, limit: 10),
-                includeAgentToken: true
+                .agentLocker(name: agent.apiPathComponent, limit: 10)
             )
             await MainActor.run {
                 self.lockerData = dto

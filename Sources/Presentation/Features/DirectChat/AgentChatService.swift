@@ -338,8 +338,7 @@ actor AgentChatService {
 
     func loadLockerSummary(limit: Int = 10) async throws -> LockerSummary {
         let response: AgentLockerDTO = try await APIClient.shared.get(
-            path: "/api/v1/agents/\(agent.id)/locker-cockpit?limit=\(limit)",
-            includeAgentToken: true
+            path: "/api/v1/agents/\(agent.id)/locker-cockpit?limit=\(limit)"
         )
         let workSpine = Self.workSpineSummary(from: response.workSpine)
         return LockerSummary(
