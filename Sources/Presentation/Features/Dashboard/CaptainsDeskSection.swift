@@ -162,7 +162,10 @@ private struct CaptainsDeskCard: View {
     private var subtitleText: String {
         switch state {
         case .loaded(let ticket):
-            return "updated \(RelativeTimeFormatter.shared.string(from: ticket.updatedAt)) · \(subtitle)"
+            if let updatedAt = ticket.updatedAt {
+                return "updated \(RelativeTimeFormatter.shared.string(from: updatedAt)) · \(subtitle)"
+            }
+            return ticket.isProtected ? "Governed in ORCA · \(subtitle)" : subtitle
         case .loading:
             return "\(subtitle) · loading"
         case .unavailable:
@@ -237,7 +240,9 @@ final class CaptainsDeskModel {
 
     private func loadTicket(id: String) async -> CaptainsDeskCardState {
         do {
-            let ticket: TicketDTO = try await apiClient.get(path: Endpoint.ticket(id: id).path)
+            let ticket: CaptainsDeskTicketPayload = try await apiClient.get(
+                path: Endpoint.ticket(id: id).path
+            )
             return .loaded(CaptainsDeskTicket(ticket))
         } catch {
             #if DEBUG
@@ -281,12 +286,43 @@ struct CaptainsDeskTicket: Equatable {
     let id: String
     let title: String
     let description: String?
-    let updatedAt: Date
+    let updatedAt: Date?
+    let isProtected: Bool
 
-    init(_ dto: TicketDTO) {
+    init(_ dto: CaptainsDeskTicketPayload) {
         self.id = dto.id
         self.title = dto.title
-        self.description = dto.description
+        self.description = dto.description ?? (
+            dto.isProtected
+                ? "Protected focus pointer. The current detail remains governed in ORCA."
+                : nil
+        )
         self.updatedAt = dto.updatedAt
+        self.isProtected = dto.isProtected
+    }
+}
+
+struct CaptainsDeskTicketPayload: Decodable {
+    let id: String
+    let title: String
+    let description: String?
+    let updatedAt: Date?
+    let isProtected: Bool
+    let pointer: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, description, pointer
+        case updatedAt = "updated_at"
+        case isProtected = "protected"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
+        isProtected = try container.decodeIfPresent(Bool.self, forKey: .isProtected) ?? false
+        pointer = try container.decodeIfPresent(String.self, forKey: .pointer)
     }
 }

@@ -691,19 +691,50 @@ private struct AgentManagementCardView: View {
 final class LoopAtlasViewModel {
     private(set) var response: LoopAtlasResponseDTO?
     private(set) var isLoading = false
+    private(set) var hasLoaded = false
     private(set) var errorMessage: String?
+
+    private let apiClient: APIClient
+    private let retryDelayNanoseconds: UInt64
+
+    init(
+        apiClient: APIClient = .shared,
+        retryDelayNanoseconds: UInt64 = 750_000_000
+    ) {
+        self.apiClient = apiClient
+        self.retryDelayNanoseconds = retryDelayNanoseconds
+    }
 
     func load(force: Bool = false) async {
         guard !isLoading else { return }
         if !force, response != nil { return }
         isLoading = true
         errorMessage = nil
-        defer { isLoading = false }
-        do {
-            response = try await APIClient.shared.get(path: "/api/v1/management/loop-atlas")
-        } catch {
-            errorMessage = "Loop health unavailable: \(managementErrorText(error))"
+        defer {
+            isLoading = false
+            hasLoaded = true
         }
+        do {
+            response = try await apiClient.get(path: "/api/v1/management/loop-atlas")
+        } catch {
+            guard shouldRetry(error) else {
+                errorMessage = "Loop health unavailable: \(managementErrorText(error))"
+                return
+            }
+            if retryDelayNanoseconds > 0 {
+                try? await Task.sleep(nanoseconds: retryDelayNanoseconds)
+            }
+            do {
+                response = try await apiClient.get(path: "/api/v1/management/loop-atlas")
+            } catch {
+                errorMessage = "Loop health unavailable: \(managementErrorText(error))"
+            }
+        }
+    }
+
+    private func shouldRetry(_ error: Error) -> Bool {
+        guard let apiError = error as? APIError else { return true }
+        return apiError.code == 0 || (500...599).contains(apiError.code)
     }
 }
 
@@ -750,7 +781,7 @@ struct LoopGaugeView: View {
                 Text("ORCA · \(response.computedAt, style: .relative)")
                     .font(.caption2)
                     .foregroundStyle(AppColors.textTertiary)
-            } else if model.isLoading {
+            } else if model.isLoading || !model.hasLoaded {
                 ProgressView("Computing loop health")
                     .tint(AppColors.accentElectric)
                     .frame(maxWidth: .infinity, minHeight: 88)

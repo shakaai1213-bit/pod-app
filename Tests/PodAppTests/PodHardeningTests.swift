@@ -155,6 +155,88 @@ final class PodHardeningTests: XCTestCase {
         XCTAssertTrue(atlas.captainQueue.isEmpty)
     }
 
+    func testCaptainsDeskProtectedPointerDecodesWithoutFullTicketFields() throws {
+        let payload = #"""
+        {
+          "id":"71a5f76b-87f4-4020-baa5-065e3107ad7e",
+          "title":"CURRENT TOPICS",
+          "type":"ticket",
+          "protected":true,
+          "pointer":"/api/v1/tickets/71a5f76b-87f4-4020-baa5-065e3107ad7e"
+        }
+        """#
+
+        let dto = try JSONDecoder().decode(
+            CaptainsDeskTicketPayload.self,
+            from: Data(payload.utf8)
+        )
+        let ticket = CaptainsDeskTicket(dto)
+
+        XCTAssertTrue(ticket.isProtected)
+        XCTAssertNil(ticket.updatedAt)
+        XCTAssertEqual(
+            ticket.description,
+            "Protected focus pointer. The current detail remains governed in ORCA."
+        )
+    }
+
+    @MainActor
+    func testLoopAtlasRetriesOneTransientServerFailure() async {
+        var requestCount = 0
+        MockURLProtocol.handler = { request in
+            requestCount += 1
+            if requestCount == 1 {
+                let response = HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 503,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"]
+                )!
+                return (response, Data(#"{"detail":"Restarting"}"#.utf8))
+            }
+
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let body = #"""
+            {
+              "computed_at":"2026-07-27T01:44:39.890242",
+              "gauge":[],
+              "lanes":[],
+              "captain_queue":[],
+              "source_refs":["/api/v1/lab/velocity"]
+            }
+            """#
+            return (response, Data(body.utf8))
+        }
+
+        let model = LoopAtlasViewModel(
+            apiClient: makeClient(keychainToken: "keychain-token"),
+            retryDelayNanoseconds: 0
+        )
+        await model.load(force: true)
+
+        XCTAssertEqual(requestCount, 2)
+        XCTAssertNotNil(model.response)
+        XCTAssertTrue(model.hasLoaded)
+        XCTAssertNil(model.errorMessage)
+    }
+
+    @MainActor
+    func testLoopAtlasDoesNotShowUnavailableBeforeFirstLoad() {
+        let model = LoopAtlasViewModel(
+            apiClient: makeClient(keychainToken: "keychain-token"),
+            retryDelayNanoseconds: 0
+        )
+
+        XCTAssertFalse(model.hasLoaded)
+        XCTAssertNil(model.response)
+        XCTAssertNil(model.errorMessage)
+    }
+
     func testCentralAgentHealthDecodesRuntimeEvidence() throws {
         let payload = #"""
         {
