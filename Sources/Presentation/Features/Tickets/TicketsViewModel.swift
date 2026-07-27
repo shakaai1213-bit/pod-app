@@ -376,6 +376,39 @@ struct AgentRunTrace: Sendable, Hashable {
     let computeRuns: [ComputeRunRecord]
     let chatMessages: [AgentRunTraceChatMessage]
     let notes: [TicketNoteRecord]
+    let lifecycle: AgentRunTraceLifecycle?
+}
+
+struct AgentRunTraceLifecycleStage: Identifiable, Sendable, Hashable {
+    var id: String { key }
+    let key: String
+    let label: String
+    let status: String
+    let detail: String?
+    let owner: String?
+    let sourceRef: String?
+    let occurredAt: Date?
+}
+
+struct AgentRunTraceLifecycle: Sendable, Hashable {
+    let state: String
+    let conversationOwner: String?
+    let domainOwner: String?
+    let riskLevel: String?
+    let bodyPolicy: String?
+    let approvalGate: String?
+    let recommendedRuntime: String?
+    let recommendedSurface: String?
+    let route: String?
+    let routeReason: String?
+    let originSurface: String?
+    let originChannel: String?
+    let controllerGeneration: Int?
+    let agentSessionId: String?
+    let agentSessionStatus: String?
+    let terminalReplyCount: Int
+    let childRunCount: Int
+    let stages: [AgentRunTraceLifecycleStage]
 }
 
 struct AgentRunArtifactSummary: Identifiable, Sendable, Hashable {
@@ -5764,6 +5797,7 @@ struct AgentRunTraceDTO: Decodable {
     let computeRuns: [ComputeRunRecordDTO]?
     let chatMessages: [AgentRunTraceChatMessageDTO]?
     let notes: [TicketNoteDTO]?
+    let lifecycle: AgentRunTraceLifecycleDTO?
 
     enum CodingKeys: String, CodingKey {
         case traceId = "trace_id"
@@ -5771,6 +5805,7 @@ struct AgentRunTraceDTO: Decodable {
         case computeRuns = "compute_runs"
         case chatMessages = "chat_messages"
         case notes
+        case lifecycle
         case events
     }
 
@@ -5781,7 +5816,99 @@ struct AgentRunTraceDTO: Decodable {
             events: events.map { $0.toDomain() }.sorted { $0.createdAt < $1.createdAt },
             computeRuns: (computeRuns ?? []).map { $0.toDomain() }.sorted { $0.createdAt < $1.createdAt },
             chatMessages: (chatMessages ?? []).map { $0.toDomain() }.sorted { $0.createdAt < $1.createdAt },
-            notes: (notes ?? []).map { $0.toDomain() }.sorted { $0.updatedAt < $1.updatedAt }
+            notes: (notes ?? []).map { $0.toDomain() }.sorted { $0.updatedAt < $1.updatedAt },
+            lifecycle: lifecycle?.toDomain()
+        )
+    }
+}
+
+struct AgentRunTraceLifecycleDTO: Decodable {
+    let state: String
+    let conversationOwner: String?
+    let domainOwner: String?
+    let riskLevel: String?
+    let bodyPolicy: String?
+    let approvalGate: String?
+    let recommendedRuntime: String?
+    let recommendedSurface: String?
+    let route: String?
+    let routeReason: String?
+    let originSurface: String?
+    let originChannel: String?
+    let controllerGeneration: Int?
+    let agentSessionId: String?
+    let agentSessionStatus: String?
+    let terminalReplyCount: Int?
+    let childRunCount: Int?
+    let stages: [AgentRunTraceLifecycleStageDTO]?
+
+    enum CodingKeys: String, CodingKey {
+        case state, route, stages
+        case conversationOwner = "conversation_owner"
+        case domainOwner = "domain_owner"
+        case riskLevel = "risk_level"
+        case bodyPolicy = "body_policy"
+        case approvalGate = "approval_gate"
+        case recommendedRuntime = "recommended_runtime"
+        case recommendedSurface = "recommended_surface"
+        case routeReason = "route_reason"
+        case originSurface = "origin_surface"
+        case originChannel = "origin_channel"
+        case controllerGeneration = "controller_generation"
+        case agentSessionId = "agent_session_id"
+        case agentSessionStatus = "agent_session_status"
+        case terminalReplyCount = "terminal_reply_count"
+        case childRunCount = "child_run_count"
+    }
+
+    func toDomain() -> AgentRunTraceLifecycle {
+        AgentRunTraceLifecycle(
+            state: state,
+            conversationOwner: conversationOwner,
+            domainOwner: domainOwner,
+            riskLevel: riskLevel,
+            bodyPolicy: bodyPolicy,
+            approvalGate: approvalGate,
+            recommendedRuntime: recommendedRuntime,
+            recommendedSurface: recommendedSurface,
+            route: route,
+            routeReason: routeReason,
+            originSurface: originSurface,
+            originChannel: originChannel,
+            controllerGeneration: controllerGeneration,
+            agentSessionId: agentSessionId,
+            agentSessionStatus: agentSessionStatus,
+            terminalReplyCount: terminalReplyCount ?? 0,
+            childRunCount: childRunCount ?? 0,
+            stages: (stages ?? []).map { $0.toDomain() }
+        )
+    }
+}
+
+struct AgentRunTraceLifecycleStageDTO: Decodable {
+    let key: String
+    let label: String
+    let status: String
+    let detail: String?
+    let owner: String?
+    let sourceRef: String?
+    let occurredAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case key, label, status, detail, owner
+        case sourceRef = "source_ref"
+        case occurredAt = "occurred_at"
+    }
+
+    func toDomain() -> AgentRunTraceLifecycleStage {
+        AgentRunTraceLifecycleStage(
+            key: key,
+            label: label,
+            status: status,
+            detail: detail,
+            owner: owner,
+            sourceRef: sourceRef,
+            occurredAt: occurredAt
         )
     }
 }

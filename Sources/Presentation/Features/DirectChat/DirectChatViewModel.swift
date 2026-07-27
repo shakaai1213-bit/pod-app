@@ -47,6 +47,8 @@ final class DirectChatViewModel {
     var agentRunTrace: AgentRunTrace?
     var isLoadingAgentRunTrace: Bool = false
     var agentRunTraceError: String?
+    var messageTracesById: [String: AgentRunTrace] = [:]
+    var loadingMessageTraceIds: Set<String> = []
     var artifactSummariesByRunId: [String: [AgentRunArtifactSummary]] = [:]
     var artifactSummaryErrorsByRunId: [String: String] = [:]
     var ticketApprovals: [DirectChatApprovalRecord] = []
@@ -3119,6 +3121,35 @@ final class DirectChatViewModel {
         } catch {
             agentRunTraceError = "Agent Run trace unavailable."
         }
+    }
+
+    func lifecycle(for traceId: String?) -> AgentRunTraceLifecycle? {
+        guard let traceId = normalizedTraceId(traceId) else { return nil }
+        return messageTracesById[traceId]?.lifecycle
+    }
+
+    func loadMessageTraceLifecycle(traceId: String?) async {
+        guard let traceId = normalizedTraceId(traceId),
+              messageTracesById[traceId] == nil,
+              !loadingMessageTraceIds.contains(traceId) else {
+            return
+        }
+        loadingMessageTraceIds.insert(traceId)
+        defer { loadingMessageTraceIds.remove(traceId) }
+        let encoded = traceId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? traceId
+        do {
+            let dto: AgentRunTraceDTO = try await api.get(
+                path: "/api/v1/agent-runs/traces/\(encoded)"
+            )
+            messageTracesById[traceId] = dto.toDomain()
+        } catch {
+            // Message delivery remains usable when deep evidence is temporarily unavailable.
+        }
+    }
+
+    private func normalizedTraceId(_ value: String?) -> String? {
+        let traceId = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return traceId.isEmpty ? nil : traceId
     }
 
     private func loadArtifactSummaries(runId: String) async {

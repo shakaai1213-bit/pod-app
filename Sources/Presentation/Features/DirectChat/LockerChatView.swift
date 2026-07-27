@@ -389,7 +389,15 @@ struct LockerChatView: View {
 
     @ViewBuilder
     private func messageBubble(_ message: DMMessage, agent: AgentInfo) -> some View {
-        DMBubble(message: message, agent: agent, onRetry: { viewModel.retryMessage(message) })
+        DMBubble(
+            message: message,
+            agent: agent,
+            lifecycle: viewModel.lifecycle(for: message.traceId),
+            onRetry: { viewModel.retryMessage(message) }
+        )
+            .task(id: message.traceId) {
+                await viewModel.loadMessageTraceLifecycle(traceId: message.traceId)
+            }
             .contextMenu {
                 Button {
                     selectedEvidenceMessage = message
@@ -3326,7 +3334,21 @@ struct SonarComputeRunDTO: Decodable {
 struct DMBubble: View {
     let message: DMMessage
     let agent: AgentInfo
+    let lifecycle: AgentRunTraceLifecycle?
     var onRetry: (() -> Void)? = nil
+    @State private var isLifecycleExpanded = false
+
+    init(
+        message: DMMessage,
+        agent: AgentInfo,
+        lifecycle: AgentRunTraceLifecycle? = nil,
+        onRetry: (() -> Void)? = nil
+    ) {
+        self.message = message
+        self.agent = agent
+        self.lifecycle = lifecycle
+        self.onRetry = onRetry
+    }
 
     private var isUser: Bool { message.role == "user" }
 
@@ -3375,6 +3397,10 @@ struct DMBubble: View {
 
                 if !isUser {
                     MessageDeliveryLedger(message: message, agent: agent)
+                }
+
+                if !isUser, let lifecycle {
+                    lifecyclePanel(lifecycle)
                 }
 
                 if isUser {
@@ -3432,6 +3458,193 @@ struct DMBubble: View {
             }
 
             if !isUser { Spacer(minLength: 60) }
+        }
+    }
+
+    private func lifecyclePanel(_ lifecycle: AgentRunTraceLifecycle) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    isLifecycleExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 7) {
+                    Image(systemName: lifecycleStateIcon(lifecycle.state))
+                        .foregroundStyle(lifecycleStateColor(lifecycle.state))
+                    Text("Lifecycle")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(AppColors.textSecondary)
+                    Text(lifecycle.state.replacingOccurrences(of: "_", with: " ").capitalized)
+                        .font(.caption2)
+                        .foregroundStyle(lifecycleStateColor(lifecycle.state))
+                    Spacer(minLength: 6)
+                    Image(systemName: isLifecycleExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(AppColors.textTertiary)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(
+                isLifecycleExpanded ? "Collapse agent lifecycle" : "Expand agent lifecycle"
+            )
+
+            HStack(alignment: .top, spacing: 5) {
+                ForEach(Array(lifecycle.stages.prefix(6).enumerated()), id: \.element.id) { index, stage in
+                    if index > 0 {
+                        Rectangle()
+                            .fill(stageStatusColor(stage.status).opacity(0.45))
+                            .frame(width: 12, height: 1)
+                            .padding(.top, 9)
+                    }
+                    VStack(spacing: 3) {
+                        Image(systemName: stageIcon(stage.key))
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(stageStatusColor(stage.status))
+                            .frame(width: 18, height: 18)
+                            .background(stageStatusColor(stage.status).opacity(0.12))
+                            .clipShape(Circle())
+                        Text(stage.label)
+                            .font(.system(size: 8, weight: .medium))
+                            .foregroundStyle(AppColors.textTertiary)
+                            .lineLimit(1)
+                    }
+                    .frame(minWidth: 38)
+                }
+            }
+
+            if isLifecycleExpanded {
+                Divider()
+                    .overlay(AppColors.border)
+
+                lifecycleFacts(lifecycle)
+
+                ForEach(lifecycle.stages) { stage in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: stageIcon(stage.key))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(stageStatusColor(stage.status))
+                            .frame(width: 18)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(stage.label) · \(stage.status.replacingOccurrences(of: "_", with: " "))")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(AppColors.textSecondary)
+                            if let detail = stage.detail, !detail.isEmpty {
+                                Text(detail)
+                                    .font(.caption2)
+                                    .foregroundStyle(AppColors.textTertiary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                    }
+                }
+
+                if let gate = lifecycle.approvalGate, !gate.isEmpty {
+                    Label(gate, systemImage: "checkmark.shield")
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.accentWarning)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let reason = lifecycle.routeReason, !reason.isEmpty {
+                    Text(reason)
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: 430)
+        .background(AppColors.backgroundTertiary.opacity(0.72))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(AppColors.border.opacity(0.8), lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private func lifecycleFacts(_ lifecycle: AgentRunTraceLifecycle) -> some View {
+        let ownerText = lifecycleOwnerText(lifecycle)
+        let runtimeText = lifecycleRuntimeText(lifecycle)
+        VStack(alignment: .leading, spacing: 4) {
+            if !ownerText.isEmpty {
+                Label(ownerText, systemImage: "person.2")
+            }
+            if !runtimeText.isEmpty {
+                Label(runtimeText, systemImage: "cpu")
+            }
+            if let risk = lifecycle.riskLevel, !risk.isEmpty {
+                Label(risk.replacingOccurrences(of: "_", with: " "), systemImage: "shield")
+            }
+            if let generation = lifecycle.controllerGeneration {
+                Label("controller generation \(generation)", systemImage: "point.3.connected.trianglepath.dotted")
+            }
+            if lifecycle.childRunCount > 0 {
+                Label(
+                    "\(lifecycle.childRunCount) bounded child run\(lifecycle.childRunCount == 1 ? "" : "s")",
+                    systemImage: "arrow.triangle.branch"
+                )
+            }
+        }
+        .font(.caption2)
+        .foregroundStyle(AppColors.textSecondary)
+    }
+
+    private func lifecycleOwnerText(_ lifecycle: AgentRunTraceLifecycle) -> String {
+        [
+            lifecycle.conversationOwner.map { "conversation \($0)" },
+            lifecycle.domainOwner.map { "domain \($0)" }
+        ]
+        .compactMap { $0 }
+        .joined(separator: " · ")
+    }
+
+    private func lifecycleRuntimeText(_ lifecycle: AgentRunTraceLifecycle) -> String {
+        [lifecycle.recommendedRuntime, lifecycle.recommendedSurface]
+            .compactMap { $0 }
+            .joined(separator: " · ")
+    }
+
+    private func stageIcon(_ key: String) -> String {
+        switch key {
+        case "intake": return "tray.and.arrow.down"
+        case "triage": return "arrow.triangle.branch"
+        case "controller": return "point.3.connected.trianglepath.dotted"
+        case "schoolhouse": return "building.columns"
+        case "work": return "hammer"
+        case "output": return "bubble.left.and.bubble.right"
+        default: return "circle"
+        }
+    }
+
+    private func lifecycleStateIcon(_ state: String) -> String {
+        switch state {
+        case "complete": return "checkmark.circle.fill"
+        case "blocked": return "exclamationmark.triangle.fill"
+        case "active": return "bolt.circle.fill"
+        default: return "clock"
+        }
+    }
+
+    private func lifecycleStateColor(_ state: String) -> Color {
+        switch state {
+        case "complete": return AppColors.accentSuccess
+        case "blocked": return AppColors.accentDanger
+        case "active": return AppColors.accentElectric
+        default: return AppColors.accentWarning
+        }
+    }
+
+    private func stageStatusColor(_ status: String) -> Color {
+        switch status {
+        case "complete": return AppColors.accentSuccess
+        case "blocked", "failed", "cancelled": return AppColors.accentDanger
+        case "active", "running": return AppColors.accentElectric
+        case "waiting": return AppColors.accentWarning
+        case "not_required": return AppColors.textSecondary
+        default: return AppColors.textTertiary
         }
     }
 
