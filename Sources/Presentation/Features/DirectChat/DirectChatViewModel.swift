@@ -309,6 +309,13 @@ final class DirectChatViewModel {
         return String(channelId.prefix(8))
     }
 
+    func agent(forChannelId channelId: String) -> AgentInfo? {
+        let target = channelId.lowercased()
+        return directChatAgents.first { agent in
+            currentChannelId(for: agent)?.lowercased() == target
+        }
+    }
+
     // MARK: - Load Conversations
 
     func loadConversations() {
@@ -422,7 +429,7 @@ final class DirectChatViewModel {
                 checks: [
                     SonarHealthCheck(
                         key: "sonar_health",
-                        label: "Sonar health",
+                        label: "Chat health",
                         status: "degraded",
                         detail: "Health endpoint unavailable.",
                         count: nil
@@ -664,7 +671,7 @@ final class DirectChatViewModel {
             roomActionMessage = "Approval \(dto.approvalId) created for ticket \(String(ticketId.prefix(8)))."
         } catch let apiError as APIError {
             roomActionMessage = "Approval card recorded, but approval object was not created: \(apiError.message)"
-            await createSonarAgentRunComment(ticketId: ticketId, content: "Approval request from Sonar message \(messageId):\n\n\(content)", traceId: traceId, messageId: messageId)
+            await createSonarAgentRunComment(ticketId: ticketId, content: "Approval request from ORCA chat message \(messageId):\n\n\(content)", traceId: traceId, messageId: messageId)
         } catch {
             roomActionMessage = "Approval card recorded, but approval object was not created."
         }
@@ -674,7 +681,7 @@ final class DirectChatViewModel {
         let body = DirectChatWorkspaceToolRequestBody(
             toolName: "agent_workspace_task",
             instruction: content,
-            reason: "Requested from Sonar room for ticket \(ticketId).",
+            reason: "Requested from ORCA chat room for ticket \(ticketId).",
             source: "pod.sonar.tool_request",
             idempotencyKey: "pod-sonar-tool-\(UUID().uuidString.lowercased())"
         )
@@ -692,7 +699,7 @@ final class DirectChatViewModel {
         let body = DirectChatWorkspaceFileWriteRequest(
             filename: "sonar-file-request-\(Self.timestampForFilename()).md",
             content: """
-            # Sonar File Context Request
+            # Chat File Context Request
 
             Room: \(room.displayName)
             Ticket: \(ticketId)
@@ -701,7 +708,7 @@ final class DirectChatViewModel {
             ## Request
             \(content)
             """,
-            description: "Sonar file/context request for ticket \(ticketId)",
+            description: "Chat file/context request for ticket \(ticketId)",
             runId: nil,
             source: "pod.sonar.file_request"
         )
@@ -750,7 +757,7 @@ final class DirectChatViewModel {
     private func createSonarAgentRunComment(ticketId: String, content: String, traceId: String, messageId: String) async {
         let body = DirectChatTicketCommentBody(
             message: """
-            ## Sonar Agent Run Request
+            ## Chat Agent Run Request
 
             \(content)
 

@@ -260,7 +260,7 @@ struct WorkView: View {
             Text("Workbench")
                 .font(.system(size: 28, weight: .bold))
                 .foregroundColor(AppColors.textPrimary)
-            Text("1:1 lanes, approvals, tasks, projects, and tickets.")
+            Text("Pod Chat, approvals, tasks, projects, and tickets.")
                 .font(.system(size: 14))
                 .foregroundColor(AppColors.textSecondary)
         }
@@ -2285,10 +2285,10 @@ private struct WorkbenchAgentCockpitSection: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("1:1")
+                    Text("POD CHAT")
                         .font(.caption.weight(.semibold))
                         .foregroundColor(AppColors.textTertiary)
-                    Text("Direct conversations")
+                    Text("Agent conversations")
                         .font(.headline)
                         .foregroundColor(AppColors.textPrimary)
                 }
@@ -2318,8 +2318,8 @@ private struct WorkbenchAgentCockpitSection: View {
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Open direct conversation workspace")
-                    .help("Open direct conversation workspace")
+                    .accessibilityLabel("Open Pod Chat workspace")
+                    .help("Open Pod Chat workspace")
                 }
 
                 Button {
@@ -2588,7 +2588,7 @@ private struct WorkDirectConversationWorkspace: View {
                 }
             } header: {
                 HStack {
-                    Text("1:1 INBOX")
+                    Text("POD CHAT")
                     Spacer()
                     if totalUnreadCount > 0 {
                         Text("\(totalUnreadCount) unread")
@@ -2599,7 +2599,7 @@ private struct WorkDirectConversationWorkspace: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(AppColors.backgroundPrimary)
-        .navigationTitle("Conversations")
+        .navigationTitle("Pod Chat")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "Search conversations")
         .toolbarBackground(AppColors.backgroundSecondary, for: .navigationBar)

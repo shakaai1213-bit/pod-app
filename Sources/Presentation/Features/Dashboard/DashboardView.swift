@@ -17,7 +17,7 @@ struct DashboardView: View {
     @State private var isGeneratingBriefing = false
     @State private var showingVoiceRoom = false
     @State private var showingSettings = false
-    @State private var playgroundModel = PlaygroundPanelModel()
+    @State private var podChatModel = PodChatPanelModel()
     @State private var loopAtlasModel = LoopAtlasViewModel()
     @AppStorage("orca_display_name") private var displayName: String = "Captain"
 
@@ -51,9 +51,9 @@ struct DashboardView: View {
                     // 7. Voice room status — realtime team surface.
                     dashboardVoiceBanner
 
-                    // 8. Playground NATS tail — unread inbox + action-required
-                    PlaygroundPanelView(model: playgroundModel, onChatTap: {
-                        appState.navigateTo(.chat)
+                    // 8. Pod Chat readiness and conversation attention.
+                    PodChatPanelView(model: podChatModel, onChatTap: {
+                        appState.navigateTo(.work)
                     })
 
                     // 9. Compact briefing + doctrine velocity line
@@ -70,7 +70,7 @@ struct DashboardView: View {
                 await briefingModel.load(force: true)
                 await dailyBriefingModel.load(force: true)
                 await fundLandingModel.load()
-                await playgroundModel.load()
+                await podChatModel.load()
                 await loopAtlasModel.load(force: true)
             }
             .background(AppColors.backgroundPrimary)
@@ -84,7 +84,7 @@ struct DashboardView: View {
                             await briefingModel.load(force: true)
                             await dailyBriefingModel.load(force: true)
                             await fundLandingModel.load()
-                            await playgroundModel.load()
+                            await podChatModel.load()
                             await loopAtlasModel.load(force: true)
                         }
                     } label: {
@@ -123,7 +123,7 @@ struct DashboardView: View {
                 await briefingModel.load()
                 await dailyBriefingModel.load()
                 await fundLandingModel.load()
-                await playgroundModel.load()
+                await podChatModel.load()
                 await loopAtlasModel.load()
             }
             .task {

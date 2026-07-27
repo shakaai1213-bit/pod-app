@@ -1409,9 +1409,9 @@ struct AgentDetailSheet: View {
     private func lockerChatStatusText(_ chat: AgentLockerDTO.LockerChat) -> String {
         let state = (chat.policyState ?? "open").replacingOccurrences(of: "_", with: " ")
         if chat.exists {
-            return "Playground thread ready • \(state)"
+            return "Pod Chat thread ready • \(state)"
         }
-        return "Playground will open this 1:1 thread • \(state)"
+        return "Pod Chat will open this 1:1 thread • \(state)"
     }
 
     private func lockerChatStatusColor(_ status: String?) -> Color {

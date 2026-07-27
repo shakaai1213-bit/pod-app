@@ -93,7 +93,7 @@ struct LockerChatView: View {
                         }
 
                         if shouldCompactMessages {
-                            PlaygroundHistoryToggle(
+                            ChatHistoryToggle(
                                 hiddenCount: hiddenMessageCount,
                                 isExpanded: areOlderMessagesExpanded,
                                 action: {
@@ -279,7 +279,7 @@ struct LockerChatView: View {
             )
         ) {
             if let message = selectedEvidenceMessage {
-                SonarEvidenceDrawer(
+                ChatEvidenceDrawer(
                     message: message,
                     agent: agent,
                     channelId: viewModel.currentChannelId(for: agent),
@@ -2575,7 +2575,7 @@ private struct RouteProgressStrip: View {
     }
 }
 
-struct PlaygroundHistoryToggle: View {
+struct ChatHistoryToggle: View {
     let hiddenCount: Int
     let isExpanded: Bool
     let action: () -> Void
@@ -2829,7 +2829,7 @@ private struct LockerToolRequestOption: Identifiable, Hashable {
     ]
 }
 
-private struct SonarEvidenceDrawer: View {
+private struct ChatEvidenceDrawer: View {
     let message: DMMessage
     let agent: AgentInfo
     let channelId: String?
@@ -2854,7 +2854,7 @@ private struct SonarEvidenceDrawer: View {
                 .padding(16)
             }
             .background(AppColors.backgroundPrimary)
-            .navigationTitle("Playground Evidence")
+            .navigationTitle("Chat Evidence")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -3038,7 +3038,7 @@ private struct SonarEvidenceDrawer: View {
 
     private var evidencePacket: String {
         """
-        # Sonar Evidence
+        # Chat Evidence
         Agent: \(agent.name)
         Message ID: \(message.remoteMessageId ?? message.id.uuidString)
         Channel ID: \(channelId ?? "not recorded")

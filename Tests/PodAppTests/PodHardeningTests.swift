@@ -26,6 +26,56 @@ final class PodHardeningTests: XCTestCase {
         XCTAssertNotEqual(AppConfig.canonicalBackendURL, "http://100.76.196.40:8000")
     }
 
+    func testPodChatHasOneUserFacingEntryInsideWork() throws {
+        XCTAssertEqual(AppTab.chat.title, "Pod Chat")
+
+        let sourceRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources")
+        let appState = try String(
+            contentsOf: sourceRoot.appendingPathComponent("App/AppState.swift"),
+            encoding: .utf8
+        )
+        let contentView = try String(
+            contentsOf: sourceRoot.appendingPathComponent("App/ContentView.swift"),
+            encoding: .utf8
+        )
+        let dashboard = try String(
+            contentsOf: sourceRoot.appendingPathComponent("Presentation/Features/Dashboard/DashboardView.swift"),
+            encoding: .utf8
+        )
+        let chatPanel = try String(
+            contentsOf: sourceRoot.appendingPathComponent("Presentation/Features/Dashboard/PodChatPanel.swift"),
+            encoding: .utf8
+        )
+        let retiredShells = [
+            "Presentation/Features/Sonar/SonarView.swift",
+            "Presentation/Features/DirectChat/DirectChatView.swift",
+            "Presentation/Features/Chat/ChatView.swift",
+            "Presentation/Features/Chat/ChatViewModel.swift",
+            "Presentation/Features/Chat/ComposeBar.swift",
+            "Presentation/Features/Chat/MessageBubbleView.swift",
+            "Presentation/Features/Chat/SpeechRecognizer.swift",
+        ]
+
+        XCTAssertTrue(appState.contains("case .chat: selectedTab = .work"))
+        XCTAssertTrue(appState.contains("pendingDirectChatChannelId = channelId.uuidString"))
+        XCTAssertTrue(contentView.contains("appState.selectedTab == .chat || appState.selectedTab == .work"))
+        XCTAssertFalse(contentView.contains("SonarView(viewModel:"))
+        XCTAssertTrue(contentView.contains("directChatViewModel.agent(forChannelId: channelId)"))
+        XCTAssertTrue(dashboard.contains("appState.navigateTo(.work)"))
+        XCTAssertTrue(chatPanel.contains("Text(\"POD CHAT\")"))
+        XCTAssertTrue(chatPanel.contains("Label(\"Open Chat\""))
+        XCTAssertFalse(chatPanel.contains("Open Playground"))
+        for relativePath in retiredShells {
+            XCTAssertFalse(FileManager.default.fileExists(
+                atPath: sourceRoot.appendingPathComponent(relativePath).path
+            ))
+        }
+    }
+
     func testUserFacingBackendClientsUseAppConfigInsteadOfLegacyShakaProxy() throws {
         let sourceRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

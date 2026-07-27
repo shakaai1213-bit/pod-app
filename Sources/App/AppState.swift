@@ -199,7 +199,7 @@ final class AppState: ObservableObject {
             print("[AppState] performAuth: SUCCESS")
             appendDiagnostic("Token accepted")
             // Set both at once — no delay, avoids SwiftUI render timing issues
-            // Set token BEFORE isAuthenticated=true so ChatViewModel has it when it loads
+            // Set the token before publishing authenticated state so data loads can start safely.
             await APIClient.shared.setToken(token)
             isLoading = false
             loadingMessage = nil
@@ -355,7 +355,7 @@ final class AppState: ObservableObject {
     func navigateTo(_ state: NavigationState) {
         switch state {
         case .dashboard: selectedTab = .dashboard
-        case .chat: selectedTab = .chat
+        case .chat: selectedTab = .work
         case .projects: selectedTab = .work
         case .knowledge: selectedTab = .knowledge
         case .agents: selectedTab = .crew  // agents folded into Crew (L1 revamp)
@@ -365,7 +365,9 @@ final class AppState: ObservableObject {
     }
 
     func navigateTo(_ tab: AppTab) {
-        selectedTab = tab
+        // Pod Chat is a capability inside Work. Keep the old enum case for
+        // deep-link compatibility, but never restore the duplicate room shell.
+        selectedTab = tab == .chat ? .work : tab
         switch tab {
         case .dashboard: navigationState = .dashboard
         case .runtime: navigationState = .dashboard
@@ -386,8 +388,9 @@ final class AppState: ObservableObject {
     func route(_ action: NotificationAction) {
         switch action {
         case .newMessage(let channelId, _):
-            selectedTab = .chat
+            selectedTab = .work
             navigationState = .chat(channelId: channelId)
+            pendingDirectChatChannelId = channelId.uuidString
         case .taskAssigned(let taskId, _):
             selectedTab = .work
             navigationState = .projects(taskId: taskId)

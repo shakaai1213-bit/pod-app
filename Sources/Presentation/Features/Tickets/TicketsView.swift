@@ -1,5 +1,25 @@
 import SwiftUI
 
+private extension Date {
+    var relativeTimeString: String {
+        let interval = Date().timeIntervalSince(self)
+        if interval < 30 { return "just now" }
+        if interval < 60 { return "\(Int(interval))s ago" }
+        if interval < 3_600 { return "\(Int(interval / 60))m ago" }
+
+        let calendar = Calendar.current
+        if calendar.isDateInToday(self), interval < 14_400 {
+            return "\(Int(interval / 3_600))h ago"
+        }
+        if calendar.isDateInYesterday(self) {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "'Yesterday at' h:mm a"
+            return formatter.string(from: self)
+        }
+        return formatted(date: .numeric, time: .shortened)
+    }
+}
+
 private extension Font {
     func dynamic() -> Font { self }
 }

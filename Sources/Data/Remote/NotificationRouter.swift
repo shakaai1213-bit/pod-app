@@ -6,7 +6,7 @@ final class NotificationRouter {
     static let shared = NotificationRouter()
 
     var navigationPath: [ScreenDestination] = []
-    var selectedTab: AppTab = .chat
+    var selectedTab: AppTab = .work
     var showApprovalSheet: Bool = false
     var pendingApprovalId: UUID?
 
@@ -15,7 +15,7 @@ final class NotificationRouter {
     func route(_ action: NotificationAction) {
         switch action {
         case .newMessage(let channelId, _):
-            selectedTab = .chat
+            selectedTab = .work
             navigateTo(.chat(channelId: channelId))
 
         case .taskAssigned(let taskId, _):
@@ -103,4 +103,3 @@ enum ScreenDestination: Hashable {
 }
 
 // NOTE: AppTab is defined in App/AppState.swift (the canonical version)
-

@@ -1,11 +1,11 @@
 import SwiftUI
 
-// MARK: - Playground Panel
+// MARK: - Pod Chat Panel
 
 @MainActor
 @Observable
-final class PlaygroundPanelModel {
-    var agents: [PlaygroundAgentReadiness] = []
+final class PodChatPanelModel {
+    var agents: [PodChatAgentReadiness] = []
     var roomCount = 0
     var unreadRoomCount = 0
     var pendingMessageCount = 0
@@ -41,7 +41,7 @@ final class PlaygroundPanelModel {
         var nextHealthStatus: String?
 
         do {
-            let contacts: PlaygroundContactsResponseDTO = try await APIClient.shared.get(path: "/api/v1/sonar/contacts")
+            let contacts: PodChatContactsResponseDTO = try await APIClient.shared.get(path: "/api/v1/sonar/contacts")
             nextGeneratedAt = contacts.generatedAt
             nextRoomCount = contacts.contacts.count
             nextUnreadRoomCount = contacts.contacts.filter { ($0.unreadCount ?? 0) > 0 }.count
@@ -57,14 +57,14 @@ final class PlaygroundPanelModel {
         }
 
         do {
-            let health: PlaygroundHealthDTO = try await APIClient.shared.get(path: "/api/v1/sonar/health")
+            let health: PodChatHealthDTO = try await APIClient.shared.get(path: "/api/v1/sonar/health")
             nextHealthStatus = health.status
             nextGeneratedAt = nextGeneratedAt ?? health.generatedAt
         } catch {
             nextHealthStatus = nil
         }
 
-        var nextAgents: [PlaygroundAgentReadiness] = []
+        var nextAgents: [PodChatAgentReadiness] = []
         var failures: [String] = []
 
         for agent in AgentInfo.team where agent.isReachable {
@@ -72,7 +72,7 @@ final class PlaygroundPanelModel {
                 let locker: AgentLockerDTO = try await APIClient.shared.get(
                     path: Endpoint.agentLocker(name: agent.id, limit: 4).path
                 )
-                nextAgents.append(PlaygroundAgentReadiness(agent: agent, locker: locker))
+                nextAgents.append(PodChatAgentReadiness(agent: agent, locker: locker))
             } catch {
                 failures.append(agent.name)
             }
@@ -98,7 +98,7 @@ final class PlaygroundPanelModel {
     }
 }
 
-struct PlaygroundAgentReadiness: Identifiable, Hashable {
+struct PodChatAgentReadiness: Identifiable, Hashable {
     let id: String
     let name: String
     let role: String
@@ -166,11 +166,11 @@ struct PlaygroundAgentReadiness: Identifiable, Hashable {
     }
 }
 
-struct PlaygroundPanelView: View {
-    let model: PlaygroundPanelModel
+struct PodChatPanelView: View {
+    let model: PodChatPanelModel
     let onChatTap: (() -> Void)?
 
-    private let playgroundColor = Color(hexString: "26A6B8")
+    private let chatColor = Color(hexString: "26A6B8")
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.sm) {
@@ -182,7 +182,7 @@ struct PlaygroundPanelView: View {
         .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
         .overlay(
             RoundedRectangle(cornerRadius: Theme.radiusMedium)
-                .strokeBorder(playgroundColor.opacity(0.35), lineWidth: 1)
+                .strokeBorder(chatColor.opacity(0.35), lineWidth: 1)
         )
     }
 
@@ -190,9 +190,9 @@ struct PlaygroundPanelView: View {
         HStack(spacing: Theme.xs) {
             Image(systemName: "gamecontroller.fill")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(playgroundColor)
+                .foregroundStyle(chatColor)
 
-            Text("PLAYGROUND")
+            Text("POD CHAT")
                 .podTextStyle(.label, color: AppColors.textTertiary)
 
             if let health = model.healthStatus, !health.isEmpty {
@@ -226,7 +226,7 @@ struct PlaygroundPanelView: View {
                 .lineLimit(2)
             actionRow
         } else {
-            Text("Playground is waiting for Locker Cockpit data.")
+            Text("Pod Chat is waiting for Locker data.")
                 .podTextStyle(.caption, color: AppColors.textTertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
             actionRow
@@ -239,7 +239,7 @@ struct PlaygroundPanelView: View {
             metricPill("\(model.totalPendingCount)", label: "pending", color: model.totalPendingCount > 0 ? AppColors.accentWarning : AppColors.textTertiary)
             metricPill("\(model.gatedAgentCount)", label: "gated", color: model.gatedAgentCount > 0 ? AppColors.accentWarning : AppColors.textTertiary)
             if model.roomCount > 0 {
-                metricPill("\(model.roomCount)", label: "rooms", color: playgroundColor)
+                metricPill("\(model.roomCount)", label: "threads", color: chatColor)
             }
             if model.attentionRoomCount > 0 {
                 metricPill("\(model.attentionRoomCount)", label: "attention", color: AppColors.accentWarning)
@@ -259,7 +259,7 @@ struct PlaygroundPanelView: View {
         }
     }
 
-    private func agentRow(_ agent: PlaygroundAgentReadiness) -> some View {
+    private func agentRow(_ agent: PodChatAgentReadiness) -> some View {
         HStack(alignment: .top, spacing: Theme.xs) {
             Image(systemName: agent.icon)
                 .font(.system(size: 12, weight: .semibold))
@@ -300,7 +300,7 @@ struct PlaygroundPanelView: View {
                         statusChip("Run", color: AppColors.accentSuccess)
                     }
                     if agent.canRequestResearch {
-                        statusChip("Research", color: playgroundColor)
+                        statusChip("Research", color: chatColor)
                     }
                 }
             }
@@ -313,12 +313,12 @@ struct PlaygroundPanelView: View {
             Button {
                 onChatTap?()
             } label: {
-                Label("Open Playground", systemImage: "arrow.up.forward.app.fill")
+                Label("Open Chat", systemImage: "arrow.up.forward.app.fill")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(playgroundColor)
+                    .foregroundStyle(chatColor)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
-                    .background(playgroundColor.opacity(0.10))
+                    .background(chatColor.opacity(0.10))
                     .clipShape(Capsule())
             }
             .buttonStyle(.plain)
@@ -375,7 +375,7 @@ struct PlaygroundPanelView: View {
         case "dormant_archive":
             return AppColors.textTertiary
         default:
-            return playgroundColor
+            return chatColor
         }
     }
 
@@ -388,7 +388,7 @@ struct PlaygroundPanelView: View {
         case "failed", "error":
             return AppColors.accentDanger
         default:
-            return playgroundColor
+            return chatColor
         }
     }
 
@@ -401,9 +401,9 @@ struct PlaygroundPanelView: View {
     }
 }
 
-private struct PlaygroundContactsResponseDTO: Decodable {
+private struct PodChatContactsResponseDTO: Decodable {
     let generatedAt: Date
-    let contacts: [PlaygroundContactDTO]
+    let contacts: [PodChatContactDTO]
 
     enum CodingKeys: String, CodingKey {
         case generatedAt = "generated_at"
@@ -411,7 +411,7 @@ private struct PlaygroundContactsResponseDTO: Decodable {
     }
 }
 
-private struct PlaygroundContactDTO: Decodable {
+private struct PodChatContactDTO: Decodable {
     let pendingCount: Int
     let unreadCount: Int?
     let needsAttention: Bool?
@@ -425,7 +425,7 @@ private struct PlaygroundContactDTO: Decodable {
     }
 }
 
-private struct PlaygroundHealthDTO: Decodable {
+private struct PodChatHealthDTO: Decodable {
     let status: String
     let generatedAt: Date
 

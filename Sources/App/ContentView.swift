@@ -83,8 +83,8 @@ struct ContentView: View {
                 appState.pendingDirectChatAgentId = nil
                 return
             }
-            // Direct 1:1 chat now lives inside Workbench; keep the old Playground
-            // shell routable, but route current deep links to the operating cockpit.
+            // Pod Chat lives inside Workbench. Legacy chat links normalize to the
+            // same operating cockpit instead of opening a second room browser.
             withAnimation(.easeInOut(duration: 0.15)) { appState.navigateTo(.work) }
             if agentInfo.isReachable {
                 directChatViewModel.navigationPath = NavigationPath()
@@ -92,6 +92,23 @@ struct ContentView: View {
                 directChatViewModel.navigationPath.append(agentInfo)
             }
             appState.pendingDirectChatAgentId = nil
+            appState.pendingDirectChatChannelId = nil
+        }
+        .onChange(of: appState.pendingDirectChatChannelId) { _, channelId in
+            guard appState.pendingDirectChatTicketId == nil,
+                  appState.pendingDirectChatAgentId == nil,
+                  let channelId,
+                  !channelId.isEmpty else {
+                return
+            }
+            Task { @MainActor in
+                await directChatViewModel.loadORCAChannelSummaries()
+                if let agent = directChatViewModel.agent(forChannelId: channelId) {
+                    appState.pendingDirectChatAgentId = agent.id
+                } else {
+                    appState.pendingDirectChatChannelId = nil
+                }
+            }
         }
         .onChange(of: appState.pendingDirectChatTicketId) { _, ticketId in
             guard let ticketId else { return }
@@ -125,9 +142,7 @@ struct ContentView: View {
         // MARK: Primary 8-tab structure (L1 revamp + Fund amendment 2026-W22)
         if appState.selectedTab == .dashboard {
             DashboardView()
-        } else if appState.selectedTab == .chat {
-            SonarView(viewModel: directChatViewModel)
-        } else if appState.selectedTab == .work {
+        } else if appState.selectedTab == .chat || appState.selectedTab == .work {
             WorkView(directChatViewModel: directChatViewModel)
         } else if appState.selectedTab == .fund {
             TradingView()

@@ -10,7 +10,7 @@ import Foundation
 enum AppTab: String, CaseIterable, Hashable {
     // MARK: Visible (8 tabs — ordered as shown in tab bar)
     case dashboard
-    case chat           // legacy/routable Playground shell; not shown in primary tab bar
+    case chat           // legacy Pod Chat alias; normalized to Work and never shown
     case work
     case fund           // protected read-only Fund cockpit, sourced through ORCA
     case crew           // NEW — merges Agents + Arms+Team + Focus
@@ -28,7 +28,7 @@ enum AppTab: String, CaseIterable, Hashable {
     var title: String {
         switch self {
         case .dashboard:   return "Dashboard"
-        case .chat:        return "Playground"
+        case .chat:        return "Pod Chat"
         case .work:        return "Workbench"
         case .fund:        return "Fund"
         case .crew:        return "Crew"
@@ -47,7 +47,7 @@ enum AppTab: String, CaseIterable, Hashable {
     var tabBarTitle: String {
         switch self {
         case .dashboard: return "Home"
-        case .chat:      return "Play"
+        case .chat:      return "Chat"
         case .work:      return "Work"
         default:         return title
         }
@@ -56,7 +56,7 @@ enum AppTab: String, CaseIterable, Hashable {
     var icon: String {
         switch self {
         case .dashboard:   return "house.fill"
-        case .chat:        return "gamecontroller.fill"
+        case .chat:        return "bubble.left.and.bubble.right.fill"
         case .work:        return "square.stack.3d.up.fill"
         case .fund:        return "chart.line.uptrend.xyaxis"
         case .crew:        return "person.3.sequence.fill"
