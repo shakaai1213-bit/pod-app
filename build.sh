@@ -14,7 +14,7 @@ fi
 build_root="${POD_BUILD_ROOT:-$default_build_root}"
 source_packages_dir="${SOURCE_PACKAGES_DIR:-$build_root/SourcePackages}"
 derived_data_dir="${DERIVED_DATA_DIR:-${TMPDIR:-/tmp}/pod-derived-data}"
-destination="${DESTINATION:-platform=iOS Simulator,name=iPhone 17 Pro}"
+destination="${DESTINATION:-generic/platform=iOS Simulator}"
 install_after_build=false
 
 case "${1:-sim}" in

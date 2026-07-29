@@ -620,27 +620,41 @@ struct WorkControlIntegritySummary: Decodable, Sendable, Hashable {
     let issues: Int
     let countsByIssue: [String: Int]
     let countsByField: [String: Int]
+    let countsByWorkBucket: [String: Int]
+    let incompleteByWorkBucket: [String: Int]
+    let currentCountsByField: [String: Int]
+    let currentIssues: Int
+    let protectedIssues: Int
+    let historicalIssues: Int
     let items: [WorkControlIntegrityItem]
 
+    var currentCount: Int { countsByWorkBucket["current"] ?? 0 }
+    var protectedCount: Int { countsByWorkBucket["protected"] ?? 0 }
+    var historicalCount: Int { countsByWorkBucket["historical"] ?? 0 }
+    var reviewIssues: Int { protectedIssues + historicalIssues }
+    var currentItems: [WorkControlIntegrityItem] {
+        items.filter { $0.workBucket == "current" }
+    }
+
     var sourceLinkGapCount: Int {
-        let itemCount = items.filter(\.hasSourceLinkGap).count
+        let itemCount = currentItems.filter(\.hasSourceLinkGap).count
         if itemCount > 0 { return itemCount }
-        return countsByField["source_chat_or_thread_link"]
+        return currentCountsByField["source_chat_or_thread_link"]
             ?? countsByIssue["source_chat_or_thread_link"]
             ?? 0
     }
 
     var triageLinkGapCount: Int {
-        let itemCount = items.filter(\.hasTriageLinkGap).count
+        let itemCount = currentItems.filter(\.hasTriageLinkGap).count
         if itemCount > 0 { return itemCount }
         return max(
-            countsByField["triage_id"] ?? countsByIssue["triage_id"] ?? 0,
-            countsByField["triage_trace_id"] ?? countsByIssue["triage_trace_id"] ?? 0
+            currentCountsByField["triage_id"] ?? countsByIssue["triage_id"] ?? 0,
+            currentCountsByField["triage_trace_id"] ?? countsByIssue["triage_trace_id"] ?? 0
         )
     }
 
     var otherGapCount: Int {
-        max(0, issues - sourceLinkGapCount - triageLinkGapCount)
+        max(0, currentIssues - sourceLinkGapCount - triageLinkGapCount)
     }
 
     enum CodingKeys: String, CodingKey {
@@ -662,6 +676,12 @@ struct WorkControlIntegritySummary: Decodable, Sendable, Hashable {
         case countsByViolation = "counts_by_violation"
         case countsByProblem = "counts_by_problem"
         case countsByField = "counts_by_field"
+        case countsByWorkBucket = "counts_by_work_bucket"
+        case incompleteByWorkBucket = "incomplete_by_work_bucket"
+        case currentCountsByField = "current_counts_by_missing_field"
+        case currentIssues = "current_incomplete"
+        case protectedIssues = "protected_incomplete"
+        case historicalIssues = "historical_incomplete"
         case items
     }
 
@@ -684,6 +704,10 @@ struct WorkControlIntegritySummary: Decodable, Sendable, Hashable {
         countsByField = try c.decodeIfPresent([String: Int].self, forKey: .countsByField)
             ?? c.decodeIfPresent([String: Int].self, forKey: .countsByMissingField)
             ?? [:]
+        countsByWorkBucket = try c.decodeIfPresent([String: Int].self, forKey: .countsByWorkBucket) ?? [:]
+        incompleteByWorkBucket = try c.decodeIfPresent([String: Int].self, forKey: .incompleteByWorkBucket) ?? [:]
+        currentCountsByField = try c.decodeIfPresent([String: Int].self, forKey: .currentCountsByField)
+            ?? countsByField
         let issueCount = try c.decodeIfPresent(Int.self, forKey: .issues)
         let incompleteCount = try c.decodeIfPresent(Int.self, forKey: .incomplete)
         let failingCount = try c.decodeIfPresent(Int.self, forKey: .failing)
@@ -693,6 +717,15 @@ struct WorkControlIntegritySummary: Decodable, Sendable, Hashable {
         let decodedIssues = issueCount ?? incompleteCount ?? failingCount ?? invalidCount ?? violationCount ?? needsReviewCount
         let countedIssues = countsByIssue.values.reduce(0, +)
         issues = decodedIssues ?? (countedIssues > 0 ? countedIssues : max(0, total - clean))
+        currentIssues = try c.decodeIfPresent(Int.self, forKey: .currentIssues)
+            ?? incompleteByWorkBucket["current"]
+            ?? issues
+        protectedIssues = try c.decodeIfPresent(Int.self, forKey: .protectedIssues)
+            ?? incompleteByWorkBucket["protected"]
+            ?? 0
+        historicalIssues = try c.decodeIfPresent(Int.self, forKey: .historicalIssues)
+            ?? incompleteByWorkBucket["historical"]
+            ?? 0
     }
 }
 
@@ -703,6 +736,9 @@ struct WorkControlIntegrityItem: Decodable, Identifiable, Sendable, Hashable {
     let issues: [String]
     let fields: [String]
     let notes: [String]
+    let workBucket: String
+    let bucketReason: String?
+    let executionEligible: Bool
 
     var id: String { ticketId }
 
@@ -732,6 +768,9 @@ struct WorkControlIntegrityItem: Decodable, Identifiable, Sendable, Hashable {
         case issueFields = "issue_fields"
         case missingFields = "missing_fields"
         case notes
+        case workBucket = "work_bucket"
+        case bucketReason = "bucket_reason"
+        case executionEligible = "execution_eligible"
     }
 
     init(from decoder: Decoder) throws {
@@ -750,6 +789,9 @@ struct WorkControlIntegrityItem: Decodable, Identifiable, Sendable, Hashable {
             ?? c.decodeIfPresent([String].self, forKey: .missingFields)
             ?? []
         notes = try c.decodeIfPresent([String].self, forKey: .notes) ?? []
+        workBucket = try c.decodeIfPresent(String.self, forKey: .workBucket) ?? "current"
+        bucketReason = try c.decodeIfPresent(String.self, forKey: .bucketReason)
+        executionEligible = try c.decodeIfPresent(Bool.self, forKey: .executionEligible) ?? false
     }
 }
 

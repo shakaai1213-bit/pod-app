@@ -446,11 +446,16 @@ struct TicketsView: View {
                         } else if viewModel.ticketFlowErrorMessage != nil {
                             summaryPill(label: "Flow Offline", value: 0, color: AppColors.accentDanger)
                         }
-                        if let integrity = viewModel.workControlIntegritySummary, integrity.issues > 0 {
-                            summaryPill(label: "Source Link", value: integrity.sourceLinkGapCount, color: AppColors.accentDanger)
-                            summaryPill(label: "Triage Link", value: integrity.triageLinkGapCount, color: Color.orange)
-                            if integrity.otherGapCount > 0 {
-                                summaryPill(label: "Other Gaps", value: integrity.otherGapCount, color: AppColors.textSecondary)
+                        if let integrity = viewModel.workControlIntegritySummary {
+                            summaryPill(label: "Current", value: integrity.currentCount, color: AppColors.accentElectric)
+                            if integrity.currentIssues > 0 {
+                                summaryPill(label: "Needs Control", value: integrity.currentIssues, color: AppColors.accentDanger)
+                            }
+                            if integrity.protectedCount > 0 {
+                                summaryPill(label: "Protected", value: integrity.protectedCount, color: AppColors.accentWarning)
+                            }
+                            if integrity.historicalCount > 0 {
+                                summaryPill(label: "History", value: integrity.historicalCount, color: AppColors.textSecondary)
                             }
                         }
                         if let backfill = viewModel.workControlBackfillSummary, backfill.needsBackfill > 0 {
@@ -582,13 +587,13 @@ struct TicketsView: View {
                 .font(.caption2)
                 .foregroundColor(AppColors.textSecondary)
                 .lineLimit(2)
-        } else if showGroomingDetails, let integrity = viewModel.workControlIntegritySummary, integrity.issues > 0 {
-            let topIssues = integrity.countsByField
+        } else if showGroomingDetails, let integrity = viewModel.workControlIntegritySummary {
+            let topIssues = integrity.currentCountsByField
                 .sorted { $0.value > $1.value }
                 .prefix(3)
                 .map { "\(displayLabel($0.key)): \($0.value)" }
                 .joined(separator: ", ")
-            Text("Source links missing on \(integrity.sourceLinkGapCount) tickets; triage links missing on \(integrity.triageLinkGapCount)\(topIssues.isEmpty ? "." : ". Top gaps: \(topIssues).")")
+            Text("\(integrity.currentCount) current tickets; \(integrity.currentIssues) need control. \(integrity.protectedCount) protected and \(integrity.historicalCount) historical rows stay outside autonomous dispatch\(topIssues.isEmpty ? "." : ". Current gaps: \(topIssues).")")
                 .font(.caption2)
                 .foregroundColor(AppColors.textSecondary)
                 .lineLimit(2)
@@ -997,16 +1002,16 @@ struct TicketsView: View {
                     if let summary {
                         Section {
                             HStack(spacing: 10) {
-                                summaryMetric("Source Link", value: summary.sourceLinkGapCount, color: AppColors.accentDanger)
-                                summaryMetric("Triage Link", value: summary.triageLinkGapCount, color: Color.orange)
-                                summaryMetric("Clean", value: summary.clean, color: AppColors.accentSuccess)
+                                summaryMetric("Current", value: summary.currentCount, color: AppColors.accentElectric)
+                                summaryMetric("Protected", value: summary.protectedCount, color: AppColors.accentWarning)
+                                summaryMetric("History", value: summary.historicalCount, color: AppColors.textSecondary)
                             }
                             .listRowBackground(AppColors.backgroundSecondary)
                         } footer: {
-                            Text("Read-only integrity review from WorkControlIntegritySummary. Source link means a chat or thread source is missing; triage link means Merman triage id or trace is missing.")
+                            Text("Read-only ORCA projection. Only Current can drive autonomous dispatch. Protected requires its exact approval path; History remains evidence-preserving review.")
                         }
 
-                        Section("Link Gaps") {
+                        Section("Current Control Gaps") {
                             integrityCountRow("Source chat/thread link", value: summary.sourceLinkGapCount, color: AppColors.accentDanger)
                             integrityCountRow("Triage id or trace", value: summary.triageLinkGapCount, color: Color.orange)
                             if summary.otherGapCount > 0 {
@@ -1014,16 +1019,16 @@ struct TicketsView: View {
                             }
                         }
 
-                        if !summary.countsByField.isEmpty {
-                            Section("Missing Fields") {
-                                ForEach(summary.countsByField.sorted(by: { $0.value > $1.value }), id: \.key) { field, count in
+                        if !summary.currentCountsByField.isEmpty {
+                            Section("Current Missing Fields") {
+                                ForEach(summary.currentCountsByField.sorted(by: { $0.value > $1.value }), id: \.key) { field, count in
                                     integrityCountRow(displayLabel(field), value: count, color: color(for: field))
                                 }
                             }
                         }
 
-                        Section("Tickets") {
-                            ForEach(summary.items) { item in
+                        Section("Current Work") {
+                            ForEach(summary.items.filter { $0.workBucket == "current" }) { item in
                                 Button {
                                     onOpen(item.ticketId)
                                 } label: {
@@ -1031,6 +1036,32 @@ struct TicketsView: View {
                                 }
                                 .buttonStyle(.plain)
                                 .listRowBackground(AppColors.backgroundSecondary)
+                            }
+                        }
+
+                        if summary.reviewIssues > 0 {
+                            Section("Protected Review") {
+                                ForEach(summary.items.filter { $0.workBucket == "protected" }) { item in
+                                    Button {
+                                        onOpen(item.ticketId)
+                                    } label: {
+                                        integrityItemRow(item)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .listRowBackground(AppColors.backgroundSecondary)
+                                }
+                            }
+
+                            Section("Historical Review") {
+                                ForEach(summary.items.filter { $0.workBucket == "historical" }) { item in
+                                    Button {
+                                        onOpen(item.ticketId)
+                                    } label: {
+                                        integrityItemRow(item)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .listRowBackground(AppColors.backgroundSecondary)
+                                }
                             }
                         }
                     } else {
@@ -1196,6 +1227,13 @@ struct TicketsView: View {
 
                         if let status = item.status {
                             Text(status.replacingOccurrences(of: "_", with: " ").capitalized)
+                                .font(.caption2)
+                                .foregroundColor(AppColors.textTertiary)
+                                .lineLimit(1)
+                        }
+
+                        if let reason = item.bucketReason {
+                            Text(reason)
                                 .font(.caption2)
                                 .foregroundColor(AppColors.textTertiary)
                                 .lineLimit(1)
