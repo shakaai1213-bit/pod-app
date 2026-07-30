@@ -389,12 +389,15 @@ struct LockerChatView: View {
 
     @ViewBuilder
     private func messageBubble(_ message: DMMessage, agent: AgentInfo) -> some View {
-        DMBubble(
-            message: message,
-            agent: agent,
-            lifecycle: viewModel.lifecycle(for: message.traceId),
-            onRetry: { viewModel.retryMessage(message) }
-        )
+        if isTimeoutHelper(message) {
+            timeoutHelperNotice(message, agent: agent)
+        } else {
+            DMBubble(
+                message: message,
+                agent: agent,
+                lifecycle: viewModel.lifecycle(for: message.traceId),
+                onRetry: { viewModel.retryMessage(message) }
+            )
             .task(id: message.traceId) {
                 await viewModel.loadMessageTraceLifecycle(traceId: message.traceId)
             }
@@ -410,6 +413,61 @@ struct LockerChatView: View {
                     Label("Copy Message", systemImage: "doc.on.doc")
                 }
             }
+        }
+    }
+
+    private func isTimeoutHelper(_ message: DMMessage) -> Bool {
+        message.role != "user"
+            && DMResponseProvenance.parse(message.provenance) == .timeoutFallback
+    }
+
+    private func timeoutHelperNotice(_ message: DMMessage, agent: AgentInfo) -> some View {
+        let superseded = DMDeliveryState.parse(message.deliveryState) == .fallbackPresented
+        return HStack(alignment: .top, spacing: 10) {
+            Image(systemName: superseded ? "arrow.triangle.2.circlepath" : "cpu")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(superseded ? AppColors.textTertiary : AppColors.accentWarning)
+                .frame(width: 28, height: 28)
+                .background((superseded ? AppColors.textTertiary : AppColors.accentWarning).opacity(0.10))
+                .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(superseded ? "Helper draft superseded by \(agent.name)" : "ORCA helper draft while \(agent.name) is still working")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(superseded ? AppColors.textTertiary : AppColors.accentWarning)
+
+                Text(message.content)
+                    .font(.caption)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("This is compute assistance, not \(agent.name)'s answer.")
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.textTertiary)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .frame(maxWidth: 460, alignment: .leading)
+        .background(AppColors.backgroundSecondary.opacity(0.78))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(AppColors.border.opacity(0.8), lineWidth: 1)
+        )
+        .contextMenu {
+            Button {
+                selectedEvidenceMessage = message
+            } label: {
+                Label("Show Evidence", systemImage: "point.topleft.down.curvedto.point.bottomright.up")
+            }
+            Button {
+                UIPasteboard.general.string = message.content
+            } label: {
+                Label("Copy Draft", systemImage: "doc.on.doc")
+            }
+        }
     }
 
     private var chatContextSurface: some View {
@@ -1111,6 +1169,7 @@ struct LockerChatView: View {
 
                 classroomToolRail
                 agentToolProjectionRows
+                agentToolRunRows
                 runtimeProvenanceRows
 
                 HStack(spacing: 8) {
@@ -1143,6 +1202,27 @@ struct LockerChatView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 9)
+            .background(AppColors.backgroundSecondary.opacity(0.82))
+            .overlay(
+                Rectangle()
+                    .fill(AppColors.border.opacity(0.7))
+                    .frame(height: 0.5),
+                alignment: .bottom
+            )
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Conversation capabilities", systemImage: "wrench.and.screwdriver.fill")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(AppColors.accentElectric)
+                agentToolProjectionRows
+                agentToolRunRows
+                Text("Attach an ORCA ticket when this conversation needs a durable work object, repository scope, or protected approval context.")
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
             .background(AppColors.backgroundSecondary.opacity(0.82))
             .overlay(
                 Rectangle()
@@ -1290,6 +1370,88 @@ struct LockerChatView: View {
         }
     }
 
+    @ViewBuilder
+    private var agentToolRunRows: some View {
+        if viewModel.isLoadingAgentToolRuns && viewModel.agentToolRuns.isEmpty {
+            Label("Loading tool receipts", systemImage: "hourglass")
+                .font(.caption2)
+                .foregroundStyle(AppColors.textTertiary)
+        } else if !viewModel.agentToolRuns.isEmpty {
+            VStack(alignment: .leading, spacing: 7) {
+                Label("Live tool receipts", systemImage: "checkmark.seal")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(AppColors.accentElectric)
+
+                ForEach(viewModel.agentToolRuns.prefix(3)) { run in
+                    PodReviewCard(
+                        item: toolRunReviewItem(run),
+                        isBusy: run.approvalId.map {
+                            viewModel.resolvingAgentToolApprovalIds.contains($0)
+                        } ?? false,
+                        onAction: { action in
+                            if action.id == "approve" {
+                                viewModel.resolveAgentToolApproval(run, approved: true)
+                            } else if action.id == "reject" {
+                                viewModel.resolveAgentToolApproval(run, approved: false)
+                            }
+                        }
+                    )
+                }
+
+                if let message = viewModel.agentToolActionMessage {
+                    Text(message)
+                        .font(.caption2)
+                        .foregroundStyle(message.lowercased().contains("couldn't") ? AppColors.accentWarning : AppColors.accentSuccess)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        } else if let error = viewModel.agentToolRunsError {
+            Label(error, systemImage: "exclamationmark.triangle")
+                .font(.caption2)
+                .foregroundStyle(AppColors.accentWarning)
+        }
+    }
+
+    private func toolRunReviewItem(_ run: WorkbenchToolRunRecord) -> PodReviewItem {
+        var provenance = [run.modelLabel]
+        if let executionRunId = run.executionRunId {
+            provenance.append("AgentRun \(String(executionRunId.prefix(8)))")
+        }
+        if let createdAt = run.createdAt {
+            provenance.append(createdAt.formatted(date: .abbreviated, time: .shortened))
+        }
+        let actions: [PodReviewAction] = run.isApprovalPending
+            ? [
+                PodReviewAction(id: "approve", title: "Approve", systemImage: "checkmark.shield", style: .success),
+                PodReviewAction(id: "reject", title: "Reject", systemImage: "xmark.shield", style: .destructive),
+            ]
+            : []
+        return PodReviewItem(
+            id: run.id,
+            eyebrow: run.toolLabel ?? run.toolId ?? "ORCA tool",
+            title: run.summary,
+            detail: run.isApprovalPending
+                ? "Approval releases one bounded request. No mutation has run."
+                : nil,
+            status: run.normalizedApprovalState == "pending"
+                ? "Waiting approval"
+                : run.status.replacingOccurrences(of: "_", with: " ").capitalized,
+            statusColor: toolRunStatusColor(run),
+            provenance: provenance,
+            traceId: run.traceId,
+            actions: actions
+        )
+    }
+
+    private func toolRunStatusColor(_ run: WorkbenchToolRunRecord) -> Color {
+        if run.isApprovalPending { return AppColors.accentWarning }
+        switch run.normalizedStatus {
+        case "completed", "succeeded": return AppColors.accentSuccess
+        case "failed", "denied", "cancelled": return AppColors.accentDanger
+        default: return AppColors.accentElectric
+        }
+    }
+
     private func agentToolCapabilityChip(_ capability: WorkbenchAgentToolCapability) -> some View {
         let color = agentToolCapabilityColor(capability)
         return HStack(spacing: 4) {
@@ -1325,6 +1487,8 @@ struct LockerChatView: View {
 
     private func agentToolCapabilityIcon(_ capability: WorkbenchAgentToolCapability) -> String {
         switch capability.toolClass {
+        case "search":
+            return "magnifyingglass"
         case "read_context":
             return "book"
         case "preview":

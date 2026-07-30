@@ -686,11 +686,14 @@ struct WorkbenchToolRunsResponse: Decodable, Hashable {
 
 struct WorkbenchToolRunRecord: Decodable, Identifiable, Hashable {
     let id: String
+    let executionRunId: String?
     let toolId: String?
     let toolLabel: String?
     let status: String
     let approvalRequired: Bool
     let approvalState: String
+    let approvalId: String?
+    let approvalResolvedAt: Date?
     let output: [String: AgentRunJSONValue]
     let resource: [String: AgentRunJSONValue]
     let modelProvenance: [String: AgentRunJSONValue]
@@ -701,10 +704,13 @@ struct WorkbenchToolRunRecord: Decodable, Identifiable, Hashable {
     enum CodingKeys: String, CodingKey {
         case status, output, resource, policy
         case id = "run_id"
+        case executionRunId = "execution_run_id"
         case toolId = "tool_id"
         case toolLabel = "tool_label"
         case approvalRequired = "approval_required"
         case approvalState = "approval_state"
+        case approvalId = "approval_id"
+        case approvalResolvedAt = "approval_resolved_at"
         case modelProvenance = "model_provenance"
         case createdAt = "created_at"
         case traceId = "trace_id"
@@ -713,11 +719,14 @@ struct WorkbenchToolRunRecord: Decodable, Identifiable, Hashable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        executionRunId = try c.decodeIfPresent(String.self, forKey: .executionRunId)
         toolId = try c.decodeIfPresent(String.self, forKey: .toolId)
         toolLabel = try c.decodeIfPresent(String.self, forKey: .toolLabel)
         status = try c.decodeIfPresent(String.self, forKey: .status) ?? "recorded"
         approvalRequired = try c.decodeIfPresent(Bool.self, forKey: .approvalRequired) ?? false
         approvalState = try c.decodeIfPresent(String.self, forKey: .approvalState) ?? (approvalRequired ? "approval_required" : "not_required")
+        approvalId = try c.decodeIfPresent(String.self, forKey: .approvalId)
+        approvalResolvedAt = try c.decodeIfPresent(Date.self, forKey: .approvalResolvedAt)
         output = (try? c.decodeIfPresent([String: AgentRunJSONValue].self, forKey: .output)) ?? [:]
         resource = (try? c.decodeIfPresent([String: AgentRunJSONValue].self, forKey: .resource)) ?? [:]
         modelProvenance = (try? c.decodeIfPresent([String: AgentRunJSONValue].self, forKey: .modelProvenance)) ?? [:]
@@ -734,6 +743,25 @@ struct WorkbenchToolRunRecord: Decodable, Identifiable, Hashable {
         modelProvenance["llm_model"]?.displayValue
             ?? modelProvenance["runtime_provider"]?.displayValue
             ?? "agent identity"
+    }
+
+    var boardId: String? {
+        resource["board_id"]?.displayValue
+    }
+
+    var normalizedStatus: String {
+        status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    var normalizedApprovalState: String {
+        approvalState.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    var isApprovalPending: Bool {
+        approvalRequired
+            && normalizedApprovalState == "pending"
+            && approvalId != nil
+            && boardId != nil
     }
 }
 
@@ -995,10 +1023,16 @@ struct WorkbenchAgentToolsWorkObject: Decodable, Hashable {
 
 struct WorkbenchAgentToolCapability: Decodable, Hashable, Identifiable {
     let id: String
+    let version: String
     let label: String
     let toolClass: String
     let status: String
     let mode: String?
+    let executionHost: String
+    let scopes: [String]
+    let risk: String
+    let resultSchema: String
+    let health: String
     let endpoints: [String: String]
     let requiresApproval: Bool
     let blockedReasons: [String]
@@ -1006,8 +1040,10 @@ struct WorkbenchAgentToolCapability: Decodable, Hashable, Identifiable {
     let provenanceRequired: Bool
 
     enum CodingKeys: String, CodingKey {
-        case id, label, status, mode, endpoints
+        case id, version, label, status, mode, scopes, risk, health, endpoints
         case toolClass = "tool_class"
+        case executionHost = "execution_host"
+        case resultSchema = "result_schema"
         case requiresApproval = "requires_approval"
         case blockedReasons = "blocked_reasons"
         case evidenceTypes = "evidence_types"
@@ -1017,10 +1053,16 @@ struct WorkbenchAgentToolCapability: Decodable, Hashable, Identifiable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        version = try c.decodeIfPresent(String.self, forKey: .version) ?? "1.0"
         label = try c.decodeIfPresent(String.self, forKey: .label) ?? id.replacingOccurrences(of: "_", with: " ").capitalized
         toolClass = try c.decodeIfPresent(String.self, forKey: .toolClass) ?? id
         status = try c.decodeIfPresent(String.self, forKey: .status) ?? "unknown"
         mode = try c.decodeIfPresent(String.self, forKey: .mode)
+        executionHost = try c.decodeIfPresent(String.self, forKey: .executionHost) ?? "orca"
+        scopes = (try? c.decodeIfPresent([String].self, forKey: .scopes)) ?? []
+        risk = try c.decodeIfPresent(String.self, forKey: .risk) ?? "read_only"
+        resultSchema = try c.decodeIfPresent(String.self, forKey: .resultSchema) ?? "orca.agent-tool-run.v1"
+        health = try c.decodeIfPresent(String.self, forKey: .health) ?? "unknown"
         endpoints = (try? c.decodeIfPresent([String: String].self, forKey: .endpoints)) ?? [:]
         requiresApproval = try c.decodeIfPresent(Bool.self, forKey: .requiresApproval) ?? false
         blockedReasons = (try? c.decodeIfPresent([String].self, forKey: .blockedReasons)) ?? []
