@@ -94,6 +94,11 @@ final class DirectChatViewModel {
     var agentToolsProjection: WorkbenchAgentToolsProjection?
     var isLoadingAgentTools: Bool = false
     var agentToolsError: String?
+    var agentToolRuns: [WorkbenchToolRunRecord] = []
+    var isLoadingAgentToolRuns: Bool = false
+    var agentToolRunsError: String?
+    var resolvingAgentToolApprovalIds: Set<String> = []
+    var agentToolActionMessage: String?
     var centralAgentHealth: CentralAgentHealth?
     var centralAgentHealthError: String?
     var isLoadingCentralAgentHealth: Bool = false
@@ -806,6 +811,8 @@ final class DirectChatViewModel {
         loadMessages(for: agent)
         loadTicketContext(for: agent)
         Task { await loadAgentLocker(for: agent) }
+        Task { await loadAgentToolsForActiveTicket(agent: agent) }
+        Task { await loadAgentToolRuns(for: agent) }
         startCentralAgentHealthMonitoring(for: agent)
         applyPendingTicketContinuationIfNeeded(for: agent)
         guard modelContext != nil else {
@@ -824,14 +831,11 @@ final class DirectChatViewModel {
         }
         if let ticketId = activeTicketId {
             Task { await loadAttachedTicketContinuity(ticketId: ticketId) }
-            Task { await loadAgentToolsForActiveTicket(agent: agent) }
             startAttachedTicketLifecycleStream(agent: agent, ticketId: ticketId)
         } else {
             stopAttachedTicketLifecycleStream()
             activeTicketContinuity = nil
             ticketContinuityError = nil
-            agentToolsProjection = nil
-            agentToolsError = nil
         }
     }
 
@@ -860,6 +864,11 @@ final class DirectChatViewModel {
         agentToolsProjection = nil
         agentToolsError = nil
         isLoadingAgentTools = false
+        agentToolRuns = []
+        agentToolRunsError = nil
+        isLoadingAgentToolRuns = false
+        resolvingAgentToolApprovalIds = []
+        agentToolActionMessage = nil
         selectedDeliveryMode = .compute
         selectedRoom = nil
         roomMessages = []
@@ -902,6 +911,7 @@ final class DirectChatViewModel {
             guard let self else { return }
             while !Task.isCancelled, self.selectedAgent?.id == agent.id {
                 await self.loadCentralAgentHealth()
+                await self.loadAgentToolRuns(for: agent)
                 await TaskSafeSleep.sleep(seconds: 20)
             }
         }
@@ -913,6 +923,9 @@ final class DirectChatViewModel {
         centralAgentHealth = nil
         centralAgentHealthError = nil
         isLoadingCentralAgentHealth = false
+        agentToolRuns = []
+        agentToolRunsError = nil
+        isLoadingAgentToolRuns = false
     }
 
     func loadAgentLocker(for agent: AgentInfo) async {
@@ -2889,11 +2902,10 @@ final class DirectChatViewModel {
         stopAgentRunFollowupRefresh()
         activeTicketContinuity = nil
         ticketContinuityError = nil
-        agentToolsProjection = nil
-        agentToolsError = nil
         clearAgentRunContext()
-        ticketActionMessage = "Detached this chat from ORCA. New messages stay local until you create a ticket."
+        ticketActionMessage = "Detached the work item. This conversation remains in ORCA without an active ticket."
         try? ctx.save()
+        Task { await loadAgentToolsForActiveTicket(agent: agent) }
     }
 
     func refreshAttachedTicketContinuity() async {
@@ -3085,32 +3097,86 @@ final class DirectChatViewModel {
     }
 
     func loadAgentToolsForActiveTicket(agent explicitAgent: AgentInfo? = nil) async {
-        guard let ticketId = activeTicketId,
-              let agent = explicitAgent ?? selectedAgent else {
+        guard let agent = explicitAgent ?? selectedAgent else {
             agentToolsProjection = nil
             agentToolsError = nil
             return
         }
+        let ticketId = activeTicketId
 
         isLoadingAgentTools = true
         agentToolsError = nil
         defer { isLoadingAgentTools = false }
 
         do {
-            let projection = try await WorkbenchRepository().loadAgentTools(agentName: agent.id, ticketId: ticketId)
+            let projection = try await WorkbenchRepository().loadAgentTools(
+                agentName: agent.id,
+                ticketId: ticketId
+            )
             guard activeTicketId == ticketId,
                   (selectedAgent?.id ?? agent.id) == agent.id else {
                 return
             }
             agentToolsProjection = projection
         } catch let apiError as APIError {
-            guard activeTicketId == ticketId else { return }
+            guard activeTicketId == ticketId,
+                  (selectedAgent?.id ?? agent.id) == agent.id else { return }
             agentToolsProjection = nil
             agentToolsError = apiError.message
         } catch {
-            guard activeTicketId == ticketId else { return }
+            guard activeTicketId == ticketId,
+                  (selectedAgent?.id ?? agent.id) == agent.id else { return }
             agentToolsProjection = nil
             agentToolsError = "Tool projection unavailable."
+        }
+    }
+
+    func loadAgentToolRuns(for explicitAgent: AgentInfo? = nil) async {
+        guard let agent = explicitAgent ?? selectedAgent, agent.id == "coral" else {
+            agentToolRuns = []
+            agentToolRunsError = nil
+            return
+        }
+        isLoadingAgentToolRuns = agentToolRuns.isEmpty
+        agentToolRunsError = nil
+        defer { isLoadingAgentToolRuns = false }
+
+        do {
+            let response = try await WorkbenchRepository().loadToolRuns(limit: 12)
+            guard selectedAgent?.id == agent.id else { return }
+            agentToolRuns = response.runs
+        } catch let apiError as APIError {
+            guard selectedAgent?.id == agent.id else { return }
+            agentToolRunsError = apiError.message
+        } catch {
+            guard selectedAgent?.id == agent.id else { return }
+            agentToolRunsError = "Tool receipts unavailable."
+        }
+    }
+
+    func resolveAgentToolApproval(_ run: WorkbenchToolRunRecord, approved: Bool) {
+        guard run.isApprovalPending,
+              let approvalId = run.approvalId,
+              let boardId = run.boardId,
+              !resolvingAgentToolApprovalIds.contains(approvalId) else { return }
+        resolvingAgentToolApprovalIds.insert(approvalId)
+        agentToolActionMessage = nil
+        Task {
+            defer { resolvingAgentToolApprovalIds.remove(approvalId) }
+            do {
+                let _: DirectChatGenericApprovalDTO = try await api.patch(
+                    path: "/api/v1/boards/\(boardId)/approvals/\(approvalId)",
+                    body: WorkbenchApprovalUpdate(status: approved ? "approved" : "rejected")
+                )
+                agentToolActionMessage = approved
+                    ? "Tool request approved. No mutation runs until Coral resumes the exact request."
+                    : "Tool request rejected. No mutation ran."
+                await loadAgentToolRuns()
+            } catch let apiError as APIError {
+                agentToolActionMessage = "Couldn't resolve tool approval: \(apiError.message)"
+            } catch {
+                agentToolActionMessage = "Couldn't resolve tool approval."
+            }
         }
     }
 
@@ -4892,6 +4958,11 @@ private struct DirectChatApprovalDTO: Decodable {
             resolvedAt: resolvedAt
         )
     }
+}
+
+private struct DirectChatGenericApprovalDTO: Decodable {
+    let id: String
+    let status: String
 }
 
 private struct DirectChatTicketDTO: Decodable {

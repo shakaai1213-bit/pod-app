@@ -48,10 +48,11 @@ struct LockerChatView: View {
     var body: some View {
         VStack(spacing: 0) {
             chatContextSurface
-            if agent.id == "coral" {
+            if agent.id == "coral",
+               viewModel.centralAgentHealth?.needsAttention == true || viewModel.centralAgentHealthError != nil {
                 centralAgentRuntimeBar
             }
-            if !viewModel.routeProgressSteps.isEmpty {
+            if DirectChatPresentationPolicy.showsRouteProgress(viewModel.routeProgressSteps) {
                 RouteProgressStrip(steps: viewModel.routeProgressSteps)
             }
 
@@ -162,7 +163,7 @@ struct LockerChatView: View {
                 .background(AppColors.accentSuccess.opacity(0.1))
             }
 
-            if viewModel.liveChatStatus != nil {
+            if DirectChatPresentationPolicy.showsLiveStatusBar(viewModel.liveChatStatus) {
                 liveStatusBar
             }
 
@@ -389,12 +390,16 @@ struct LockerChatView: View {
 
     @ViewBuilder
     private func messageBubble(_ message: DMMessage, agent: AgentInfo) -> some View {
-        DMBubble(
-            message: message,
-            agent: agent,
-            lifecycle: viewModel.lifecycle(for: message.traceId),
-            onRetry: { viewModel.retryMessage(message) }
-        )
+        if isTimeoutHelper(message) {
+            timeoutHelperNotice(message, agent: agent)
+        } else {
+            DMBubble(
+                message: message,
+                agent: agent,
+                lifecycle: viewModel.lifecycle(for: message.traceId),
+                onRetry: { viewModel.retryMessage(message) },
+                onShowEvidence: { selectedEvidenceMessage = message }
+            )
             .task(id: message.traceId) {
                 await viewModel.loadMessageTraceLifecycle(traceId: message.traceId)
             }
@@ -410,6 +415,61 @@ struct LockerChatView: View {
                     Label("Copy Message", systemImage: "doc.on.doc")
                 }
             }
+        }
+    }
+
+    private func isTimeoutHelper(_ message: DMMessage) -> Bool {
+        message.role != "user"
+            && DMResponseProvenance.parse(message.provenance) == .timeoutFallback
+    }
+
+    private func timeoutHelperNotice(_ message: DMMessage, agent: AgentInfo) -> some View {
+        let superseded = DMDeliveryState.parse(message.deliveryState) == .fallbackPresented
+        return HStack(alignment: .top, spacing: 10) {
+            Image(systemName: superseded ? "arrow.triangle.2.circlepath" : "cpu")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(superseded ? AppColors.textTertiary : AppColors.accentWarning)
+                .frame(width: 28, height: 28)
+                .background((superseded ? AppColors.textTertiary : AppColors.accentWarning).opacity(0.10))
+                .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(superseded ? "Helper draft superseded by \(agent.name)" : "ORCA helper draft while \(agent.name) is still working")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(superseded ? AppColors.textTertiary : AppColors.accentWarning)
+
+                Text(message.content)
+                    .font(.caption)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("This is compute assistance, not \(agent.name)'s answer.")
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.textTertiary)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .frame(maxWidth: 460, alignment: .leading)
+        .background(AppColors.backgroundSecondary.opacity(0.78))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(AppColors.border.opacity(0.8), lineWidth: 1)
+        )
+        .contextMenu {
+            Button {
+                selectedEvidenceMessage = message
+            } label: {
+                Label("Show Evidence", systemImage: "point.topleft.down.curvedto.point.bottomright.up")
+            }
+            Button {
+                UIPasteboard.general.string = message.content
+            } label: {
+                Label("Copy Draft", systemImage: "doc.on.doc")
+            }
+        }
     }
 
     private var chatContextSurface: some View {
@@ -675,11 +735,13 @@ struct LockerChatView: View {
                 .joined(separator: " · ")
         }
 
-        let channelText = viewModel.shortChannelId(for: agent).map { "ORCA channel \($0)" }
-        let lockerText = lockerSummary.map { "Locker \($0.reportCardScore)%" }
-        return [deliveryTruthText, channelText, lockerText, agent.boundaryText]
-            .compactMap { $0 }
-            .joined(separator: " · ")
+        if let summary = lockerSummary {
+            return "\(lockerPolicyText(summary)) · Locker \(summary.reportCardScore)%"
+        }
+        if viewModel.currentChannelId(for: agent) != nil {
+            return "ORCA connected"
+        }
+        return deliveryTruthText
     }
 
     private var lockerSummary: AgentChatService.LockerSummary? {
@@ -1111,6 +1173,7 @@ struct LockerChatView: View {
 
                 classroomToolRail
                 agentToolProjectionRows
+                agentToolRunRows
                 runtimeProvenanceRows
 
                 HStack(spacing: 8) {
@@ -1143,6 +1206,27 @@ struct LockerChatView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 9)
+            .background(AppColors.backgroundSecondary.opacity(0.82))
+            .overlay(
+                Rectangle()
+                    .fill(AppColors.border.opacity(0.7))
+                    .frame(height: 0.5),
+                alignment: .bottom
+            )
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Conversation capabilities", systemImage: "wrench.and.screwdriver.fill")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(AppColors.accentElectric)
+                agentToolProjectionRows
+                agentToolRunRows
+                Text("Attach an ORCA ticket when this conversation needs a durable work object, repository scope, or protected approval context.")
+                    .font(.caption2)
+                    .foregroundStyle(AppColors.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
             .background(AppColors.backgroundSecondary.opacity(0.82))
             .overlay(
                 Rectangle()
@@ -1290,6 +1374,88 @@ struct LockerChatView: View {
         }
     }
 
+    @ViewBuilder
+    private var agentToolRunRows: some View {
+        if viewModel.isLoadingAgentToolRuns && viewModel.agentToolRuns.isEmpty {
+            Label("Loading tool receipts", systemImage: "hourglass")
+                .font(.caption2)
+                .foregroundStyle(AppColors.textTertiary)
+        } else if !viewModel.agentToolRuns.isEmpty {
+            VStack(alignment: .leading, spacing: 7) {
+                Label("Live tool receipts", systemImage: "checkmark.seal")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(AppColors.accentElectric)
+
+                ForEach(viewModel.agentToolRuns.prefix(3)) { run in
+                    PodReviewCard(
+                        item: toolRunReviewItem(run),
+                        isBusy: run.approvalId.map {
+                            viewModel.resolvingAgentToolApprovalIds.contains($0)
+                        } ?? false,
+                        onAction: { action in
+                            if action.id == "approve" {
+                                viewModel.resolveAgentToolApproval(run, approved: true)
+                            } else if action.id == "reject" {
+                                viewModel.resolveAgentToolApproval(run, approved: false)
+                            }
+                        }
+                    )
+                }
+
+                if let message = viewModel.agentToolActionMessage {
+                    Text(message)
+                        .font(.caption2)
+                        .foregroundStyle(message.lowercased().contains("couldn't") ? AppColors.accentWarning : AppColors.accentSuccess)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        } else if let error = viewModel.agentToolRunsError {
+            Label(error, systemImage: "exclamationmark.triangle")
+                .font(.caption2)
+                .foregroundStyle(AppColors.accentWarning)
+        }
+    }
+
+    private func toolRunReviewItem(_ run: WorkbenchToolRunRecord) -> PodReviewItem {
+        var provenance = [run.modelLabel]
+        if let executionRunId = run.executionRunId {
+            provenance.append("AgentRun \(String(executionRunId.prefix(8)))")
+        }
+        if let createdAt = run.createdAt {
+            provenance.append(createdAt.formatted(date: .abbreviated, time: .shortened))
+        }
+        let actions: [PodReviewAction] = run.isApprovalPending
+            ? [
+                PodReviewAction(id: "approve", title: "Approve", systemImage: "checkmark.shield", style: .success),
+                PodReviewAction(id: "reject", title: "Reject", systemImage: "xmark.shield", style: .destructive),
+            ]
+            : []
+        return PodReviewItem(
+            id: run.id,
+            eyebrow: run.toolLabel ?? run.toolId ?? "ORCA tool",
+            title: run.summary,
+            detail: run.isApprovalPending
+                ? "Approval releases one bounded request. No mutation has run."
+                : nil,
+            status: run.normalizedApprovalState == "pending"
+                ? "Waiting approval"
+                : run.status.replacingOccurrences(of: "_", with: " ").capitalized,
+            statusColor: toolRunStatusColor(run),
+            provenance: provenance,
+            traceId: run.traceId,
+            actions: actions
+        )
+    }
+
+    private func toolRunStatusColor(_ run: WorkbenchToolRunRecord) -> Color {
+        if run.isApprovalPending { return AppColors.accentWarning }
+        switch run.normalizedStatus {
+        case "completed", "succeeded": return AppColors.accentSuccess
+        case "failed", "denied", "cancelled": return AppColors.accentDanger
+        default: return AppColors.accentElectric
+        }
+    }
+
     private func agentToolCapabilityChip(_ capability: WorkbenchAgentToolCapability) -> some View {
         let color = agentToolCapabilityColor(capability)
         return HStack(spacing: 4) {
@@ -1325,6 +1491,8 @@ struct LockerChatView: View {
 
     private func agentToolCapabilityIcon(_ capability: WorkbenchAgentToolCapability) -> String {
         switch capability.toolClass {
+        case "search":
+            return "magnifyingglass"
         case "read_context":
             return "book"
         case "preview":
@@ -3336,18 +3504,21 @@ struct DMBubble: View {
     let agent: AgentInfo
     let lifecycle: AgentRunTraceLifecycle?
     var onRetry: (() -> Void)? = nil
+    var onShowEvidence: (() -> Void)? = nil
     @State private var isLifecycleExpanded = false
 
     init(
         message: DMMessage,
         agent: AgentInfo,
         lifecycle: AgentRunTraceLifecycle? = nil,
-        onRetry: (() -> Void)? = nil
+        onRetry: (() -> Void)? = nil,
+        onShowEvidence: (() -> Void)? = nil
     ) {
         self.message = message
         self.agent = agent
         self.lifecycle = lifecycle
         self.onRetry = onRetry
+        self.onShowEvidence = onShowEvidence
     }
 
     private var isUser: Bool { message.role == "user" }
@@ -3369,10 +3540,12 @@ struct DMBubble: View {
             }
 
             VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
-                if !isUser {
+                if !isUser, shouldShowAssistantStatus {
                     HStack(spacing: 6) {
                         provenanceLabel
-                        deliveryStateLabel
+                        if DirectChatPresentationPolicy.showsDeliveryStateLabel(message.deliveryState) {
+                            deliveryStateLabel
+                        }
                     }
                 }
 
@@ -3395,7 +3568,11 @@ struct DMBubble: View {
                         .frame(maxWidth: 420)
                 }
 
-                if !isUser {
+                if !isUser,
+                   DirectChatPresentationPolicy.showsInlineDeliveryLedger(
+                    deliveryState: message.deliveryState,
+                    hasLifecycle: lifecycle != nil
+                   ) {
                     MessageDeliveryLedger(message: message, agent: agent)
                 }
 
@@ -3403,7 +3580,8 @@ struct DMBubble: View {
                     lifecyclePanel(lifecycle)
                 }
 
-                if isUser {
+                if isUser,
+                   DirectChatPresentationPolicy.showsUserDeliveryChip(message.userDeliveryState) {
                     userDeliveryChip
                         .padding(.top, 2)
                 }
@@ -3430,30 +3608,14 @@ struct DMBubble: View {
                     .padding(.top, 2)
                 }
 
-                // Streaming indicator
-                if message.isStreaming {
-                    HStack(spacing: 4) {
-                        ProgressView()
-                            .scaleEffect(0.5)
-                        Text(streamingStatusText)
-                            .font(.caption2)
-                            .foregroundColor(AppColors.textTertiary)
+                if !isUser, lifecycle == nil, !message.isStreaming, let onShowEvidence {
+                    Button(action: onShowEvidence) {
+                        Image(systemName: "info.circle")
+                            .font(.caption)
+                            .foregroundStyle(AppColors.textTertiary)
                     }
-                }
-
-                // Metadata
-                if !message.isStreaming, let metadataText {
-                    Text(metadataText)
-                        .font(.caption2)
-                        .foregroundColor(AppColors.textTertiary)
-                }
-
-                if !message.isStreaming, let traceId = message.traceId, !traceId.isEmpty {
-                    Label(Self.shortTraceLabel(traceId), systemImage: "point.topleft.down.curvedto.point.bottomright.up")
-                        .font(.caption2)
-                        .foregroundColor(AppColors.textTertiary)
-                        .lineLimit(1)
-                        .accessibilityLabel("Trace \(traceId)")
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Show message evidence")
                 }
             }
 
@@ -3463,30 +3625,43 @@ struct DMBubble: View {
 
     private func lifecyclePanel(_ lifecycle: AgentRunTraceLifecycle) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.18)) {
-                    isLifecycleExpanded.toggle()
+            HStack(spacing: 8) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        isLifecycleExpanded.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: lifecycleStateIcon(lifecycle.state))
+                            .foregroundStyle(lifecycleStateColor(lifecycle.state))
+                        Text("Lifecycle")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(AppColors.textSecondary)
+                        Text(lifecycle.state.replacingOccurrences(of: "_", with: " ").capitalized)
+                            .font(.caption2)
+                            .foregroundStyle(lifecycleStateColor(lifecycle.state))
+                        Spacer(minLength: 6)
+                        Image(systemName: isLifecycleExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(AppColors.textTertiary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-            } label: {
-                HStack(spacing: 7) {
-                    Image(systemName: lifecycleStateIcon(lifecycle.state))
-                        .foregroundStyle(lifecycleStateColor(lifecycle.state))
-                    Text("Lifecycle")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(AppColors.textSecondary)
-                    Text(lifecycle.state.replacingOccurrences(of: "_", with: " ").capitalized)
-                        .font(.caption2)
-                        .foregroundStyle(lifecycleStateColor(lifecycle.state))
-                    Spacer(minLength: 6)
-                    Image(systemName: isLifecycleExpanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(AppColors.textTertiary)
+                .buttonStyle(.plain)
+                .accessibilityLabel(
+                    isLifecycleExpanded ? "Collapse agent lifecycle" : "Expand agent lifecycle"
+                )
+
+                if let onShowEvidence {
+                    Button(action: onShowEvidence) {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(AppColors.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Show lifecycle evidence")
                 }
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(
-                isLifecycleExpanded ? "Collapse agent lifecycle" : "Expand agent lifecycle"
-            )
 
             HStack(alignment: .top, spacing: 5) {
                 ForEach(Array(lifecycle.stages.prefix(6).enumerated()), id: \.element.id) { index, stage in
@@ -3648,24 +3823,12 @@ struct DMBubble: View {
         }
     }
 
-    private var metadataText: String? {
-        var parts: [String] = []
-        if let model = message.modelUsed, !model.isEmpty {
-            parts.append(model)
-        }
-        if let deliveryMode = DMDeliveryMode.parse(message.deliveryMode) {
-            parts.append(Self.deliveryLabel(deliveryMode, agent: agent))
-        }
-        if let lane = message.lane, !lane.isEmpty {
-            parts.append(lane)
-        }
-        if let ms = message.latencyMs {
-            parts.append("\(ms)ms")
-        }
-        if let tokens = message.tokenCount {
-            parts.append("\(tokens)t")
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    private var shouldShowAssistantStatus: Bool {
+        DirectChatPresentationPolicy.showsAssistantStatus(
+            deliveryState: message.deliveryState,
+            provenance: message.provenance,
+            isStreaming: message.isStreaming
+        )
     }
 
     private var displayContent: String {
@@ -3685,50 +3848,6 @@ struct DMBubble: View {
             return "Not delivered - agent unresponsive"
         default:
             return message.isStreaming ? "Routing through ORCA..." : ""
-        }
-    }
-
-    private var streamingStatusText: String {
-        switch deliveryState {
-        case .computeRunning:
-            return "Compute helper accepted."
-        case .agentRunQueued:
-            return "Agent Run queued."
-        case .agentRunRunning:
-            return "Agent Run running."
-        case .waitingForLiveAgent:
-            return "Live inbox acknowledged."
-        case .deliveryNatsFailed:
-            return "Transport failed."
-        case .agentUnresponsive:
-            return "Delivery failed."
-        default:
-            return message.content.isEmpty ? "Routing through ORCA." : "Receiving..."
-        }
-    }
-
-    private static func shortTraceLabel(_ traceId: String) -> String {
-        let trimmed = traceId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.count > 18 else { return trimmed }
-        return "\(trimmed.prefix(10))...\(trimmed.suffix(6))"
-    }
-
-    private static func deliveryLabel(_ mode: DMDeliveryMode, agent: AgentInfo) -> String {
-        switch mode {
-        case .compute:
-            return "Helper draft"
-        case .liveInbox:
-            return "\(agent.name) inbox"
-        case .agentRun:
-            return "ORCA Agent Run"
-        case .auto:
-            return "Auto route"
-        case .fallback:
-            return "Local fallback"
-        case .system:
-            return "Pod system"
-        case .ticket:
-            return "ORCA ticket"
         }
     }
 

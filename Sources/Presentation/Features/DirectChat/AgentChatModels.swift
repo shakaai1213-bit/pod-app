@@ -274,7 +274,6 @@ struct CentralAgentHealth: Decodable, Sendable, Equatable {
     var controllerIsLive: Bool {
         checks.controllerRuntime.status == "ok"
             && checks.controllerRuntime.activeLeaseCount > 0
-            && checks.controllerRuntime.agents.contains("coral")
     }
 
     var hasCompletedCodexProof: Bool {
@@ -282,9 +281,10 @@ struct CentralAgentHealth: Decodable, Sendable, Equatable {
     }
 
     var needsAttention: Bool {
-        !controllerIsLive
-            || !hasCompletedCodexProof
+        checks.controllerRuntime.status == "error"
+            || checks.codexWorker.status == "error"
             || checks.codexWorker.stuckCount > 0
+            || checks.durableArrival.status == "error"
             || checks.durableArrival.missingCount > 0
     }
 
@@ -501,6 +501,71 @@ struct DirectChatProgressStep: Identifiable, Hashable, Sendable {
     let title: String
     let icon: String
     let state: State
+}
+
+enum DirectChatPresentationPolicy {
+    static func showsRouteProgress(_ steps: [DirectChatProgressStep]) -> Bool {
+        steps.contains { $0.state == .current || $0.state == .failed }
+    }
+
+    static func showsAssistantStatus(
+        deliveryState: String?,
+        provenance: String?,
+        isStreaming: Bool
+    ) -> Bool {
+        if isStreaming { return true }
+
+        switch DMDeliveryState.parse(deliveryState) {
+        case .sending, .routing, .computeRunning, .agentRunQueued, .agentRunRunning,
+             .waitingForLiveAgent, .claimedByAgent, .working, .deliveryNatsFailed,
+             .agentUnresponsive, .failed, .fallbackPresented, .timedOut:
+            return true
+        case .responseReceived, nil:
+            break
+        }
+
+        switch DMResponseProvenance.parse(provenance) {
+        case .coordinationReview, .timeoutFallback, .compute, .fallback, .system,
+             .ticket, .protected:
+            return true
+        case .liveInbox, .agentRun, nil:
+            return false
+        }
+    }
+
+    static func showsDeliveryStateLabel(_ rawState: String?) -> Bool {
+        guard let state = DMDeliveryState.parse(rawState) else { return false }
+        return state != .responseReceived
+    }
+
+    static func showsInlineDeliveryLedger(
+        deliveryState: String?,
+        hasLifecycle: Bool
+    ) -> Bool {
+        guard !hasLifecycle, let state = DMDeliveryState.parse(deliveryState) else {
+            return false
+        }
+        return state != .responseReceived
+    }
+
+    static func showsUserDeliveryChip(_ rawState: String?) -> Bool {
+        guard let state = DMUserMessageDeliveryState.parse(rawState) else { return false }
+        return state != .sent
+    }
+
+    static func showsLiveStatusBar(_ status: String?) -> Bool {
+        let value = status?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        guard !value.isEmpty else { return false }
+        return [
+            "failed",
+            "unavailable",
+            "expired",
+            "still waiting",
+            "not delivered",
+            "no orca channel",
+            "unresponsive",
+        ].contains { value.contains($0) }
+    }
 }
 
 struct DirectChatTicketContinuity: Sendable, Hashable {
