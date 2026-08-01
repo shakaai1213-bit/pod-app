@@ -304,8 +304,55 @@ final class PodHardeningTests: XCTestCase {
 
         XCTAssertTrue(health.controllerIsLive)
         XCTAssertFalse(health.hasCompletedCodexProof)
-        XCTAssertTrue(health.needsAttention)
+        XCTAssertFalse(health.needsAttention)
         XCTAssertEqual(health.compactSummary, "Controller live · Codex awaiting proof · 4 arrivals")
+    }
+
+    func testAllNamedAgentChatsShareCanonicalLiveInboxRoute() {
+        let expectedAgents = Set(["aloha", "maui", "shaka", "chief", "rooster", "coral", "reef"])
+
+        XCTAssertEqual(Set(AgentInfo.team.map(\.id)), expectedAgents)
+        for agent in AgentInfo.team {
+            XCTAssertTrue(agent.isReachable, "\(agent.id) should be reachable from Pod")
+            XCTAssertEqual(agent.defaultDeliveryMode, .liveInbox, "\(agent.id) should enter the shared lifecycle")
+        }
+    }
+
+    func testChatPresentationKeepsLifecyclePrimaryAndExceptionsVisible() {
+        let completeSteps = [
+            DirectChatProgressStep(id: "reply", title: "Reply", icon: "checkmark", state: .done)
+        ]
+        let activeSteps = [
+            DirectChatProgressStep(id: "work", title: "Work", icon: "hammer", state: .current)
+        ]
+
+        XCTAssertFalse(DirectChatPresentationPolicy.showsRouteProgress(completeSteps))
+        XCTAssertTrue(DirectChatPresentationPolicy.showsRouteProgress(activeSteps))
+        XCTAssertFalse(
+            DirectChatPresentationPolicy.showsAssistantStatus(
+                deliveryState: "response_received",
+                provenance: "live_inbox",
+                isStreaming: false
+            )
+        )
+        XCTAssertTrue(
+            DirectChatPresentationPolicy.showsAssistantStatus(
+                deliveryState: "waiting_for_live_agent",
+                provenance: "live_inbox",
+                isStreaming: false
+            )
+        )
+        XCTAssertTrue(
+            DirectChatPresentationPolicy.showsAssistantStatus(
+                deliveryState: "response_received",
+                provenance: "protected",
+                isStreaming: false
+            )
+        )
+        XCTAssertFalse(DirectChatPresentationPolicy.showsUserDeliveryChip("sent"))
+        XCTAssertTrue(DirectChatPresentationPolicy.showsUserDeliveryChip("transport_failed"))
+        XCTAssertFalse(DirectChatPresentationPolicy.showsLiveStatusBar("Live stream connected."))
+        XCTAssertTrue(DirectChatPresentationPolicy.showsLiveStatusBar("Live stream unavailable; using refresh."))
     }
 
     func testNamedAgentProvenanceWinsOverSparkSubstrate() throws {
