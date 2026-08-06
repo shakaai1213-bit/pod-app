@@ -3669,11 +3669,16 @@ private struct KnowledgePacketResultRow: View {
     var body: some View {
         Button(action: action) {
             HStack(alignment: .top, spacing: 10) {
-                Image(systemName: packet.sourceIcon)
+                Image(systemName: packet.isProtectedLane ? "lock.shield" : packet.sourceIcon)
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(AppColors.accentElectric)
+                    .foregroundColor(
+                        packet.isProtectedLane ? AppColors.accentWarning : AppColors.accentElectric
+                    )
                     .frame(width: 24, height: 24)
-                    .background(AppColors.accentElectric.opacity(0.12))
+                    .background(
+                        (packet.isProtectedLane ? AppColors.accentWarning : AppColors.accentElectric)
+                            .opacity(0.12)
+                    )
                     .clipShape(Circle())
 
                 VStack(alignment: .leading, spacing: 6) {
@@ -3699,6 +3704,11 @@ private struct KnowledgePacketResultRow: View {
                             .font(.caption)
                             .foregroundColor(AppColors.textSecondary)
                             .lineLimit(3)
+                    } else if packet.bodyRedacted {
+                        Text("Content withheld by ORCA policy.")
+                            .font(.caption)
+                            .foregroundColor(AppColors.accentWarning)
+                            .lineLimit(2)
                     }
 
                     HStack(spacing: 6) {
@@ -3746,9 +3756,15 @@ private struct KnowledgePacketDetailSheet: View {
                         .foregroundColor(AppColors.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Text(packet.body.isEmpty ? "No packet body returned." : packet.body)
+                    Text(
+                        packet.bodyRedacted
+                            ? "Content withheld by ORCA policy."
+                            : packet.body.isEmpty ? "No packet body returned." : packet.body
+                    )
                         .font(.body)
-                        .foregroundColor(AppColors.textSecondary)
+                        .foregroundColor(
+                            packet.bodyRedacted ? AppColors.accentWarning : AppColors.textSecondary
+                        )
                         .fixedSize(horizontal: false, vertical: true)
 
                     if let evidenceRef = packet.evidenceRef, !evidenceRef.isEmpty {

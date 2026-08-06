@@ -1029,6 +1029,7 @@ struct KnowledgePacketSearchResult: Decodable, Identifiable, Hashable, Sendable 
     let evidenceRef: String?
     let createdAt: String?
     let score: Double?
+    let bodyRedacted: Bool
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -1039,6 +1040,8 @@ struct KnowledgePacketSearchResult: Decodable, Identifiable, Hashable, Sendable 
         case summary
         case lane
         case laneId = "lane_id"
+        case accessLane = "access_lane"
+        case protected
         case sourceType = "source_type"
         case source
         case type
@@ -1066,7 +1069,8 @@ struct KnowledgePacketSearchResult: Decodable, Identifiable, Hashable, Sendable 
             ?? container.decodeIfPresent(String.self, forKey: .name)
             ?? container.decodeIfPresent(String.self, forKey: .summary)
             ?? "Untitled packet"
-        lane = try container.decodeIfPresent(String.self, forKey: .lane)
+        lane = try container.decodeIfPresent(String.self, forKey: .accessLane)
+            ?? container.decodeIfPresent(String.self, forKey: .lane)
             ?? container.decodeIfPresent(String.self, forKey: .laneId)
             ?? "knowledge"
         sourceType = try container.decodeIfPresent(String.self, forKey: .sourceType)
@@ -1087,6 +1091,7 @@ struct KnowledgePacketSearchResult: Decodable, Identifiable, Hashable, Sendable 
         createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
             ?? container.decodeIfPresent(String.self, forKey: .updatedAt)
         score = try container.decodeIfPresent(Double.self, forKey: .score)
+        bodyRedacted = try container.decodeIfPresent(Bool.self, forKey: .protected) ?? false
     }
 
     var sourceIcon: String {
@@ -1102,6 +1107,13 @@ struct KnowledgePacketSearchResult: Decodable, Identifiable, Hashable, Sendable 
 
     var displayLane: String {
         lane.replacingOccurrences(of: "_", with: " ").uppercased()
+    }
+
+    var isProtectedLane: Bool {
+        let value = lane.lowercased()
+        return value == "protected"
+            || value == "captain-only"
+            || value == "chief-fund"
     }
 }
 

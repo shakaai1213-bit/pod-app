@@ -44,6 +44,47 @@ final class PodHardeningTests: XCTestCase {
         XCTAssertEqual(AppTab.maker.title, OrcaSurfaceSection.maker.title)
     }
 
+    func testKnowledgePacketUsesCanonicalAccessLaneAndRedactionState() throws {
+        let privilegedPayload = #"""
+        {
+          "id":"knowledge-protected",
+          "title":"Protected research",
+          "access_lane":"protected",
+          "source_type":"research_packet",
+          "body":"Authorized body",
+          "protected":false
+        }
+        """#
+        let privileged = try JSONDecoder().decode(
+            KnowledgePacketSearchResult.self,
+            from: Data(privilegedPayload.utf8)
+        )
+
+        XCTAssertEqual(privileged.lane, "protected")
+        XCTAssertTrue(privileged.isProtectedLane)
+        XCTAssertFalse(privileged.bodyRedacted)
+        XCTAssertEqual(privileged.body, "Authorized body")
+
+        let redactedPayload = #"""
+        {
+          "id":"knowledge-redacted",
+          "title":"Protected research",
+          "access_lane":"protected",
+          "source_type":"research_packet",
+          "body":null,
+          "protected":true
+        }
+        """#
+        let redacted = try JSONDecoder().decode(
+            KnowledgePacketSearchResult.self,
+            from: Data(redactedPayload.utf8)
+        )
+
+        XCTAssertTrue(redacted.isProtectedLane)
+        XCTAssertTrue(redacted.bodyRedacted)
+        XCTAssertTrue(redacted.body.isEmpty)
+    }
+
     func testPodChatHasOneUserFacingEntryInsideWork() throws {
         XCTAssertEqual(AppTab.chat.title, "Pod Chat")
 
