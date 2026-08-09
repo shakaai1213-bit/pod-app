@@ -56,6 +56,7 @@ xcodebuild \
   -configuration "$configuration" \
   -derivedDataPath "$derived_data_dir" \
   -clonedSourcePackagesDirPath "$source_packages_dir" \
+  -skipPackagePluginValidation \
   build
 
 if [[ "$install_after_build" == true ]]; then

@@ -1,0 +1,750 @@
+{
+  "components": {
+    "schemas": {
+      "ChatRuntimeActorType": {
+        "enum": [
+          "user",
+          "agent",
+          "system",
+          "adapter",
+          "worker"
+        ],
+        "title": "ChatRuntimeActorType",
+        "type": "string"
+      },
+      "ChatRuntimeAdapterContractRead": {
+        "properties": {
+          "credential_owner": {
+            "const": "central_secret_broker",
+            "default": "central_secret_broker",
+            "title": "Credential Owner",
+            "type": "string"
+          },
+          "identity_owner": {
+            "const": "named_agent",
+            "default": "named_agent",
+            "title": "Identity Owner",
+            "type": "string"
+          },
+          "memory_owner": {
+            "const": "orca",
+            "default": "orca",
+            "title": "Memory Owner",
+            "type": "string"
+          },
+          "provider_identifiers_are_extensible": {
+            "default": true,
+            "title": "Provider Identifiers Are Extensible",
+            "type": "boolean"
+          },
+          "reference_schema": {
+            "default": "ChatRuntimeAdapterRef",
+            "title": "Reference Schema",
+            "type": "string"
+          },
+          "resource_envelope_schema": {
+            "default": "ChatRuntimeResourceEnvelope",
+            "title": "Resource Envelope Schema",
+            "type": "string"
+          },
+          "secrets_allowed_in_payloads": {
+            "default": false,
+            "title": "Secrets Allowed In Payloads",
+            "type": "boolean"
+          },
+          "selection_owner": {
+            "const": "orca",
+            "default": "orca",
+            "title": "Selection Owner",
+            "type": "string"
+          }
+        },
+        "title": "ChatRuntimeAdapterContractRead",
+        "type": "object"
+      },
+      "ChatRuntimeAdapterRef": {
+        "description": "Execution adapter selected for a turn without transferring ORCA ownership.",
+        "properties": {
+          "adapter_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Adapter Id",
+            "type": "string"
+          },
+          "execution_mode": {
+            "enum": [
+              "local",
+              "remote",
+              "hybrid"
+            ],
+            "title": "Execution Mode",
+            "type": "string"
+          },
+          "host_id": {
+            "maxLength": 128,
+            "title": "Host Id",
+            "type": "string"
+          },
+          "model_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Model Id",
+            "type": "string"
+          },
+          "provider_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Provider Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "adapter_id",
+          "provider_id",
+          "model_id",
+          "execution_mode"
+        ],
+        "title": "ChatRuntimeAdapterRef",
+        "type": "object"
+      },
+      "ChatRuntimeCompatibilityRouteRead": {
+        "properties": {
+          "current_route": {
+            "title": "Current Route",
+            "type": "string"
+          },
+          "runtime_resource": {
+            "title": "Runtime Resource",
+            "type": "string"
+          },
+          "transition": {
+            "enum": [
+              "preserve",
+              "adapt",
+              "replace_after_parity"
+            ],
+            "title": "Transition",
+            "type": "string"
+          }
+        },
+        "required": [
+          "current_route",
+          "runtime_resource",
+          "transition"
+        ],
+        "title": "ChatRuntimeCompatibilityRouteRead",
+        "type": "object"
+      },
+      "ChatRuntimeContractRead": {
+        "description": "Versioned public contract for provider-independent named-agent chat.",
+        "properties": {
+          "adapter": {
+            "$ref": "#/components/schemas/ChatRuntimeAdapterContractRead"
+          },
+          "authority": {
+            "const": "orca",
+            "default": "orca",
+            "title": "Authority",
+            "type": "string"
+          },
+          "compatibility_routes": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeCompatibilityRouteRead"
+            },
+            "title": "Compatibility Routes",
+            "type": "array"
+          },
+          "contract_version": {
+            "const": "orca.chat-runtime.v1",
+            "default": "orca.chat-runtime.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "invariants": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeInvariantRead"
+            },
+            "title": "Invariants",
+            "type": "array"
+          },
+          "lifecycle": {
+            "const": "schoolhouse",
+            "default": "schoolhouse",
+            "title": "Lifecycle",
+            "type": "string"
+          },
+          "maturity": {
+            "const": "foundation",
+            "default": "foundation",
+            "title": "Maturity",
+            "type": "string"
+          },
+          "provider_binding": {
+            "const": "adapter",
+            "default": "adapter",
+            "title": "Provider Binding",
+            "type": "string"
+          },
+          "resources": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Resources",
+            "type": "array"
+          },
+          "router": {
+            "const": "cascade",
+            "default": "cascade",
+            "title": "Router",
+            "type": "string"
+          },
+          "transports": {
+            "items": {
+              "enum": [
+                "rest",
+                "resumable_sse"
+              ],
+              "type": "string"
+            },
+            "title": "Transports",
+            "type": "array"
+          },
+          "turn": {
+            "$ref": "#/components/schemas/ChatRuntimeTurnContractRead"
+          }
+        },
+        "required": [
+          "transports",
+          "resources",
+          "adapter",
+          "turn",
+          "invariants",
+          "compatibility_routes"
+        ],
+        "title": "ChatRuntimeContractRead",
+        "type": "object"
+      },
+      "ChatRuntimeEventType": {
+        "description": "Cross-provider events that form one resumable turn timeline.",
+        "enum": [
+          "message.accepted",
+          "turn.claimed",
+          "turn.progress",
+          "lifecycle.updated",
+          "route.decided",
+          "tool.requested",
+          "tool.completed",
+          "tool.failed",
+          "approval.requested",
+          "approval.decided",
+          "escalation.updated",
+          "worker.updated",
+          "artifact.recorded",
+          "memory.updated",
+          "turn.completed",
+          "turn.failed",
+          "turn.cancelled"
+        ],
+        "title": "ChatRuntimeEventType",
+        "type": "string"
+      },
+      "ChatRuntimeInvariantRead": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "description"
+        ],
+        "title": "ChatRuntimeInvariantRead",
+        "type": "object"
+      },
+      "ChatRuntimeProgressState": {
+        "description": "Canonical client-visible progress states for one runtime turn.",
+        "enum": [
+          "accepted",
+          "claimed",
+          "working",
+          "blocked",
+          "approval_needed",
+          "completed",
+          "failed",
+          "cancelled"
+        ],
+        "title": "ChatRuntimeProgressState",
+        "type": "string"
+      },
+      "ChatRuntimeProvenanceRead": {
+        "properties": {
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "source_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Source Ref",
+            "type": "string"
+          },
+          "trace_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_ref",
+          "trace_id"
+        ],
+        "title": "ChatRuntimeProvenanceRead",
+        "type": "object"
+      },
+      "ChatRuntimeResourceEnvelope": {
+        "description": "Governed execution limits passed to any selected provider adapter.",
+        "properties": {
+          "allowed_root_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Root Refs",
+            "type": "array"
+          },
+          "allowed_tool_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Tool Ids",
+            "type": "array"
+          },
+          "approval_rule_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Approval Rule Ids",
+            "type": "array"
+          },
+          "compute_budget_units": {
+            "minimum": 0.0,
+            "title": "Compute Budget Units",
+            "type": "integer"
+          },
+          "deadline_at": {
+            "format": "date-time",
+            "title": "Deadline At",
+            "type": "string"
+          },
+          "max_concurrent_workers": {
+            "default": 1,
+            "maximum": 64.0,
+            "minimum": 1.0,
+            "title": "Max Concurrent Workers",
+            "type": "integer"
+          },
+          "network_access": {
+            "default": "governed",
+            "enum": [
+              "denied",
+              "governed",
+              "allowed"
+            ],
+            "title": "Network Access",
+            "type": "string"
+          },
+          "provider_rungs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Provider Rungs",
+            "type": "array"
+          }
+        },
+        "title": "ChatRuntimeResourceEnvelope",
+        "type": "object"
+      },
+      "ChatRuntimeSchemaBundleRead": {
+        "properties": {
+          "contract_version": {
+            "const": "orca.chat-runtime.v1",
+            "default": "orca.chat-runtime.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "schema_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Schema Sha256",
+            "type": "string"
+          },
+          "schemas": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Schemas",
+            "type": "object"
+          }
+        },
+        "required": [
+          "schema_sha256",
+          "schemas"
+        ],
+        "title": "ChatRuntimeSchemaBundleRead",
+        "type": "object"
+      },
+      "ChatRuntimeTerminalOutcomeRead": {
+        "properties": {
+          "completed_at": {
+            "format": "date-time",
+            "title": "Completed At",
+            "type": "string"
+          },
+          "error_code": {
+            "maxLength": 128,
+            "title": "Error Code",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ChatRuntimeProgressState"
+          },
+          "summary": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "summary",
+          "completed_at"
+        ],
+        "title": "ChatRuntimeTerminalOutcomeRead",
+        "type": "object"
+      },
+      "ChatRuntimeTimelineEventRead": {
+        "description": "Ordered event envelope shared by REST reads and resumable streams.",
+        "properties": {
+          "actor_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Actor Id",
+            "type": "string"
+          },
+          "actor_type": {
+            "$ref": "#/components/schemas/ChatRuntimeActorType"
+          },
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "cursor": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Cursor",
+            "type": "string"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "$ref": "#/components/schemas/ChatRuntimeEventType"
+          },
+          "message_id": {
+            "format": "uuid",
+            "title": "Message Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ChatRuntimeProvenanceRead"
+          },
+          "sequence": {
+            "minimum": 0.0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ChatRuntimeProgressState"
+          },
+          "turn_id": {
+            "format": "uuid",
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "sequence",
+          "cursor",
+          "conversation_id",
+          "turn_id",
+          "agent_id",
+          "event_type",
+          "actor_type",
+          "actor_id",
+          "occurred_at",
+          "provenance"
+        ],
+        "title": "ChatRuntimeTimelineEventRead",
+        "type": "object"
+      },
+      "ChatRuntimeTurnContractRead": {
+        "properties": {
+          "controller_lease_required": {
+            "default": true,
+            "title": "Controller Lease Required",
+            "type": "boolean"
+          },
+          "exactly_one_terminal_outcome": {
+            "default": true,
+            "title": "Exactly One Terminal Outcome",
+            "type": "boolean"
+          },
+          "idempotency_key_required": {
+            "default": true,
+            "title": "Idempotency Key Required",
+            "type": "boolean"
+          },
+          "persist_before_execute": {
+            "default": true,
+            "title": "Persist Before Execute",
+            "type": "boolean"
+          },
+          "progress_states": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeProgressState"
+            },
+            "title": "Progress States",
+            "type": "array"
+          },
+          "resumable_cursor": {
+            "default": true,
+            "title": "Resumable Cursor",
+            "type": "boolean"
+          },
+          "terminal_states": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeProgressState"
+            },
+            "title": "Terminal States",
+            "type": "array"
+          }
+        },
+        "required": [
+          "progress_states",
+          "terminal_states"
+        ],
+        "title": "ChatRuntimeTurnContractRead",
+        "type": "object"
+      },
+      "ChatRuntimeTurnRead": {
+        "description": "Canonical provider-independent read model for one accepted turn.",
+        "properties": {
+          "adapter": {
+            "$ref": "#/components/schemas/ChatRuntimeAdapterRef"
+          },
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeTimelineEventRead"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "idempotency_key": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "latest_cursor": {
+            "maxLength": 256,
+            "title": "Latest Cursor",
+            "type": "string"
+          },
+          "message_id": {
+            "format": "uuid",
+            "title": "Message Id",
+            "type": "string"
+          },
+          "resources": {
+            "$ref": "#/components/schemas/ChatRuntimeResourceEnvelope"
+          },
+          "runtime_session_id": {
+            "format": "uuid",
+            "title": "Runtime Session Id",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ChatRuntimeProgressState"
+          },
+          "terminal_outcome": {
+            "$ref": "#/components/schemas/ChatRuntimeTerminalOutcomeRead"
+          },
+          "turn_id": {
+            "format": "uuid",
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_id",
+          "conversation_id",
+          "message_id",
+          "agent_id",
+          "state",
+          "idempotency_key",
+          "resources"
+        ],
+        "title": "ChatRuntimeTurnRead",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "Provider-neutral named-agent runtime contract.",
+    "title": "ORCA Chat Runtime API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/chat-runtime/v1/conformance/complete-turn": {
+      "get": {
+        "description": "Returns a deterministic provider-neutral accepted-to-terminal turn for generated client decoding, ordering, and replay conformance tests.",
+        "operationId": "get_chat_runtime_conformance_turn_api_v1_chat_runtime_v1_conformance_complete_turn_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatRuntimeTurnRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read ORCA Chat Runtime v1 Complete-Turn Fixture",
+        "tags": [
+          "chat-runtime"
+        ]
+      }
+    },
+    "/api/v1/chat-runtime/v1/contract": {
+      "get": {
+        "description": "Returns the provider-neutral authority, lifecycle, progress, adapter, transport, and compatibility contract for named-agent chat clients.",
+        "operationId": "get_chat_runtime_contract_api_v1_chat_runtime_v1_contract_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatRuntimeContractRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read ORCA Chat Runtime v1 Contract",
+        "tags": [
+          "chat-runtime"
+        ]
+      }
+    },
+    "/api/v1/chat-runtime/v1/schema-bundle": {
+      "get": {
+        "description": "Returns deterministic provider-neutral JSON schemas for runtime, event, adapter, resource, and terminal-outcome client generation.",
+        "operationId": "get_chat_runtime_schema_bundle_api_v1_chat_runtime_v1_schema_bundle_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatRuntimeSchemaBundleRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read ORCA Chat Runtime v1 Schema Bundle",
+        "tags": [
+          "chat-runtime"
+        ]
+      }
+    }
+  },
+  "tags": [
+    {
+      "description": "Provider-neutral ORCA named-agent runtime contract and resources.",
+      "name": "chat-runtime"
+    }
+  ],
+  "x-orca-contract-version": "orca.chat-runtime.v1",
+  "x-orca-schema-sha256": "7e867ff94398b39827dd2bc210505266f0dd08ea0892e28fa19128e392cfe74f"
+}

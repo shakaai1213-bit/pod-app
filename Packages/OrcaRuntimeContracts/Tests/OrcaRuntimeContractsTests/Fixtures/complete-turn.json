@@ -1,0 +1,164 @@
+{
+  "turn_id": "30000000-0000-4000-8000-000000000001",
+  "conversation_id": "10000000-0000-4000-8000-000000000001",
+  "message_id": "20000000-0000-4000-8000-000000000001",
+  "agent_id": "40000000-0000-4000-8000-000000000001",
+  "state": "completed",
+  "idempotency_key": "orca-chat-runtime-conformance-v1",
+  "runtime_session_id": "50000000-0000-4000-8000-000000000001",
+  "adapter": {
+    "adapter_id": "conformance-adapter",
+    "provider_id": "conformance-provider",
+    "model_id": "conformance-model",
+    "host_id": "conformance-host",
+    "execution_mode": "hybrid"
+  },
+  "resources": {
+    "allowed_tool_ids": [
+      "conformance.read"
+    ],
+    "allowed_root_refs": [
+      "orca://conformance"
+    ],
+    "provider_rungs": [
+      "local",
+      "frontier"
+    ],
+    "approval_rule_ids": [
+      "conformance.no-protected-mutation"
+    ],
+    "compute_budget_units": 1,
+    "max_concurrent_workers": 1,
+    "deadline_at": null,
+    "network_access": "denied"
+  },
+  "latest_cursor": "conformance-turn:4",
+  "events": [
+    {
+      "event_id": "60000000-0000-4000-8000-000000000001",
+      "sequence": 0,
+      "cursor": "conformance-turn:0",
+      "conversation_id": "10000000-0000-4000-8000-000000000001",
+      "message_id": "20000000-0000-4000-8000-000000000001",
+      "turn_id": "30000000-0000-4000-8000-000000000001",
+      "agent_id": "40000000-0000-4000-8000-000000000001",
+      "event_type": "message.accepted",
+      "state": "accepted",
+      "actor_type": "user",
+      "actor_id": "conformance-user",
+      "occurred_at": "2026-08-09T12:00:00Z",
+      "payload": {},
+      "provenance": {
+        "source_ref": "orca://chat-runtime/conformance/0",
+        "trace_id": "conformance-trace-v1",
+        "evidence_refs": [
+          "orca://evidence/conformance-v1"
+        ]
+      }
+    },
+    {
+      "event_id": "60000000-0000-4000-8000-000000000002",
+      "sequence": 1,
+      "cursor": "conformance-turn:1",
+      "conversation_id": "10000000-0000-4000-8000-000000000001",
+      "message_id": "20000000-0000-4000-8000-000000000001",
+      "turn_id": "30000000-0000-4000-8000-000000000001",
+      "agent_id": "40000000-0000-4000-8000-000000000001",
+      "event_type": "turn.claimed",
+      "state": "claimed",
+      "actor_type": "agent",
+      "actor_id": "conformance-agent",
+      "occurred_at": "2026-08-09T12:00:00Z",
+      "payload": {},
+      "provenance": {
+        "source_ref": "orca://chat-runtime/conformance/1",
+        "trace_id": "conformance-trace-v1",
+        "evidence_refs": [
+          "orca://evidence/conformance-v1"
+        ]
+      }
+    },
+    {
+      "event_id": "60000000-0000-4000-8000-000000000003",
+      "sequence": 2,
+      "cursor": "conformance-turn:2",
+      "conversation_id": "10000000-0000-4000-8000-000000000001",
+      "message_id": "20000000-0000-4000-8000-000000000001",
+      "turn_id": "30000000-0000-4000-8000-000000000001",
+      "agent_id": "40000000-0000-4000-8000-000000000001",
+      "event_type": "route.decided",
+      "state": "working",
+      "actor_type": "system",
+      "actor_id": "cascade",
+      "occurred_at": "2026-08-09T12:00:00Z",
+      "payload": {
+        "adapter_id": "conformance-adapter",
+        "reason": "fixture"
+      },
+      "provenance": {
+        "source_ref": "orca://chat-runtime/conformance/2",
+        "trace_id": "conformance-trace-v1",
+        "evidence_refs": [
+          "orca://evidence/conformance-v1"
+        ]
+      }
+    },
+    {
+      "event_id": "60000000-0000-4000-8000-000000000004",
+      "sequence": 3,
+      "cursor": "conformance-turn:3",
+      "conversation_id": "10000000-0000-4000-8000-000000000001",
+      "message_id": "20000000-0000-4000-8000-000000000001",
+      "turn_id": "30000000-0000-4000-8000-000000000001",
+      "agent_id": "40000000-0000-4000-8000-000000000001",
+      "event_type": "turn.progress",
+      "state": "working",
+      "actor_type": "adapter",
+      "actor_id": "conformance-adapter",
+      "occurred_at": "2026-08-09T12:00:00Z",
+      "payload": {
+        "message": "bounded work completed"
+      },
+      "provenance": {
+        "source_ref": "orca://chat-runtime/conformance/3",
+        "trace_id": "conformance-trace-v1",
+        "evidence_refs": [
+          "orca://evidence/conformance-v1"
+        ]
+      }
+    },
+    {
+      "event_id": "60000000-0000-4000-8000-000000000005",
+      "sequence": 4,
+      "cursor": "conformance-turn:4",
+      "conversation_id": "10000000-0000-4000-8000-000000000001",
+      "message_id": "20000000-0000-4000-8000-000000000001",
+      "turn_id": "30000000-0000-4000-8000-000000000001",
+      "agent_id": "40000000-0000-4000-8000-000000000001",
+      "event_type": "turn.completed",
+      "state": "completed",
+      "actor_type": "agent",
+      "actor_id": "conformance-agent",
+      "occurred_at": "2026-08-09T12:00:00Z",
+      "payload": {
+        "summary": "Provider-neutral conformance turn completed."
+      },
+      "provenance": {
+        "source_ref": "orca://chat-runtime/conformance/4",
+        "trace_id": "conformance-trace-v1",
+        "evidence_refs": [
+          "orca://evidence/conformance-v1"
+        ]
+      }
+    }
+  ],
+  "terminal_outcome": {
+    "state": "completed",
+    "summary": "Provider-neutral conformance turn completed.",
+    "error_code": null,
+    "evidence_refs": [
+      "orca://evidence/conformance-v1"
+    ],
+    "completed_at": "2026-08-09T12:00:00Z"
+  }
+}
