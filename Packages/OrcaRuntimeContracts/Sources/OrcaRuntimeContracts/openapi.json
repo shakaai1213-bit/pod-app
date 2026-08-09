@@ -1,6 +1,131 @@
 {
   "components": {
     "schemas": {
+      "ChatMessageRead": {
+        "description": "Read chat message response.",
+        "properties": {
+          "channel_id": {
+            "format": "uuid",
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "delivery_mode": {
+            "title": "Delivery Mode",
+            "type": "string"
+          },
+          "delivery_state": {
+            "default": "delivered",
+            "title": "Delivery State",
+            "type": "string"
+          },
+          "fallback_scheduled_at": {
+            "format": "date-time",
+            "title": "Fallback Scheduled At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_thread_reply": {
+            "default": false,
+            "title": "Is Thread Reply",
+            "type": "boolean"
+          },
+          "lane": {
+            "title": "Lane",
+            "type": "string"
+          },
+          "message_type": {
+            "title": "Message Type",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "provenance": {
+            "title": "Provenance",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "reply_to_id": {
+            "format": "uuid",
+            "title": "Reply To Id",
+            "type": "string"
+          },
+          "response_state": {
+            "title": "Response State",
+            "type": "string"
+          },
+          "sender_agent_id": {
+            "format": "uuid",
+            "title": "Sender Agent Id",
+            "type": "string"
+          },
+          "sender_emoji": {
+            "title": "Sender Emoji",
+            "type": "string"
+          },
+          "sender_name": {
+            "title": "Sender Name",
+            "type": "string"
+          },
+          "sender_type": {
+            "title": "Sender Type",
+            "type": "string"
+          },
+          "sender_user_id": {
+            "format": "uuid",
+            "title": "Sender User Id",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "triage_id": {
+            "title": "Triage Id",
+            "type": "string"
+          },
+          "triage_trace_id": {
+            "title": "Triage Trace Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "channel_id",
+          "content",
+          "message_type",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ChatMessageRead",
+        "type": "object"
+      },
       "ChatRuntimeActorType": {
         "enum": [
           "user",
@@ -641,6 +766,315 @@
         ],
         "title": "ChatRuntimeTurnRead",
         "type": "object"
+      },
+      "DirectAgentChatMessage": {
+        "description": "Prior chat turn supplied by a client during local-to-ORCA transition.",
+        "properties": {
+          "content": {
+            "maxLength": 12000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "role": {
+            "pattern": "^(user|assistant|system)$",
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "DirectAgentChatMessage",
+        "type": "object"
+      },
+      "DirectAgentChatMetadata": {
+        "description": "Compute routing metadata for one direct-chat response.",
+        "properties": {
+          "backend": {
+            "title": "Backend",
+            "type": "string"
+          },
+          "compute_run_id": {
+            "maxLength": 128,
+            "title": "Compute Run Id",
+            "type": "string"
+          },
+          "delivery_mode": {
+            "pattern": "^(auto|compute|agent_inbox)$",
+            "title": "Delivery Mode",
+            "type": "string"
+          },
+          "fallback_available_at": {
+            "maxLength": 64,
+            "title": "Fallback Available At",
+            "type": "string"
+          },
+          "lane": {
+            "title": "Lane",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "origin_delivery_receipt": {
+            "additionalProperties": true,
+            "title": "Origin Delivery Receipt",
+            "type": "object"
+          },
+          "provenance": {
+            "pattern": "^(live_inbox|compute|fallback|timeout_fallback|system|ticket|protected)$",
+            "title": "Provenance",
+            "type": "string"
+          },
+          "reply_window_seconds": {
+            "minimum": 0.0,
+            "title": "Reply Window Seconds",
+            "type": "integer"
+          },
+          "response_state": {
+            "maxLength": 64,
+            "title": "Response State",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "tier": {
+            "title": "Tier",
+            "type": "string"
+          },
+          "token_count": {
+            "title": "Token Count",
+            "type": "integer"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "triage_id": {
+            "maxLength": 128,
+            "title": "Triage Id",
+            "type": "string"
+          },
+          "triage_trace_id": {
+            "maxLength": 128,
+            "title": "Triage Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trace_id",
+          "source",
+          "lane"
+        ],
+        "title": "DirectAgentChatMetadata",
+        "type": "object"
+      },
+      "DirectAgentChatRequest": {
+        "description": "Send one named-agent turn through the ORCA direct-chat controller.",
+        "properties": {
+          "active_ticket_id": {
+            "format": "uuid",
+            "title": "Active Ticket Id",
+            "type": "string"
+          },
+          "async_response": {
+            "default": false,
+            "title": "Async Response",
+            "type": "boolean"
+          },
+          "channel_of_origin": {
+            "default": "pod-chat",
+            "pattern": "^(pod-chat|imessage)$",
+            "title": "Channel Of Origin",
+            "type": "string"
+          },
+          "chat_thread_id": {
+            "format": "uuid",
+            "title": "Chat Thread Id",
+            "type": "string"
+          },
+          "content": {
+            "maxLength": 12000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "delivery_mode": {
+            "default": "auto",
+            "pattern": "^(auto|compute|agent_inbox)$",
+            "title": "Delivery Mode",
+            "type": "string"
+          },
+          "fallback_after_seconds": {
+            "maximum": 3600.0,
+            "minimum": 1.0,
+            "title": "Fallback After Seconds",
+            "type": "integer"
+          },
+          "fallback_reason": {
+            "maxLength": 64,
+            "title": "Fallback Reason",
+            "type": "string"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/DirectAgentChatMessage"
+            },
+            "maxItems": 30,
+            "title": "History",
+            "type": "array"
+          },
+          "idempotency_key": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "origin_chat_id": {
+            "minimum": 1.0,
+            "title": "Origin Chat Id",
+            "type": "integer"
+          },
+          "origin_request_id": {
+            "maxLength": 160,
+            "title": "Origin Request Id",
+            "type": "string"
+          },
+          "origin_thread_id": {
+            "maxLength": 160,
+            "title": "Origin Thread Id",
+            "type": "string"
+          },
+          "reply_to_message_id": {
+            "format": "uuid",
+            "title": "Reply To Message Id",
+            "type": "string"
+          },
+          "trace_id": {
+            "maxLength": 128,
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "triage_id": {
+            "maxLength": 128,
+            "title": "Triage Id",
+            "type": "string"
+          },
+          "triage_trace_id": {
+            "maxLength": 128,
+            "title": "Triage Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "DirectAgentChatRequest",
+        "type": "object"
+      },
+      "DirectAgentChatResponse": {
+        "description": "ORCA-recorded direct chat response.",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "agent_slug": {
+            "title": "Agent Slug",
+            "type": "string"
+          },
+          "assistant_message_id": {
+            "format": "uuid",
+            "title": "Assistant Message Id",
+            "type": "string"
+          },
+          "channel_id": {
+            "format": "uuid",
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/DirectAgentChatMetadata"
+          },
+          "user_message_id": {
+            "format": "uuid",
+            "title": "User Message Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel_id",
+          "user_message_id",
+          "assistant_message_id",
+          "agent_slug",
+          "content",
+          "metadata"
+        ],
+        "title": "DirectAgentChatResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -660,7 +1094,7 @@
     "/api/v1/chat-runtime/v1/conformance/complete-turn": {
       "get": {
         "description": "Returns a deterministic provider-neutral accepted-to-terminal turn for generated client decoding, ordering, and replay conformance tests.",
-        "operationId": "get_chat_runtime_conformance_turn_api_v1_chat_runtime_v1_conformance_complete_turn_get",
+        "operationId": "getRuntimeConformanceTurn",
         "responses": {
           "200": {
             "content": {
@@ -687,7 +1121,7 @@
     "/api/v1/chat-runtime/v1/contract": {
       "get": {
         "description": "Returns the provider-neutral authority, lifecycle, progress, adapter, transport, and compatibility contract for named-agent chat clients.",
-        "operationId": "get_chat_runtime_contract_api_v1_chat_runtime_v1_contract_get",
+        "operationId": "getRuntimeContract",
         "responses": {
           "200": {
             "content": {
@@ -714,7 +1148,7 @@
     "/api/v1/chat-runtime/v1/schema-bundle": {
       "get": {
         "description": "Returns deterministic provider-neutral JSON schemas for runtime, event, adapter, resource, and terminal-outcome client generation.",
-        "operationId": "get_chat_runtime_schema_bundle_api_v1_chat_runtime_v1_schema_bundle_get",
+        "operationId": "getRuntimeSchemaBundle",
         "responses": {
           "200": {
             "content": {
@@ -736,6 +1170,139 @@
         "tags": [
           "chat-runtime"
         ]
+      }
+    },
+    "/api/v1/chat/channels/{channel_id}/messages": {
+      "get": {
+        "description": "List messages in a channel.",
+        "operationId": "listConversationMessages",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "channel_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Channel Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ChatMessageRead"
+                  },
+                  "title": "Response List Messages Api V1 Chat Channels  Channel Id  Messages Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Messages",
+        "tags": [
+          "chat"
+        ],
+        "x-orca-compatibility-adapter": true
+      }
+    },
+    "/api/v1/chat/direct/{agent_slug}/send": {
+      "post": {
+        "description": "Record a direct surface turn in ORCA, then route it through the named agent.",
+        "operationId": "sendDirectAgentTurn",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_slug",
+            "required": true,
+            "schema": {
+              "title": "Agent Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectAgentChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectAgentChatResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Send Direct Agent Chat",
+        "tags": [
+          "chat"
+        ],
+        "x-orca-compatibility-adapter": true
       }
     }
   },

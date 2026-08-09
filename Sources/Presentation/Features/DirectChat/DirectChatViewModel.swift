@@ -113,6 +113,7 @@ final class DirectChatViewModel {
     private var liveRefreshTask: Task<Void, Never>?
     private var liveSSEManager: SSEStreamManager?
     private var liveSSEConnectedChannels: Set<String> = []
+    private var lastLiveEventIDByChannel: [String: String] = [:]
     private var ticketSSEManager: SSEStreamManager?
     private var ticketLiveTask: Task<Void, Never>?
     private var ticketLiveRefreshTask: Task<Void, Never>?
@@ -1101,7 +1102,7 @@ final class DirectChatViewModel {
 
     // MARK: - Send Message
 
-    func sendMessage() {
+    func sendMessage(reusingTraceID: String? = nil) {
         guard let agent = selectedAgent,
               !isStreaming,
               !isCapturingParkingLot,
@@ -1165,7 +1166,7 @@ final class DirectChatViewModel {
         let history = currentMessages
             .filter { !$0.isStreaming }
             .map { (role: $0.role, content: $0.content) }
-        let outgoingTraceId = Self.makeTraceId(prefix: "pod-chat")
+        let outgoingTraceId = reusingTraceID ?? Self.makeTraceId(prefix: "pod-chat")
 
         // Save user message
         let conversation = getOrCreateConversation(for: agent)
@@ -1421,7 +1422,7 @@ final class DirectChatViewModel {
               Self.isRetryableUserDelivery(message.userDeliveryState),
               !isStreaming else { return }
         composedMessage = message.content
-        sendMessage()
+        sendMessage(reusingTraceID: message.traceId)
     }
 
     func retryLastFailedMessage() {
@@ -1704,7 +1705,8 @@ final class DirectChatViewModel {
             let stream = await manager.connect(
                 channelId: channelId,
                 token: token,
-                baseURL: AppState.backendURL
+                baseURL: AppState.backendURL,
+                afterEventID: lastLiveEventIDByChannel[channelId]
             )
             for try await event in stream {
                 if Task.isCancelled {
@@ -1720,6 +1722,7 @@ final class DirectChatViewModel {
                     liveSSEConnectedChannels.insert(channelId)
                     liveChatStatus = "Live \(agent.name) stream connected."
                 case .message(let payload):
+                    lastLiveEventIDByChannel[channelId] = payload.id
                     importLiveAgentResponsePayload(
                         payload,
                         agent: agent,
@@ -1890,6 +1893,9 @@ final class DirectChatViewModel {
         guard selectedAgent?.id == agent.id, let ctx = modelContext else { return }
         do {
             let messages: [DirectChatORCAMessageDTO] = try await api.get(path: "/api/v1/chat/channels/\(channelId)/messages")
+            if let latest = messages.max(by: { $0.createdAt < $1.createdAt }) {
+                lastLiveEventIDByChannel[channelId] = latest.id
+            }
             let liveReplies = messages
                 .filter {
                     $0.id != acknowledgedMessageId
@@ -1992,6 +1998,9 @@ final class DirectChatViewModel {
         guard selectedAgent?.id == agent.id, let ctx = modelContext else { return }
         do {
             let remoteMessages: [DirectChatORCAMessageDTO] = try await api.get(path: "/api/v1/chat/channels/\(channelId)/messages")
+            if let latest = remoteMessages.max(by: { $0.createdAt < $1.createdAt }) {
+                lastLiveEventIDByChannel[channelId] = latest.id
+            }
             let conversation = getOrCreateConversation(for: agent)
             conversation.orcaChannelId = channelId
             var existingRemoteIds = Set(currentMessages.compactMap(\.remoteMessageId))

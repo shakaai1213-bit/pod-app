@@ -318,6 +318,40 @@ final class PodHardeningTests: XCTestCase {
         }
     }
 
+    func testPodChatUsesProviderNeutralRuntimeAndResumableDelivery() throws {
+        let sourceRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources")
+        let service = try String(
+            contentsOf: sourceRoot.appendingPathComponent(
+                "Presentation/Features/DirectChat/AgentChatService.swift"
+            ),
+            encoding: .utf8
+        )
+        let viewModel = try String(
+            contentsOf: sourceRoot.appendingPathComponent(
+                "Presentation/Features/DirectChat/DirectChatViewModel.swift"
+            ),
+            encoding: .utf8
+        )
+        let sse = try String(
+            contentsOf: sourceRoot.appendingPathComponent("Data/Remote/SSEClient.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(service.contains("import OrcaRuntimeContracts"))
+        XCTAssertTrue(service.contains("verifyCompatibility()"))
+        XCTAssertTrue(service.contains("idempotencyKey: \"pod-chat-turn:"))
+        XCTAssertTrue(service.contains("case .httpStatus(404), .httpStatus(405):"))
+        XCTAssertFalse(service.contains("api.anthropic.com"))
+        XCTAssertFalse(service.contains("systemPrompt"))
+        XCTAssertTrue(viewModel.contains("sendMessage(reusingTraceID: message.traceId)"))
+        XCTAssertTrue(viewModel.contains("afterEventID: lastLiveEventIDByChannel[channelId]"))
+        XCTAssertTrue(sse.contains("forHTTPHeaderField: \"Last-Event-ID\""))
+    }
+
     func testChatPresentationKeepsLifecyclePrimaryAndExceptionsVisible() {
         let completeSteps = [
             DirectChatProgressStep(id: "reply", title: "Reply", icon: "checkmark", state: .done)

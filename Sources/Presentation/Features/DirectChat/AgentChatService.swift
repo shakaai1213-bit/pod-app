@@ -1,4 +1,5 @@
 import Foundation
+import OrcaRuntimeContracts
 
 /// Sends messages through ORCA as agent-scoped chat.
 actor AgentChatService {
@@ -22,6 +23,10 @@ actor AgentChatService {
     }
 
     private let agent: AgentInfo
+    private static let runtimeClient = OrcaRuntimeClient(
+        serverURL: URL(string: AppConfig.backendURL)!,
+        tokenProvider: { await APIClient.shared.currentToken() }
+    )
 
     init(agent: AgentInfo) {
         self.agent = agent
@@ -193,6 +198,7 @@ actor AgentChatService {
         let history: [HistoryMessage]
         let deliveryMode: String
         let asyncResponse: Bool
+        let idempotencyKey: String
         let traceId: String?
         let triageId: String?
         let triageTraceId: String?
@@ -208,6 +214,7 @@ actor AgentChatService {
             case content, history
             case deliveryMode = "delivery_mode"
             case asyncResponse = "async_response"
+            case idempotencyKey = "idempotency_key"
             case traceId = "trace_id"
             case triageId = "triage_id"
             case triageTraceId = "triage_trace_id"
@@ -282,6 +289,32 @@ actor AgentChatService {
                 triageId = try container.decodeIfPresent(String.self, forKey: .triageId)
                 computeRunId = try container.decodeIfPresent(String.self, forKey: .computeRunId)
             }
+
+            init(runtime response: OrcaRuntimeDirectTurnResponse) {
+                model = response.model
+                backend = response.provider
+                tier = response.tier
+                tokenCount = response.tokenCount
+                traceId = response.traceID
+                source = response.source
+                lane = response.lane
+                deliveryMode = response.deliveryMode
+                provenance = response.provenance
+                responseState = response.responseState
+                deliveryError = nil
+                deliveryFailedHop = nil
+                deliveryEvidence = nil
+                triageId = response.triageID
+                computeRunId = response.computeRunID
+            }
+        }
+
+        init(runtime response: OrcaRuntimeDirectTurnResponse) {
+            channelId = response.conversationID
+            userMessageId = response.userMessageID
+            assistantMessageId = response.assistantMessageID
+            content = response.content
+            metadata = DirectAgentChatMetadata(runtime: response)
         }
     }
 
@@ -470,6 +503,7 @@ actor AgentChatService {
             Task {
                 do {
                     let mode = deliveryMode ?? agent.defaultDeliveryMode
+                    let requestTraceId = traceId ?? "pod-chat-\(UUID().uuidString.lowercased())"
                     let body = DirectAgentChatRequest(
                         content: message,
                         history: history.suffix(20).map {
@@ -477,16 +511,14 @@ actor AgentChatService {
                         },
                         deliveryMode: mode.rawValue,
                         asyncResponse: mode == .liveInbox,
-                        traceId: traceId,
+                        idempotencyKey: "pod-chat-turn:\(requestTraceId)",
+                        traceId: requestTraceId,
                         triageId: triagePreview?.id,
                         triageTraceId: triagePreview?.traceId,
                         activeTicketId: activeTicketId,
                         chatThreadId: chatThreadId
                     )
-                    let response: DirectAgentChatResponse = try await APIClient.shared.post(
-                        path: "/api/v1/chat/direct/\(agent.id)/send",
-                        body: body
-                    )
+                    let response = try await sendDirectAgentTurn(body)
                     let content = response.content
                     let parsedState = DMDeliveryState.parse(response.metadata.responseState)
                     let parsedMode = DMDeliveryMode.parse(response.metadata.deliveryMode) ?? mode
@@ -536,205 +568,43 @@ actor AgentChatService {
         }
     }
 
-    private var systemPrompt: String {
-        """
-        You are \(agent.name) in Tony's Schoolhouse/ORCA lab.
-        Role: \(agent.role).
-        You are speaking in Pod chat. Be brief, direct, and useful.
-
-        Current Pod chat capability:
-        - You are a compute-backed agent persona, not the live OpenClaw agent process.
-        - You can answer from the provided chat history and these guardrails.
-        - You cannot directly read inboxes, browse files, query Chroma, mutate ORCA, send NATS, use tools, or update memory from this chat response.
-        - Pod can create an ORCA ticket from the chat with Tony's explicit confirmation.
-        - If this chat is already attached to an ORCA ticket, Pod can add Tony's follow-up as a ticket comment.
-        - If Tony asks what you can do, be transparent about these limits and suggest the next real Pod/ORCA action.
-        - Never invent ticket ids, file names, P&L, portfolio state, credentials, agent status, or completed actions.
-        - If Tony asks for live state you cannot access, say you cannot see it from Pod chat and propose the next controlled check.
-
-        Core lab rules:
-        - ORCA is truth for tickets, projects, owners, blockers, approvals, and evidence.
-        - Team-Wiki holds standards, SOPs, charters, audits, and the chronogram.
-        - Daily memory is continuity; durable memory is curated.
-        - Actionable work should point to an ORCA ticket/project or become one.
-        - Do not delete, archive, overwrite identity, mutate security, or change Chief/Fund systems without review.
-        - If Tony asks for work, give the next concrete ORCA/Pod step.
-
-        Agent-specific guardrail:
-        \(agent.guardrail)
-        """
-    }
-
-    private static func computeTag(for agent: AgentInfo) -> String {
-        // Direct chat is a lightweight triage surface. Protected-domain routing
-        // belongs on ORCA tickets/runs; otherwise simple Chief/Rooster chat can
-        // block behind slow specialist lanes before Tony gets any response.
-        "classify"
-    }
-
-    // MARK: - Direct Claude API streaming (for agents with API keys)
-
-    /// Streams a response directly from Claude API with agent-specific system prompt.
-    /// Used when we want real-time streaming responses (not async OpenClaw injection).
-    func streamDirect(
-        message: String,
-        history: [(role: String, content: String)] = [],
-        apiKey: String,
-        model: String = "claude-sonnet-4-6"
-    ) -> AsyncThrowingStream<String, Error> {
-        AsyncThrowingStream { continuation in
-            Task {
-                do {
-                    let systemPrompt = """
-                    You are \(agent.name), \(agent.role) on the ORCA platform.
-                    You are having a 1:1 conversation with Tony (The Captain).
-                    Be concise, direct, and helpful. Tony values brevity and execution over narration.
-                    """
-
-                    var messages: [[String: Any]] = []
-                    // Include conversation history
-                    for msg in history.suffix(20) {
-                        messages.append(["role": msg.role, "content": msg.content])
-                    }
-                    messages.append(["role": "user", "content": message])
-
-                    let body: [String: Any] = [
-                        "model": model,
-                        "max_tokens": 4096,
-                        "system": systemPrompt,
-                        "messages": messages,
-                        "stream": true
-                    ]
-
-                    var request = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
-                    request.httpMethod = "POST"
-                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                    request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-                    request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
-                    request.timeoutInterval = 120
-                    request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-                    let (bytes, response) = try await URLSession.shared.bytes(for: request)
-
-                    if let http = response as? HTTPURLResponse, http.statusCode != 200 {
-                        continuation.finish(throwing: AgentChatError.httpError(http.statusCode, nil))
-                        return
-                    }
-
-                    for try await line in bytes.lines {
-                        if line.hasPrefix("data: ") {
-                            let json = String(line.dropFirst(6))
-                            if json == "[DONE]" { break }
-                            if let text = Self.parseContentDelta(json) {
-                                continuation.yield(text)
-                            }
-                        }
-                    }
-                    continuation.finish()
-                } catch {
-                    continuation.finish(throwing: error)
-                }
+    private func sendDirectAgentTurn(
+        _ body: DirectAgentChatRequest
+    ) async throws -> DirectAgentChatResponse {
+        do {
+            _ = try await Self.runtimeClient.verifyCompatibility()
+            let response = try await Self.runtimeClient.send(
+                OrcaRuntimeDirectTurnRequest(
+                    agentSlug: agent.id,
+                    content: body.content,
+                    history: body.history.map {
+                        OrcaRuntimeHistoryMessage(role: $0.role, content: $0.content)
+                    },
+                    deliveryMode: body.deliveryMode,
+                    asyncResponse: body.asyncResponse,
+                    traceID: body.traceId ?? UUID().uuidString,
+                    idempotencyKey: body.idempotencyKey,
+                    triageID: body.triageId,
+                    triageTraceID: body.triageTraceId,
+                    activeTicketID: body.activeTicketId,
+                    conversationID: body.chatThreadId
+                )
+            )
+            return DirectAgentChatResponse(runtime: response)
+        } catch let error as OrcaRuntimeClientError {
+            switch error {
+            case .httpStatus(404), .httpStatus(405):
+                // Production may temporarily predate the v1 handshake. Keep
+                // the existing durable ORCA route until the backend promotes.
+                return try await APIClient.shared.post(
+                    path: "/api/v1/chat/direct/\(agent.id)/send",
+                    body: body
+                )
+            default:
+                // A present-but-incompatible runtime must fail closed.
+                throw error
             }
         }
-    }
-
-    // MARK: - SSE Parser
-
-    private static func parseContentDelta(_ json: String) -> String? {
-        guard let data = json.data(using: .utf8) else { return nil }
-        struct Event: Decodable {
-            let type: String?
-            let delta: Delta?
-            struct Delta: Decodable { let text: String? }
-        }
-        guard let event = try? JSONDecoder().decode(Event.self, from: data),
-              event.type == "content_block_delta",
-              let text = event.delta?.text else {
-            return nil
-        }
-        return text
-    }
-
-    private static func parseChatCompletion(
-        _ data: Data,
-        traceId: String,
-        source: String,
-        lane: String
-    ) throws -> ResponseChunk {
-        struct Response: Decodable {
-            struct Choice: Decodable {
-                struct Message: Decodable {
-                    let content: String?
-                    let refusal: String?
-                }
-                let message: Message?
-                let text: String?
-            }
-            struct Usage: Decodable {
-                let totalTokens: Int?
-
-                enum CodingKeys: String, CodingKey {
-                    case totalTokens = "total_tokens"
-                }
-            }
-            struct Routing: Decodable {
-                struct Router: Decodable {
-                    let tierChosen: String?
-                    let caller: String?
-
-                    enum CodingKeys: String, CodingKey {
-                        case tierChosen = "tier_chosen"
-                        case caller
-                    }
-                }
-
-                let backend: String?
-                let model: String?
-                let tier: String?
-                let computeRouter: Router?
-
-                enum CodingKeys: String, CodingKey {
-                    case backend, model, tier
-                    case computeRouter = "compute_router"
-                }
-            }
-
-            let model: String?
-            let choices: [Choice]
-            let usage: Usage?
-            let routing: Routing?
-
-            enum CodingKeys: String, CodingKey {
-                case model, choices, usage
-                case routing = "_routing"
-            }
-        }
-        let response = try JSONDecoder().decode(Response.self, from: data)
-        let content = response.choices.first?.message?.content
-            ?? response.choices.first?.message?.refusal
-            ?? response.choices.first?.text
-            ?? ""
-        let metadata = ResponseMetadata(
-            channelId: "",
-            userMessageId: "",
-            assistantMessageId: "",
-            model: response.routing?.model ?? response.model,
-            backend: response.routing?.backend,
-            tier: response.routing?.computeRouter?.tierChosen ?? response.routing?.tier,
-            tokenCount: response.usage?.totalTokens,
-            traceId: traceId,
-            source: source,
-            lane: lane,
-            deliveryMode: DMDeliveryMode.compute.rawValue,
-            provenance: DMResponseProvenance.compute.rawValue,
-            responseState: DMDeliveryState.responseReceived.rawValue,
-            deliveryError: nil,
-            deliveryFailedHop: nil,
-            deliveryEvidence: nil,
-            triageId: nil,
-            computeRunId: nil
-        )
-        return ResponseChunk(content: content, metadata: metadata)
     }
 
     private static func provenance(for deliveryMode: String?, source: String?, lane: String?) -> String {

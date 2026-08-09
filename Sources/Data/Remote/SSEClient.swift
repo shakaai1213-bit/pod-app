@@ -97,7 +97,8 @@ public actor SSEStreamManager {
     public func connect(
         channelId: String,
         token: String,
-        baseURL: String
+        baseURL: String,
+        afterEventID: String? = nil
     ) -> AsyncThrowingStream<SSEEvent, Error> {
         isCancelled = false
         markConnecting()
@@ -118,7 +119,13 @@ public actor SSEStreamManager {
             }
 
             Task { [weak self] in
-                await self?.runStream(channelId: channelId, token: token, baseURL: baseURL, continuation: continuation)
+                await self?.runStream(
+                    channelId: channelId,
+                    token: token,
+                    baseURL: baseURL,
+                    afterEventID: afterEventID,
+                    continuation: continuation
+                )
             }
         }
     }
@@ -128,6 +135,7 @@ public actor SSEStreamManager {
         channelId: String,
         token: String,
         baseURL: String,
+        afterEventID: String?,
         continuation: AsyncThrowingStream<SSEEvent, Error>.Continuation
     ) async {
         let urlString = "\(baseURL)/api/v1/chat/channels/\(channelId)/stream"
@@ -139,6 +147,9 @@ public actor SSEStreamManager {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        if let afterEventID, !afterEventID.isEmpty {
+            request.setValue(afterEventID, forHTTPHeaderField: "Last-Event-ID")
+        }
         request.timeoutInterval = .infinity
 
         let delegate = SSEDelegate(continuation: continuation, manager: self, mode: .chat)
