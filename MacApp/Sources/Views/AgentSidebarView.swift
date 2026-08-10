@@ -11,9 +11,9 @@ struct AgentSidebarView: View {
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(Color.orcaCyan)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("ORCA")
+                    Text("ORCA Console")
                         .font(.headline)
-                    Text("Captain Console")
+                    Text("Lab operating surface")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -24,11 +24,36 @@ struct AgentSidebarView: View {
 
             Divider()
 
-            List(selection: agentSelection) {
-                Section("Team") {
+            List {
+                Section("ORCA") {
+                    ForEach(ConsoleSection.allCases.filter { $0 != .conversations }) { section in
+                        Button {
+                            model.selectSection(section)
+                        } label: {
+                            ConsoleNavigationRow(section: section)
+                        }
+                        .buttonStyle(.plain)
+                        .listRowBackground(
+                            model.selectedSection == section
+                                ? Color.accentColor.opacity(0.12)
+                                : Color.clear
+                        )
+                    }
+                }
+
+                Section("Conversations") {
                     ForEach(model.agents) { agent in
-                        AgentRow(agent: agent)
-                            .tag(agent.id)
+                        Button {
+                            model.selectAgent(agent.id)
+                        } label: {
+                            AgentRow(agent: agent)
+                        }
+                        .buttonStyle(.plain)
+                        .listRowBackground(
+                            model.selectedSection == .conversations && model.selectedAgentID == agent.id
+                                ? Color.accentColor.opacity(0.12)
+                                : Color.clear
+                        )
                     }
                 }
             }
@@ -61,11 +86,36 @@ struct AgentSidebarView: View {
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
-    private var agentSelection: Binding<String?> {
-        Binding(
-            get: { model.selectedAgentID },
-            set: { if let id = $0 { model.selectAgent(id) } }
-        )
+}
+
+private struct ConsoleNavigationRow: View {
+    let section: ConsoleSection
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: section.symbol)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(section == .fund ? Color.orcaGreen : Color.orcaCyan)
+                .frame(width: 24)
+
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 5) {
+                    Text(section.title)
+                        .font(.body.weight(.medium))
+                    if section.isProtected {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Text(section.subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .frame(height: 36)
+        .contentShape(Rectangle())
     }
 }
 
@@ -119,7 +169,7 @@ struct ConnectionDot: View {
         case .ready: return .orcaGreen
         case .connecting: return .orcaAmber
         case .idle: return .secondary
-        case .credentialsRequired, .incompatible, .unavailable: return .orcaCoral
+        case .credentialsRequired, .runtimeUpgradeRequired, .incompatible, .unavailable: return .orcaCoral
         }
     }
 }

@@ -21,7 +21,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.orcamc.mac
-        PRODUCT_NAME: ORCA
+        PRODUCT_NAME: "ORCA Console"
+        PRODUCT_MODULE_NAME: ORCA
         INFOPLIST_FILE: Resources/Info.plist
         CODE_SIGN_ENTITLEMENTS: Resources/OrcaMac.entitlements
         CODE_SIGN_STYLE: Automatic
@@ -39,8 +40,9 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.orcamc.mac.tests
+        PRODUCT_MODULE_NAME: OrcaMacTests
         GENERATE_INFOPLIST_FILE: YES
-        TEST_HOST: $(BUILT_PRODUCTS_DIR)/ORCA.app/Contents/MacOS/ORCA
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/ORCA Console.app/Contents/MacOS/ORCA Console"
         BUNDLE_LOADER: $(TEST_HOST)
 schemes:
   OrcaMac:

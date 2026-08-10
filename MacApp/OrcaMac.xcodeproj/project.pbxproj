@@ -11,15 +11,20 @@
 		10C345AEFE0EEC7732669995 /* ConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00EA42D1501458B99559CB02 /* ConversationView.swift */; };
 		277C2AF86B2AD598940DDD6B /* AgentProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33AB8BC31D2D897D3F7975FE /* AgentProfile.swift */; };
 		4EA24E98111488AE8D34E449 /* AgentSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B881A41472EBD84E7E11CEE /* AgentSidebarView.swift */; };
+		4F94A1EC58560A4D8C203B37 /* ConsoleModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDE6B16EBAC1BD3DACA293F6 /* ConsoleModels.swift */; };
 		5C2A1189E3697D57BC6C80C8 /* RuntimeInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DABE2808685236170CD27E3 /* RuntimeInspectorView.swift */; };
+		6AD3BABB3808E52BB0DC5898 /* OrcaConsoleService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8786120F464535F2B5D5335 /* OrcaConsoleService.swift */; };
 		71E73FDFAB0A03A3F2FDE787 /* OrcaMacRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F8F0C6338DDF03277178DE /* OrcaMacRootView.swift */; };
 		7C2A91486F032CABA4D19614 /* RuntimeTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2486F747AFC706EA37D40353 /* RuntimeTokenStore.swift */; };
+		843E40830EFBC5298E907194 /* ConsoleSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61DE8611CB4FA2C9A5F20E42 /* ConsoleSection.swift */; };
+		901A4937A12ACC20DEA8591A /* ConsoleInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67A66FA57C2B25C9565C0BFC /* ConsoleInspectorView.swift */; };
 		99FBE414128793480ED47BF5 /* OrcaRuntimeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E16FB299A152B526B16103E9 /* OrcaRuntimeService.swift */; };
 		9EFDDCA5ABF5BA2B1C232E8A /* OrcaRuntimeContracts in Frameworks */ = {isa = PBXBuildFile; productRef = 116C04D573F5CD68638491FC /* OrcaRuntimeContracts */; };
 		C8422182A7AC9EE7B9C37059 /* OrcaMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AD237E2711945CDB9595F40 /* OrcaMacApp.swift */; };
 		D2E5AE67656BD94A9B758F4F /* RuntimeSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADCFAE90923B128D54DB1670 /* RuntimeSettingsView.swift */; };
 		D456856E9EE405384F9C4A7C /* OrcaMacModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 899EEF8FAFC5B303A787CD4E /* OrcaMacModel.swift */; };
 		E6D573CF1B1B9CDB71E5E43F /* OrcaMacModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C2A8295BDFAF1CEDA0E7203 /* OrcaMacModelTests.swift */; };
+		EA78C9ECE5E6F3BFEC5C86D6 /* ConsoleSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBAC885AD2E475E60B8E5316 /* ConsoleSectionView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -41,12 +46,17 @@
 		4B881A41472EBD84E7E11CEE /* AgentSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSidebarView.swift; sourceTree = "<group>"; };
 		57572F55993B1FD11A52D669 /* OrcaMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OrcaMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6109B3070CA1D88217D8AEC5 /* OrcaMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OrcaMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		61DE8611CB4FA2C9A5F20E42 /* ConsoleSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleSection.swift; sourceTree = "<group>"; };
+		67A66FA57C2B25C9565C0BFC /* ConsoleInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleInspectorView.swift; sourceTree = "<group>"; };
 		899EEF8FAFC5B303A787CD4E /* OrcaMacModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrcaMacModel.swift; sourceTree = "<group>"; };
 		95DC6E995F1BAAFDE0312D01 /* OrcaRuntimeContracts */ = {isa = PBXFileReference; lastKnownFileType = folder; name = OrcaRuntimeContracts; path = ../Packages/OrcaRuntimeContracts; sourceTree = SOURCE_ROOT; };
 		9C2A8295BDFAF1CEDA0E7203 /* OrcaMacModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrcaMacModelTests.swift; sourceTree = "<group>"; };
 		ADCFAE90923B128D54DB1670 /* RuntimeSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeSettingsView.swift; sourceTree = "<group>"; };
 		C7F8F0C6338DDF03277178DE /* OrcaMacRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrcaMacRootView.swift; sourceTree = "<group>"; };
+		CDE6B16EBAC1BD3DACA293F6 /* ConsoleModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleModels.swift; sourceTree = "<group>"; };
+		DBAC885AD2E475E60B8E5316 /* ConsoleSectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleSectionView.swift; sourceTree = "<group>"; };
 		E16FB299A152B526B16103E9 /* OrcaRuntimeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrcaRuntimeService.swift; sourceTree = "<group>"; };
+		E8786120F464535F2B5D5335 /* OrcaConsoleService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrcaConsoleService.swift; sourceTree = "<group>"; };
 		FC801CF96663423C51FD82B1 /* ConversationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationModels.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -77,6 +87,7 @@
 		23A7B8C63026732FA2E777A9 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				E8786120F464535F2B5D5335 /* OrcaConsoleService.swift */,
 				E16FB299A152B526B16103E9 /* OrcaRuntimeService.swift */,
 				2486F747AFC706EA37D40353 /* RuntimeTokenStore.swift */,
 			);
@@ -138,6 +149,8 @@
 			isa = PBXGroup;
 			children = (
 				33AB8BC31D2D897D3F7975FE /* AgentProfile.swift */,
+				CDE6B16EBAC1BD3DACA293F6 /* ConsoleModels.swift */,
+				61DE8611CB4FA2C9A5F20E42 /* ConsoleSection.swift */,
 				FC801CF96663423C51FD82B1 /* ConversationModels.swift */,
 			);
 			path = Models;
@@ -147,6 +160,8 @@
 			isa = PBXGroup;
 			children = (
 				4B881A41472EBD84E7E11CEE /* AgentSidebarView.swift */,
+				67A66FA57C2B25C9565C0BFC /* ConsoleInspectorView.swift */,
+				DBAC885AD2E475E60B8E5316 /* ConsoleSectionView.swift */,
 				00EA42D1501458B99559CB02 /* ConversationView.swift */,
 				C7F8F0C6338DDF03277178DE /* OrcaMacRootView.swift */,
 				0DABE2808685236170CD27E3 /* RuntimeInspectorView.swift */,
@@ -239,8 +254,13 @@
 			files = (
 				277C2AF86B2AD598940DDD6B /* AgentProfile.swift in Sources */,
 				4EA24E98111488AE8D34E449 /* AgentSidebarView.swift in Sources */,
+				901A4937A12ACC20DEA8591A /* ConsoleInspectorView.swift in Sources */,
+				4F94A1EC58560A4D8C203B37 /* ConsoleModels.swift in Sources */,
+				843E40830EFBC5298E907194 /* ConsoleSection.swift in Sources */,
+				EA78C9ECE5E6F3BFEC5C86D6 /* ConsoleSectionView.swift in Sources */,
 				02F690900F0EE560FB15950C /* ConversationModels.swift in Sources */,
 				10C345AEFE0EEC7732669995 /* ConversationView.swift in Sources */,
+				6AD3BABB3808E52BB0DC5898 /* OrcaConsoleService.swift in Sources */,
 				C8422182A7AC9EE7B9C37059 /* OrcaMacApp.swift in Sources */,
 				D456856E9EE405384F9C4A7C /* OrcaMacModel.swift in Sources */,
 				71E73FDFAB0A03A3F2FDE787 /* OrcaMacRootView.swift in Sources */,
@@ -282,8 +302,9 @@
 					"@loader_path/../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.orcamc.mac.tests;
+				PRODUCT_MODULE_NAME = OrcaMacTests;
 				SDKROOT = macosx;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ORCA.app/Contents/MacOS/ORCA";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ORCA Console.app/Contents/MacOS/ORCA Console";
 			};
 			name = Release;
 		};
@@ -303,7 +324,8 @@
 				);
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.orcamc.mac;
-				PRODUCT_NAME = ORCA;
+				PRODUCT_MODULE_NAME = ORCA;
+				PRODUCT_NAME = "ORCA Console";
 				SDKROOT = macosx;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 			};
@@ -321,8 +343,9 @@
 					"@loader_path/../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.orcamc.mac.tests;
+				PRODUCT_MODULE_NAME = OrcaMacTests;
 				SDKROOT = macosx;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ORCA.app/Contents/MacOS/ORCA";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ORCA Console.app/Contents/MacOS/ORCA Console";
 			};
 			name = Debug;
 		};
@@ -461,7 +484,8 @@
 				);
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.orcamc.mac;
-				PRODUCT_NAME = ORCA;
+				PRODUCT_MODULE_NAME = ORCA;
+				PRODUCT_NAME = "ORCA Console";
 				SDKROOT = macosx;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 			};

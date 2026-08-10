@@ -67,12 +67,13 @@ struct ConversationView: View {
                 LazyVStack(spacing: 12) {
                     if model.selectedMessages.isEmpty {
                         ContentUnavailableView(
-                            model.connectionState == .credentialsRequired
-                                ? "ORCA Sign-In Required"
-                                : "No Messages",
-                            systemImage: model.connectionState == .credentialsRequired
-                                ? "key"
-                                : "bubble.left.and.bubble.right"
+                            model.connectionState.isReady
+                                ? "No Messages"
+                                : model.connectionState.unavailableTitle,
+                            systemImage: model.connectionState.isReady
+                                ? "bubble.left.and.bubble.right"
+                                : model.connectionState.unavailableSymbol,
+                            description: model.connectionDetail.map(Text.init)
                         )
                         .frame(maxWidth: .infinity, minHeight: 360)
                     } else {

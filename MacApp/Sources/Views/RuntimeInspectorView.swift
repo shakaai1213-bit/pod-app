@@ -71,7 +71,7 @@ struct RuntimeInspectorView: View {
         }
     }
 }
-private struct InspectorSection<Content: View>: View {
+struct InspectorSection<Content: View>: View {
     let title: String
     @ViewBuilder let content: Content
 
@@ -86,7 +86,7 @@ private struct InspectorSection<Content: View>: View {
     }
 }
 
-private struct InspectorValue: View {
+struct InspectorValue: View {
     let label: String
     let value: String
 

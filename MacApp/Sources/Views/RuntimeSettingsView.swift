@@ -12,7 +12,7 @@ struct RuntimeSettingsView: View {
                 TextField("Server", text: $serverAddress)
                     .textFieldStyle(.roundedBorder)
                 SecureField(
-                    model.hasStoredCredential ? "Credential stored" : "Agent credential",
+                    model.hasStoredCredential ? "ORCA access stored" : "ORCA access token",
                     text: $token
                 )
                 .textFieldStyle(.roundedBorder)
@@ -21,7 +21,15 @@ struct RuntimeSettingsView: View {
             Section {
                 HStack {
                     ConnectionDot(state: model.connectionState)
-                    Text(model.connectionState.label)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(model.connectionState.label)
+                        if let detail = model.connectionDetail {
+                            Text(detail)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
+                    }
                     Spacer()
                     Button(role: .destructive) {
                         Task { await model.removeCredential() }

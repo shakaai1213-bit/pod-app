@@ -8,20 +8,26 @@ final class OrcaMacModel {
     static let defaultServerAddress = "http://100.104.72.62:8000"
 
     var selectedAgentID: String
+    var selectedSection: ConsoleSection
+    var selectedRecordID: String?
     var draft = ""
     var isSending = false
+    var isLoadingSection = false
     var connectionState: RuntimeConnectionState = .idle
     var contractVersion: String?
     var schemaSHA256: String?
     var conversations: [String: ConversationState] = [:]
+    var sectionSnapshots: [ConsoleSection: ConsoleSectionSnapshot] = [:]
     var lastUpdatedAt: Date?
     var presentedError: String?
+    var sectionError: String?
     var serverAddress: String
     var hasStoredCredential = false
 
     @ObservationIgnored private let tokenStore: any RuntimeTokenStoring
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var service: (any OrcaRuntimeServing)?
+    @ObservationIgnored private var consoleService: OrcaConsoleService?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
 
     init(
@@ -36,6 +42,9 @@ final class OrcaMacModel {
         selectedAgentID = AgentProfile.roster.contains(where: { $0.id == storedAgent })
             ? storedAgent
             : "coral"
+        selectedSection = ConsoleSection(
+            rawValue: defaults.string(forKey: "orca.mac.selected-section") ?? "overview"
+        ) ?? .overview
     }
 
     var agents: [AgentProfile] { AgentProfile.roster }
@@ -52,6 +61,15 @@ final class OrcaMacModel {
 
     var selectedMessages: [TranscriptMessage] { selectedConversation.messages }
 
+    var selectedSnapshot: ConsoleSectionSnapshot {
+        sectionSnapshots[selectedSection] ?? .empty(selectedSection)
+    }
+
+    var selectedRecord: ConsoleRecord? {
+        guard let selectedRecordID else { return nil }
+        return selectedSnapshot.records.first(where: { $0.id == selectedRecordID })
+    }
+
     var canSend: Bool {
         connectionState.isReady
             && !isSending
@@ -60,7 +78,9 @@ final class OrcaMacModel {
 
     var connectionDetail: String? {
         switch connectionState {
-        case let .incompatible(detail), let .unavailable(detail): return detail
+        case let .runtimeUpgradeRequired(detail),
+             let .incompatible(detail),
+             let .unavailable(detail): return detail
         default: return nil
         }
     }
@@ -88,8 +108,18 @@ final class OrcaMacModel {
         do {
             guard try await tokenStore.loadToken() != nil else {
                 hasStoredCredential = false
-                connectionState = .credentialsRequired
                 service = nil
+                consoleService = nil
+                switch await OrcaRuntimeService.probeContract(at: endpoint) {
+                case .available:
+                    connectionState = .credentialsRequired
+                case .upgradeRequired:
+                    connectionState = .runtimeUpgradeRequired(
+                        "The connected ORCA backend does not expose Runtime API v1."
+                    )
+                case let .unavailable(detail):
+                    connectionState = .unavailable(detail)
+                }
                 return
             }
             hasStoredCredential = true
@@ -97,16 +127,23 @@ final class OrcaMacModel {
             let nextService = OrcaRuntimeService(serverURL: endpoint, tokenStore: tokenStore)
             let compatibility = try await nextService.verifyCompatibility()
             service = nextService
+            consoleService = OrcaConsoleService(serverURL: endpoint, tokenStore: tokenStore)
             contractVersion = compatibility.contractVersion
             schemaSHA256 = compatibility.schemaSHA256
             connectionState = .ready
-            await refreshSelectedConversation(silent: true)
+            if selectedSection == .conversations {
+                await refreshSelectedConversation(silent: true)
+            } else {
+                await refreshSelectedSection(silent: true)
+            }
             beginRefreshLoop()
         } catch let error as OrcaRuntimeClientError {
             service = nil
+            consoleService = nil
             connectionState = .incompatible(error.localizedDescription)
         } catch {
             service = nil
+            consoleService = nil
             connectionState = .unavailable(error.localizedDescription)
         }
     }
@@ -135,8 +172,9 @@ final class OrcaMacModel {
             try await tokenStore.deleteToken()
             hasStoredCredential = false
             service = nil
+            consoleService = nil
             refreshTask?.cancel()
-            connectionState = .credentialsRequired
+            await connect()
         } catch {
             presentedError = error.localizedDescription
         }
@@ -144,12 +182,51 @@ final class OrcaMacModel {
 
     func selectAgent(_ id: String) {
         guard AgentProfile.roster.contains(where: { $0.id == id }) else { return }
+        selectSection(.conversations, refresh: false)
         selectedAgentID = id
         defaults.set(id, forKey: "orca.mac.selected-agent")
         if conversations[id] == nil {
             conversations[id] = ConversationState(conversationID: storedConversationID(for: id))
         }
         Task { await refreshSelectedConversation(silent: true) }
+    }
+
+    func selectSection(_ section: ConsoleSection, refresh: Bool = true) {
+        selectedSection = section
+        selectedRecordID = nil
+        defaults.set(section.rawValue, forKey: "orca.mac.selected-section")
+        guard refresh else { return }
+        Task {
+            if section == .conversations {
+                await refreshSelectedConversation(silent: true)
+            } else {
+                await refreshSelectedSection(silent: true)
+            }
+        }
+    }
+
+    func selectRecord(_ id: String?) {
+        selectedRecordID = id
+    }
+
+    func refreshSelectedSection(silent: Bool = false) async {
+        guard selectedSection != .conversations, let consoleService else { return }
+        let section = selectedSection
+        isLoadingSection = true
+        do {
+            let snapshot = try await consoleService.snapshot(for: section)
+            sectionSnapshots[section] = snapshot
+            sectionError = nil
+            lastUpdatedAt = snapshot.updatedAt
+            if let selectedRecordID,
+               !snapshot.records.contains(where: { $0.id == selectedRecordID }) {
+                self.selectedRecordID = nil
+            }
+        } catch {
+            sectionError = error.localizedDescription
+            if !silent { presentedError = error.localizedDescription }
+        }
+        isLoadingSection = false
     }
 
     func refreshSelectedConversation(silent: Bool = false) async {
@@ -283,7 +360,11 @@ final class OrcaMacModel {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(4))
                 guard !Task.isCancelled, let self else { return }
-                await self.refreshSelectedConversation(silent: true)
+                if self.selectedSection == .conversations {
+                    await self.refreshSelectedConversation(silent: true)
+                } else {
+                    await self.refreshSelectedSection(silent: true)
+                }
             }
         }
     }

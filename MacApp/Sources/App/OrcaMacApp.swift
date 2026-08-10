@@ -5,7 +5,7 @@ struct OrcaMacApp: App {
     @State private var model = OrcaMacModel()
 
     var body: some Scene {
-        WindowGroup("ORCA") {
+        WindowGroup("ORCA Console") {
             OrcaMacRootView()
                 .environment(model)
                 .frame(minWidth: 980, minHeight: 640)
@@ -14,9 +14,15 @@ struct OrcaMacApp: App {
         .defaultSize(width: 1280, height: 820)
         .commands {
             CommandGroup(replacing: .newItem) { }
-            CommandMenu("Conversation") {
+            CommandMenu("ORCA") {
                 Button("Refresh") {
-                    Task { await model.refreshSelectedConversation() }
+                    Task {
+                        if model.selectedSection == .conversations {
+                            await model.refreshSelectedConversation()
+                        } else {
+                            await model.refreshSelectedSection()
+                        }
+                    }
                 }
                 .keyboardShortcut("r", modifiers: .command)
 
@@ -24,7 +30,7 @@ struct OrcaMacApp: App {
                     Task { await model.sendDraft() }
                 }
                 .keyboardShortcut(.return, modifiers: .command)
-                .disabled(!model.canSend)
+                .disabled(model.selectedSection != .conversations || !model.canSend)
             }
         }
 

@@ -82,6 +82,7 @@ enum RuntimeConnectionState: Equatable, Sendable {
     case connecting
     case ready
     case credentialsRequired
+    case runtimeUpgradeRequired(String)
     case incompatible(String)
     case unavailable(String)
 
@@ -90,11 +91,28 @@ enum RuntimeConnectionState: Equatable, Sendable {
         case .idle: return "Idle"
         case .connecting: return "Connecting"
         case .ready: return "Connected"
-        case .credentialsRequired: return "Sign in required"
+        case .credentialsRequired: return "Connection required"
+        case .runtimeUpgradeRequired: return "Runtime upgrade required"
         case .incompatible: return "Contract mismatch"
         case .unavailable: return "Unavailable"
         }
     }
 
     var isReady: Bool { self == .ready }
+
+    var unavailableTitle: String {
+        switch self {
+        case .runtimeUpgradeRequired: return "ORCA Runtime Upgrade Required"
+        case .credentialsRequired: return "ORCA Connection Required"
+        default: return "ORCA Unavailable"
+        }
+    }
+
+    var unavailableSymbol: String {
+        switch self {
+        case .runtimeUpgradeRequired: return "arrow.up.circle"
+        case .credentialsRequired: return "key"
+        default: return "network.slash"
+        }
+    }
 }

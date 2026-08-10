@@ -22,7 +22,7 @@ protocol RuntimeTokenStoring: Sendable {
 
 actor RuntimeTokenStore: RuntimeTokenStoring {
     private let service = "com.orcamc.mac.runtime"
-    private let account = "captain-agent-token"
+    private let account = "orca-console-access-token"
 
     func loadToken() throws -> String? {
         let query: [String: Any] = [

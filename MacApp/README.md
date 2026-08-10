@@ -1,19 +1,22 @@
-# ORCA for Mac
+# ORCA Console for Mac
 
-Native Captain Console for the provider-neutral ORCA Chat Runtime. This target
-consumes the same `OrcaRuntimeContracts` package as Pod and does not own agent
-identity, routing, work truth, approvals, memory, or provider credentials.
+Native Mac operating surface for ORCA. It consumes the same
+`OrcaRuntimeContracts` package as Pod and reads canonical ORCA product data;
+it does not own agent identity, routing, work truth, approvals, memory, or
+provider credentials.
 
 ## Current milestone
 
 - native macOS 14 SwiftUI application target;
+- Overview, Work, Fund, Crew, Knowledge, Lab, Runtime, and Maker navigation;
 - seven named-agent conversation lanes;
 - Runtime API v1 compatibility handshake;
-- Keychain-backed agent credential;
+- Keychain-backed ORCA client credential;
 - persisted conversation identifiers per agent;
 - canonical message refresh and duplicate-safe merge;
 - visible route and trace receipts;
-- Mac-native sidebar, conversation, inspector, settings, and keyboard commands.
+- Mac-native sidebar, list/detail views, conversation, inspector, settings,
+  and keyboard commands.
 
 Workbench files, diffs, tests, terminal, workers, approvals, and evidence panes
 belong to the next bounded milestone. They must use ORCA AgentRun and the host

@@ -10,11 +10,23 @@ struct OrcaMacRootView: View {
             AgentSidebarView()
                 .navigationSplitViewColumnWidth(min: 210, ideal: 230, max: 270)
         } content: {
-            ConversationView()
-                .navigationSplitViewColumnWidth(min: 520, ideal: 720)
+            Group {
+                if model.selectedSection == .conversations {
+                    ConversationView()
+                } else {
+                    ConsoleSectionView(section: model.selectedSection)
+                }
+            }
+            .navigationSplitViewColumnWidth(min: 520, ideal: 720)
         } detail: {
-            RuntimeInspectorView()
-                .navigationSplitViewColumnWidth(min: 230, ideal: 270, max: 330)
+            Group {
+                if model.selectedSection == .conversations {
+                    RuntimeInspectorView()
+                } else {
+                    ConsoleInspectorView()
+                }
+            }
+            .navigationSplitViewColumnWidth(min: 230, ideal: 270, max: 330)
         }
         .navigationSplitViewStyle(.balanced)
         .alert(
@@ -32,7 +44,11 @@ struct OrcaMacRootView: View {
             guard next == .active else { return }
             Task {
                 if model.connectionState.isReady {
-                    await model.refreshSelectedConversation(silent: true)
+                    if model.selectedSection == .conversations {
+                        await model.refreshSelectedConversation(silent: true)
+                    } else {
+                        await model.refreshSelectedSection(silent: true)
+                    }
                 } else {
                     await model.connect()
                 }
