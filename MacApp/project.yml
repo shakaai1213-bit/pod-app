@@ -1,0 +1,53 @@
+name: OrcaMac
+options:
+  deploymentTarget:
+    macOS: "14.0"
+  groupSortPosition: top
+packages:
+  OrcaRuntimeContracts:
+    path: ../Packages/OrcaRuntimeContracts
+settings:
+  base:
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    SWIFT_VERSION: "5.0"
+targets:
+  OrcaMac:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources
+    dependencies:
+      - package: OrcaRuntimeContracts
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.orcamc.mac
+        PRODUCT_NAME: ORCA
+        INFOPLIST_FILE: Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Resources/OrcaMac.entitlements
+        CODE_SIGN_STYLE: Automatic
+        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: 0.1.0
+        ENABLE_HARDENED_RUNTIME: YES
+        SWIFT_EMIT_LOC_STRINGS: YES
+  OrcaMacTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: OrcaMac
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.orcamc.mac.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/ORCA.app/Contents/MacOS/ORCA
+        BUNDLE_LOADER: $(TEST_HOST)
+schemes:
+  OrcaMac:
+    build:
+      targets:
+        OrcaMac: all
+        OrcaMacTests: [test]
+    test:
+      targets:
+        - OrcaMacTests

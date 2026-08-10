@@ -1,0 +1,517 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		02F690900F0EE560FB15950C /* ConversationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC801CF96663423C51FD82B1 /* ConversationModels.swift */; };
+		10C345AEFE0EEC7732669995 /* ConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00EA42D1501458B99559CB02 /* ConversationView.swift */; };
+		277C2AF86B2AD598940DDD6B /* AgentProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33AB8BC31D2D897D3F7975FE /* AgentProfile.swift */; };
+		4EA24E98111488AE8D34E449 /* AgentSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B881A41472EBD84E7E11CEE /* AgentSidebarView.swift */; };
+		5C2A1189E3697D57BC6C80C8 /* RuntimeInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DABE2808685236170CD27E3 /* RuntimeInspectorView.swift */; };
+		71E73FDFAB0A03A3F2FDE787 /* OrcaMacRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F8F0C6338DDF03277178DE /* OrcaMacRootView.swift */; };
+		7C2A91486F032CABA4D19614 /* RuntimeTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2486F747AFC706EA37D40353 /* RuntimeTokenStore.swift */; };
+		99FBE414128793480ED47BF5 /* OrcaRuntimeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E16FB299A152B526B16103E9 /* OrcaRuntimeService.swift */; };
+		9EFDDCA5ABF5BA2B1C232E8A /* OrcaRuntimeContracts in Frameworks */ = {isa = PBXBuildFile; productRef = 116C04D573F5CD68638491FC /* OrcaRuntimeContracts */; };
+		C8422182A7AC9EE7B9C37059 /* OrcaMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AD237E2711945CDB9595F40 /* OrcaMacApp.swift */; };
+		D2E5AE67656BD94A9B758F4F /* RuntimeSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADCFAE90923B128D54DB1670 /* RuntimeSettingsView.swift */; };
+		D456856E9EE405384F9C4A7C /* OrcaMacModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 899EEF8FAFC5B303A787CD4E /* OrcaMacModel.swift */; };
+		E6D573CF1B1B9CDB71E5E43F /* OrcaMacModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C2A8295BDFAF1CEDA0E7203 /* OrcaMacModelTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		777927AA985CB1CA2137D6E6 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 36242B978E21B77BE8165487 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 008344AC8A5F23CBD5A247ED;
+			remoteInfo = OrcaMac;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		00EA42D1501458B99559CB02 /* ConversationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationView.swift; sourceTree = "<group>"; };
+		0DABE2808685236170CD27E3 /* RuntimeInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeInspectorView.swift; sourceTree = "<group>"; };
+		2486F747AFC706EA37D40353 /* RuntimeTokenStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeTokenStore.swift; sourceTree = "<group>"; };
+		2AD237E2711945CDB9595F40 /* OrcaMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrcaMacApp.swift; sourceTree = "<group>"; };
+		33AB8BC31D2D897D3F7975FE /* AgentProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentProfile.swift; sourceTree = "<group>"; };
+		4B881A41472EBD84E7E11CEE /* AgentSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSidebarView.swift; sourceTree = "<group>"; };
+		57572F55993B1FD11A52D669 /* OrcaMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OrcaMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6109B3070CA1D88217D8AEC5 /* OrcaMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OrcaMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		899EEF8FAFC5B303A787CD4E /* OrcaMacModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrcaMacModel.swift; sourceTree = "<group>"; };
+		95DC6E995F1BAAFDE0312D01 /* OrcaRuntimeContracts */ = {isa = PBXFileReference; lastKnownFileType = folder; name = OrcaRuntimeContracts; path = ../Packages/OrcaRuntimeContracts; sourceTree = SOURCE_ROOT; };
+		9C2A8295BDFAF1CEDA0E7203 /* OrcaMacModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrcaMacModelTests.swift; sourceTree = "<group>"; };
+		ADCFAE90923B128D54DB1670 /* RuntimeSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeSettingsView.swift; sourceTree = "<group>"; };
+		C7F8F0C6338DDF03277178DE /* OrcaMacRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrcaMacRootView.swift; sourceTree = "<group>"; };
+		E16FB299A152B526B16103E9 /* OrcaRuntimeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrcaRuntimeService.swift; sourceTree = "<group>"; };
+		FC801CF96663423C51FD82B1 /* ConversationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationModels.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		E282588B48BD56189CC3D79D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9EFDDCA5ABF5BA2B1C232E8A /* OrcaRuntimeContracts in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		1731FE9A3C8AAC193DE8B15C /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				DCD4C2A367541216743CE7A4 /* App */,
+				EE75E4A58B7127BDD7F8CC29 /* Models */,
+				23A7B8C63026732FA2E777A9 /* Services */,
+				7F32E3F6338390D77270210A /* ViewModels */,
+				F79B45EAA8C297227ABBF1AD /* Views */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		23A7B8C63026732FA2E777A9 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				E16FB299A152B526B16103E9 /* OrcaRuntimeService.swift */,
+				2486F747AFC706EA37D40353 /* RuntimeTokenStore.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		2CBB4234ED0FC4EC97429DA4 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				95DC6E995F1BAAFDE0312D01 /* OrcaRuntimeContracts */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		7F32E3F6338390D77270210A /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				899EEF8FAFC5B303A787CD4E /* OrcaMacModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		809EA961BE03F8A8CF27F377 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				9C2A8295BDFAF1CEDA0E7203 /* OrcaMacModelTests.swift */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		AA8C30B3ACA081735A53DBAF /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				57572F55993B1FD11A52D669 /* OrcaMac.app */,
+				6109B3070CA1D88217D8AEC5 /* OrcaMacTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		BEB7398E26EFD47DE08E3EEC = {
+			isa = PBXGroup;
+			children = (
+				2CBB4234ED0FC4EC97429DA4 /* Packages */,
+				1731FE9A3C8AAC193DE8B15C /* Sources */,
+				809EA961BE03F8A8CF27F377 /* Tests */,
+				AA8C30B3ACA081735A53DBAF /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		DCD4C2A367541216743CE7A4 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				2AD237E2711945CDB9595F40 /* OrcaMacApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		EE75E4A58B7127BDD7F8CC29 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				33AB8BC31D2D897D3F7975FE /* AgentProfile.swift */,
+				FC801CF96663423C51FD82B1 /* ConversationModels.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		F79B45EAA8C297227ABBF1AD /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				4B881A41472EBD84E7E11CEE /* AgentSidebarView.swift */,
+				00EA42D1501458B99559CB02 /* ConversationView.swift */,
+				C7F8F0C6338DDF03277178DE /* OrcaMacRootView.swift */,
+				0DABE2808685236170CD27E3 /* RuntimeInspectorView.swift */,
+				ADCFAE90923B128D54DB1670 /* RuntimeSettingsView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		008344AC8A5F23CBD5A247ED /* OrcaMac */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1AA71174273782950BCA5B45 /* Build configuration list for PBXNativeTarget "OrcaMac" */;
+			buildPhases = (
+				38ACB733076C30477EA469E4 /* Sources */,
+				E282588B48BD56189CC3D79D /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = OrcaMac;
+			packageProductDependencies = (
+				116C04D573F5CD68638491FC /* OrcaRuntimeContracts */,
+			);
+			productName = OrcaMac;
+			productReference = 57572F55993B1FD11A52D669 /* OrcaMac.app */;
+			productType = "com.apple.product-type.application";
+		};
+		7186F26ADD855BBC1937DDC1 /* OrcaMacTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 39200C70C854B3EB87E329A6 /* Build configuration list for PBXNativeTarget "OrcaMacTests" */;
+			buildPhases = (
+				91868716049938DEA75A054F /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				6CFB984D25DF72651DE3ECE2 /* PBXTargetDependency */,
+			);
+			name = OrcaMacTests;
+			packageProductDependencies = (
+			);
+			productName = OrcaMacTests;
+			productReference = 6109B3070CA1D88217D8AEC5 /* OrcaMacTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		36242B978E21B77BE8165487 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					008344AC8A5F23CBD5A247ED = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 7994BDCE203901416CBBA6C5 /* Build configuration list for PBXProject "OrcaMac" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = BEB7398E26EFD47DE08E3EEC;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A5529BD6C6F49EB2E15346DC /* XCLocalSwiftPackageReference "../Packages/OrcaRuntimeContracts" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = AA8C30B3ACA081735A53DBAF /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				008344AC8A5F23CBD5A247ED /* OrcaMac */,
+				7186F26ADD855BBC1937DDC1 /* OrcaMacTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		38ACB733076C30477EA469E4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				277C2AF86B2AD598940DDD6B /* AgentProfile.swift in Sources */,
+				4EA24E98111488AE8D34E449 /* AgentSidebarView.swift in Sources */,
+				02F690900F0EE560FB15950C /* ConversationModels.swift in Sources */,
+				10C345AEFE0EEC7732669995 /* ConversationView.swift in Sources */,
+				C8422182A7AC9EE7B9C37059 /* OrcaMacApp.swift in Sources */,
+				D456856E9EE405384F9C4A7C /* OrcaMacModel.swift in Sources */,
+				71E73FDFAB0A03A3F2FDE787 /* OrcaMacRootView.swift in Sources */,
+				99FBE414128793480ED47BF5 /* OrcaRuntimeService.swift in Sources */,
+				5C2A1189E3697D57BC6C80C8 /* RuntimeInspectorView.swift in Sources */,
+				D2E5AE67656BD94A9B758F4F /* RuntimeSettingsView.swift in Sources */,
+				7C2A91486F032CABA4D19614 /* RuntimeTokenStore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		91868716049938DEA75A054F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E6D573CF1B1B9CDB71E5E43F /* OrcaMacModelTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		6CFB984D25DF72651DE3ECE2 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 008344AC8A5F23CBD5A247ED /* OrcaMac */;
+			targetProxy = 777927AA985CB1CA2137D6E6 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		2ECF6D9317EC65B8748FA191 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.orcamc.mac.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ORCA.app/Contents/MacOS/ORCA";
+			};
+			name = Release;
+		};
+		4BB0ECC2969E3638ED4546ED /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Resources/OrcaMac.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.orcamc.mac;
+				PRODUCT_NAME = ORCA;
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Debug;
+		};
+		6F56CE642929CE8DD7CBD98C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.orcamc.mac.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ORCA.app/Contents/MacOS/ORCA";
+			};
+			name = Debug;
+		};
+		8B7512705742CF6C5B78C642 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		8ED15A61D9E970AEC09889C9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		D1154DF508109CA269617BEF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Resources/OrcaMac.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.orcamc.mac;
+				PRODUCT_NAME = ORCA;
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1AA71174273782950BCA5B45 /* Build configuration list for PBXNativeTarget "OrcaMac" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4BB0ECC2969E3638ED4546ED /* Debug */,
+				D1154DF508109CA269617BEF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		39200C70C854B3EB87E329A6 /* Build configuration list for PBXNativeTarget "OrcaMacTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6F56CE642929CE8DD7CBD98C /* Debug */,
+				2ECF6D9317EC65B8748FA191 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		7994BDCE203901416CBBA6C5 /* Build configuration list for PBXProject "OrcaMac" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8ED15A61D9E970AEC09889C9 /* Debug */,
+				8B7512705742CF6C5B78C642 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		A5529BD6C6F49EB2E15346DC /* XCLocalSwiftPackageReference "../Packages/OrcaRuntimeContracts" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../Packages/OrcaRuntimeContracts;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		116C04D573F5CD68638491FC /* OrcaRuntimeContracts */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = OrcaRuntimeContracts;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 36242B978E21B77BE8165487 /* Project object */;
+}
