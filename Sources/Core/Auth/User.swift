@@ -190,6 +190,7 @@ struct AuthLoginResponse: Codable, Sendable {
 
 struct AuthRefreshRequest: Codable, Sendable {
     let refreshToken: String
+    let deviceId: String
 }
 
 struct AuthRefreshResponse: Codable, Sendable {

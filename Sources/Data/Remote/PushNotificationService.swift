@@ -76,7 +76,7 @@ final class PushNotificationService {
             return
         }
         request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        request.setValue(authToken, forHTTPHeaderField: "X-Api-Key")
+        request.setValue(OrcaDeviceIdentity.current(), forHTTPHeaderField: "X-ORCA-Device-ID")
 
         let deviceName = await MainActor.run { UIDevice.current.name }
         let payload: [String: String] = [
@@ -117,7 +117,7 @@ final class PushNotificationService {
             return
         }
         request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        request.setValue(authToken, forHTTPHeaderField: "X-Api-Key")
+        request.setValue(OrcaDeviceIdentity.current(), forHTTPHeaderField: "X-ORCA-Device-ID")
 
         let payload: [String: String] = [
             "device_token": token,

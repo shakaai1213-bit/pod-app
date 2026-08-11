@@ -13,10 +13,6 @@ let package = Package(
     ],
     dependencies: [
         .package(
-            url: "https://github.com/apple/swift-openapi-generator",
-            exact: "1.13.0"
-        ),
-        .package(
             url: "https://github.com/apple/swift-openapi-runtime",
             exact: "1.12.0"
         ),
@@ -44,12 +40,6 @@ let package = Package(
                 .product(
                     name: "HTTPTypes",
                     package: "swift-http-types"
-                ),
-            ],
-            plugins: [
-                .plugin(
-                    name: "OpenAPIGenerator",
-                    package: "swift-openapi-generator"
                 ),
             ]
         ),

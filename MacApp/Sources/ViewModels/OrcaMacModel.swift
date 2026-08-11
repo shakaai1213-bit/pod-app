@@ -1,3 +1,4 @@
+import AuthenticationServices
 import Foundation
 import Observation
 import OrcaRuntimeContracts
@@ -28,6 +29,7 @@ final class OrcaMacModel {
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var service: (any OrcaRuntimeServing)?
     @ObservationIgnored private var consoleService: OrcaConsoleService?
+    @ObservationIgnored private var authService: OrcaNativeAuthService?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
 
     init(
@@ -87,12 +89,7 @@ final class OrcaMacModel {
 
     func start() async {
         do {
-            if let bootstrap = ProcessInfo.processInfo.environment["ORCA_AGENT_TOKEN"]?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-               !bootstrap.isEmpty {
-                try await tokenStore.storeToken(bootstrap)
-            }
-            hasStoredCredential = try await tokenStore.loadToken() != nil
+            hasStoredCredential = try await tokenStore.loadCredential() != nil
         } catch {
             presentedError = error.localizedDescription
         }
@@ -106,10 +103,11 @@ final class OrcaMacModel {
             return
         }
         do {
-            guard try await tokenStore.loadToken() != nil else {
+            guard try await tokenStore.loadCredential() != nil else {
                 hasStoredCredential = false
                 service = nil
                 consoleService = nil
+                authService = nil
                 switch await OrcaRuntimeService.probeContract(at: endpoint) {
                 case .available:
                     connectionState = .credentialsRequired
@@ -124,10 +122,22 @@ final class OrcaMacModel {
             }
             hasStoredCredential = true
             connectionState = .connecting
-            let nextService = OrcaRuntimeService(serverURL: endpoint, tokenStore: tokenStore)
+            let nextAuthService = OrcaNativeAuthService(
+                serverURL: endpoint,
+                tokenStore: tokenStore,
+                defaults: defaults
+            )
+            _ = try await nextAuthService.validAccessToken()
+            let nextService = OrcaRuntimeService(serverURL: endpoint, authService: nextAuthService)
             let compatibility = try await nextService.verifyCompatibility()
+            authService = nextAuthService
             service = nextService
-            consoleService = OrcaConsoleService(serverURL: endpoint, tokenStore: tokenStore)
+            consoleService = OrcaConsoleService(
+                serverURL: endpoint,
+                tokenStore: tokenStore,
+                authService: nextAuthService,
+                deviceID: await nextAuthService.boundDeviceID()
+            )
             contractVersion = compatibility.contractVersion
             schemaSHA256 = compatibility.schemaSHA256
             connectionState = .ready
@@ -148,19 +158,36 @@ final class OrcaMacModel {
         }
     }
 
-    func saveConnection(serverAddress: String, token: String) async {
+    func saveConnection(serverAddress: String) async {
         guard let endpoint = Self.normalizedEndpoint(serverAddress) else {
             presentedError = "Enter a valid ORCA server address."
             return
         }
+        self.serverAddress = endpoint.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        defaults.set(self.serverAddress, forKey: "orca.mac.runtime.server")
+        await connect()
+    }
+
+    func completeAppleSignIn(_ authorization: ASAuthorization) async {
+        guard let endpoint = Self.normalizedEndpoint(serverAddress),
+              let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+              let identityTokenData = credential.identityToken,
+              let identityToken = String(data: identityTokenData, encoding: .utf8) else {
+            presentedError = "Apple did not return a usable ORCA identity token."
+            return
+        }
         do {
-            let normalizedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !normalizedToken.isEmpty {
-                try await tokenStore.storeToken(normalizedToken)
-            }
-            self.serverAddress = endpoint.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            defaults.set(self.serverAddress, forKey: "orca.mac.runtime.server")
-            hasStoredCredential = try await tokenStore.loadToken() != nil
+            let nextAuthService = OrcaNativeAuthService(
+                serverURL: endpoint,
+                tokenStore: tokenStore,
+                defaults: defaults
+            )
+            try await nextAuthService.exchange(
+                identityToken: identityToken,
+                appleUserID: credential.user
+            )
+            authService = nextAuthService
+            hasStoredCredential = true
             await connect()
         } catch {
             presentedError = error.localizedDescription
@@ -169,10 +196,15 @@ final class OrcaMacModel {
 
     func removeCredential() async {
         do {
-            try await tokenStore.deleteToken()
+            if let authService {
+                try await authService.logout()
+            } else {
+                try await tokenStore.deleteCredential()
+            }
             hasStoredCredential = false
             service = nil
             consoleService = nil
+            authService = nil
             refreshTask?.cancel()
             await connect()
         } catch {

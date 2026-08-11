@@ -17,15 +17,21 @@ enum OrcaConsoleServiceError: Error, LocalizedError {
 actor OrcaConsoleService {
     private let serverURL: URL
     private let tokenStore: any RuntimeTokenStoring
+    private let authService: OrcaNativeAuthService?
+    private let deviceID: String
     private let session: URLSession
 
     init(
         serverURL: URL,
         tokenStore: any RuntimeTokenStoring,
+        authService: OrcaNativeAuthService? = nil,
+        deviceID: String = OrcaDeviceIdentity.current(),
         session: URLSession = .shared
     ) {
         self.serverURL = serverURL
         self.tokenStore = tokenStore
+        self.authService = authService
+        self.deviceID = deviceID
         self.session = session
     }
 
@@ -298,7 +304,13 @@ actor OrcaConsoleService {
     }
 
     private func get(_ path: String) async throws -> ConsoleJSON {
-        guard let token = try await tokenStore.loadToken(), !token.isEmpty else {
+        let token: String?
+        if let authService {
+            token = try await authService.validAccessToken()
+        } else {
+            token = try await tokenStore.loadToken()
+        }
+        guard let token, !token.isEmpty else {
             throw OrcaConsoleServiceError.missingCredential
         }
         guard let url = URL(string: path, relativeTo: serverURL)?.absoluteURL else {
@@ -307,7 +319,7 @@ actor OrcaConsoleService {
         var request = URLRequest(url: url)
         request.timeoutInterval = 15
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue(token, forHTTPHeaderField: "X-Api-Key")
+        request.setValue(deviceID, forHTTPHeaderField: "X-ORCA-Device-ID")
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw OrcaConsoleServiceError.invalidResponse

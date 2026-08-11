@@ -18,19 +18,19 @@ struct ContentView: View {
 
             // Use authStateKey to force SwiftUI to treat as new identity on change
             // This prevents the LoginView from "sticking" during render cycles
+            #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--parking-lot-evidence") {
                 if ProcessInfo.processInfo.arguments.contains("--parking-lot-scenario=chat") {
                     ParkingLotChatEvidenceView(viewModel: directChatViewModel)
                 } else {
                     NavigationStack { ParkingLotView() }
                 }
-            } else if appState.isAuthenticated {
-                mainTabView
-                    .id("main-\(authStateKey)")
             } else {
-                LoginView()
-                    .id("login-\(authStateKey)")
+                authenticatedContent
             }
+            #else
+            authenticatedContent
+            #endif
 
             // Global loading overlay — separate from auth state
             // Hidden when error is shown so the error sheet can be interacted with
@@ -48,6 +48,17 @@ struct ContentView: View {
             set: { appState.showError = $0 }
         )) {
             errorSheet
+        }
+    }
+
+    @ViewBuilder
+    private var authenticatedContent: some View {
+        if appState.isAuthenticated {
+            mainTabView
+                .id("main-\(authStateKey)")
+        } else {
+            LoginView()
+                .id("login-\(authStateKey)")
         }
     }
 

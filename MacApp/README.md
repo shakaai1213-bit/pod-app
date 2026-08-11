@@ -35,10 +35,13 @@ xcodebuild \
   -destination 'platform=macOS,arch=arm64' \
   -derivedDataPath .derived \
   CODE_SIGNING_ALLOWED=NO \
-  -skipPackagePluginValidation \
+  -disableAutomaticPackageResolution \
+  -onlyUsePackageVersionsFromResolvedFile \
   test
 ```
 
-The development app accepts an `ORCA_AGENT_TOKEN` bootstrap once and stores it
-in the device Keychain. It may also be entered in ORCA Settings. Never commit a
-token or add one to `project.yml`, source, fixtures, or build settings.
+ORCA Console uses Sign in with Apple. The backend exchanges the Apple identity
+token for a short-lived, device-bound access token and a rotating refresh token;
+the native client stores that credential only in the device Keychain. The app
+does not accept shared bearer-token bootstrap values in settings, source,
+fixtures, build settings, or environment variables.

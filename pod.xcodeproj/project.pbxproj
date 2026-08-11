@@ -31,6 +31,7 @@
 		34872FCC1AD4A48E333DD625 /* PodChatTicketSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 270DC140CE16E286BAF0A0CE /* PodChatTicketSheets.swift */; };
 		367E10870A54B88CFB0699C9 /* CrewTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70E23BCCE4D9D3289B7D1F13 /* CrewTabView.swift */; };
 		37870C52287CAB60B0FCDB38 /* LabContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D98B88FCFC79DC5214247FB /* LabContent.swift */; };
+		37CFE090C6AB10FA2B72A53B /* OrcaDeviceIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A1A0066524D33F59CB7CF06 /* OrcaDeviceIdentity.swift */; };
 		3A579D796D053AEF7F48A93B /* Typography.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0905CC7645A277BCFB4D4211 /* Typography.swift */; };
 		3AB34F50F3630DA8760A6CFA /* Colors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A10B6FE95332F160D3E227C /* Colors.swift */; };
 		3C135990C2E55C1E5079A33C /* CockpitSignQueueSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4E4C855478DA5C9D41034E0 /* CockpitSignQueueSection.swift */; };
@@ -58,7 +59,6 @@
 		710AEB8A57C35177AD7DB6F6 /* KnowledgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ECF09C31E0CCB3C58FAA879 /* KnowledgeView.swift */; };
 		7220D0BB4926EC9516B9ADC5 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 308D6AB690E03E31147A14E0 /* OnboardingView.swift */; };
 		75C7A3458E8A5B80918AA5A8 /* BoundedTaskGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64BE9C5283D04F5E1D6FA983 /* BoundedTaskGroup.swift */; };
-		7B3C12FECEB78F9D71D4AC06 /* AgentSecrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5106151FE25B0B26C56D66DC /* AgentSecrets.swift */; };
 		7D73F19AA5F1A62E35E17CAC /* SwiftDataModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 652176F506F2AFBA5504A5DB /* SwiftDataModels.swift */; };
 		808D6CB1C446F74B0C367DD3 /* SearchSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 538A3B3487E3FD106CCB6B2F /* SearchSheet.swift */; };
 		81916D9ADC97416E0C579E35 /* CaptainsLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FB9B918F6720B94640FB12E /* CaptainsLogView.swift */; };
@@ -80,7 +80,6 @@
 		9D4B4DAE827723A348E04A4A /* LiveKitVoiceConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B94D45A038CEDC2E86B74A9F /* LiveKitVoiceConnection.swift */; };
 		A089DB778E746D317E0D14B9 /* AgentChatModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C4B07E8E58F2CC0B52E73D1 /* AgentChatModels.swift */; };
 		A119987125AF2585A9FF89CC /* OnboardingPageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAC3FB7EBC81243BD3E32D8F /* OnboardingPageView.swift */; };
-		A166B4991DC01428DE7A9CFA /* OrcaSecrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = E16586DBFA6CCC43DCBA1DD5 /* OrcaSecrets.swift */; };
 		A181B4D7C45780A5CA3ECDA0 /* AppShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05ADDFC32BFD813663C896B5 /* AppShortcuts.swift */; };
 		A27F2DEA7CE25B9E41FAC8B2 /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBD062EB03F1386CFB3A77D5 /* User.swift */; };
 		A38EF93421E11165DA34063C /* FlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C0D215A37D20015C3281815 /* FlowLayout.swift */; };
@@ -99,9 +98,7 @@
 		BD475140A9DD7F94BCD62AAD /* ScanSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 802C03DADDC0952CE2E3ABAC /* ScanSheet.swift */; };
 		BFAA01EF640B83F68B6F31B7 /* TaskDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BC89BE77403D8AA46EA84D4 /* TaskDetailSheet.swift */; };
 		C034834CB36EB1EC8B5AEE25 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49A69CF51ACDCD9D554A9BA5 /* DashboardView.swift */; };
-		C1744CDD1E4C10DF18842364 /* OrcaSecrets.swift.template in Resources */ = {isa = PBXBuildFile; fileRef = 6926026E5B2BDECA7D7A5B96 /* OrcaSecrets.swift.template */; };
 		C2595E99C59F93D07A054964 /* Navigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 187E28435D0A3606280B6AD0 /* Navigation.swift */; };
-		C2B17CBA695EA9F6975F9CCB /* AgentSecrets.swift.template in Resources */ = {isa = PBXBuildFile; fileRef = F4667D6B147D084680DB6685 /* AgentSecrets.swift.template */; };
 		C60ED1C341E4C1ACCBE7CC79 /* PodHardeningTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46F6D0FFC203927729044A31 /* PodHardeningTests.swift */; };
 		C8BA82A7E103175379551AB4 /* AgentRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C828D5C39A08FAA8E8C6F7E /* AgentRepository.swift */; };
 		C9979E0E3352306A2960539F /* MakerDTO.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57B9BA1F0478DFCA0910DB54 /* MakerDTO.swift */; };
@@ -178,6 +175,7 @@
 		348A3B6C0FA234B66DDC7B35 /* OnboardingViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingViewModel.swift; sourceTree = "<group>"; };
 		3853FCF809EDAFB9AE5C0021 /* StandardDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandardDetailView.swift; sourceTree = "<group>"; };
 		39AC4A4AC88444FC3C79EECF /* LabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabView.swift; sourceTree = "<group>"; };
+		3A1A0066524D33F59CB7CF06 /* OrcaDeviceIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrcaDeviceIdentity.swift; sourceTree = "<group>"; };
 		3AB0691F93E9F5494A3A79B1 /* StandardRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandardRepository.swift; sourceTree = "<group>"; };
 		3B0D00C9AD7DFCF672218C0B /* Knowledge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Knowledge.swift; sourceTree = "<group>"; };
 		3C0D215A37D20015C3281815 /* FlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowLayout.swift; sourceTree = "<group>"; };
@@ -193,7 +191,6 @@
 		49B691A32B1F1F566C259775 /* ProjectsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectsView.swift; sourceTree = "<group>"; };
 		4CC5A89E0995E0ECB8ABF610 /* podApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = podApp.swift; sourceTree = "<group>"; };
 		510607B1F088DD433091827C /* ParkingLotView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkingLotView.swift; sourceTree = "<group>"; };
-		5106151FE25B0B26C56D66DC /* AgentSecrets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSecrets.swift; sourceTree = "<group>"; };
 		52704E1BE41BEF8E97D4B80A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		53060DCC4194D0B0C836FA59 /* podTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = podTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		538A3B3487E3FD106CCB6B2F /* SearchSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchSheet.swift; sourceTree = "<group>"; };
@@ -210,7 +207,6 @@
 		652176F506F2AFBA5504A5DB /* SwiftDataModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftDataModels.swift; sourceTree = "<group>"; };
 		663823AE3FAD0B6638F09CEB /* WorkbenchRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkbenchRepository.swift; sourceTree = "<group>"; };
 		669E5C6A23ECCE8F11F520BF /* AppIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIntents.swift; sourceTree = "<group>"; };
-		6926026E5B2BDECA7D7A5B96 /* OrcaSecrets.swift.template */ = {isa = PBXFileReference; path = OrcaSecrets.swift.template; sourceTree = "<group>"; };
 		6DACC05C307AB5FA9A895001 /* SIWASignInService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SIWASignInService.swift; sourceTree = "<group>"; };
 		6E32CA807B88458FAED25ED6 /* StatusBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBadge.swift; sourceTree = "<group>"; };
 		6FF5F53FAD59A5AB311C5FAA /* DTOs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DTOs.swift; sourceTree = "<group>"; };
@@ -267,14 +263,12 @@
 		DBE261A9A40BC12CBB2C0F78 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		DC9A4A64DB751E8953D363DF /* ChannelRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelRepository.swift; sourceTree = "<group>"; };
 		E0AA356201992C4B685F6B8E /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
-		E16586DBFA6CCC43DCBA1DD5 /* OrcaSecrets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrcaSecrets.swift; sourceTree = "<group>"; };
 		E253A244EAB68FD7087A05E0 /* BoardRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardRepository.swift; sourceTree = "<group>"; };
 		E5BAAD53E2764107339314F1 /* captains_chart.snapshot.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = captains_chart.snapshot.json; sourceTree = "<group>"; };
 		E72E32FF815FB0AF501BC6D8 /* PersistenceController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceController.swift; sourceTree = "<group>"; };
 		E86C3336F7FF419C6E67D560 /* WallDisplayLauncherView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallDisplayLauncherView.swift; sourceTree = "<group>"; };
 		ED6986244E7F194490495D69 /* AvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarView.swift; sourceTree = "<group>"; };
 		F33539E9E5F23B69193ED2C1 /* LabSystemContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabSystemContent.swift; sourceTree = "<group>"; };
-		F4667D6B147D084680DB6685 /* AgentSecrets.swift.template */ = {isa = PBXFileReference; path = AgentSecrets.swift.template; sourceTree = "<group>"; };
 		F5D15A077B49CD21B9DDADD5 /* StandardEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandardEditorView.swift; sourceTree = "<group>"; };
 		F73FE194ED17E1FF892B715D /* DashboardModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardModels.swift; sourceTree = "<group>"; };
 		F92E1097762048180C6B3C9E /* KnowledgeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeViewModel.swift; sourceTree = "<group>"; };
@@ -490,6 +484,7 @@
 			children = (
 				A491A719857042CDC29EDAD6 /* AgentTokenManager.swift */,
 				C1E75CB63EBA420B1C8624C8 /* AuthManager.swift */,
+				3A1A0066524D33F59CB7CF06 /* OrcaDeviceIdentity.swift */,
 				6DACC05C307AB5FA9A895001 /* SIWASignInService.swift */,
 				CBD062EB03F1386CFB3A77D5 /* User.swift */,
 			);
@@ -595,8 +590,6 @@
 			children = (
 				7C4B07E8E58F2CC0B52E73D1 /* AgentChatModels.swift */,
 				AE083260B98D522D8163C7E2 /* AgentChatService.swift */,
-				5106151FE25B0B26C56D66DC /* AgentSecrets.swift */,
-				F4667D6B147D084680DB6685 /* AgentSecrets.swift.template */,
 				5D08D7D34A8A9C7A08349196 /* DirectChatViewModel.swift */,
 				ADFE23926127563B96F166CC /* LockerChatView.swift */,
 				270DC140CE16E286BAF0A0CE /* PodChatTicketSheets.swift */,
@@ -669,8 +662,6 @@
 				A729C35216CFE6E3C3B8A5C5 /* ContentView.swift */,
 				52704E1BE41BEF8E97D4B80A /* Info.plist */,
 				187E28435D0A3606280B6AD0 /* Navigation.swift */,
-				E16586DBFA6CCC43DCBA1DD5 /* OrcaSecrets.swift */,
-				6926026E5B2BDECA7D7A5B96 /* OrcaSecrets.swift.template */,
 				C1F48EDBD1C94A943212ECDE /* pod.entitlements */,
 				4CC5A89E0995E0ECB8ABF610 /* podApp.swift */,
 				55C5EA92AF78A2BD257AA7E1 /* TaskSafeSleep.swift */,
@@ -852,9 +843,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C2B17CBA695EA9F6975F9CCB /* AgentSecrets.swift.template in Resources */,
 				66835E4FCEDE9A8E379C9BA5 /* Assets.xcassets in Resources */,
-				C1744CDD1E4C10DF18842364 /* OrcaSecrets.swift.template in Resources */,
 				DA1C00C156339423F9C0E2FB /* captains_chart.snapshot.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -872,7 +861,6 @@
 				6AC8EBD5560D31E8401DC5A5 /* AgentChatService.swift in Sources */,
 				F2BA10B64E34BFE3E8114D23 /* AgentDetailSheet.swift in Sources */,
 				C8BA82A7E103175379551AB4 /* AgentRepository.swift in Sources */,
-				7B3C12FECEB78F9D71D4AC06 /* AgentSecrets.swift in Sources */,
 				F9774DEACCFE1CAE257BAB9E /* AgentStatusCard.swift in Sources */,
 				3CBDC75F194CB5E34B2A60AC /* AgentTokenManager.swift in Sources */,
 				99367A8E3BC0E7405588837A /* Agents.swift in Sources */,
@@ -936,7 +924,7 @@
 				7220D0BB4926EC9516B9ADC5 /* OnboardingView.swift in Sources */,
 				115714EE9EE458D6F1609B08 /* OnboardingViewModel.swift in Sources */,
 				2E01CCD350BCB92DC2E85AF9 /* OpenClawClient.swift in Sources */,
-				A166B4991DC01428DE7A9CFA /* OrcaSecrets.swift in Sources */,
+				37CFE090C6AB10FA2B72A53B /* OrcaDeviceIdentity.swift in Sources */,
 				B6A18A87316F363D14025CFF /* ParkingLotView.swift in Sources */,
 				99EA3523D26347EF51CBB81E /* PersistenceController.swift in Sources */,
 				CFBE8E0C7689E2DD9B87DE63 /* PlanningTimelineView.swift in Sources */,

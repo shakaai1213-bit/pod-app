@@ -45,9 +45,7 @@ final class AppState: ObservableObject {
     static let backendURL = AppConfig.backendURL
 
     static func localBearerTokenFallback() -> String? {
-        let token = OrcaSecrets.bearerToken.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !token.isEmpty, !token.contains("REPLACE_ME") else { return nil }
-        return token
+        nil
     }
 
     // MARK: - Initialization
@@ -113,12 +111,7 @@ final class AppState: ObservableObject {
             await prepareNotifications()
             print("[AppState] Auto-login successful")
         } else {
-            if let localToken = Self.localBearerTokenFallback() {
-                print("[AppState] Keychain auto-login failed; trying local ORCA token fallback")
-                await authenticate(token: localToken)
-            } else {
-                print("[AppState] Auto-login skipped or failed")
-            }
+            print("[AppState] Auto-login skipped or failed; native sign-in required")
         }
     }
 
@@ -284,7 +277,7 @@ final class AppState: ObservableObject {
         }
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue(token, forHTTPHeaderField: "X-Api-Key")
+        request.setValue(OrcaDeviceIdentity.current(), forHTTPHeaderField: "X-ORCA-Device-ID")
         request.timeoutInterval = 15
         print("[AppState] verifyTokenDirectly: GET \(url.absoluteString)")
 

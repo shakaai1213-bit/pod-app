@@ -130,7 +130,7 @@ actor APIClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue(token, forHTTPHeaderField: "X-Api-Key")
+        request.setValue(OrcaDeviceIdentity.current(), forHTTPHeaderField: "X-ORCA-Device-ID")
 
         let (data, response) = try await session.data(for: request)
         try validateResponse(response, data: data)
@@ -181,7 +181,7 @@ actor APIClient {
             }
             if let token = currentToken {
                 request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-                request.setValue(token, forHTTPHeaderField: "X-Api-Key")
+                request.setValue(OrcaDeviceIdentity.current(), forHTTPHeaderField: "X-ORCA-Device-ID")
             }
         }
 
@@ -239,7 +239,7 @@ actor APIClient {
         return try await perform(request)
     }
 
-    /// POST without injecting Authorization/X-Api-Key headers. Used by
+    /// POST without injecting an Authorization header. Used by
     /// the SIWA exchange flow (`/auth/apple/callback`) which is the very
     /// call that mints the bearer token, so it must run unauthenticated.
     func unauthenticatedPost<T: Decodable>(path: String, body: some Encodable) async throws -> T {

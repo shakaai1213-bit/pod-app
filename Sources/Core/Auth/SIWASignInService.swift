@@ -111,7 +111,7 @@ final class SIWASignInService: NSObject {
         let response = try await exchangeWithBackend(
             identityToken: identityToken,
             appleUserId: credential.user,
-            deviceId: await currentDeviceId()
+            deviceId: OrcaDeviceIdentity.current()
         )
 
         // 4. Store JWT pair in Keychain. We don't yet have a userId from this
@@ -135,16 +135,6 @@ final class SIWASignInService: NSObject {
         }
 
         return token
-    }
-
-    /// Best-effort device identifier for backend session telemetry.
-    /// Falls back to a per-install UUID stored in UserDefaults.
-    private func currentDeviceId() async -> String {
-        let key = "pod.device_id"
-        if let existing = UserDefaults.standard.string(forKey: key) { return existing }
-        let new = UUID().uuidString
-        UserDefaults.standard.set(new, forKey: key)
-        return new
     }
 
     /// Deterministic UUID derived from Apple's stable sub.

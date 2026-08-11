@@ -2,12 +2,14 @@ import Foundation
 
 actor OpenClawClient {
     private let baseURL: String
-    private let authToken: String
+    private let tokenProvider: @Sendable () async -> String?
 
     init(baseURL: String = AppConfig.backendURL,
-         authToken: String = OrcaSecrets.bearerToken) {
+         tokenProvider: @escaping @Sendable () async -> String? = {
+             await APIClient.shared.currentToken()
+         }) {
         self.baseURL = baseURL
-        self.authToken = authToken
+        self.tokenProvider = tokenProvider
     }
 
     struct MessagePayload: Encodable {
@@ -75,12 +77,14 @@ actor OpenClawClient {
 
     /// Post a message to the ORCA MC general channel
     func postMessage(content: String, channelId: String = "4a37b0e8-bd9f-419f-ad82-f133877facf9") async throws {
+        let authToken = try await bearerToken()
         let url = URL(string: "\(baseURL)/api/v1/chat/channels/\(channelId)/messages")!
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        request.setValue(OrcaDeviceIdentity.current(), forHTTPHeaderField: "X-ORCA-Device-ID")
 
         let payload = MessagePayload(content: content)
         request.httpBody = try JSONEncoder().encode(payload)
@@ -96,11 +100,12 @@ actor OpenClawClient {
     }
 
     func fetchVoiceProviders() async throws -> [VoiceProvider] {
+        let authToken = try await bearerToken()
         let url = URL(string: "\(baseURL)/api/v1/voice/providers")!
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        request.setValue(authToken, forHTTPHeaderField: "X-Api-Key")
+        request.setValue(OrcaDeviceIdentity.current(), forHTTPHeaderField: "X-ORCA-Device-ID")
 
         let (data, response) = try await URLSession.shared.data(for: request)
         try validate(response: response, data: data)
@@ -108,12 +113,13 @@ actor OpenClawClient {
     }
 
     func createLiveKitSession(agentSlug: String, participantName: String = "Tony") async throws -> LiveKitSession {
+        let authToken = try await bearerToken()
         let url = URL(string: "\(baseURL)/api/v1/voice/livekit/sessions")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        request.setValue(authToken, forHTTPHeaderField: "X-Api-Key")
+        request.setValue(OrcaDeviceIdentity.current(), forHTTPHeaderField: "X-ORCA-Device-ID")
         request.httpBody = try JSONEncoder().encode(
             LiveKitSessionRequest(agentSlug: agentSlug, participantName: participantName, ttlSeconds: 1800)
         )
@@ -135,6 +141,15 @@ actor OpenClawClient {
                 NSLocalizedDescriptionKey: body
             ])
         }
+    }
+
+    private func bearerToken() async throws -> String {
+        guard let token = await tokenProvider(), !token.isEmpty else {
+            throw NSError(domain: "OpenClawClient", code: 401, userInfo: [
+                NSLocalizedDescriptionKey: "Sign in to ORCA before using voice."
+            ])
+        }
+        return token
     }
 
     /// Post a voice transcript and AI response to ORCA MC

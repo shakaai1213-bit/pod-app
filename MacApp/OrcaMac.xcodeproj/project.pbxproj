@@ -25,6 +25,7 @@
 		D456856E9EE405384F9C4A7C /* OrcaMacModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 899EEF8FAFC5B303A787CD4E /* OrcaMacModel.swift */; };
 		E6D573CF1B1B9CDB71E5E43F /* OrcaMacModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C2A8295BDFAF1CEDA0E7203 /* OrcaMacModelTests.swift */; };
 		EA78C9ECE5E6F3BFEC5C86D6 /* ConsoleSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBAC885AD2E475E60B8E5316 /* ConsoleSectionView.swift */; };
+		F7C4687328DA11FCDCC454C7 /* OrcaNativeAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C163B310FD43803FA2A73249 /* OrcaNativeAuthService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -52,6 +53,7 @@
 		95DC6E995F1BAAFDE0312D01 /* OrcaRuntimeContracts */ = {isa = PBXFileReference; lastKnownFileType = folder; name = OrcaRuntimeContracts; path = ../Packages/OrcaRuntimeContracts; sourceTree = SOURCE_ROOT; };
 		9C2A8295BDFAF1CEDA0E7203 /* OrcaMacModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrcaMacModelTests.swift; sourceTree = "<group>"; };
 		ADCFAE90923B128D54DB1670 /* RuntimeSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeSettingsView.swift; sourceTree = "<group>"; };
+		C163B310FD43803FA2A73249 /* OrcaNativeAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrcaNativeAuthService.swift; sourceTree = "<group>"; };
 		C7F8F0C6338DDF03277178DE /* OrcaMacRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrcaMacRootView.swift; sourceTree = "<group>"; };
 		CDE6B16EBAC1BD3DACA293F6 /* ConsoleModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleModels.swift; sourceTree = "<group>"; };
 		DBAC885AD2E475E60B8E5316 /* ConsoleSectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleSectionView.swift; sourceTree = "<group>"; };
@@ -88,6 +90,7 @@
 			isa = PBXGroup;
 			children = (
 				E8786120F464535F2B5D5335 /* OrcaConsoleService.swift */,
+				C163B310FD43803FA2A73249 /* OrcaNativeAuthService.swift */,
 				E16FB299A152B526B16103E9 /* OrcaRuntimeService.swift */,
 				2486F747AFC706EA37D40353 /* RuntimeTokenStore.swift */,
 			);
@@ -220,6 +223,7 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					008344AC8A5F23CBD5A247ED = {
+						DevelopmentTeam = 5H23S6WPV2;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -264,6 +268,7 @@
 				C8422182A7AC9EE7B9C37059 /* OrcaMacApp.swift in Sources */,
 				D456856E9EE405384F9C4A7C /* OrcaMacModel.swift in Sources */,
 				71E73FDFAB0A03A3F2FDE787 /* OrcaMacRootView.swift in Sources */,
+				F7C4687328DA11FCDCC454C7 /* OrcaNativeAuthService.swift in Sources */,
 				99FBE414128793480ED47BF5 /* OrcaRuntimeService.swift in Sources */,
 				5C2A1189E3697D57BC6C80C8 /* RuntimeInspectorView.swift in Sources */,
 				D2E5AE67656BD94A9B758F4F /* RuntimeSettingsView.swift in Sources */,
@@ -316,6 +321,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5H23S6WPV2;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Resources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -476,6 +482,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5H23S6WPV2;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Resources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

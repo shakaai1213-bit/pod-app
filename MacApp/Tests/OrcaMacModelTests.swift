@@ -2,15 +2,23 @@ import XCTest
 @testable import ORCA
 
 private actor TestRuntimeTokenStore: RuntimeTokenStoring {
-    private var token: String?
+    private var credential: RuntimeCredential?
 
     init(token: String?) {
-        self.token = token
+        credential = token.map {
+            RuntimeCredential(
+                accessToken: $0,
+                refreshToken: "test-refresh-token",
+                expiresAt: Date().addingTimeInterval(3_600),
+                clientID: OrcaNativeAuthService.clientID,
+                deviceID: OrcaDeviceIdentity.current()
+            )
+        }
     }
 
-    func loadToken() -> String? { token }
-    func storeToken(_ token: String) { self.token = token }
-    func deleteToken() { token = nil }
+    func loadCredential() -> RuntimeCredential? { credential }
+    func storeCredential(_ credential: RuntimeCredential) { self.credential = credential }
+    func deleteCredential() { credential = nil }
 }
 
 private final class TestURLProtocol: URLProtocol {
@@ -149,6 +157,8 @@ final class OrcaMacModelTests: XCTestCase {
         let session = URLSession(configuration: configuration)
         TestURLProtocol.response = { request in
             XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer console-token")
+            XCTAssertNil(request.value(forHTTPHeaderField: "X-Api-Key"))
+            XCTAssertFalse(request.value(forHTTPHeaderField: "X-ORCA-Device-ID")?.isEmpty ?? true)
             let payload: String
             switch request.url?.path {
             case "/api/v1/boards":

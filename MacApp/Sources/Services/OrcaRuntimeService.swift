@@ -16,10 +16,11 @@ protocol OrcaRuntimeServing: Sendable {
 actor OrcaRuntimeService: OrcaRuntimeServing {
     private let client: OrcaRuntimeClient
 
-    init(serverURL: URL, tokenStore: any RuntimeTokenStoring) {
+    init(serverURL: URL, authService: OrcaNativeAuthService) {
         client = OrcaRuntimeClient(
             serverURL: serverURL,
-            tokenProvider: { try? await tokenStore.loadToken() }
+            tokenProvider: { try? await authService.validAccessToken() },
+            deviceIDProvider: { await authService.boundDeviceID() }
         )
     }
 

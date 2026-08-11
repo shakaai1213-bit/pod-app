@@ -348,7 +348,7 @@ final class AuthManager {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue(token, forHTTPHeaderField: "X-Api-Key")
+        request.setValue(OrcaDeviceIdentity.current(), forHTTPHeaderField: "X-ORCA-Device-ID")
         request.timeoutInterval = 10
 
         let (_, response) = try await URLSession.shared.data(for: request)
@@ -517,7 +517,10 @@ final class AuthManager {
     // MARK: - Refresh Token
 
     private func refreshAccessToken(refreshToken: String, userId: UUID) async throws -> StoredToken {
-        let request = AuthRefreshRequest(refreshToken: refreshToken)
+        let request = AuthRefreshRequest(
+            refreshToken: refreshToken,
+            deviceId: OrcaDeviceIdentity.current()
+        )
         let response: AuthRefreshResponse = try await postAuth(
             path: "/api/v1/auth/refresh",
             body: request
@@ -649,6 +652,8 @@ final class AuthManager {
         request.timeoutInterval = 15
 
         let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        request.setValue(OrcaDeviceIdentity.current(), forHTTPHeaderField: "X-ORCA-Device-ID")
         request.httpBody = try encoder.encode(AnyEncodable(body))
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -681,6 +686,7 @@ final class AuthManager {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("Bearer \(activeTokenInfo.token.accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue(OrcaDeviceIdentity.current(), forHTTPHeaderField: "X-ORCA-Device-ID")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.timeoutInterval = 15
 

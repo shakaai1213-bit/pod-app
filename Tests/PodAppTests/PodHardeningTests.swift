@@ -17,7 +17,8 @@ final class PodHardeningTests: XCTestCase {
         let request = try await client.buildRequest(path: "/api/v1/agents")
 
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer keychain-token")
-        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Api-Key"), "keychain-token")
+        XCTAssertNil(request.value(forHTTPHeaderField: "X-Api-Key"))
+        XCTAssertFalse(request.value(forHTTPHeaderField: "X-ORCA-Device-ID")?.isEmpty ?? true)
         XCTAssertFalse(request.allHTTPHeaderFields?.values.contains("plaintext-token") ?? false)
     }
 

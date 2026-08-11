@@ -14,17 +14,37 @@ enum RuntimeTokenStoreError: Error, LocalizedError {
         }
     }
 }
+
+struct RuntimeCredential: Codable, Equatable, Sendable {
+    let accessToken: String
+    let refreshToken: String
+    let expiresAt: Date
+    let clientID: String
+    let deviceID: String
+
+    var needsRefresh: Bool {
+        Date() >= expiresAt.addingTimeInterval(-300)
+    }
+}
+
 protocol RuntimeTokenStoring: Sendable {
-    func loadToken() async throws -> String?
-    func storeToken(_ token: String) async throws
-    func deleteToken() async throws
+    func loadCredential() async throws -> RuntimeCredential?
+    func storeCredential(_ credential: RuntimeCredential) async throws
+    func deleteCredential() async throws
+}
+
+extension RuntimeTokenStoring {
+    func loadToken() async throws -> String? {
+        try await loadCredential()?.accessToken
+    }
 }
 
 actor RuntimeTokenStore: RuntimeTokenStoring {
     private let service = "com.orcamc.mac.runtime"
-    private let account = "orca-console-access-token"
+    private let account = "orca-console-native-session-v1"
+    private let legacyAccount = "orca-console-access-token"
 
-    func loadToken() throws -> String? {
+    func loadCredential() throws -> RuntimeCredential? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -37,16 +57,18 @@ actor RuntimeTokenStore: RuntimeTokenStoring {
         if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess else { throw RuntimeTokenStoreError.keychain(status) }
         guard let data = result as? Data,
-              let token = String(data: data, encoding: .utf8),
-              !token.isEmpty else {
+              let credential = try? JSONDecoder().decode(RuntimeCredential.self, from: data),
+              !credential.accessToken.isEmpty,
+              !credential.refreshToken.isEmpty else {
             throw RuntimeTokenStoreError.invalidToken
         }
-        return token
+        return credential
     }
 
-    func storeToken(_ token: String) throws {
-        let normalized = token.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty, let data = normalized.data(using: .utf8) else {
+    func storeCredential(_ credential: RuntimeCredential) throws {
+        guard !credential.accessToken.isEmpty,
+              !credential.refreshToken.isEmpty,
+              let data = try? JSONEncoder().encode(credential) else {
             throw RuntimeTokenStoreError.invalidToken
         }
         let lookup: [String: Any] = [
@@ -67,7 +89,12 @@ actor RuntimeTokenStore: RuntimeTokenStoring {
         guard status == errSecSuccess else { throw RuntimeTokenStoreError.keychain(status) }
     }
 
-    func deleteToken() throws {
+    func deleteCredential() throws {
+        try delete(account: account)
+        try delete(account: legacyAccount)
+    }
+
+    private func delete(account: String) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

@@ -49,9 +49,14 @@ public struct OrcaRuntimeCompatibility: Equatable, Sendable {
 
 public struct OrcaRuntimeAuthorizationMiddleware: ClientMiddleware {
     private let tokenProvider: @Sendable () async -> String?
+    private let deviceIDProvider: @Sendable () async -> String?
 
-    public init(tokenProvider: @escaping @Sendable () async -> String?) {
+    public init(
+        tokenProvider: @escaping @Sendable () async -> String?,
+        deviceIDProvider: @escaping @Sendable () async -> String? = { nil }
+    ) {
         self.tokenProvider = tokenProvider
+        self.deviceIDProvider = deviceIDProvider
     }
 
     public func intercept(
@@ -64,7 +69,9 @@ public struct OrcaRuntimeAuthorizationMiddleware: ClientMiddleware {
         var request = request
         if let token = await tokenProvider(), !token.isEmpty {
             request.headerFields[.authorization] = "Bearer \(token)"
-            request.headerFields[HTTPField.Name("X-Api-Key")!] = token
+        }
+        if let deviceID = await deviceIDProvider(), !deviceID.isEmpty {
+            request.headerFields[HTTPField.Name("X-ORCA-Device-ID")!] = deviceID
         }
         return try await next(request, body, baseURL)
     }
@@ -161,11 +168,17 @@ public actor OrcaRuntimeClient {
 
     public init(
         serverURL: URL,
-        tokenProvider: @escaping @Sendable () async -> String?
+        tokenProvider: @escaping @Sendable () async -> String?,
+        deviceIDProvider: @escaping @Sendable () async -> String? = { nil }
     ) {
         client = OrcaRuntimeContract.makeClient(
             serverURL: serverURL,
-            middlewares: [OrcaRuntimeAuthorizationMiddleware(tokenProvider: tokenProvider)]
+            middlewares: [
+                OrcaRuntimeAuthorizationMiddleware(
+                    tokenProvider: tokenProvider,
+                    deviceIDProvider: deviceIDProvider
+                )
+            ]
         )
     }
 

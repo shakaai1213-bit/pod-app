@@ -63,13 +63,7 @@ struct podApp: App {
                         }
                     }
                     if !isUnitTesting, CommandLine.arguments.contains("--auto-login") {
-                        // SEC-007 remediation 2026-05-08: token sourced from
-                        // OrcaSecrets.swift (gitignored) instead of hardcoded literal.
-                        let testToken = OrcaSecrets.bearerToken
-                        print("[podApp] TEST MODE: auto-submitting token via --auto-login")
-                        Task { @MainActor in
-                            await appState.authenticate(token: testToken)
-                        }
+                        print("[podApp] --auto-login uses the existing Keychain session")
                     }
                 }
                 .onOpenURL { url in
