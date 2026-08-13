@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import subprocess
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 GENERATOR = Path(__file__).with_name("generate_release_evidence.py")
 VERIFIER = Path(__file__).with_name("verify_release_evidence.py")
 SHELL_VERIFIER = Path(__file__).with_name("verify_orca_console_release.sh")
+PREINSTALL_CAPTURE = Path(__file__).with_name("capture_preinstall_state.py")
 
 
 def load_module(name: str, path: Path):
@@ -86,7 +88,13 @@ def sign(path: Path, key: Path, namespace: str) -> Path:
     return path.with_name(path.name + ".sig")
 
 
-def build_bundle(tmp_path: Path) -> dict[str, object]:
+def build_bundle(
+    tmp_path: Path,
+    *,
+    install_mode: str = "upgrade",
+    preinstall_overrides: dict[str, object] | None = None,
+    extra_generator_args: list[str] | None = None,
+) -> dict[str, object]:
     key = tmp_path / "release-key"
     subprocess.run(
         ["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(key)],
@@ -179,49 +187,88 @@ def build_bundle(tmp_path: Path) -> dict[str, object]:
     output = tmp_path / "current-evidence"
     trusted_hash = digest(allowed)
 
-    subprocess.run(
-        [
-            "python3",
-            str(GENERATOR),
-            "--root",
-            str(source),
-            "--artifact",
-            str(artifact),
-            "--source-commit",
-            current_source,
-            "--backend-commit",
-            current_runtime,
-            "--backend-root",
-            str(runtime),
-            "--backend-image",
-            str(current_image),
-            "--host-bundle",
-            str(current_host),
-            "--auth-transition-contract",
-            str(transition),
+    preinstall_state = tmp_path / "preinstall-state.json"
+    preinstall_payload = {
+        "app_bundle_id": "com.orcamc.mac",
+        "app_present": False,
+        "backend_image_sha256": digest(prior_image),
+        "host_bundle_sha256": digest(prior_host),
+        "host_id": "release-test-host",
+        "install_path": "/Applications/ORCA Console.app",
+        "observed_at": datetime.now(timezone.utc)
+        .isoformat(timespec="seconds")
+        .replace("+00:00", "Z"),
+        "runtime_commit": prior_runtime,
+        "schema": "orca.console.preinstall-state.v1",
+    }
+    preinstall_payload.update(preinstall_overrides or {})
+    preinstall_state.write_text(
+        json.dumps(preinstall_payload, sort_keys=True), encoding="utf-8"
+    )
+    preinstall_signature = sign(preinstall_state, key, "orca-auth-state")
+
+    command = [
+        "python3",
+        str(GENERATOR),
+        "--root",
+        str(source),
+        "--artifact",
+        str(artifact),
+        "--source-commit",
+        current_source,
+        "--backend-commit",
+        current_runtime,
+        "--backend-root",
+        str(runtime),
+        "--backend-image",
+        str(current_image),
+        "--host-bundle",
+        str(current_host),
+        "--auth-transition-contract",
+        str(transition),
+        "--install-mode",
+        install_mode,
+        "--rollback-backend-root",
+        str(runtime),
+        "--rollback-backend-image",
+        str(prior_image),
+        "--rollback-host-bundle",
+        str(prior_host),
+        "--rollback-auth-state-contract",
+        str(auth_state),
+        "--rollback-auth-state-signature",
+        str(auth_signature),
+        "--release-allowed-signers",
+        str(allowed),
+        "--trusted-allowed-signers-sha256",
+        trusted_hash,
+        "--release-signer-identity",
+        identity,
+        "--output-dir",
+        str(output),
+    ]
+    if install_mode == "upgrade":
+        command.extend(
+            [
             "--rollback-evidence-dir",
             str(prior_evidence),
             "--rollback-artifact",
             str(prior_artifact),
-            "--rollback-backend-root",
-            str(runtime),
-            "--rollback-backend-image",
-            str(prior_image),
-            "--rollback-host-bundle",
-            str(prior_host),
-            "--rollback-auth-state-contract",
-            str(auth_state),
-            "--rollback-auth-state-signature",
-            str(auth_signature),
-            "--release-allowed-signers",
-            str(allowed),
-            "--trusted-allowed-signers-sha256",
-            trusted_hash,
-            "--release-signer-identity",
-            identity,
-            "--output-dir",
-            str(output),
-        ],
+            ]
+        )
+    else:
+        command.extend(
+            [
+                "--preinstall-state-contract",
+                str(preinstall_state),
+                "--preinstall-state-signature",
+                str(preinstall_signature),
+            ]
+        )
+    command.extend(extra_generator_args or [])
+
+    subprocess.run(
+        command,
         check=True,
         capture_output=True,
     )
@@ -232,6 +279,7 @@ def build_bundle(tmp_path: Path) -> dict[str, object]:
         "identity": identity,
         "key": key,
         "output": output,
+        "preinstall_state": preinstall_state,
         "trusted_hash": trusted_hash,
     }
 
@@ -288,6 +336,135 @@ def test_public_shell_verifier_executes_complete_bundle_contract(tmp_path: Path)
 
     assert result.returncode == 0, result.stderr
     assert "release evidence verified" in result.stdout
+
+
+def test_initial_install_bundle_is_self_contained_and_verifiable(
+    tmp_path: Path,
+) -> None:
+    bundle = build_bundle(tmp_path, install_mode="initial-install")
+
+    verify(bundle)
+
+    output = Path(bundle["output"])
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["rollback"]["mode"] == "initial-install"
+    assert manifest["rollback"]["app"]["prior_present"] is False
+    assert (output / "rollback/preinstall-state.json").is_file()
+    assert (output / "rollback/preinstall-state.json.sig").is_file()
+    assert not (output / "rollback/manifest.json").exists()
+    assert verify_with_public_shell(bundle).returncode == 0
+
+
+def test_initial_install_rejects_present_app_claim(tmp_path: Path) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(
+            tmp_path,
+            install_mode="initial-install",
+            preinstall_overrides={"app_present": True},
+        )
+
+
+def test_initial_install_rejects_stale_preinstall_state(tmp_path: Path) -> None:
+    stale = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(
+        timespec="seconds"
+    ).replace("+00:00", "Z")
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(
+            tmp_path,
+            install_mode="initial-install",
+            preinstall_overrides={"observed_at": stale},
+        )
+
+
+def test_initial_install_rejects_mixed_prior_release_inputs(tmp_path: Path) -> None:
+    extra_artifact = tmp_path / "false-prior.zip"
+    extra_artifact.write_bytes(b"not a prior release")
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(
+            tmp_path,
+            install_mode="initial-install",
+            extra_generator_args=[
+                "--rollback-evidence-dir",
+                str(tmp_path),
+                "--rollback-artifact",
+                str(extra_artifact),
+            ],
+        )
+
+
+def test_initial_install_verifier_rejects_tampered_preinstall_state(
+    tmp_path: Path,
+) -> None:
+    bundle = build_bundle(tmp_path, install_mode="initial-install")
+    preinstall = Path(bundle["output"]) / "rollback/preinstall-state.json"
+    preinstall.write_bytes(preinstall.read_bytes() + b"tamper")
+
+    with pytest.raises((ValueError, subprocess.CalledProcessError)):
+        verify(bundle)
+
+
+def test_preinstall_capture_records_absent_target(tmp_path: Path) -> None:
+    image = tmp_path / "runtime.tar"
+    image.write_bytes(b"runtime")
+    host = tmp_path / "host.tar"
+    host.write_bytes(b"host")
+    target = tmp_path / "ORCA Console.app"
+    output = tmp_path / "preinstall.json"
+
+    subprocess.run(
+        [
+            "python3",
+            str(PREINSTALL_CAPTURE),
+            "--runtime-commit",
+            "a" * 40,
+            "--backend-image",
+            str(image),
+            "--host-bundle",
+            str(host),
+            "--install-path",
+            str(target),
+            "--output",
+            str(output),
+        ],
+        check=True,
+        capture_output=True,
+    )
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["app_present"] is False
+    assert payload["backend_image_sha256"] == digest(image)
+    assert payload["host_bundle_sha256"] == digest(host)
+
+
+def test_preinstall_capture_refuses_existing_target(tmp_path: Path) -> None:
+    image = tmp_path / "runtime.tar"
+    image.write_bytes(b"runtime")
+    host = tmp_path / "host.tar"
+    host.write_bytes(b"host")
+    target = tmp_path / "ORCA Console.app"
+    target.mkdir()
+
+    result = subprocess.run(
+        [
+            "python3",
+            str(PREINSTALL_CAPTURE),
+            "--runtime-commit",
+            "a" * 40,
+            "--backend-image",
+            str(image),
+            "--host-bundle",
+            str(host),
+            "--install-path",
+            str(target),
+            "--output",
+            str(tmp_path / "preinstall.json"),
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "target already exists" in result.stderr
 
 
 def test_public_shell_verifier_rejects_tampered_signed_manifest(tmp_path: Path) -> None:
