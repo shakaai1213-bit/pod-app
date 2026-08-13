@@ -58,7 +58,11 @@ enum SIWASignInError: Error, LocalizedError {
 private struct AppleCallbackRequest: Codable {
     let identityToken: String           // Apple JWS → identity_token
     let appleUserId: String             // Apple's stable sub → apple_user_id
-    let deviceId: String?               // Session telemetry → device_id
+    let deviceId: String
+    let clientId: String
+    let devicePublicKey: String
+    let challengeNonce: String
+    let deviceSignature: String
 }
 
 private struct AppleCallbackResponse: Codable {
@@ -66,12 +70,23 @@ private struct AppleCallbackResponse: Codable {
     let refreshToken: String            // 30d TTL, rotated ← refresh_token
     let tokenType: String               // "bearer" ← token_type
     let expiresIn: Int                  // Seconds ← expires_in
+    let organizationId: String
 }
+
+private struct NativeChallengeRequest: Codable {
+    let clientId: String
+    let deviceId: String
+    let devicePublicKey: String
+    let operation: String
+}
+
+private struct NativeChallengeResponse: Codable { let nonce: String }
 
 // MARK: - Service
 
 @MainActor
 final class SIWASignInService: NSObject {
+    private static let clientID = "com.orcamc.pod"
     private let tokenManager: TokenManager
     private let apiClient: APIClient
 
@@ -170,12 +185,30 @@ final class SIWASignInService: NSObject {
     private func exchangeWithBackend(
         identityToken: String,
         appleUserId: String,
-        deviceId: String?
+        deviceId: String
     ) async throws -> AppleCallbackResponse {
+        let challenge: NativeChallengeResponse = try await apiClient.unauthenticatedPost(
+            path: "/api/v1/auth/native/challenge",
+            body: NativeChallengeRequest(
+                clientId: Self.clientID,
+                deviceId: deviceId,
+                devicePublicKey: OrcaDeviceIdentity.publicKey(),
+                operation: "apple_callback"
+            )
+        )
         let body = AppleCallbackRequest(
             identityToken: identityToken,
             appleUserId: appleUserId,
-            deviceId: deviceId
+            deviceId: deviceId,
+            clientId: Self.clientID,
+            devicePublicKey: OrcaDeviceIdentity.publicKey(),
+            challengeNonce: challenge.nonce,
+            deviceSignature: try OrcaDeviceIdentity.proof(
+                operation: "apple_callback",
+                clientID: Self.clientID,
+                nonce: challenge.nonce,
+                token: identityToken
+            )
         )
 
         // Use unauthenticatedPost — the SIWA exchange itself has no bearer yet.

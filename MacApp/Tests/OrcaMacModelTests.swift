@@ -11,14 +11,18 @@ private actor TestRuntimeTokenStore: RuntimeTokenStoring {
                 refreshToken: "test-refresh-token",
                 expiresAt: Date().addingTimeInterval(3_600),
                 clientID: OrcaNativeAuthService.clientID,
-                deviceID: OrcaDeviceIdentity.current()
+                deviceID: "test-device-id-0123456789",
+                serverOrigin: "http://127.0.0.1:8000",
+                organizationID: "test-organization"
             )
         }
     }
 
-    func loadCredential() -> RuntimeCredential? { credential }
+    func loadCredential(for serverOrigin: String) -> RuntimeCredential? {
+        credential?.serverOrigin == serverOrigin ? credential : nil
+    }
     func storeCredential(_ credential: RuntimeCredential) { self.credential = credential }
-    func deleteCredential() { credential = nil }
+    func deleteCredential(for serverOrigin: String) { credential = nil }
 }
 
 private final class TestURLProtocol: URLProtocol {
@@ -53,10 +57,10 @@ private final class TestURLProtocol: URLProtocol {
 @MainActor
 final class OrcaMacModelTests: XCTestCase {
     func testRosterHasSevenUniqueNamedAgents() {
-        XCTAssertEqual(AgentProfile.roster.count, 7)
-        XCTAssertEqual(Set(AgentProfile.roster.map(\.id)).count, 7)
+        XCTAssertEqual(AgentProfile.fallbackRoster.count, 7)
+        XCTAssertEqual(Set(AgentProfile.fallbackRoster.map(\.id)).count, 7)
         XCTAssertEqual(
-            Set(AgentProfile.roster.map(\.id)),
+            Set(AgentProfile.fallbackRoster.map(\.id)),
             Set(["aloha", "maui", "shaka", "chief", "rooster", "coral", "reef"])
         )
     }
@@ -70,7 +74,8 @@ final class OrcaMacModelTests: XCTestCase {
                 role: .user,
                 content: "Hello",
                 createdAt: start,
-                deliveryState: .persisted
+                deliveryState: .persisted,
+                retryIdentity: nil
             ),
         ])
         state.appendPending(id: "pending", content: "Next", at: start.addingTimeInterval(2))
@@ -80,14 +85,16 @@ final class OrcaMacModelTests: XCTestCase {
                 role: .user,
                 content: "Hello",
                 createdAt: start,
-                deliveryState: .persisted
+                deliveryState: .persisted,
+                retryIdentity: nil
             ),
             TranscriptMessage(
                 id: "m2",
                 role: .agent,
                 content: "Hi",
                 createdAt: start.addingTimeInterval(1),
-                deliveryState: .persisted
+                deliveryState: .persisted,
+                retryIdentity: nil
             ),
         ])
 
@@ -106,14 +113,16 @@ final class OrcaMacModelTests: XCTestCase {
                     role: .user,
                     content: "Status?",
                     createdAt: start,
-                    deliveryState: .persisted
+                    deliveryState: .persisted,
+                    retryIdentity: nil
                 ),
                 TranscriptMessage(
                     id: "orca-agent",
                     role: .agent,
                     content: "Working",
                     createdAt: start.addingTimeInterval(1),
-                    deliveryState: .persisted
+                    deliveryState: .persisted,
+                    retryIdentity: nil
                 ),
             ]
         )
@@ -128,7 +137,18 @@ final class OrcaMacModelTests: XCTestCase {
             "http://100.104.72.62:8000"
         )
         XCTAssertNil(OrcaMacModel.normalizedEndpoint("file:///tmp/orca"))
+        XCTAssertNil(OrcaMacModel.normalizedEndpoint("http://untrusted.example:8000"))
+        XCTAssertNil(OrcaMacModel.normalizedEndpoint("https://orca.example"))
         XCTAssertNil(OrcaMacModel.normalizedEndpoint(""))
+    }
+
+    func testFailedTurnRetainsRetryIdentity() {
+        var state = ConversationState()
+        let identity = TurnRetryIdentity(traceID: "trace-1", idempotencyKey: "turn-1")
+        state.appendPending(id: "pending", content: "Retry me", at: Date(), retryIdentity: identity)
+        state.failPending(id: "pending", reason: "offline")
+
+        XCTAssertEqual(state.messages.first?.retryIdentity, identity)
     }
 
     func testConsoleInventoryMatchesPodOperatingAreas() {
@@ -177,7 +197,7 @@ final class OrcaMacModelTests: XCTestCase {
         defer { TestURLProtocol.response = nil }
 
         let service = OrcaConsoleService(
-            serverURL: URL(string: "http://orca.test:8000")!,
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
             tokenStore: TestRuntimeTokenStore(token: "console-token"),
             session: session
         )
@@ -195,6 +215,27 @@ final class OrcaMacModelTests: XCTestCase {
             Set(snapshot.sources),
             Set(["/api/v1/boards", "/api/v1/projects/", "/api/v1/tickets", "/api/v1/control-room/captain-inbox"])
         )
+    }
+
+    func testAgentRosterLoadsFromCanonicalManagementProjection() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        TestURLProtocol.response = { request in
+            XCTAssertEqual(request.url?.path, "/api/v1/management/agents")
+            return (200, Data(#"{"agents":[{"agent_name":"coral","display_name":"Coral","title":"Operations and surfaces"},{"agent_name":"reef","display_name":"Reef","title":"Runtime support"}]}"#.utf8))
+        }
+        defer { TestURLProtocol.response = nil }
+
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            session: session
+        )
+
+        let profiles = try await service.agentProfiles()
+        XCTAssertEqual(profiles.map(\.id), ["coral", "reef"])
+        XCTAssertEqual(profiles.first?.role, "Operations and surfaces")
     }
 
     func testRuntimeContractProbeSeparatesUpgradeFromCredentialGate() async {

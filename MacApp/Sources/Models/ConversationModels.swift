@@ -18,6 +18,12 @@ struct TranscriptMessage: Identifiable, Equatable, Sendable {
     let content: String
     let createdAt: Date
     var deliveryState: TranscriptDeliveryState
+    let retryIdentity: TurnRetryIdentity?
+}
+
+struct TurnRetryIdentity: Equatable, Sendable {
+    let traceID: String
+    let idempotencyKey: String
 }
 
 struct RuntimeReceipt: Equatable, Sendable {
@@ -37,14 +43,20 @@ struct ConversationState: Equatable, Sendable {
     var messages: [TranscriptMessage] = []
     var latestReceipt: RuntimeReceipt?
 
-    mutating func appendPending(id: String, content: String, at date: Date) {
+    mutating func appendPending(
+        id: String,
+        content: String,
+        at date: Date,
+        retryIdentity: TurnRetryIdentity? = nil
+    ) {
         messages.append(
             TranscriptMessage(
                 id: id,
                 role: .user,
                 content: content,
                 createdAt: date,
-                deliveryState: .pending
+                deliveryState: .pending,
+                retryIdentity: retryIdentity
             )
         )
     }

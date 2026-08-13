@@ -49,6 +49,19 @@ actor OrcaConsoleService {
         }
     }
 
+    func agentProfiles() async throws -> [AgentProfile] {
+        let value = try await get("/api/v1/management/agents")
+        return collection(value, keys: ["agents"]).compactMap { object in
+            guard let id = field(object, keys: ["agent_name", "slug"])?.lowercased(),
+                  !id.isEmpty else { return nil }
+            return AgentProfile.fromRuntime(
+                id: id,
+                name: field(object, keys: ["display_name", "agent_name"]),
+                role: field(object, keys: ["title"])
+            )
+        }
+    }
+
     private func overviewSnapshot() async throws -> ConsoleSectionSnapshot {
         async let inbox = get("/api/v1/control-room/captain-inbox")
         async let health = get("/api/v1/control-room/central-agent-health")
@@ -304,16 +317,21 @@ actor OrcaConsoleService {
     }
 
     private func get(_ path: String) async throws -> ConsoleJSON {
+        guard OrcaServerOrigin.isApproved(serverURL),
+              let serverOrigin = OrcaServerOrigin.normalized(serverURL) else {
+            throw OrcaNativeAuthError.unapprovedOrigin
+        }
         let token: String?
         if let authService {
             token = try await authService.validAccessToken()
         } else {
-            token = try await tokenStore.loadToken()
+            token = try await tokenStore.loadToken(for: serverOrigin)
         }
         guard let token, !token.isEmpty else {
             throw OrcaConsoleServiceError.missingCredential
         }
-        guard let url = URL(string: path, relativeTo: serverURL)?.absoluteURL else {
+        guard let url = URL(string: path, relativeTo: serverURL)?.absoluteURL,
+              OrcaServerOrigin.normalized(url) == serverOrigin else {
             throw OrcaConsoleServiceError.invalidResponse
         }
         var request = URLRequest(url: url)

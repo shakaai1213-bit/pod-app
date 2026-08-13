@@ -12,6 +12,12 @@ cd "$root"
 : "${ORCA_BACKEND_IMAGE_DIGEST:?Set ORCA_BACKEND_IMAGE_DIGEST to the sha256 image digest}"
 : "${HOST_BUNDLE_SHA256:?Set HOST_BUNDLE_SHA256 to the exact host bundle digest}"
 : "${ROLLBACK_RELEASE_REF:?Set ROLLBACK_RELEASE_REF to the verified prior release}"
+: "${ROLLBACK_ARTIFACT_SHA256:?Set ROLLBACK_ARTIFACT_SHA256 to the prior app artifact digest}"
+: "${ROLLBACK_MANIFEST_SHA256:?Set ROLLBACK_MANIFEST_SHA256 to the prior release manifest digest}"
+: "${ROLLBACK_BACKEND_COMMIT:?Set ROLLBACK_BACKEND_COMMIT to the prior full runtime commit}"
+: "${ROLLBACK_BACKEND_IMAGE_DIGEST:?Set ROLLBACK_BACKEND_IMAGE_DIGEST to the prior runtime image digest}"
+: "${ROLLBACK_HOST_BUNDLE_SHA256:?Set ROLLBACK_HOST_BUNDLE_SHA256 to the prior host bundle digest}"
+: "${ROLLBACK_AUTH_STATE_SHA256:?Set ROLLBACK_AUTH_STATE_SHA256 to the prior non-secret auth-state contract digest}"
 
 [[ "$ORCA_BACKEND_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
   echo "release refused: ORCA_BACKEND_COMMIT must be a full git SHA" >&2
@@ -23,6 +29,21 @@ cd "$root"
 }
 [[ "$HOST_BUNDLE_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
   echo "release refused: HOST_BUNDLE_SHA256 must be 64 lowercase hex characters" >&2
+  exit 2
+}
+for name in ROLLBACK_ARTIFACT_SHA256 ROLLBACK_MANIFEST_SHA256 ROLLBACK_HOST_BUNDLE_SHA256 ROLLBACK_AUTH_STATE_SHA256; do
+  value="${!name}"
+  [[ "$value" =~ ^[0-9a-f]{64}$ ]] || {
+    echo "release refused: $name must be 64 lowercase hex characters" >&2
+    exit 2
+  }
+done
+[[ "$ROLLBACK_BACKEND_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
+  echo "release refused: ROLLBACK_BACKEND_COMMIT must be a full git SHA" >&2
+  exit 2
+}
+[[ "$ROLLBACK_BACKEND_IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+  echo "release refused: ROLLBACK_BACKEND_IMAGE_DIGEST must be sha256:<64 hex>" >&2
   exit 2
 }
 
@@ -82,6 +103,12 @@ python3 scripts/generate_release_evidence.py \
   --backend-image-digest "$ORCA_BACKEND_IMAGE_DIGEST" \
   --host-bundle-sha256 "$HOST_BUNDLE_SHA256" \
   --rollback-release-ref "$ROLLBACK_RELEASE_REF" \
+  --rollback-artifact-sha256 "$ROLLBACK_ARTIFACT_SHA256" \
+  --rollback-manifest-sha256 "$ROLLBACK_MANIFEST_SHA256" \
+  --rollback-backend-commit "$ROLLBACK_BACKEND_COMMIT" \
+  --rollback-backend-image-digest "$ROLLBACK_BACKEND_IMAGE_DIGEST" \
+  --rollback-host-bundle-sha256 "$ROLLBACK_HOST_BUNDLE_SHA256" \
+  --rollback-auth-state-sha256 "$ROLLBACK_AUTH_STATE_SHA256" \
   --output-dir "$evidence_dir"
 
 ssh-keygen -Y sign \

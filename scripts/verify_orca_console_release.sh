@@ -29,7 +29,7 @@ from pathlib import Path
 
 manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 artifact = Path(sys.argv[2])
-if manifest.get("schema") != "orca.console.release-manifest.v1":
+if manifest.get("schema") != "orca.console.release-manifest.v2":
     raise SystemExit("release verification failed: unsupported manifest schema")
 source = manifest.get("source") or {}
 if not re.fullmatch(r"[0-9a-f]{40}", str(source.get("commit") or "")):
@@ -43,8 +43,24 @@ if not re.fullmatch(r"sha256:[0-9a-f]{64}", str(runtime.get("backend_image_diges
     raise SystemExit("release verification failed: invalid backend image digest")
 if not re.fullmatch(r"[0-9a-f]{64}", str(runtime.get("host_bundle_sha256") or "")):
     raise SystemExit("release verification failed: invalid host bundle digest")
-if not str((manifest.get("rollback") or {}).get("release_ref") or "").strip():
+rollback = manifest.get("rollback") or {}
+if not str(rollback.get("release_ref") or "").strip():
     raise SystemExit("release verification failed: rollback release is missing")
+for field in (
+    "artifact_sha256",
+    "manifest_sha256",
+    "host_bundle_sha256",
+    "auth_state_sha256",
+):
+    if not re.fullmatch(r"[0-9a-f]{64}", str(rollback.get(field) or "")):
+        raise SystemExit(f"release verification failed: invalid rollback {field}")
+if not re.fullmatch(r"[0-9a-f]{40}", str(rollback.get("backend_commit") or "")):
+    raise SystemExit("release verification failed: invalid rollback backend commit")
+if not re.fullmatch(
+    r"sha256:[0-9a-f]{64}",
+    str(rollback.get("backend_image_digest") or ""),
+):
+    raise SystemExit("release verification failed: invalid rollback backend image digest")
 artifact_row = manifest.get("artifact") or {}
 if artifact_row.get("name") != artifact.name:
     raise SystemExit("release verification failed: artifact name mismatch")

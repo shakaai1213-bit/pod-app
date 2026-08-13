@@ -231,6 +231,7 @@ struct UserProfile: Codable {
 /// Thread-safe: uses internal actor isolation for token operations.
 @Observable
 final class AuthManager {
+    private static let nativeClientID = "com.orcamc.pod"
 
     // MARK: - Published State
 
@@ -517,9 +518,19 @@ final class AuthManager {
     // MARK: - Refresh Token
 
     private func refreshAccessToken(refreshToken: String, userId: UUID) async throws -> StoredToken {
+        let challenge = try await nativeChallenge(operation: "refresh")
         let request = AuthRefreshRequest(
             refreshToken: refreshToken,
-            deviceId: OrcaDeviceIdentity.current()
+            deviceId: OrcaDeviceIdentity.current(),
+            clientId: Self.nativeClientID,
+            devicePublicKey: OrcaDeviceIdentity.publicKey(),
+            challengeNonce: challenge.nonce,
+            deviceSignature: try OrcaDeviceIdentity.proof(
+                operation: "refresh",
+                clientID: Self.nativeClientID,
+                nonce: challenge.nonce,
+                token: refreshToken
+            )
         )
         let response: AuthRefreshResponse = try await postAuth(
             path: "/api/v1/auth/refresh",
@@ -566,11 +577,7 @@ final class AuthManager {
 
     /// Signs out the current user. Optionally removes all tokens.
     func signOut(removeAllUsers: Bool = false) {
-        if removeAllUsers {
-            Task { try? await tokenManager.deleteAllTokens() }
-        } else if let userId = currentUser?.id {
-            Task { try? await tokenManager.deleteToken(for: userId) }
-        }
+        Task { await revokeAndDelete(removeAllUsers: removeAllUsers) }
 
         currentUser = nil
         isAuthenticated = false
@@ -580,6 +587,56 @@ final class AuthManager {
         Task { await loadStoredUsers() }
 
         print("[AuthManager] Signed out")
+    }
+
+    private func revokeAndDelete(removeAllUsers: Bool) async {
+        let active = try? await tokenManager.getActiveToken()
+        if let active,
+           let refreshToken = active.token.refreshToken,
+           let challenge = try? await nativeChallenge(operation: "logout"),
+           let signature = try? OrcaDeviceIdentity.proof(
+               operation: "logout",
+               clientID: Self.nativeClientID,
+               nonce: challenge.nonce,
+               token: refreshToken
+           ) {
+            let request = AuthRefreshRequest(
+                refreshToken: refreshToken,
+                deviceId: OrcaDeviceIdentity.current(),
+                clientId: Self.nativeClientID,
+                devicePublicKey: OrcaDeviceIdentity.publicKey(),
+                challengeNonce: challenge.nonce,
+                deviceSignature: signature
+            )
+            try? await postAuthVoid(path: "/api/v1/auth/logout", body: request)
+        }
+        if removeAllUsers {
+            try? await tokenManager.deleteAllTokens()
+        } else if let active {
+            try? await tokenManager.deleteToken(for: active.userId)
+        }
+        await loadStoredUsers()
+    }
+
+    private struct NativeChallengeRequest: Encodable {
+        let clientId: String
+        let deviceId: String
+        let devicePublicKey: String
+        let operation: String
+    }
+
+    private struct NativeChallengeResponse: Decodable { let nonce: String }
+
+    private func nativeChallenge(operation: String) async throws -> NativeChallengeResponse {
+        try await postAuth(
+            path: "/api/v1/auth/native/challenge",
+            body: NativeChallengeRequest(
+                clientId: Self.nativeClientID,
+                deviceId: OrcaDeviceIdentity.current(),
+                devicePublicKey: OrcaDeviceIdentity.publicKey(),
+                operation: operation
+            )
+        )
     }
 
     // MARK: - Auto Login
@@ -671,6 +728,20 @@ final class AuthManager {
             throw AuthError.unauthorized
         default:
             throw AuthError.serverError(httpResponse.statusCode)
+        }
+    }
+
+    private func postAuthVoid(path: String, body: some Encodable) async throws {
+        guard let url = URL(string: "\(backendURL)\(path)") else { throw AuthError.invalidResponse }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        request.httpBody = try encoder.encode(AnyEncodable(body))
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
+            throw AuthError.unauthorized
         }
     }
 

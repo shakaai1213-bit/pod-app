@@ -24,6 +24,7 @@ final class OrcaMacModel {
     var sectionError: String?
     var serverAddress: String
     var hasStoredCredential = false
+    var agents: [AgentProfile] = AgentProfile.fallbackRoster
 
     @ObservationIgnored private let tokenStore: any RuntimeTokenStoring
     @ObservationIgnored private let defaults: UserDefaults
@@ -41,7 +42,7 @@ final class OrcaMacModel {
         serverAddress = defaults.string(forKey: "orca.mac.runtime.server")
             ?? Self.defaultServerAddress
         let storedAgent = defaults.string(forKey: "orca.mac.selected-agent") ?? "coral"
-        selectedAgentID = AgentProfile.roster.contains(where: { $0.id == storedAgent })
+        selectedAgentID = AgentProfile.fallbackRoster.contains(where: { $0.id == storedAgent })
             ? storedAgent
             : "coral"
         selectedSection = ConsoleSection(
@@ -49,10 +50,8 @@ final class OrcaMacModel {
         ) ?? .overview
     }
 
-    var agents: [AgentProfile] { AgentProfile.roster }
-
     var selectedAgent: AgentProfile {
-        AgentProfile.roster.first(where: { $0.id == selectedAgentID }) ?? AgentProfile.roster[0]
+        agents.first(where: { $0.id == selectedAgentID }) ?? agents[0]
     }
 
     var selectedConversation: ConversationState {
@@ -88,8 +87,9 @@ final class OrcaMacModel {
     }
 
     func start() async {
+        let origin = Self.normalizedEndpoint(serverAddress).flatMap(OrcaServerOrigin.normalized) ?? ""
         do {
-            hasStoredCredential = try await tokenStore.loadCredential() != nil
+            hasStoredCredential = try await tokenStore.loadCredential(for: origin) != nil
         } catch {
             presentedError = error.localizedDescription
         }
@@ -102,8 +102,12 @@ final class OrcaMacModel {
             connectionState = .unavailable("Invalid ORCA server address.")
             return
         }
+        guard let origin = OrcaServerOrigin.normalized(endpoint) else {
+            connectionState = .unavailable("Invalid ORCA server address.")
+            return
+        }
         do {
-            guard try await tokenStore.loadCredential() != nil else {
+            guard try await tokenStore.loadCredential(for: origin) != nil else {
                 hasStoredCredential = false
                 service = nil
                 consoleService = nil
@@ -122,22 +126,28 @@ final class OrcaMacModel {
             }
             hasStoredCredential = true
             connectionState = .connecting
-            let nextAuthService = OrcaNativeAuthService(
+            let nextAuthService = try OrcaNativeAuthService(
                 serverURL: endpoint,
-                tokenStore: tokenStore,
-                defaults: defaults
+                tokenStore: tokenStore
             )
             _ = try await nextAuthService.validAccessToken()
             let nextService = OrcaRuntimeService(serverURL: endpoint, authService: nextAuthService)
             let compatibility = try await nextService.verifyCompatibility()
             authService = nextAuthService
             service = nextService
-            consoleService = OrcaConsoleService(
+            let nextConsoleService = OrcaConsoleService(
                 serverURL: endpoint,
                 tokenStore: tokenStore,
                 authService: nextAuthService,
                 deviceID: await nextAuthService.boundDeviceID()
             )
+            consoleService = nextConsoleService
+            let runtimeAgents = try await nextConsoleService.agentProfiles()
+            guard !runtimeAgents.isEmpty else { throw OrcaConsoleServiceError.invalidResponse }
+            agents = runtimeAgents
+            if !agents.contains(where: { $0.id == selectedAgentID }) {
+                selectedAgentID = agents[0].id
+            }
             contractVersion = compatibility.contractVersion
             schemaSHA256 = compatibility.schemaSHA256
             connectionState = .ready
@@ -177,10 +187,9 @@ final class OrcaMacModel {
             return
         }
         do {
-            let nextAuthService = OrcaNativeAuthService(
+            let nextAuthService = try OrcaNativeAuthService(
                 serverURL: endpoint,
-                tokenStore: tokenStore,
-                defaults: defaults
+                tokenStore: tokenStore
             )
             try await nextAuthService.exchange(
                 identityToken: identityToken,
@@ -199,7 +208,8 @@ final class OrcaMacModel {
             if let authService {
                 try await authService.logout()
             } else {
-                try await tokenStore.deleteCredential()
+                let origin = Self.normalizedEndpoint(serverAddress).flatMap(OrcaServerOrigin.normalized) ?? ""
+                try await tokenStore.deleteCredential(for: origin)
             }
             hasStoredCredential = false
             service = nil
@@ -213,7 +223,7 @@ final class OrcaMacModel {
     }
 
     func selectAgent(_ id: String) {
-        guard AgentProfile.roster.contains(where: { $0.id == id }) else { return }
+        guard agents.contains(where: { $0.id == id }) else { return }
         selectSection(.conversations, refresh: false)
         selectedAgentID = id
         defaults.set(id, forKey: "orca.mac.selected-agent")
@@ -267,11 +277,7 @@ final class OrcaMacModel {
         guard let conversationID = conversations[agentID]?.conversationID
             ?? storedConversationID(for: agentID) else { return }
         do {
-            let remote = try await service.messages(
-                conversationID: conversationID,
-                offset: 0,
-                limit: 200
-            )
+            let remote = try await loadAllMessages(service: service, conversationID: conversationID)
             var state = conversations[agentID] ?? ConversationState(conversationID: conversationID)
             state.conversationID = conversationID
             state.mergeCanonical(remote.map(Self.transcriptMessage))
@@ -282,12 +288,13 @@ final class OrcaMacModel {
         }
     }
 
-    func sendDraft() async {
+    func sendDraft(retryIdentity: TurnRetryIdentity? = nil) async {
         let content = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !content.isEmpty, let service, connectionState.isReady else { return }
 
         let agentID = selectedAgentID
-        let traceID = "orca-mac-\(UUID().uuidString.lowercased())"
+        let traceID = retryIdentity?.traceID ?? "orca-mac-\(UUID().uuidString.lowercased())"
+        let idempotencyKey = retryIdentity?.idempotencyKey ?? "orca-mac-turn:\(traceID)"
         let pendingID = "pending:\(traceID)"
         let startedAt = Date()
         var state = conversations[agentID]
@@ -299,7 +306,12 @@ final class OrcaMacModel {
                 content: message.content
             )
         }
-        state.appendPending(id: pendingID, content: content, at: startedAt)
+        state.appendPending(
+            id: pendingID,
+            content: content,
+            at: startedAt,
+            retryIdentity: TurnRetryIdentity(traceID: traceID, idempotencyKey: idempotencyKey)
+        )
         conversations[agentID] = state
         draft = ""
         isSending = true
@@ -314,7 +326,7 @@ final class OrcaMacModel {
                     deliveryMode: "agent_inbox",
                     asyncResponse: true,
                     traceID: traceID,
-                    idempotencyKey: "orca-mac-turn:\(traceID)",
+                    idempotencyKey: idempotencyKey,
                     conversationID: state.conversationID
                 )
             )
@@ -327,7 +339,8 @@ final class OrcaMacModel {
                     role: .user,
                     content: content,
                     createdAt: startedAt,
-                    deliveryState: .persisted
+                    deliveryState: .persisted,
+                    retryIdentity: nil
                 ),
             ]
             if !response.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -337,7 +350,8 @@ final class OrcaMacModel {
                         role: .agent,
                         content: response.content,
                         createdAt: Date(),
-                        deliveryState: .persisted
+                        deliveryState: .persisted,
+                        retryIdentity: nil
                     )
                 )
             }
@@ -371,7 +385,7 @@ final class OrcaMacModel {
         state.messages.removeAll { $0.id == message.id }
         conversations[selectedAgentID] = state
         draft = message.content
-        await sendDraft()
+        await sendDraft(retryIdentity: message.retryIdentity)
     }
 
     static func normalizedEndpoint(_ raw: String) -> URL? {
@@ -382,7 +396,8 @@ final class OrcaMacModel {
         guard let url = URL(string: normalized),
               let scheme = url.scheme?.lowercased(),
               ["http", "https"].contains(scheme),
-              url.host != nil else { return nil }
+              url.host != nil,
+              OrcaServerOrigin.isApproved(url) else { return nil }
         return url
     }
 
@@ -404,11 +419,7 @@ final class OrcaMacModel {
     private func refreshConversation(agentID: String, conversationID: String) async {
         guard let service else { return }
         do {
-            let remote = try await service.messages(
-                conversationID: conversationID,
-                offset: 0,
-                limit: 200
-            )
+            let remote = try await loadAllMessages(service: service, conversationID: conversationID)
             var state = conversations[agentID] ?? ConversationState(conversationID: conversationID)
             state.conversationID = conversationID
             state.mergeCanonical(remote.map(Self.transcriptMessage))
@@ -421,6 +432,27 @@ final class OrcaMacModel {
 
     private func storedConversationID(for agentID: String) -> String? {
         defaults.string(forKey: "orca.mac.conversation.\(agentID)")
+    }
+
+    private func loadAllMessages(
+        service: any OrcaRuntimeServing,
+        conversationID: String
+    ) async throws -> [OrcaRuntimeConversationMessage] {
+        let pageSize = 200
+        let maximum = 5_000
+        var offset = 0
+        var output: [OrcaRuntimeConversationMessage] = []
+        while output.count < maximum {
+            let page = try await service.messages(
+                conversationID: conversationID,
+                offset: offset,
+                limit: pageSize
+            )
+            output.append(contentsOf: page)
+            if page.count < pageSize { break }
+            offset += page.count
+        }
+        return output
     }
 
     private func storeConversationID(_ conversationID: String, for agentID: String) {
@@ -443,7 +475,8 @@ final class OrcaMacModel {
             role: role,
             content: message.content,
             createdAt: message.createdAt,
-            deliveryState: .persisted
+            deliveryState: .persisted,
+            retryIdentity: nil
         )
     }
 }

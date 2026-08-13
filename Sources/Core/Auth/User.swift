@@ -191,12 +191,17 @@ struct AuthLoginResponse: Codable, Sendable {
 struct AuthRefreshRequest: Codable, Sendable {
     let refreshToken: String
     let deviceId: String
+    let clientId: String
+    let devicePublicKey: String
+    let challengeNonce: String
+    let deviceSignature: String
 }
 
 struct AuthRefreshResponse: Codable, Sendable {
     let accessToken: String
     let refreshToken: String?
     let expiresIn: Int
+    let organizationId: UUID?
 
     var expiresAt: Date {
         Date().addingTimeInterval(TimeInterval(expiresIn))

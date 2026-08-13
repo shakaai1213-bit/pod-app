@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import CryptoKit
 
 enum RuntimeTokenStoreError: Error, LocalizedError {
     case invalidToken
@@ -21,6 +22,8 @@ struct RuntimeCredential: Codable, Equatable, Sendable {
     let expiresAt: Date
     let clientID: String
     let deviceID: String
+    let serverOrigin: String
+    let organizationID: String
 
     var needsRefresh: Bool {
         Date() >= expiresAt.addingTimeInterval(-300)
@@ -28,27 +31,27 @@ struct RuntimeCredential: Codable, Equatable, Sendable {
 }
 
 protocol RuntimeTokenStoring: Sendable {
-    func loadCredential() async throws -> RuntimeCredential?
+    func loadCredential(for serverOrigin: String) async throws -> RuntimeCredential?
     func storeCredential(_ credential: RuntimeCredential) async throws
-    func deleteCredential() async throws
+    func deleteCredential(for serverOrigin: String) async throws
 }
 
 extension RuntimeTokenStoring {
-    func loadToken() async throws -> String? {
-        try await loadCredential()?.accessToken
+    func loadToken(for serverOrigin: String) async throws -> String? {
+        try await loadCredential(for: serverOrigin)?.accessToken
     }
 }
 
 actor RuntimeTokenStore: RuntimeTokenStoring {
     private let service = "com.orcamc.mac.runtime"
-    private let account = "orca-console-native-session-v1"
+    private let accountPrefix = "orca-console-native-session-v2"
     private let legacyAccount = "orca-console-access-token"
 
-    func loadCredential() throws -> RuntimeCredential? {
+    func loadCredential(for serverOrigin: String) throws -> RuntimeCredential? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
+            kSecAttrAccount as String: account(for: serverOrigin),
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
@@ -59,7 +62,8 @@ actor RuntimeTokenStore: RuntimeTokenStoring {
         guard let data = result as? Data,
               let credential = try? JSONDecoder().decode(RuntimeCredential.self, from: data),
               !credential.accessToken.isEmpty,
-              !credential.refreshToken.isEmpty else {
+              !credential.refreshToken.isEmpty,
+              credential.serverOrigin == serverOrigin else {
             throw RuntimeTokenStoreError.invalidToken
         }
         return credential
@@ -74,7 +78,7 @@ actor RuntimeTokenStore: RuntimeTokenStoring {
         let lookup: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
+            kSecAttrAccount as String: account(for: credential.serverOrigin),
         ]
         let update = SecItemUpdate(
             lookup as CFDictionary,
@@ -89,9 +93,14 @@ actor RuntimeTokenStore: RuntimeTokenStoring {
         guard status == errSecSuccess else { throw RuntimeTokenStoreError.keychain(status) }
     }
 
-    func deleteCredential() throws {
-        try delete(account: account)
+    func deleteCredential(for serverOrigin: String) throws {
+        try delete(account: account(for: serverOrigin))
         try delete(account: legacyAccount)
+    }
+
+    private func account(for serverOrigin: String) -> String {
+        let digest = SHA256.hash(data: Data(serverOrigin.utf8)).map { String(format: "%02x", $0) }.joined()
+        return "\(accountPrefix):\(digest)"
     }
 
     private func delete(account: String) throws {

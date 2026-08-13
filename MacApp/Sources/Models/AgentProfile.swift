@@ -24,7 +24,7 @@ struct AgentProfile: Identifiable, Hashable, Sendable {
         case teal
     }
 
-    static let roster: [AgentProfile] = [
+    static let fallbackRoster: [AgentProfile] = [
         AgentProfile(
             id: "aloha",
             name: "Aloha",
@@ -82,4 +82,30 @@ struct AgentProfile: Identifiable, Hashable, Sendable {
             lane: .support
         ),
     ]
+
+    static func fromRuntime(
+        id: String,
+        name: String?,
+        role: String?
+    ) -> AgentProfile {
+        let defaults = Dictionary(uniqueKeysWithValues: fallbackRoster.map { ($0.id, $0) })
+        if let known = defaults[id] {
+            return AgentProfile(
+                id: id,
+                name: name?.capitalized ?? known.name,
+                role: role ?? known.role,
+                symbol: known.symbol,
+                accent: known.accent,
+                lane: known.lane
+            )
+        }
+        return AgentProfile(
+            id: id,
+            name: name?.capitalized ?? id.capitalized,
+            role: role ?? "Named ORCA agent",
+            symbol: "person.crop.circle",
+            accent: .teal,
+            lane: .support
+        )
+    }
 }

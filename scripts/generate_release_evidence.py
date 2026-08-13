@@ -65,6 +65,12 @@ def main() -> int:
     parser.add_argument("--backend-image-digest", required=True)
     parser.add_argument("--host-bundle-sha256", required=True)
     parser.add_argument("--rollback-release-ref", required=True)
+    parser.add_argument("--rollback-artifact-sha256", required=True)
+    parser.add_argument("--rollback-manifest-sha256", required=True)
+    parser.add_argument("--rollback-backend-commit", required=True)
+    parser.add_argument("--rollback-backend-image-digest", required=True)
+    parser.add_argument("--rollback-host-bundle-sha256", required=True)
+    parser.add_argument("--rollback-auth-state-sha256", required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
 
@@ -91,7 +97,7 @@ def main() -> int:
     sbom_path.write_text(json.dumps(sbom, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     manifest = {
-        "schema": "orca.console.release-manifest.v1",
+        "schema": "orca.console.release-manifest.v2",
         "created_at": created_at,
         "source": {
             "commit": args.source_commit,
@@ -115,7 +121,13 @@ def main() -> int:
         },
         "rollback": {
             "release_ref": args.rollback_release_ref,
-            "procedure": "restore the exact prior app artifact and runtime release ref, then rerun compatibility and G1-G10 canaries",
+            "artifact_sha256": args.rollback_artifact_sha256,
+            "manifest_sha256": args.rollback_manifest_sha256,
+            "backend_commit": args.rollback_backend_commit,
+            "backend_image_digest": args.rollback_backend_image_digest,
+            "host_bundle_sha256": args.rollback_host_bundle_sha256,
+            "auth_state_sha256": args.rollback_auth_state_sha256,
+            "procedure": "restore only the hash-bound prior app, runtime, host bundle, and non-secret auth-state contract; then rerun compatibility and G1-G10 canaries",
         },
     }
     manifest_path = output / "manifest.json"
