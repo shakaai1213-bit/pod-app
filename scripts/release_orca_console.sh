@@ -9,32 +9,33 @@ cd "$root"
 : "${DEVELOPER_ID_PROFILE:?Set DEVELOPER_ID_PROFILE to the Sign in with Apple Developer ID provisioning profile name}"
 : "${RELEASE_SIGNING_KEY:?Set RELEASE_SIGNING_KEY to the dedicated SSH manifest-signing private key}"
 : "${ORCA_BACKEND_COMMIT:?Set ORCA_BACKEND_COMMIT to the exact runtime commit}"
-: "${ORCA_BACKEND_IMAGE_DIGEST:?Set ORCA_BACKEND_IMAGE_DIGEST to the sha256 image digest}"
-: "${HOST_BUNDLE_SHA256:?Set HOST_BUNDLE_SHA256 to the exact host bundle digest}"
+: "${ORCA_BACKEND_ROOT:?Set ORCA_BACKEND_ROOT to the runtime Git checkout}"
+: "${ORCA_BACKEND_IMAGE:?Set ORCA_BACKEND_IMAGE to the exact runtime image artifact}"
+: "${HOST_BUNDLE:?Set HOST_BUNDLE to the exact host bundle artifact}"
 : "${ROLLBACK_EVIDENCE_DIR:?Set ROLLBACK_EVIDENCE_DIR to the signed prior evidence directory}"
 : "${ROLLBACK_ARTIFACT:?Set ROLLBACK_ARTIFACT to the exact prior app artifact}"
+: "${ROLLBACK_BACKEND_ROOT:?Set ROLLBACK_BACKEND_ROOT to the prior runtime Git checkout}"
+: "${ROLLBACK_BACKEND_IMAGE:?Set ROLLBACK_BACKEND_IMAGE to the exact prior runtime image}"
+: "${ROLLBACK_HOST_BUNDLE:?Set ROLLBACK_HOST_BUNDLE to the exact prior host bundle}"
 : "${ROLLBACK_AUTH_STATE_CONTRACT:?Set ROLLBACK_AUTH_STATE_CONTRACT to the signed prior auth-state contract}"
 : "${ROLLBACK_AUTH_STATE_SIGNATURE:?Set ROLLBACK_AUTH_STATE_SIGNATURE to the prior auth-state signature}"
 : "${RELEASE_ALLOWED_SIGNERS:?Set RELEASE_ALLOWED_SIGNERS to the approved signer registry}"
+: "${TRUSTED_ALLOWED_SIGNERS_SHA256:?Set TRUSTED_ALLOWED_SIGNERS_SHA256 from the external trust registry}"
 : "${RELEASE_SIGNER_IDENTITY:?Set RELEASE_SIGNER_IDENTITY to the prior release signer identity}"
 
 [[ "$ORCA_BACKEND_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
   echo "release refused: ORCA_BACKEND_COMMIT must be a full git SHA" >&2
   exit 2
 }
-[[ "$ORCA_BACKEND_IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || {
-  echo "release refused: ORCA_BACKEND_IMAGE_DIGEST must be sha256:<64 hex>" >&2
-  exit 2
-}
-[[ "$HOST_BUNDLE_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
-  echo "release refused: HOST_BUNDLE_SHA256 must be 64 lowercase hex characters" >&2
+[[ "$TRUSTED_ALLOWED_SIGNERS_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
+  echo "release refused: TRUSTED_ALLOWED_SIGNERS_SHA256 must be 64 lowercase hex characters" >&2
   exit 2
 }
 [[ -f "$ROLLBACK_EVIDENCE_DIR/manifest.json" && -f "$ROLLBACK_EVIDENCE_DIR/manifest.json.sig" ]] || {
   echo "release refused: signed rollback evidence is incomplete" >&2
   exit 2
 }
-[[ -f "$ROLLBACK_ARTIFACT" && -f "$ROLLBACK_AUTH_STATE_CONTRACT" && -f "$ROLLBACK_AUTH_STATE_SIGNATURE" ]] || {
+[[ -f "$ORCA_BACKEND_IMAGE" && -f "$HOST_BUNDLE" && -f "$ROLLBACK_ARTIFACT" && -f "$ROLLBACK_BACKEND_IMAGE" && -f "$ROLLBACK_HOST_BUNDLE" && -f "$ROLLBACK_AUTH_STATE_CONTRACT" && -f "$ROLLBACK_AUTH_STATE_SIGNATURE" ]] || {
   echo "release refused: rollback artifact or auth-state evidence is missing" >&2
   exit 2
 }
@@ -95,14 +96,19 @@ python3 scripts/generate_release_evidence.py \
   --artifact "$artifact_path" \
   --source-commit "$source_commit" \
   --backend-commit "$ORCA_BACKEND_COMMIT" \
-  --backend-image-digest "$ORCA_BACKEND_IMAGE_DIGEST" \
-  --host-bundle-sha256 "$HOST_BUNDLE_SHA256" \
+  --backend-root "$ORCA_BACKEND_ROOT" \
+  --backend-image "$ORCA_BACKEND_IMAGE" \
+  --host-bundle "$HOST_BUNDLE" \
   --auth-transition-contract "$root/release/native-auth-transition-v1.json" \
   --rollback-evidence-dir "$ROLLBACK_EVIDENCE_DIR" \
   --rollback-artifact "$ROLLBACK_ARTIFACT" \
+  --rollback-backend-root "$ROLLBACK_BACKEND_ROOT" \
+  --rollback-backend-image "$ROLLBACK_BACKEND_IMAGE" \
+  --rollback-host-bundle "$ROLLBACK_HOST_BUNDLE" \
   --rollback-auth-state-contract "$ROLLBACK_AUTH_STATE_CONTRACT" \
   --rollback-auth-state-signature "$ROLLBACK_AUTH_STATE_SIGNATURE" \
   --release-allowed-signers "$RELEASE_ALLOWED_SIGNERS" \
+  --trusted-allowed-signers-sha256 "$TRUSTED_ALLOWED_SIGNERS_SHA256" \
   --release-signer-identity "$RELEASE_SIGNER_IDENTITY" \
   --output-dir "$evidence_dir"
 
@@ -110,5 +116,7 @@ ssh-keygen -Y sign \
   -n orca-release \
   -f "$RELEASE_SIGNING_KEY" \
   "$evidence_dir/manifest.json"
+
+scripts/verify_orca_console_release.sh "$evidence_dir" "$artifact_path"
 
 echo "release evidence: $evidence_dir"
