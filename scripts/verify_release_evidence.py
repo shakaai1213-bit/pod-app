@@ -138,12 +138,22 @@ def verify_auth_state(path: Path, *, runtime_commit: str) -> dict[str, Any]:
         raise ValueError("invalid rollback auth-state schema")
     if payload.get("runtime_commit") != runtime_commit:
         raise ValueError("rollback auth state does not match runtime")
+    if payload.get("native_refresh_policy") not in {
+        "legacy",
+        "device-key-bound",
+    }:
+        raise ValueError("invalid native refresh policy")
+    if (
+        not isinstance(payload.get("active_refresh_families"), int)
+        or payload["active_refresh_families"] < 0
+    ):
+        raise ValueError("invalid active refresh family count")
     hashes = payload.get("active_refresh_family_hashes")
     if not isinstance(hashes, list) or hashes != sorted(set(hashes)):
         raise ValueError("invalid active refresh family hashes")
     if any(re.fullmatch(r"[0-9a-f]{64}", str(value)) is None for value in hashes):
         raise ValueError("invalid active refresh family hash")
-    if payload.get("active_refresh_families") != len(hashes):
+    if payload["active_refresh_families"] != len(hashes):
         raise ValueError("active refresh family count mismatch")
     if payload.get("active_refresh_family_digest") != token_family_digest(hashes):
         raise ValueError("active refresh family digest mismatch")

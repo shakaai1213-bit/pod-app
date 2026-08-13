@@ -230,6 +230,7 @@ def build_bundle(tmp_path: Path) -> dict[str, object]:
         "artifact": artifact,
         "allowed": allowed,
         "identity": identity,
+        "key": key,
         "output": output,
         "trusted_hash": trusted_hash,
     }
@@ -297,6 +298,44 @@ def test_public_shell_verifier_rejects_tampered_signed_manifest(tmp_path: Path) 
     result = verify_with_public_shell(bundle)
 
     assert result.returncode != 0
+
+
+def test_public_shell_verifier_rejects_resigned_auth_state_without_policy(
+    tmp_path: Path,
+) -> None:
+    bundle = build_bundle(tmp_path)
+    output = Path(bundle["output"])
+    key = Path(bundle["key"])
+    auth_path = output / "rollback/rollback-auth-state.json"
+    auth_state = json.loads(auth_path.read_text(encoding="utf-8"))
+    del auth_state["native_refresh_policy"]
+    auth_path.write_text(
+        json.dumps(auth_state, sort_keys=True),
+        encoding="utf-8",
+    )
+    auth_signature = auth_path.with_name(auth_path.name + ".sig")
+    auth_signature.unlink()
+    sign(auth_path, key, "orca-auth-state")
+
+    manifest_path = output / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    auth_row = manifest["rollback"]["auth_state"]
+    auth_row["sha256"] = digest(auth_path)
+    auth_row["size_bytes"] = auth_path.stat().st_size
+    auth_row["signature"]["sha256"] = digest(auth_signature)
+    auth_row["signature"]["size_bytes"] = auth_signature.stat().st_size
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    manifest_signature = manifest_path.with_name(manifest_path.name + ".sig")
+    manifest_signature.unlink()
+    sign(manifest_path, key, "orca-release")
+
+    result = verify_with_public_shell(bundle)
+
+    assert result.returncode != 0
+    assert "invalid native refresh policy" in result.stderr
 
 
 @pytest.mark.parametrize(
