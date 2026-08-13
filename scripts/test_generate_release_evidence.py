@@ -338,6 +338,48 @@ def test_public_shell_verifier_rejects_resigned_auth_state_without_policy(
     assert "invalid native refresh policy" in result.stderr
 
 
+def test_public_shell_verifier_rejects_resigned_boolean_family_count(
+    tmp_path: Path,
+) -> None:
+    bundle = build_bundle(tmp_path)
+    output = Path(bundle["output"])
+    key = Path(bundle["key"])
+    auth_path = output / "rollback/rollback-auth-state.json"
+    auth_state = json.loads(auth_path.read_text(encoding="utf-8"))
+    auth_state["active_refresh_families"] = True
+    auth_state["active_refresh_family_hashes"] = ["a" * 64]
+    auth_state["active_refresh_family_digest"] = release_evidence.token_family_digest(
+        auth_state["active_refresh_family_hashes"]
+    )
+    auth_path.write_text(json.dumps(auth_state, sort_keys=True), encoding="utf-8")
+    auth_signature = auth_path.with_name(auth_path.name + ".sig")
+    auth_signature.unlink()
+    sign(auth_path, key, "orca-auth-state")
+
+    manifest_path = output / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    auth_row = manifest["rollback"]["auth_state"]
+    auth_row["sha256"] = digest(auth_path)
+    auth_row["size_bytes"] = auth_path.stat().st_size
+    auth_row["active_refresh_family_digest"] = auth_state[
+        "active_refresh_family_digest"
+    ]
+    auth_row["signature"]["sha256"] = digest(auth_signature)
+    auth_row["signature"]["size_bytes"] = auth_signature.stat().st_size
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    manifest_signature = manifest_path.with_name(manifest_path.name + ".sig")
+    manifest_signature.unlink()
+    sign(manifest_path, key, "orca-release")
+
+    result = verify_with_public_shell(bundle)
+
+    assert result.returncode != 0
+    assert "invalid active refresh family count" in result.stderr
+
+
 @pytest.mark.parametrize(
     "relative_path",
     [
@@ -386,6 +428,29 @@ def test_auth_state_rejects_count_only_contract(tmp_path: Path) -> None:
     )
 
     with pytest.raises(ValueError, match="family hashes"):
+        release_evidence.verify_auth_state_contract(contract)
+
+
+def test_auth_state_rejects_boolean_family_count(tmp_path: Path) -> None:
+    family_hashes = ["a" * 64]
+    contract = tmp_path / "auth-state.json"
+    contract.write_text(
+        json.dumps(
+            {
+                "schema": "orca.native-auth.state.v1",
+                "runtime_commit": "1" * 40,
+                "native_refresh_policy": "legacy",
+                "active_refresh_families": True,
+                "active_refresh_family_hashes": family_hashes,
+                "active_refresh_family_digest": release_evidence.token_family_digest(
+                    family_hashes
+                ),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="family count"):
         release_evidence.verify_auth_state_contract(contract)
 
 

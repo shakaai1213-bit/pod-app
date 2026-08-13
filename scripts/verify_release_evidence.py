@@ -144,7 +144,7 @@ def verify_auth_state(path: Path, *, runtime_commit: str) -> dict[str, Any]:
     }:
         raise ValueError("invalid native refresh policy")
     if (
-        not isinstance(payload.get("active_refresh_families"), int)
+        type(payload.get("active_refresh_families")) is not int
         or payload["active_refresh_families"] < 0
     ):
         raise ValueError("invalid active refresh family count")

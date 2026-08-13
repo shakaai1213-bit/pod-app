@@ -173,7 +173,7 @@ def verify_auth_state_contract(path: Path) -> dict[str, Any]:
     if payload.get("native_refresh_policy") not in {"legacy", "device-key-bound"}:
         raise ValueError("invalid native refresh policy")
     if (
-        not isinstance(payload.get("active_refresh_families"), int)
+        type(payload.get("active_refresh_families")) is not int
         or payload["active_refresh_families"] < 0
     ):
         raise ValueError("invalid active refresh family count")
