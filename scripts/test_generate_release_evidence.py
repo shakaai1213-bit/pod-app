@@ -60,6 +60,19 @@ def signed_commit(repository: Path, key: Path, identity: str, content: str) -> s
     ).strip()
 
 
+def unsigned_commit(repository: Path, content: str) -> str:
+    payload = repository / "payload.txt"
+    payload.write_text(content, encoding="utf-8")
+    subprocess.run(["git", "-C", str(repository), "add", payload.name], check=True)
+    subprocess.run(
+        ["git", "-C", str(repository), "commit", "-q", "-m", content.strip()],
+        check=True,
+    )
+    return subprocess.check_output(
+        ["git", "-C", str(repository), "rev-parse", "HEAD"], text=True
+    ).strip()
+
+
 def signed_history(
     tmp_path: Path, name: str, key: Path, identity: str
 ) -> tuple[Path, str, str]:
@@ -79,6 +92,25 @@ def signed_history(
     return repository, prior, current
 
 
+def legacy_runtime_history(
+    tmp_path: Path, key: Path, identity: str
+) -> tuple[Path, str, str]:
+    repository = tmp_path / "runtime"
+    repository.mkdir()
+    subprocess.run(["git", "init", "-q", str(repository)], check=True)
+    subprocess.run(
+        ["git", "-C", str(repository), "config", "user.name", "Release Test"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repository), "config", "user.email", identity],
+        check=True,
+    )
+    prior = unsigned_commit(repository, "runtime legacy prior\n")
+    current = signed_commit(repository, key, identity, "runtime current\n")
+    return repository, prior, current
+
+
 def sign(path: Path, key: Path, namespace: str) -> Path:
     subprocess.run(
         ["ssh-keygen", "-Y", "sign", "-n", namespace, "-f", str(key), str(path)],
@@ -92,6 +124,7 @@ def build_bundle(
     tmp_path: Path,
     *,
     install_mode: str = "upgrade",
+    rollback_commit_trust: str = "git-ssh-signed",
     preinstall_overrides: dict[str, object] | None = None,
     extra_generator_args: list[str] | None = None,
 ) -> dict[str, object]:
@@ -109,9 +142,14 @@ def build_bundle(
     source, prior_source, current_source = signed_history(
         tmp_path, "source", key, identity
     )
-    runtime, prior_runtime, current_runtime = signed_history(
-        tmp_path, "runtime", key, identity
-    )
+    if rollback_commit_trust == "preinstall-attested-legacy":
+        runtime, prior_runtime, current_runtime = legacy_runtime_history(
+            tmp_path, key, identity
+        )
+    else:
+        runtime, prior_runtime, current_runtime = signed_history(
+            tmp_path, "runtime", key, identity
+        )
 
     prior_artifact = tmp_path / "ORCA-Console-prior.zip"
     prior_artifact.write_bytes(b"verified prior app")
@@ -119,6 +157,8 @@ def build_bundle(
     prior_image.write_bytes(b"verified prior runtime image")
     prior_host = tmp_path / "prior-host-bundle.tar"
     prior_host.write_bytes(b"verified prior host bundle")
+    prior_source_archive = tmp_path / "prior-runtime-source.tar"
+    prior_source_archive.write_bytes(b"verified prior runtime source")
     prior_evidence = tmp_path / "prior-evidence"
     prior_evidence.mkdir()
     prior_sbom = prior_evidence / "sbom.spdx.json"
@@ -190,15 +230,18 @@ def build_bundle(
     preinstall_state = tmp_path / "preinstall-state.json"
     preinstall_payload = {
         "app_bundle_id": "com.orcamc.mac",
+        "app_host_id": "release-test-app-host",
         "app_present": False,
         "backend_image_sha256": digest(prior_image),
         "host_bundle_sha256": digest(prior_host),
-        "host_id": "release-test-host",
         "install_path": "/Applications/ORCA Console.app",
         "observed_at": datetime.now(timezone.utc)
         .isoformat(timespec="seconds")
         .replace("+00:00", "Z"),
         "runtime_commit": prior_runtime,
+        "runtime_commit_trust": rollback_commit_trust,
+        "runtime_host_id": "release-test-runtime-host",
+        "runtime_source_sha256": digest(prior_source_archive),
         "schema": "orca.console.preinstall-state.v1",
     }
     preinstall_payload.update(preinstall_overrides or {})
@@ -263,6 +306,8 @@ def build_bundle(
                 str(preinstall_state),
                 "--preinstall-state-signature",
                 str(preinstall_signature),
+                "--rollback-backend-source",
+                str(prior_source_archive),
             ]
         )
     command.extend(extra_generator_args or [])
@@ -355,6 +400,59 @@ def test_initial_install_bundle_is_self_contained_and_verifiable(
     assert verify_with_public_shell(bundle).returncode == 0
 
 
+def test_initial_install_accepts_release_attested_legacy_runtime(
+    tmp_path: Path,
+) -> None:
+    bundle = build_bundle(
+        tmp_path,
+        install_mode="initial-install",
+        rollback_commit_trust="preinstall-attested-legacy",
+    )
+
+    verify(bundle)
+
+    manifest = json.loads(
+        (Path(bundle["output"]) / "manifest.json").read_text(encoding="utf-8")
+    )
+    rollback = manifest["rollback"]
+    assert rollback["backend_commit_signed"] is False
+    assert rollback["backend_commit_trust"] == "preinstall-attested-legacy"
+    assert verify_with_public_shell(bundle).returncode == 0
+
+
+def test_initial_install_rejects_signed_runtime_as_legacy(tmp_path: Path) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(
+            tmp_path,
+            install_mode="initial-install",
+            rollback_commit_trust="git-ssh-signed",
+            preinstall_overrides={
+                "runtime_commit_trust": "preinstall-attested-legacy"
+            },
+        )
+
+
+def test_initial_install_rejects_unsigned_runtime_as_git_signed(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(
+            tmp_path,
+            install_mode="initial-install",
+            rollback_commit_trust="preinstall-attested-legacy",
+            preinstall_overrides={"runtime_commit_trust": "git-ssh-signed"},
+        )
+
+
+def test_initial_install_rejects_runtime_source_mismatch(tmp_path: Path) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(
+            tmp_path,
+            install_mode="initial-install",
+            preinstall_overrides={"runtime_source_sha256": "f" * 64},
+        )
+
+
 def test_initial_install_rejects_present_app_claim(tmp_path: Path) -> None:
     with pytest.raises(subprocess.CalledProcessError):
         build_bundle(
@@ -403,7 +501,20 @@ def test_initial_install_verifier_rejects_tampered_preinstall_state(
         verify(bundle)
 
 
+def test_initial_install_verifier_rejects_tampered_runtime_source(
+    tmp_path: Path,
+) -> None:
+    bundle = build_bundle(tmp_path, install_mode="initial-install")
+    source = Path(bundle["output"]) / "rollback/prior-runtime-source.tar"
+    source.write_bytes(source.read_bytes() + b"tamper")
+
+    with pytest.raises((ValueError, subprocess.CalledProcessError)):
+        verify(bundle)
+
+
 def test_preinstall_capture_records_absent_target(tmp_path: Path) -> None:
+    source = tmp_path / "runtime-source.tar"
+    source.write_bytes(b"source")
     image = tmp_path / "runtime.tar"
     image.write_bytes(b"runtime")
     host = tmp_path / "host.tar"
@@ -417,6 +528,12 @@ def test_preinstall_capture_records_absent_target(tmp_path: Path) -> None:
             str(PREINSTALL_CAPTURE),
             "--runtime-commit",
             "a" * 40,
+            "--runtime-commit-trust",
+            "git-ssh-signed",
+            "--runtime-host-id",
+            "runtime-host",
+            "--runtime-source",
+            str(source),
             "--backend-image",
             str(image),
             "--host-bundle",
@@ -434,9 +551,12 @@ def test_preinstall_capture_records_absent_target(tmp_path: Path) -> None:
     assert payload["app_present"] is False
     assert payload["backend_image_sha256"] == digest(image)
     assert payload["host_bundle_sha256"] == digest(host)
+    assert payload["runtime_source_sha256"] == digest(source)
 
 
 def test_preinstall_capture_refuses_existing_target(tmp_path: Path) -> None:
+    source = tmp_path / "runtime-source.tar"
+    source.write_bytes(b"source")
     image = tmp_path / "runtime.tar"
     image.write_bytes(b"runtime")
     host = tmp_path / "host.tar"
@@ -450,6 +570,12 @@ def test_preinstall_capture_refuses_existing_target(tmp_path: Path) -> None:
             str(PREINSTALL_CAPTURE),
             "--runtime-commit",
             "a" * 40,
+            "--runtime-commit-trust",
+            "git-ssh-signed",
+            "--runtime-host-id",
+            "runtime-host",
+            "--runtime-source",
+            str(source),
             "--backend-image",
             str(image),
             "--host-bundle",

@@ -26,6 +26,13 @@ def sha256(path: Path) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--runtime-commit", required=True)
+    parser.add_argument(
+        "--runtime-commit-trust",
+        choices=("git-ssh-signed", "preinstall-attested-legacy"),
+        required=True,
+    )
+    parser.add_argument("--runtime-host-id", required=True)
+    parser.add_argument("--runtime-source", type=Path, required=True)
     parser.add_argument("--backend-image", type=Path, required=True)
     parser.add_argument("--host-bundle", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
@@ -34,30 +41,36 @@ def main() -> int:
 
     if re.fullmatch(r"[0-9a-f]{40}", args.runtime_commit) is None:
         raise SystemExit("preinstall capture refused: invalid runtime commit")
+    runtime_source = args.runtime_source.resolve()
     backend_image = args.backend_image.resolve()
     host_bundle = args.host_bundle.resolve()
-    for path in (backend_image, host_bundle):
+    for path in (runtime_source, backend_image, host_bundle):
         if not path.is_file():
             raise SystemExit(f"preinstall capture refused: missing artifact: {path}")
     if args.install_path.exists() or args.install_path.is_symlink():
         raise SystemExit(
             f"preinstall capture refused: app target already exists: {args.install_path}"
         )
-    host_id = platform.node()
-    if re.fullmatch(r"[A-Za-z0-9._-]{1,255}", host_id) is None:
-        raise SystemExit("preinstall capture refused: invalid host identifier")
+    app_host_id = platform.node()
+    if re.fullmatch(r"[A-Za-z0-9._-]{1,255}", app_host_id) is None:
+        raise SystemExit("preinstall capture refused: invalid app host identifier")
+    if re.fullmatch(r"[A-Za-z0-9._-]{1,255}", args.runtime_host_id) is None:
+        raise SystemExit("preinstall capture refused: invalid runtime host identifier")
 
     payload = {
         "app_bundle_id": "com.orcamc.mac",
         "app_present": False,
         "backend_image_sha256": sha256(backend_image),
         "host_bundle_sha256": sha256(host_bundle),
-        "host_id": host_id,
+        "app_host_id": app_host_id,
         "install_path": str(args.install_path),
         "observed_at": datetime.now(timezone.utc)
         .isoformat(timespec="seconds")
         .replace("+00:00", "Z"),
         "runtime_commit": args.runtime_commit,
+        "runtime_commit_trust": args.runtime_commit_trust,
+        "runtime_host_id": args.runtime_host_id,
+        "runtime_source_sha256": sha256(runtime_source),
         "schema": "orca.console.preinstall-state.v1",
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)

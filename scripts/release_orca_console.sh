@@ -28,6 +28,9 @@ case "$INSTALL_MODE" in
     : "${ROLLBACK_ARTIFACT:?Set ROLLBACK_ARTIFACT to the exact prior app artifact}"
     ;;
   initial-install)
+    : "${ROLLBACK_BACKEND_SOURCE:?Set ROLLBACK_BACKEND_SOURCE to the exact prior runtime source artifact}"
+    : "${ROLLBACK_RUNTIME_HOST_ID:?Set ROLLBACK_RUNTIME_HOST_ID to the runtime host identifier}"
+    : "${ROLLBACK_COMMIT_TRUST:?Set ROLLBACK_COMMIT_TRUST to git-ssh-signed or preinstall-attested-legacy}"
     if [[ -e "/Applications/ORCA Console.app" || -L "/Applications/ORCA Console.app" ]]; then
       echo "release refused: initial-install target already exists" >&2
       exit 2
@@ -47,6 +50,14 @@ esac
   echo "release refused: TRUSTED_ALLOWED_SIGNERS_SHA256 must be 64 lowercase hex characters" >&2
   exit 2
 }
+if [[ "$INSTALL_MODE" == "initial-install" ]] && [[ "$ROLLBACK_COMMIT_TRUST" != "git-ssh-signed" && "$ROLLBACK_COMMIT_TRUST" != "preinstall-attested-legacy" ]]; then
+  echo "release refused: invalid ROLLBACK_COMMIT_TRUST" >&2
+  exit 2
+fi
+if [[ "$INSTALL_MODE" == "initial-install" ]] && [[ ! -f "$ROLLBACK_BACKEND_SOURCE" ]]; then
+  echo "release refused: rollback runtime source artifact is missing" >&2
+  exit 2
+fi
 if [[ "$INSTALL_MODE" == "upgrade" ]] && [[ ! -f "$ROLLBACK_EVIDENCE_DIR/manifest.json" || ! -f "$ROLLBACK_EVIDENCE_DIR/manifest.json.sig" || ! -f "$ROLLBACK_ARTIFACT" ]]; then
   echo "release refused: signed prior app evidence is incomplete" >&2
   exit 2
@@ -125,6 +136,9 @@ PY
 )"
   python3 scripts/capture_preinstall_state.py \
     --runtime-commit "$rollback_runtime_commit" \
+    --runtime-commit-trust "$ROLLBACK_COMMIT_TRUST" \
+    --runtime-host-id "$ROLLBACK_RUNTIME_HOST_ID" \
+    --runtime-source "$ROLLBACK_BACKEND_SOURCE" \
     --backend-image "$ROLLBACK_BACKEND_IMAGE" \
     --host-bundle "$ROLLBACK_HOST_BUNDLE" \
     --output "$preinstall_state"
@@ -135,6 +149,7 @@ PY
   rollback_mode_args=(
     --preinstall-state-contract "$preinstall_state"
     --preinstall-state-signature "$preinstall_state.sig"
+    --rollback-backend-source "$ROLLBACK_BACKEND_SOURCE"
   )
 fi
 

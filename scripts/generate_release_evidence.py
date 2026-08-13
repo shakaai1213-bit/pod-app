@@ -119,8 +119,10 @@ def write_git_commit_object(
     destination: Path,
     *,
     allowed_signers: Path,
+    require_signature: bool = True,
 ) -> dict[str, Any]:
-    verify_git_commit(root, commit, allowed_signers=allowed_signers)
+    if require_signature:
+        verify_git_commit(root, commit, allowed_signers=allowed_signers)
     payload = subprocess.check_output(
         ["git", "-C", str(root), "cat-file", "commit", commit]
     )
@@ -217,13 +219,16 @@ def verify_preinstall_state_contract(path: Path) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     expected_keys = {
         "app_bundle_id",
+        "app_host_id",
         "app_present",
         "backend_image_sha256",
         "host_bundle_sha256",
-        "host_id",
         "install_path",
         "observed_at",
         "runtime_commit",
+        "runtime_commit_trust",
+        "runtime_host_id",
+        "runtime_source_sha256",
         "schema",
     }
     if set(payload) != expected_keys:
@@ -236,11 +241,12 @@ def verify_preinstall_state_contract(path: Path) -> dict[str, Any]:
         raise ValueError("invalid preinstall app target")
     if payload.get("app_present") is not False:
         raise ValueError("first-install target must be absent")
-    host_id = payload.get("host_id")
-    if not isinstance(host_id, str) or re.fullmatch(
-        r"[A-Za-z0-9._-]{1,255}", host_id
-    ) is None:
-        raise ValueError("invalid preinstall host identifier")
+    for key in ("app_host_id", "runtime_host_id"):
+        host_id = payload.get(key)
+        if not isinstance(host_id, str) or re.fullmatch(
+            r"[A-Za-z0-9._-]{1,255}", host_id
+        ) is None:
+            raise ValueError(f"invalid preinstall {key.replace('_', ' ')}")
     observed_at = payload.get("observed_at")
     if not isinstance(observed_at, str) or not observed_at.endswith("Z"):
         raise ValueError("invalid preinstall observation time")
@@ -249,6 +255,14 @@ def verify_preinstall_state_contract(path: Path) -> dict[str, Any]:
     except ValueError as exc:
         raise ValueError("invalid preinstall observation time") from exc
     require_commit(payload.get("runtime_commit"), label="preinstall runtime commit")
+    if payload.get("runtime_commit_trust") not in {
+        "git-ssh-signed",
+        "preinstall-attested-legacy",
+    }:
+        raise ValueError("invalid preinstall runtime commit trust")
+    require_digest(
+        payload.get("runtime_source_sha256"), label="preinstall runtime source"
+    )
     require_digest(
         payload.get("backend_image_sha256"), label="preinstall backend image"
     )
@@ -367,6 +381,7 @@ def main() -> int:
     parser.add_argument("--rollback-evidence-dir", type=Path)
     parser.add_argument("--rollback-artifact", type=Path)
     parser.add_argument("--rollback-backend-root", type=Path, required=True)
+    parser.add_argument("--rollback-backend-source", type=Path)
     parser.add_argument("--rollback-backend-image", type=Path, required=True)
     parser.add_argument("--rollback-host-bundle", type=Path, required=True)
     parser.add_argument("--rollback-auth-state-contract", type=Path, required=True)
@@ -431,9 +446,10 @@ def main() -> int:
         if (
             args.preinstall_state_contract is None
             or args.preinstall_state_signature is None
+            or args.rollback_backend_source is None
         ):
             raise SystemExit(
-                "release evidence refused: initial install requires signed preinstall state"
+                "release evidence refused: initial install requires signed preinstall state and rollback source"
             )
         if args.rollback_evidence_dir is not None or args.rollback_artifact is not None:
             raise SystemExit(
@@ -464,29 +480,36 @@ def main() -> int:
     )
     auth_state = verify_auth_state_contract(auth_state_path)
     rollback_backend_root = args.rollback_backend_root.resolve()
+    rollback_backend_source = (
+        args.rollback_backend_source.resolve()
+        if args.rollback_backend_source is not None
+        else None
+    )
     rollback_backend_image = args.rollback_backend_image.resolve()
     rollback_host_bundle = args.rollback_host_bundle.resolve()
-    for path in (rollback_backend_image, rollback_host_bundle):
+    rollback_paths = [rollback_backend_image, rollback_host_bundle]
+    if rollback_backend_source is not None:
+        rollback_paths.append(rollback_backend_source)
+    for path in rollback_paths:
         if not path.is_file():
             raise SystemExit(
                 f"release evidence refused: rollback runtime artifact is missing: {path}"
             )
     rollback_backend_commit = auth_state["runtime_commit"]
-    try:
-        verify_git_commit(
-            rollback_backend_root,
-            rollback_backend_commit,
-            allowed_signers=allowed_signers,
-        )
-    except subprocess.CalledProcessError:
-        raise SystemExit(
-            "release evidence refused: rollback backend commit signature is not verified"
-        )
-
     prior: dict[str, Any] | None = None
     prior_manifest: dict[str, Any] | None = None
     preinstall_state: dict[str, Any] | None = None
     if args.install_mode == "upgrade":
+        try:
+            verify_git_commit(
+                rollback_backend_root,
+                rollback_backend_commit,
+                allowed_signers=allowed_signers,
+            )
+        except subprocess.CalledProcessError:
+            raise SystemExit(
+                "release evidence refused: rollback backend commit signature is not verified"
+            )
         prior = verify_prior_release(
             evidence_dir=args.rollback_evidence_dir.resolve(),
             artifact=args.rollback_artifact.resolve(),
@@ -524,6 +547,31 @@ def main() -> int:
             raise SystemExit(
                 "release evidence refused: preinstall state does not match rollback runtime"
             )
+        commit_trust = preinstall_state["runtime_commit_trust"]
+        try:
+            verify_git_commit(
+                rollback_backend_root,
+                rollback_backend_commit,
+                allowed_signers=allowed_signers,
+            )
+            rollback_commit_is_signed = True
+        except subprocess.CalledProcessError:
+            rollback_commit_is_signed = False
+        if commit_trust == "git-ssh-signed" and not rollback_commit_is_signed:
+            raise SystemExit(
+                "release evidence refused: preinstall state claims an unsigned rollback commit is signed"
+            )
+        if commit_trust == "preinstall-attested-legacy" and rollback_commit_is_signed:
+            raise SystemExit(
+                "release evidence refused: signed rollback commit cannot use legacy attestation"
+            )
+        assert rollback_backend_source is not None
+        if preinstall_state["runtime_source_sha256"] != sha256(
+            rollback_backend_source
+        ):
+            raise SystemExit(
+                "release evidence refused: preinstall state does not match rollback source"
+            )
         if preinstall_state["backend_image_sha256"] != sha256(rollback_backend_image):
             raise SystemExit(
                 "release evidence refused: preinstall state does not match rollback image"
@@ -559,6 +607,10 @@ def main() -> int:
         rollback_backend_commit,
         rollback_dir / "runtime-commit.object",
         allowed_signers=allowed_signers,
+        require_signature=(
+            args.install_mode == "upgrade"
+            or preinstall_state["runtime_commit_trust"] == "git-ssh-signed"
+        ),
     )
     rollback_runtime_object["name"] = "rollback/runtime-commit.object"
     rollback_image = copy_file(
@@ -633,6 +685,11 @@ def main() -> int:
         copied_preinstall_signature["name"] = (
             "rollback/preinstall-state.json.sig"
         )
+        rollback_source = copy_file(
+            rollback_backend_source,
+            rollback_dir / rollback_backend_source.name,
+        )
+        rollback_source["name"] = f"rollback/{rollback_backend_source.name}"
         rollback_contract = {
             "mode": "initial-install",
             "release_ref": "orca-console:first-install",
@@ -647,11 +704,16 @@ def main() -> int:
                 "prior_present": False,
                 "rollback_action": "remove_only_if_installed_app_matches_current_release_identity",
             },
+            "backend_commit_trust": preinstall_state["runtime_commit_trust"],
+            "backend_source": rollback_source,
         }
     rollback_contract.update(
         {
             "backend_commit": rollback_backend_commit,
-            "backend_commit_signed": True,
+            "backend_commit_signed": (
+                args.install_mode == "upgrade"
+                or preinstall_state["runtime_commit_trust"] == "git-ssh-signed"
+            ),
             "backend_commit_object": rollback_runtime_object,
             "backend_image": rollback_image,
             "host_bundle": rollback_host,

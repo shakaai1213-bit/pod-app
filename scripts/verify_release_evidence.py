@@ -96,6 +96,7 @@ def verify_commit_object(
     commit: str,
     *,
     allowed_signers: Path,
+    require_signature: bool = True,
 ) -> None:
     expected = require_commit(commit, "commit")
     with tempfile.TemporaryDirectory(prefix="orca-release-git-") as temp_dir:
@@ -120,21 +121,22 @@ def verify_commit_object(
         )
         if actual != expected:
             raise ValueError("commit object identity mismatch")
-        subprocess.run(
-            [
-                "git",
-                "-C",
-                str(repository),
-                "-c",
-                "gpg.format=ssh",
-                "-c",
-                f"gpg.ssh.allowedSignersFile={allowed_signers}",
-                "verify-commit",
-                expected,
-            ],
-            check=True,
-            capture_output=True,
-        )
+        if require_signature:
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(repository),
+                    "-c",
+                    "gpg.format=ssh",
+                    "-c",
+                    f"gpg.ssh.allowedSignersFile={allowed_signers}",
+                    "verify-commit",
+                    expected,
+                ],
+                check=True,
+                capture_output=True,
+            )
 
 
 def token_family_digest(family_hashes: list[str]) -> str:
@@ -185,13 +187,16 @@ def verify_preinstall_state(path: Path) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     expected_keys = {
         "app_bundle_id",
+        "app_host_id",
         "app_present",
         "backend_image_sha256",
         "host_bundle_sha256",
-        "host_id",
         "install_path",
         "observed_at",
         "runtime_commit",
+        "runtime_commit_trust",
+        "runtime_host_id",
+        "runtime_source_sha256",
         "schema",
     }
     if set(payload) != expected_keys:
@@ -204,11 +209,12 @@ def verify_preinstall_state(path: Path) -> dict[str, Any]:
         raise ValueError("invalid preinstall app target")
     if payload.get("app_present") is not False:
         raise ValueError("first-install target was not absent")
-    host_id = payload.get("host_id")
-    if not isinstance(host_id, str) or re.fullmatch(
-        r"[A-Za-z0-9._-]{1,255}", host_id
-    ) is None:
-        raise ValueError("invalid preinstall host identifier")
+    for key in ("app_host_id", "runtime_host_id"):
+        host_id = payload.get(key)
+        if not isinstance(host_id, str) or re.fullmatch(
+            r"[A-Za-z0-9._-]{1,255}", host_id
+        ) is None:
+            raise ValueError(f"invalid preinstall {key.replace('_', ' ')}")
     observed_at = payload.get("observed_at")
     if not isinstance(observed_at, str) or not observed_at.endswith("Z"):
         raise ValueError("invalid preinstall observation time")
@@ -217,6 +223,12 @@ def verify_preinstall_state(path: Path) -> dict[str, Any]:
     except ValueError as exc:
         raise ValueError("invalid preinstall observation time") from exc
     require_commit(payload.get("runtime_commit"), "preinstall runtime commit")
+    if payload.get("runtime_commit_trust") not in {
+        "git-ssh-signed",
+        "preinstall-attested-legacy",
+    }:
+        raise ValueError("invalid preinstall runtime commit trust")
+    require_digest(payload.get("runtime_source_sha256"), "preinstall runtime source")
     require_digest(payload.get("backend_image_sha256"), "preinstall backend image")
     require_digest(payload.get("host_bundle_sha256"), "preinstall host bundle")
     return payload
@@ -228,7 +240,7 @@ def verify_upgrade_rollback(
     *,
     allowed_signers: Path,
     signer_identity: str,
-) -> str:
+) -> tuple[str, bool]:
     allowed_keys = {
         "artifact",
         "auth_state",
@@ -342,7 +354,7 @@ def verify_upgrade_rollback(
         "rollback host bundle",
     ):
         raise ValueError("rollback host bundle disagrees with signed prior manifest")
-    return prior_runtime_commit
+    return prior_runtime_commit, True
 
 
 def verify_initial_install_rollback(
@@ -352,14 +364,16 @@ def verify_initial_install_rollback(
     allowed_signers: Path,
     release_created_at: datetime,
     signer_identity: str,
-) -> str:
+) -> tuple[str, bool]:
     allowed_keys = {
         "app",
         "auth_state",
         "backend_commit",
+        "backend_commit_trust",
         "backend_commit_object",
         "backend_commit_signed",
         "backend_image",
+        "backend_source",
         "host_bundle",
         "mode",
         "preinstall_state",
@@ -370,8 +384,6 @@ def verify_initial_install_rollback(
         raise ValueError("invalid initial-install rollback fields")
     if rollback.get("release_ref") != "orca-console:first-install":
         raise ValueError("invalid first-install release reference")
-    if rollback.get("backend_commit_signed") is not True:
-        raise ValueError("rollback runtime signature flag is invalid")
     if rollback.get("procedure") != ROLLBACK_PROCEDURE:
         raise ValueError("invalid rollback procedure")
     app = rollback.get("app") or {}
@@ -412,6 +424,17 @@ def verify_initial_install_rollback(
     )
     if preinstall["runtime_commit"] != runtime_commit:
         raise ValueError("preinstall state does not match rollback runtime")
+    commit_trust = preinstall["runtime_commit_trust"]
+    if rollback.get("backend_commit_trust") != commit_trust:
+        raise ValueError("preinstall commit trust does not match rollback contract")
+    commit_is_signed = commit_trust == "git-ssh-signed"
+    if rollback.get("backend_commit_signed") is not commit_is_signed:
+        raise ValueError("rollback runtime signature flag is invalid")
+    runtime_source = resolve_row(
+        evidence_dir, rollback.get("backend_source") or {}, "rollback runtime source"
+    )
+    if preinstall["runtime_source_sha256"] != sha256(runtime_source):
+        raise ValueError("preinstall state does not match rollback source")
     if preinstall["backend_image_sha256"] != require_digest(
         (rollback.get("backend_image") or {}).get("sha256"),
         "rollback backend image",
@@ -422,7 +445,7 @@ def verify_initial_install_rollback(
         "rollback host bundle",
     ):
         raise ValueError("preinstall state does not match rollback host bundle")
-    return runtime_commit
+    return runtime_commit, commit_is_signed
 
 
 def verify_bundle(
@@ -548,14 +571,14 @@ def verify_bundle(
     rollback = manifest.get("rollback") or {}
     mode = rollback.get("mode")
     if mode == "upgrade":
-        prior_runtime_commit = verify_upgrade_rollback(
+        prior_runtime_commit, rollback_commit_is_signed = verify_upgrade_rollback(
             evidence_dir,
             rollback,
             allowed_signers=allowed_signers,
             signer_identity=signer_identity,
         )
     elif mode == "initial-install":
-        prior_runtime_commit = verify_initial_install_rollback(
+        prior_runtime_commit, rollback_commit_is_signed = verify_initial_install_rollback(
             evidence_dir,
             rollback,
             allowed_signers=allowed_signers,
@@ -573,6 +596,7 @@ def verify_bundle(
         rollback_runtime_object,
         prior_runtime_commit,
         allowed_signers=allowed_signers,
+        require_signature=rollback_commit_is_signed,
     )
     resolve_row(
         evidence_dir, rollback.get("backend_image") or {}, "rollback runtime image"
