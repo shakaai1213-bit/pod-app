@@ -30,6 +30,13 @@ refresh families only by sorted SHA-256 values and never carries raw refresh
 tokens. If production has no active families, the signed list and count are
 both empty.
 
+Pipe one opaque active-family identifier per line from the production database
+into `scripts/capture_runtime_auth_state.py`, then sign the resulting file in
+the `orca-auth-state` namespace. The contract binds the exact runtime commit,
+runtime host, policy, and UTC capture time. Both release generation and public
+verification reject a snapshot older than 15 minutes, a future timestamp, or a
+host mismatch with the signed preinstall packet.
+
 Initial-install rollback revokes every native refresh family, removes the app
 only when the installed app matches the current release identity, restores the
 hash-bound prior runtime and host bundle, and reruns compatibility plus G1-G10

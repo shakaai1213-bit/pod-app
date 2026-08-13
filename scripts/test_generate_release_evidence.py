@@ -16,6 +16,7 @@ GENERATOR = Path(__file__).with_name("generate_release_evidence.py")
 VERIFIER = Path(__file__).with_name("verify_release_evidence.py")
 SHELL_VERIFIER = Path(__file__).with_name("verify_orca_console_release.sh")
 PREINSTALL_CAPTURE = Path(__file__).with_name("capture_preinstall_state.py")
+AUTH_STATE_CAPTURE = Path(__file__).with_name("capture_runtime_auth_state.py")
 
 
 def load_module(name: str, path: Path):
@@ -657,6 +658,69 @@ def test_preinstall_capture_refuses_existing_target(tmp_path: Path) -> None:
 
     assert result.returncode != 0
     assert "target already exists" in result.stderr
+
+
+def test_auth_state_capture_hashes_identifiers_without_retaining_them(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "auth-state.json"
+    subprocess.run(
+        [
+            "python3",
+            str(AUTH_STATE_CAPTURE),
+            "--runtime-commit",
+            "a" * 40,
+            "--runtime-host-id",
+            "runtime-host",
+            "--native-refresh-policy",
+            "legacy",
+            "--output",
+            str(output),
+        ],
+        input="family-b\nfamily-a\nfamily-a\n",
+        text=True,
+        check=True,
+        capture_output=True,
+    )
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    expected = sorted(
+        {
+            hashlib.sha256(value.encode()).hexdigest()
+            for value in ("family-a", "family-b")
+        }
+    )
+    assert payload["active_refresh_family_hashes"] == expected
+    assert payload["active_refresh_families"] == 2
+    assert "family-a" not in output.read_text(encoding="utf-8")
+    assert output.stat().st_mode & 0o777 == 0o600
+
+
+def test_auth_state_capture_supports_empty_active_set(tmp_path: Path) -> None:
+    output = tmp_path / "auth-state.json"
+    subprocess.run(
+        [
+            "python3",
+            str(AUTH_STATE_CAPTURE),
+            "--runtime-commit",
+            "a" * 40,
+            "--runtime-host-id",
+            "runtime-host",
+            "--native-refresh-policy",
+            "legacy",
+            "--output",
+            str(output),
+        ],
+        input="",
+        text=True,
+        check=True,
+        capture_output=True,
+    )
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["active_refresh_families"] == 0
+    assert payload["active_refresh_family_hashes"] == []
+    assert payload["active_refresh_family_digest"] == hashlib.sha256(b"\n").hexdigest()
 
 
 def test_public_shell_verifier_rejects_tampered_signed_manifest(tmp_path: Path) -> None:
