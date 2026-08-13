@@ -232,6 +232,7 @@ def build_bundle(
         "app_bundle_id": "com.orcamc.mac",
         "app_host_id": "release-test-app-host",
         "app_present": False,
+        "auth_state_sha256": digest(auth_state),
         "backend_image_sha256": digest(prior_image),
         "host_bundle_sha256": digest(prior_host),
         "install_path": "/Applications/ORCA Console.app",
@@ -453,6 +454,15 @@ def test_initial_install_rejects_runtime_source_mismatch(tmp_path: Path) -> None
         )
 
 
+def test_initial_install_rejects_auth_state_mismatch(tmp_path: Path) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(
+            tmp_path,
+            install_mode="initial-install",
+            preinstall_overrides={"auth_state_sha256": "f" * 64},
+        )
+
+
 def test_initial_install_rejects_present_app_claim(tmp_path: Path) -> None:
     with pytest.raises(subprocess.CalledProcessError):
         build_bundle(
@@ -515,6 +525,8 @@ def test_initial_install_verifier_rejects_tampered_runtime_source(
 def test_preinstall_capture_records_absent_target(tmp_path: Path) -> None:
     source = tmp_path / "runtime-source.tar"
     source.write_bytes(b"source")
+    auth_state = tmp_path / "auth-state.json"
+    auth_state.write_text("{}", encoding="utf-8")
     image = tmp_path / "runtime.tar"
     image.write_bytes(b"runtime")
     host = tmp_path / "host.tar"
@@ -538,6 +550,8 @@ def test_preinstall_capture_records_absent_target(tmp_path: Path) -> None:
             str(image),
             "--host-bundle",
             str(host),
+            "--auth-state-contract",
+            str(auth_state),
             "--install-path",
             str(target),
             "--output",
@@ -552,11 +566,14 @@ def test_preinstall_capture_records_absent_target(tmp_path: Path) -> None:
     assert payload["backend_image_sha256"] == digest(image)
     assert payload["host_bundle_sha256"] == digest(host)
     assert payload["runtime_source_sha256"] == digest(source)
+    assert payload["auth_state_sha256"] == digest(auth_state)
 
 
 def test_preinstall_capture_refuses_existing_target(tmp_path: Path) -> None:
     source = tmp_path / "runtime-source.tar"
     source.write_bytes(b"source")
+    auth_state = tmp_path / "auth-state.json"
+    auth_state.write_text("{}", encoding="utf-8")
     image = tmp_path / "runtime.tar"
     image.write_bytes(b"runtime")
     host = tmp_path / "host.tar"
@@ -580,6 +597,8 @@ def test_preinstall_capture_refuses_existing_target(tmp_path: Path) -> None:
             str(image),
             "--host-bundle",
             str(host),
+            "--auth-state-contract",
+            str(auth_state),
             "--install-path",
             str(target),
             "--output",

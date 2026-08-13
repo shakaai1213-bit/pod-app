@@ -221,6 +221,7 @@ def verify_preinstall_state_contract(path: Path) -> dict[str, Any]:
         "app_bundle_id",
         "app_host_id",
         "app_present",
+        "auth_state_sha256",
         "backend_image_sha256",
         "host_bundle_sha256",
         "install_path",
@@ -263,6 +264,7 @@ def verify_preinstall_state_contract(path: Path) -> dict[str, Any]:
     require_digest(
         payload.get("runtime_source_sha256"), label="preinstall runtime source"
     )
+    require_digest(payload.get("auth_state_sha256"), label="preinstall auth state")
     require_digest(
         payload.get("backend_image_sha256"), label="preinstall backend image"
     )
@@ -579,6 +581,10 @@ def main() -> int:
         if preinstall_state["host_bundle_sha256"] != sha256(rollback_host_bundle):
             raise SystemExit(
                 "release evidence refused: preinstall state does not match rollback host bundle"
+            )
+        if preinstall_state["auth_state_sha256"] != sha256(auth_state_path):
+            raise SystemExit(
+                "release evidence refused: preinstall state does not match rollback auth state"
             )
     transition_path = args.auth_transition_contract.resolve()
     verify_auth_transition_contract(transition_path)

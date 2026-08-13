@@ -11,7 +11,7 @@ signature namespace that binds:
 - the absent application target and bundle identifier;
 - the app host, runtime host, and observation time;
 - the exact rollback runtime commit object, source archive, image, and host
-  bundle.
+  bundle, and signed auth-state snapshot.
 
 The first bootstrap may attest an unsigned historical production commit only
 as `preinstall-attested-legacy`. The release-signed preinstall packet must bind

@@ -35,6 +35,7 @@ def main() -> int:
     parser.add_argument("--runtime-source", type=Path, required=True)
     parser.add_argument("--backend-image", type=Path, required=True)
     parser.add_argument("--host-bundle", type=Path, required=True)
+    parser.add_argument("--auth-state-contract", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--install-path", type=Path, default=INSTALL_PATH)
     args = parser.parse_args()
@@ -44,7 +45,8 @@ def main() -> int:
     runtime_source = args.runtime_source.resolve()
     backend_image = args.backend_image.resolve()
     host_bundle = args.host_bundle.resolve()
-    for path in (runtime_source, backend_image, host_bundle):
+    auth_state = args.auth_state_contract.resolve()
+    for path in (runtime_source, backend_image, host_bundle, auth_state):
         if not path.is_file():
             raise SystemExit(f"preinstall capture refused: missing artifact: {path}")
     if args.install_path.exists() or args.install_path.is_symlink():
@@ -60,6 +62,7 @@ def main() -> int:
     payload = {
         "app_bundle_id": "com.orcamc.mac",
         "app_present": False,
+        "auth_state_sha256": sha256(auth_state),
         "backend_image_sha256": sha256(backend_image),
         "host_bundle_sha256": sha256(host_bundle),
         "app_host_id": app_host_id,

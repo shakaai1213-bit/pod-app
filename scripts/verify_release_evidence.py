@@ -189,6 +189,7 @@ def verify_preinstall_state(path: Path) -> dict[str, Any]:
         "app_bundle_id",
         "app_host_id",
         "app_present",
+        "auth_state_sha256",
         "backend_image_sha256",
         "host_bundle_sha256",
         "install_path",
@@ -229,6 +230,7 @@ def verify_preinstall_state(path: Path) -> dict[str, Any]:
     }:
         raise ValueError("invalid preinstall runtime commit trust")
     require_digest(payload.get("runtime_source_sha256"), "preinstall runtime source")
+    require_digest(payload.get("auth_state_sha256"), "preinstall auth state")
     require_digest(payload.get("backend_image_sha256"), "preinstall backend image")
     require_digest(payload.get("host_bundle_sha256"), "preinstall host bundle")
     return payload
@@ -445,6 +447,11 @@ def verify_initial_install_rollback(
         "rollback host bundle",
     ):
         raise ValueError("preinstall state does not match rollback host bundle")
+    if preinstall["auth_state_sha256"] != require_digest(
+        (rollback.get("auth_state") or {}).get("sha256"),
+        "rollback auth state",
+    ):
+        raise ValueError("preinstall state does not match rollback auth state")
     return runtime_commit, commit_is_signed
 
 

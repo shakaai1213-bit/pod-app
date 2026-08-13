@@ -141,6 +141,7 @@ PY
     --runtime-source "$ROLLBACK_BACKEND_SOURCE" \
     --backend-image "$ROLLBACK_BACKEND_IMAGE" \
     --host-bundle "$ROLLBACK_HOST_BUNDLE" \
+    --auth-state-contract "$ROLLBACK_AUTH_STATE_CONTRACT" \
     --output "$preinstall_state"
   ssh-keygen -Y sign \
     -n orca-auth-state \
