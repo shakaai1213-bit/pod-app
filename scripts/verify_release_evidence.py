@@ -143,6 +143,15 @@ def token_family_digest(family_hashes: list[str]) -> str:
     return hashlib.sha256(("\n".join(family_hashes) + "\n").encode()).hexdigest()
 
 
+def require_utc_timestamp(value: Any, label: str) -> datetime:
+    if not isinstance(value, str) or not value.endswith("Z"):
+        raise ValueError(f"invalid {label}")
+    try:
+        return datetime.fromisoformat(value.removesuffix("Z") + "+00:00")
+    except ValueError as exc:
+        raise ValueError(f"invalid {label}") from exc
+
+
 def verify_auth_state(path: Path, *, runtime_commit: str) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if payload.get("schema") != "orca.native-auth.state.v1":
@@ -154,6 +163,12 @@ def verify_auth_state(path: Path, *, runtime_commit: str) -> dict[str, Any]:
         "device-key-bound",
     }:
         raise ValueError("invalid native refresh policy")
+    runtime_host_id = payload.get("runtime_host_id")
+    if not isinstance(runtime_host_id, str) or re.fullmatch(
+        r"[A-Za-z0-9._-]{1,255}", runtime_host_id
+    ) is None:
+        raise ValueError("invalid auth-state runtime host identifier")
+    require_utc_timestamp(payload.get("captured_at"), "auth-state capture time")
     if (
         type(payload.get("active_refresh_families")) is not int
         or payload["active_refresh_families"] < 0
@@ -216,13 +231,7 @@ def verify_preinstall_state(path: Path) -> dict[str, Any]:
             r"[A-Za-z0-9._-]{1,255}", host_id
         ) is None:
             raise ValueError(f"invalid preinstall {key.replace('_', ' ')}")
-    observed_at = payload.get("observed_at")
-    if not isinstance(observed_at, str) or not observed_at.endswith("Z"):
-        raise ValueError("invalid preinstall observation time")
-    try:
-        datetime.fromisoformat(observed_at.removesuffix("Z") + "+00:00")
-    except ValueError as exc:
-        raise ValueError("invalid preinstall observation time") from exc
+    require_utc_timestamp(payload.get("observed_at"), "preinstall observation time")
     require_commit(payload.get("runtime_commit"), "preinstall runtime commit")
     if payload.get("runtime_commit_trust") not in {
         "git-ssh-signed",
@@ -242,7 +251,7 @@ def verify_upgrade_rollback(
     *,
     allowed_signers: Path,
     signer_identity: str,
-) -> tuple[str, bool]:
+) -> tuple[str, bool, dict[str, Any] | None]:
     allowed_keys = {
         "artifact",
         "auth_state",
@@ -356,7 +365,7 @@ def verify_upgrade_rollback(
         "rollback host bundle",
     ):
         raise ValueError("rollback host bundle disagrees with signed prior manifest")
-    return prior_runtime_commit, True
+    return prior_runtime_commit, True, None
 
 
 def verify_initial_install_rollback(
@@ -366,7 +375,7 @@ def verify_initial_install_rollback(
     allowed_signers: Path,
     release_created_at: datetime,
     signer_identity: str,
-) -> tuple[str, bool]:
+) -> tuple[str, bool, dict[str, Any] | None]:
     allowed_keys = {
         "app",
         "auth_state",
@@ -452,7 +461,7 @@ def verify_initial_install_rollback(
         "rollback auth state",
     ):
         raise ValueError("preinstall state does not match rollback auth state")
-    return runtime_commit, commit_is_signed
+    return runtime_commit, commit_is_signed, preinstall
 
 
 def verify_bundle(
@@ -578,14 +587,22 @@ def verify_bundle(
     rollback = manifest.get("rollback") or {}
     mode = rollback.get("mode")
     if mode == "upgrade":
-        prior_runtime_commit, rollback_commit_is_signed = verify_upgrade_rollback(
+        (
+            prior_runtime_commit,
+            rollback_commit_is_signed,
+            preinstall_state,
+        ) = verify_upgrade_rollback(
             evidence_dir,
             rollback,
             allowed_signers=allowed_signers,
             signer_identity=signer_identity,
         )
     elif mode == "initial-install":
-        prior_runtime_commit, rollback_commit_is_signed = verify_initial_install_rollback(
+        (
+            prior_runtime_commit,
+            rollback_commit_is_signed,
+            preinstall_state,
+        ) = verify_initial_install_rollback(
             evidence_dir,
             rollback,
             allowed_signers=allowed_signers,
@@ -624,6 +641,27 @@ def verify_bundle(
         namespace="orca-auth-state",
     )
     auth_state = verify_auth_state(auth_path, runtime_commit=prior_runtime_commit)
+    auth_captured_at = require_utc_timestamp(
+        auth_state["captured_at"], "auth-state capture time"
+    )
+    auth_state_age = release_created_at - auth_captured_at
+    if auth_state_age.total_seconds() < -60 or auth_state_age.total_seconds() > 900:
+        raise ValueError("rollback auth state is stale or future-dated")
+    if (
+        preinstall_state is not None
+        and auth_state["runtime_host_id"] != preinstall_state["runtime_host_id"]
+    ):
+        raise ValueError("preinstall state does not match auth-state host")
+    if preinstall_state is not None:
+        preinstall_observed_at = require_utc_timestamp(
+            preinstall_state["observed_at"], "preinstall observation time"
+        )
+        auth_observation_age = preinstall_observed_at - auth_captured_at
+        if (
+            auth_observation_age.total_seconds() < -60
+            or auth_observation_age.total_seconds() > 900
+        ):
+            raise ValueError("auth state is outside the preinstall observation window")
     if auth_row.get("active_refresh_family_digest") != auth_state.get(
         "active_refresh_family_digest"
     ):

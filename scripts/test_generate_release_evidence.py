@@ -126,6 +126,7 @@ def build_bundle(
     install_mode: str = "upgrade",
     rollback_commit_trust: str = "git-ssh-signed",
     preinstall_overrides: dict[str, object] | None = None,
+    auth_state_overrides: dict[str, object] | None = None,
     extra_generator_args: list[str] | None = None,
 ) -> dict[str, object]:
     key = tmp_path / "release-key"
@@ -196,20 +197,23 @@ def build_bundle(
 
     family_hashes = ["a" * 64, "b" * 64]
     auth_state = tmp_path / "rollback-auth-state.json"
-    auth_state.write_text(
-        json.dumps(
-            {
-                "schema": "orca.native-auth.state.v1",
-                "runtime_commit": prior_runtime,
-                "native_refresh_policy": "legacy",
-                "active_refresh_families": len(family_hashes),
-                "active_refresh_family_hashes": family_hashes,
-                "active_refresh_family_digest": release_evidence.token_family_digest(
-                    family_hashes
-                ),
-            },
-            sort_keys=True,
+    auth_payload = {
+        "schema": "orca.native-auth.state.v1",
+        "runtime_commit": prior_runtime,
+        "runtime_host_id": "release-test-runtime-host",
+        "captured_at": datetime.now(timezone.utc)
+        .isoformat(timespec="seconds")
+        .replace("+00:00", "Z"),
+        "native_refresh_policy": "legacy",
+        "active_refresh_families": len(family_hashes),
+        "active_refresh_family_hashes": family_hashes,
+        "active_refresh_family_digest": release_evidence.token_family_digest(
+            family_hashes
         ),
+    }
+    auth_payload.update(auth_state_overrides or {})
+    auth_state.write_text(
+        json.dumps(auth_payload, sort_keys=True),
         encoding="utf-8",
     )
     auth_signature = sign(auth_state, key, "orca-auth-state")
@@ -463,6 +467,27 @@ def test_initial_install_rejects_auth_state_mismatch(tmp_path: Path) -> None:
         )
 
 
+def test_initial_install_rejects_auth_state_host_mismatch(tmp_path: Path) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(
+            tmp_path,
+            install_mode="initial-install",
+            preinstall_overrides={"runtime_host_id": "foreign-runtime-host"},
+        )
+
+
+def test_initial_install_rejects_stale_auth_state(tmp_path: Path) -> None:
+    stale = (datetime.now(timezone.utc) - timedelta(minutes=16)).isoformat(
+        timespec="seconds"
+    ).replace("+00:00", "Z")
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(
+            tmp_path,
+            install_mode="initial-install",
+            auth_state_overrides={"captured_at": stale},
+        )
+
+
 def test_initial_install_rejects_present_app_claim(tmp_path: Path) -> None:
     with pytest.raises(subprocess.CalledProcessError):
         build_bundle(
@@ -526,7 +551,18 @@ def test_preinstall_capture_records_absent_target(tmp_path: Path) -> None:
     source = tmp_path / "runtime-source.tar"
     source.write_bytes(b"source")
     auth_state = tmp_path / "auth-state.json"
-    auth_state.write_text("{}", encoding="utf-8")
+    auth_state.write_text(
+        json.dumps(
+            {
+                "captured_at": datetime.now(timezone.utc)
+                .isoformat(timespec="seconds")
+                .replace("+00:00", "Z"),
+                "runtime_commit": "a" * 40,
+                "runtime_host_id": "runtime-host",
+            }
+        ),
+        encoding="utf-8",
+    )
     image = tmp_path / "runtime.tar"
     image.write_bytes(b"runtime")
     host = tmp_path / "host.tar"
@@ -573,7 +609,18 @@ def test_preinstall_capture_refuses_existing_target(tmp_path: Path) -> None:
     source = tmp_path / "runtime-source.tar"
     source.write_bytes(b"source")
     auth_state = tmp_path / "auth-state.json"
-    auth_state.write_text("{}", encoding="utf-8")
+    auth_state.write_text(
+        json.dumps(
+            {
+                "captured_at": datetime.now(timezone.utc)
+                .isoformat(timespec="seconds")
+                .replace("+00:00", "Z"),
+                "runtime_commit": "a" * 40,
+                "runtime_host_id": "runtime-host",
+            }
+        ),
+        encoding="utf-8",
+    )
     image = tmp_path / "runtime.tar"
     image.write_bytes(b"runtime")
     host = tmp_path / "host.tar"
@@ -742,6 +789,10 @@ def test_auth_state_rejects_count_only_contract(tmp_path: Path) -> None:
             {
                 "schema": "orca.native-auth.state.v1",
                 "runtime_commit": "1" * 40,
+                "runtime_host_id": "runtime-host",
+                "captured_at": datetime.now(timezone.utc)
+                .isoformat(timespec="seconds")
+                .replace("+00:00", "Z"),
                 "native_refresh_policy": "legacy",
                 "active_refresh_families": 2,
             }
@@ -761,6 +812,10 @@ def test_auth_state_rejects_boolean_family_count(tmp_path: Path) -> None:
             {
                 "schema": "orca.native-auth.state.v1",
                 "runtime_commit": "1" * 40,
+                "runtime_host_id": "runtime-host",
+                "captured_at": datetime.now(timezone.utc)
+                .isoformat(timespec="seconds")
+                .replace("+00:00", "Z"),
                 "native_refresh_policy": "legacy",
                 "active_refresh_families": True,
                 "active_refresh_family_hashes": family_hashes,

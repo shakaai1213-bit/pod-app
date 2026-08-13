@@ -58,6 +58,23 @@ def main() -> int:
         raise SystemExit("preinstall capture refused: invalid app host identifier")
     if re.fullmatch(r"[A-Za-z0-9._-]{1,255}", args.runtime_host_id) is None:
         raise SystemExit("preinstall capture refused: invalid runtime host identifier")
+    try:
+        auth_payload = json.loads(auth_state.read_text(encoding="utf-8"))
+        captured_at = str(auth_payload["captured_at"])
+        if not captured_at.endswith("Z"):
+            raise ValueError
+        auth_captured_at = datetime.fromisoformat(
+            captured_at.removesuffix("Z") + "+00:00"
+        )
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise SystemExit("preinstall capture refused: invalid auth-state capture") from exc
+    if auth_payload.get("runtime_commit") != args.runtime_commit:
+        raise SystemExit("preinstall capture refused: auth state does not match runtime")
+    if auth_payload.get("runtime_host_id") != args.runtime_host_id:
+        raise SystemExit("preinstall capture refused: auth state does not match host")
+    auth_state_age = datetime.now(timezone.utc) - auth_captured_at
+    if auth_state_age.total_seconds() < -60 or auth_state_age.total_seconds() > 900:
+        raise SystemExit("preinstall capture refused: auth state is stale or future-dated")
 
     payload = {
         "app_bundle_id": "com.orcamc.mac",

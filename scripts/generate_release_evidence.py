@@ -175,6 +175,15 @@ def token_family_digest(family_hashes: list[str]) -> str:
     return hashlib.sha256(("\n".join(family_hashes) + "\n").encode()).hexdigest()
 
 
+def require_utc_timestamp(value: Any, *, label: str) -> datetime:
+    if not isinstance(value, str) or not value.endswith("Z"):
+        raise ValueError(f"invalid {label}")
+    try:
+        return datetime.fromisoformat(value.removesuffix("Z") + "+00:00")
+    except ValueError as exc:
+        raise ValueError(f"invalid {label}") from exc
+
+
 def verify_auth_state_contract(path: Path) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if payload.get("schema") != "orca.native-auth.state.v1":
@@ -182,6 +191,12 @@ def verify_auth_state_contract(path: Path) -> dict[str, Any]:
     require_commit(payload.get("runtime_commit"), label="auth-state runtime commit")
     if payload.get("native_refresh_policy") not in {"legacy", "device-key-bound"}:
         raise ValueError("invalid native refresh policy")
+    runtime_host_id = payload.get("runtime_host_id")
+    if not isinstance(runtime_host_id, str) or re.fullmatch(
+        r"[A-Za-z0-9._-]{1,255}", runtime_host_id
+    ) is None:
+        raise ValueError("invalid auth-state runtime host identifier")
+    require_utc_timestamp(payload.get("captured_at"), label="auth-state capture time")
     if (
         type(payload.get("active_refresh_families")) is not int
         or payload["active_refresh_families"] < 0
@@ -248,13 +263,9 @@ def verify_preinstall_state_contract(path: Path) -> dict[str, Any]:
             r"[A-Za-z0-9._-]{1,255}", host_id
         ) is None:
             raise ValueError(f"invalid preinstall {key.replace('_', ' ')}")
-    observed_at = payload.get("observed_at")
-    if not isinstance(observed_at, str) or not observed_at.endswith("Z"):
-        raise ValueError("invalid preinstall observation time")
-    try:
-        datetime.fromisoformat(observed_at.removesuffix("Z") + "+00:00")
-    except ValueError as exc:
-        raise ValueError("invalid preinstall observation time") from exc
+    require_utc_timestamp(
+        payload.get("observed_at"), label="preinstall observation time"
+    )
     require_commit(payload.get("runtime_commit"), label="preinstall runtime commit")
     if payload.get("runtime_commit_trust") not in {
         "git-ssh-signed",
@@ -481,6 +492,14 @@ def main() -> int:
         namespace="orca-auth-state",
     )
     auth_state = verify_auth_state_contract(auth_state_path)
+    auth_captured_at = require_utc_timestamp(
+        auth_state["captured_at"], label="auth-state capture time"
+    )
+    auth_state_age = datetime.now(timezone.utc) - auth_captured_at
+    if auth_state_age.total_seconds() < -60 or auth_state_age.total_seconds() > 900:
+        raise SystemExit(
+            "release evidence refused: rollback auth state is stale or future-dated"
+        )
     rollback_backend_root = args.rollback_backend_root.resolve()
     rollback_backend_source = (
         args.rollback_backend_source.resolve()
@@ -548,6 +567,18 @@ def main() -> int:
         if preinstall_state["runtime_commit"] != rollback_backend_commit:
             raise SystemExit(
                 "release evidence refused: preinstall state does not match rollback runtime"
+            )
+        if preinstall_state["runtime_host_id"] != auth_state["runtime_host_id"]:
+            raise SystemExit(
+                "release evidence refused: preinstall state does not match auth-state host"
+            )
+        auth_observation_age = observed_at - auth_captured_at
+        if (
+            auth_observation_age.total_seconds() < -60
+            or auth_observation_age.total_seconds() > 900
+        ):
+            raise SystemExit(
+                "release evidence refused: auth state is outside the preinstall observation window"
             )
         commit_trust = preinstall_state["runtime_commit_trust"]
         try:
