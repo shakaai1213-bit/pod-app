@@ -199,6 +199,7 @@ final class OrcaMacModelTests: XCTestCase {
         let service = OrcaConsoleService(
             serverURL: URL(string: "http://127.0.0.1:8000")!,
             tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
             session: session
         )
         let snapshot = try await service.snapshot(for: .work)
@@ -230,12 +231,47 @@ final class OrcaMacModelTests: XCTestCase {
         let service = OrcaConsoleService(
             serverURL: URL(string: "http://127.0.0.1:8000")!,
             tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
             session: session
         )
 
         let profiles = try await service.agentProfiles()
         XCTAssertEqual(profiles.map(\.id), ["coral", "reef"])
         XCTAssertEqual(profiles.first?.role, "Operations and surfaces")
+    }
+
+    func testConversationPersistenceChangesWithOrganizationAndClearsLegacyKey() {
+        let suiteName = "OrcaMacModelTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let origin = "http://100.104.72.62:8000"
+        let agentID = "coral"
+        let orgAKey = OrcaMacModel.conversationDefaultsKey(
+            origin: origin,
+            organizationID: "organization-a",
+            agentID: agentID
+        )
+        let orgBKey = OrcaMacModel.conversationDefaultsKey(
+            origin: origin,
+            organizationID: "organization-b",
+            agentID: agentID
+        )
+        defaults.set("legacy-conversation", forKey: "orca.mac.conversation.coral")
+        defaults.set("organization-a-conversation", forKey: orgAKey)
+        defaults.set("organization-b-conversation", forKey: orgBKey)
+
+        let model = OrcaMacModel(
+            tokenStore: TestRuntimeTokenStore(token: nil),
+            defaults: defaults
+        )
+        model.activateConversationScope(origin: origin, organizationID: "organization-a")
+        XCTAssertEqual(model.selectedConversation.conversationID, "organization-a-conversation")
+        XCTAssertNil(defaults.string(forKey: "orca.mac.conversation.coral"))
+
+        model.conversations[agentID] = ConversationState(conversationID: "in-memory-organization-a")
+        model.activateConversationScope(origin: origin, organizationID: "organization-b")
+        XCTAssertEqual(model.selectedConversation.conversationID, "organization-b-conversation")
+        XCTAssertNotEqual(orgAKey, orgBKey)
     }
 
     func testRuntimeContractProbeSeparatesUpgradeFromCredentialGate() async {

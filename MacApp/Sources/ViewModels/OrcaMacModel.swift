@@ -1,4 +1,5 @@
 import AuthenticationServices
+import CryptoKit
 import Foundation
 import Observation
 import OrcaRuntimeContracts
@@ -32,6 +33,7 @@ final class OrcaMacModel {
     @ObservationIgnored private var consoleService: OrcaConsoleService?
     @ObservationIgnored private var authService: OrcaNativeAuthService?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
+    @ObservationIgnored private var conversationScope: (origin: String, organizationID: String)?
 
     init(
         tokenStore: any RuntimeTokenStoring = RuntimeTokenStore(),
@@ -112,6 +114,7 @@ final class OrcaMacModel {
                 service = nil
                 consoleService = nil
                 authService = nil
+                deactivateConversationScope()
                 switch await OrcaRuntimeService.probeContract(at: endpoint) {
                 case .available:
                     connectionState = .credentialsRequired
@@ -131,6 +134,14 @@ final class OrcaMacModel {
                 tokenStore: tokenStore
             )
             _ = try await nextAuthService.validAccessToken()
+            guard let boundCredential = try await tokenStore.loadCredential(for: origin),
+                  !boundCredential.organizationID.isEmpty else {
+                throw OrcaNativeAuthError.missingSession
+            }
+            activateConversationScope(
+                origin: origin,
+                organizationID: boundCredential.organizationID
+            )
             let nextService = OrcaRuntimeService(serverURL: endpoint, authService: nextAuthService)
             let compatibility = try await nextService.verifyCompatibility()
             authService = nextAuthService
@@ -160,10 +171,12 @@ final class OrcaMacModel {
         } catch let error as OrcaRuntimeClientError {
             service = nil
             consoleService = nil
+            deactivateConversationScope()
             connectionState = .incompatible(error.localizedDescription)
         } catch {
             service = nil
             consoleService = nil
+            deactivateConversationScope()
             connectionState = .unavailable(error.localizedDescription)
         }
     }
@@ -215,6 +228,7 @@ final class OrcaMacModel {
             service = nil
             consoleService = nil
             authService = nil
+            deactivateConversationScope()
             refreshTask?.cancel()
             await connect()
         } catch {
@@ -430,8 +444,44 @@ final class OrcaMacModel {
         }
     }
 
+    static func conversationDefaultsKey(
+        origin: String,
+        organizationID: String,
+        agentID: String
+    ) -> String {
+        let material = "\(origin)\n\(organizationID)\n\(agentID.lowercased())"
+        let digest = SHA256.hash(data: Data(material.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+        return "orca.mac.conversation.v2.\(digest)"
+    }
+
+    func activateConversationScope(origin: String, organizationID: String) {
+        let next = (origin: origin, organizationID: organizationID)
+        if conversationScope?.origin != next.origin
+            || conversationScope?.organizationID != next.organizationID {
+            conversations.removeAll()
+        }
+        conversationScope = next
+        for key in defaults.dictionaryRepresentation().keys
+            where key.hasPrefix("orca.mac.conversation.")
+                && !key.hasPrefix("orca.mac.conversation.v2.") {
+            defaults.removeObject(forKey: key)
+        }
+    }
+
+    private func deactivateConversationScope() {
+        conversationScope = nil
+        conversations.removeAll()
+    }
+
     private func storedConversationID(for agentID: String) -> String? {
-        defaults.string(forKey: "orca.mac.conversation.\(agentID)")
+        guard let conversationScope else { return nil }
+        return defaults.string(forKey: Self.conversationDefaultsKey(
+            origin: conversationScope.origin,
+            organizationID: conversationScope.organizationID,
+            agentID: agentID
+        ))
     }
 
     private func loadAllMessages(
@@ -456,7 +506,12 @@ final class OrcaMacModel {
     }
 
     private func storeConversationID(_ conversationID: String, for agentID: String) {
-        defaults.set(conversationID, forKey: "orca.mac.conversation.\(agentID)")
+        guard let conversationScope else { return }
+        defaults.set(conversationID, forKey: Self.conversationDefaultsKey(
+            origin: conversationScope.origin,
+            organizationID: conversationScope.organizationID,
+            agentID: agentID
+        ))
     }
 
     private static func transcriptMessage(
