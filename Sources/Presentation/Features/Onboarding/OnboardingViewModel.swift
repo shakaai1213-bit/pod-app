@@ -1,6 +1,7 @@
 import SwiftUI
 import Observation
 import AuthenticationServices
+import OrcaRuntimeContracts
 
 // MARK: - OnboardingPage
 
@@ -95,11 +96,14 @@ final class OnboardingViewModel {
 
             var request = URLRequest(url: url)
             request.httpMethod = "GET"
-            request.setValue("Bearer \(trimmedToken)", forHTTPHeaderField: "Authorization")
+            try OrcaDeviceIdentity.authorize(&request, token: trimmedToken)
             request.setValue("application/json", forHTTPHeaderField: "Accept")
             request.timeoutInterval = 15
 
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await OrcaSecureURLSession.make().data(for: request)
+            guard OrcaSecureURLSession.responseStayedOnOrigin(response, requestURL: url) else {
+                throw URLError(.redirectToNonExistentLocation)
+            }
 
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw URLError(.badServerResponse)
@@ -187,11 +191,16 @@ final class OnboardingViewModel {
         guard let url = URL(string: "\(baseURL)/api/v1/agents") else { return nil }
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        do {
+            try OrcaDeviceIdentity.authorize(&req, token: token)
+        } catch {
+            return nil
+        }
         req.timeoutInterval = 15
         do {
-            let (data, response) = try await URLSession.shared.data(for: req)
+            let (data, response) = try await OrcaSecureURLSession.make().data(for: req)
             guard let http = response as? HTTPURLResponse,
+                  OrcaSecureURLSession.responseStayedOnOrigin(response, requestURL: url),
                   (200...299).contains(http.statusCode) else { return nil }
             let decoder = JSONDecoder()
             decoder.keyDecodingStrategy = .convertFromSnakeCase

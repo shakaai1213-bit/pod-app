@@ -1,4 +1,5 @@
 import Foundation
+import OrcaRuntimeContracts
 
 // MARK: - Supporting Types
 
@@ -74,7 +75,7 @@ actor APIClient {
             let config = URLSessionConfiguration.default
             config.timeoutIntervalForRequest = 30
             config.timeoutIntervalForResource = 60
-            self.session = URLSession(configuration: config)
+            self.session = OrcaSecureURLSession.make(configuration: config)
         }
 
         self.decoder = JSONDecoder()
@@ -129,10 +130,12 @@ actor APIClient {
         var request = URLRequest(url: URL(string: endpoint)!)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue(OrcaDeviceIdentity.current(), forHTTPHeaderField: "X-ORCA-Device-ID")
+        try OrcaDeviceIdentity.authorize(&request, token: token)
 
         let (data, response) = try await session.data(for: request)
+        guard OrcaSecureURLSession.responseStayedOnOrigin(response, requestURL: request.url!) else {
+            throw APIError(code: 0, message: "ORCA redirected outside its approved origin")
+        }
         try validateResponse(response, data: data)
 
         self.authToken = token
@@ -159,6 +162,9 @@ actor APIClient {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let body = body {
+            request.httpBody = try encoder.encode(AnyEncodable(body))
+        }
 
         if includeAgentToken {
             // Strict agent routes receive only the named-agent credential.
@@ -180,13 +186,8 @@ actor APIClient {
                 currentToken = await keychainTokenProvider()
             }
             if let token = currentToken {
-                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-                request.setValue(OrcaDeviceIdentity.current(), forHTTPHeaderField: "X-ORCA-Device-ID")
+                try OrcaDeviceIdentity.authorize(&request, token: token)
             }
-        }
-
-        if let body = body {
-            request.httpBody = try encoder.encode(AnyEncodable(body))
         }
 
         return request
@@ -277,7 +278,7 @@ actor APIClient {
     }
 
     func perform<T: Decodable>(_ request: URLRequest) async throws -> T {
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await performData(request)
         try validateResponse(response, data: data)
 
         if data.isEmpty, T.self == EmptyResponse.self {
@@ -290,6 +291,15 @@ actor APIClient {
             let body = String(data: data.prefix(500), encoding: .utf8) ?? "<\(data.count) bytes>"
             throw APIError(code: 0, message: "Decoding failed: \(error) | Response: \(body)")
         }
+    }
+
+    func performData(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        let (data, response) = try await session.data(for: request)
+        guard let requestURL = request.url,
+              OrcaSecureURLSession.responseStayedOnOrigin(response, requestURL: requestURL) else {
+            throw APIError(code: 0, message: "ORCA redirected outside its approved origin")
+        }
+        return (data, response)
     }
 
     private static func decodeORCADate(from decoder: Decoder) throws -> Date {

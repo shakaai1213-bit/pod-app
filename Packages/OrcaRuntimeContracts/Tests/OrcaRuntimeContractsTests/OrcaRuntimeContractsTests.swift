@@ -1,4 +1,6 @@
 import Foundation
+import HTTPTypes
+import OpenAPIRuntime
 import Testing
 @testable import OrcaRuntimeContracts
 
@@ -16,6 +18,53 @@ private func canonicalTurn() throws -> Components.Schemas.ChatRuntimeTurnRead {
         Components.Schemas.ChatRuntimeTurnRead.self,
         from: Data(contentsOf: fixtureURL)
     )
+}
+
+@Test(arguments: [301, 302, 303, 307, 308])
+func credentialRedirectsAreNeverFollowed(status: Int) throws {
+    let source = try #require(URL(string: "https://orca.test/api/v1/agents"))
+    let destination = try #require(URL(string: "https://attacker.test/capture"))
+    let response = try #require(HTTPURLResponse(
+        url: source,
+        statusCode: status,
+        httpVersion: "HTTP/1.1",
+        headerFields: ["Location": destination.absoluteString]
+    ))
+    #expect(OrcaRedirectPolicy.followedRequest(
+        for: response,
+        proposed: URLRequest(url: destination)
+    ) == nil)
+}
+
+@Test func opaqueServiceTokensDoNotInvokeNativeDeviceProof() async throws {
+    actor Counter {
+        var value = 0
+        func increment() { value += 1 }
+    }
+    let counter = Counter()
+    let middleware = OrcaRuntimeAuthorizationMiddleware(
+        tokenProvider: { "opaque-local-control-token" },
+        deviceIDProvider: { "local-device" },
+        requestProofProvider: { _, _, _, _ in
+            await counter.increment()
+            return ["X-ORCA-Proof-Signature": "should-not-be-added"]
+        }
+    )
+    let request = HTTPRequest(method: .get, scheme: "https", authority: "orca.test", path: "/api/v1/agents")
+
+    let (response, _) = try await middleware.intercept(
+        request,
+        body: nil,
+        baseURL: URL(string: "https://orca.test")!,
+        operationID: "opaque-token-test"
+    ) { forwarded, body, _ in
+        #expect(forwarded.headerFields[.authorization] == "Bearer opaque-local-control-token")
+        #expect(forwarded.headerFields[HTTPField.Name("X-ORCA-Proof-Signature")!] == nil)
+        return (HTTPResponse(status: .ok), body)
+    }
+
+    #expect(response.status == .ok)
+    #expect(await counter.value == 0)
 }
 
 @Test func contractMetadataIsPinned() {

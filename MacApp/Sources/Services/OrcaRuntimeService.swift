@@ -20,11 +20,19 @@ actor OrcaRuntimeService: OrcaRuntimeServing {
         client = OrcaRuntimeClient(
             serverURL: serverURL,
             tokenProvider: { try? await authService.validAccessToken() },
-            deviceIDProvider: { await authService.boundDeviceID() }
+            deviceIDProvider: { await authService.boundDeviceID() },
+            requestProofProvider: { method, target, body, token in
+                try await authService.requestProofHeaders(
+                    method: method,
+                    target: target,
+                    body: body,
+                    token: token
+                )
+            }
         )
     }
 
-    static func probeContract(at serverURL: URL, session: URLSession = .shared) async -> RuntimeContractReachability {
+    static func probeContract(at serverURL: URL, session: URLSession? = nil) async -> RuntimeContractReachability {
         guard let url = URL(
             string: "/api/v1/chat-runtime/v1/contract",
             relativeTo: serverURL
@@ -34,9 +42,12 @@ actor OrcaRuntimeService: OrcaRuntimeServing {
         var request = URLRequest(url: url)
         request.timeoutInterval = 8
         do {
-            let (_, response) = try await session.data(for: request)
+            let (_, response) = try await (session ?? OrcaSecureURLSession.make()).data(for: request)
             guard let http = response as? HTTPURLResponse else {
                 return .unavailable("ORCA returned an unreadable response.")
+            }
+            guard OrcaSecureURLSession.responseStayedOnOrigin(response, requestURL: url) else {
+                return .unavailable("ORCA redirected outside its approved origin.")
             }
             switch http.statusCode {
             case 200, 401, 403:

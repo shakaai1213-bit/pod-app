@@ -261,20 +261,15 @@ final class MakerViewModel {
     // MARK: Private
 
     private func makerPost<T: Decodable>(body: some Encodable) async throws -> T {
-        let token = await APIClient.shared.currentToken()
-        guard let url = URL(string: "\(AppState.backendURL)/api/v1/maker/transform") else {
-            throw URLError(.badURL)
-        }
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.timeoutInterval = 100
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let token {
-            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        req.httpBody = try JSONEncoder().encode(body)
-        let (data, response) = try await URLSession.shared.data(for: req)
+        let req = try await APIClient.shared.buildRequest(
+            path: "/api/v1/maker/transform",
+            method: "POST",
+            body: body
+        )
+        var timedRequest = req
+        timedRequest.timeoutInterval = 100
+        timedRequest.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (data, response) = try await APIClient.shared.performData(timedRequest)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             let body = String(data: data.prefix(400), encoding: .utf8) ?? "no body"
             throw URLError(.badServerResponse, userInfo: [NSLocalizedDescriptionKey: "HTTP \(http.statusCode): \(body)"])

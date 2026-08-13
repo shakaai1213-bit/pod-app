@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import OrcaRuntimeContracts
 import Security
 
 enum OrcaNativeAuthError: Error, LocalizedError {
@@ -147,11 +148,11 @@ actor OrcaNativeAuthService {
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
-    init(serverURL: URL, tokenStore: any RuntimeTokenStoring, session: URLSession = .shared) throws {
+    init(serverURL: URL, tokenStore: any RuntimeTokenStoring, session: URLSession? = nil) throws {
         self.serverURL = serverURL
         serverOrigin = OrcaServerOrigin.normalized(serverURL) ?? ""
         self.tokenStore = tokenStore
-        self.session = session
+        self.session = session ?? OrcaSecureURLSession.make()
         signingKey = try OrcaDeviceIdentity.privateKey()
         deviceID = OrcaDeviceIdentity.deviceID(signingKey)
         devicePublicKey = OrcaDeviceIdentity.publicKey(signingKey)
@@ -206,6 +207,35 @@ actor OrcaNativeAuthService {
     func boundDeviceID() -> String { deviceID }
     func origin() -> String { serverOrigin }
 
+    func requestProofHeaders(method: String, target: String, body: Data, token: String) throws -> [String: String] {
+        guard let accessJTI = Self.accessTokenJTI(token) else { throw OrcaNativeAuthError.invalidResponse }
+        let timestamp = String(Int(Date().timeIntervalSince1970))
+        let nonce = UUID().uuidString.lowercased()
+        let statement = "orca-api-request-v1\n\(method.uppercased())\n\(target)\n\(SHA256.hash(data: body).hex)\n\(Self.clientID)\n\(deviceID)\n\(timestamp)\n\(nonce)\n\(accessJTI)\n\(SHA256.hash(data: Data(token.utf8)).hex)"
+        let signature = try signingKey.signature(for: Data(statement.utf8)).base64URLEncodedString()
+        return [
+            "X-ORCA-Client-ID": Self.clientID,
+            "X-ORCA-Device-ID": deviceID,
+            "X-ORCA-Device-Public-Key": devicePublicKey,
+            "X-ORCA-Proof-Timestamp": timestamp,
+            "X-ORCA-Proof-Nonce": nonce,
+            "X-ORCA-Proof-JTI": accessJTI,
+            "X-ORCA-Proof-Signature": signature,
+        ]
+    }
+
+    private static func accessTokenJTI(_ token: String) -> String? {
+        let parts = token.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 3 else { return nil }
+        var encoded = String(parts[1]).replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        encoded += String(repeating: "=", count: (4 - encoded.count % 4) % 4)
+        guard let data = Data(base64Encoded: encoded),
+              let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let jti = payload["jti"] as? String,
+              !jti.isEmpty else { return nil }
+        return jti
+    }
+
     private func proof(operation: String, token: String) async throws -> DeviceProof {
         try requireApprovedOrigin()
         let challenge: ChallengeResponse = try await postJSON("/api/v1/auth/native/challenge", ChallengeRequest(
@@ -256,6 +286,9 @@ actor OrcaNativeAuthService {
         request.httpBody = try encoder.encode(body)
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw OrcaNativeAuthError.invalidResponse }
+        guard OrcaSecureURLSession.responseStayedOnOrigin(response, requestURL: url) else {
+            throw OrcaNativeAuthError.unapprovedOrigin
+        }
         guard 200..<300 ~= http.statusCode else {
             let detail = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["detail"] as? String
             throw OrcaNativeAuthError.rejected(http.statusCode, detail ?? "request rejected")

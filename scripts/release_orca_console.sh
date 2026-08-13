@@ -11,13 +11,12 @@ cd "$root"
 : "${ORCA_BACKEND_COMMIT:?Set ORCA_BACKEND_COMMIT to the exact runtime commit}"
 : "${ORCA_BACKEND_IMAGE_DIGEST:?Set ORCA_BACKEND_IMAGE_DIGEST to the sha256 image digest}"
 : "${HOST_BUNDLE_SHA256:?Set HOST_BUNDLE_SHA256 to the exact host bundle digest}"
-: "${ROLLBACK_RELEASE_REF:?Set ROLLBACK_RELEASE_REF to the verified prior release}"
-: "${ROLLBACK_ARTIFACT_SHA256:?Set ROLLBACK_ARTIFACT_SHA256 to the prior app artifact digest}"
-: "${ROLLBACK_MANIFEST_SHA256:?Set ROLLBACK_MANIFEST_SHA256 to the prior release manifest digest}"
-: "${ROLLBACK_BACKEND_COMMIT:?Set ROLLBACK_BACKEND_COMMIT to the prior full runtime commit}"
-: "${ROLLBACK_BACKEND_IMAGE_DIGEST:?Set ROLLBACK_BACKEND_IMAGE_DIGEST to the prior runtime image digest}"
-: "${ROLLBACK_HOST_BUNDLE_SHA256:?Set ROLLBACK_HOST_BUNDLE_SHA256 to the prior host bundle digest}"
-: "${ROLLBACK_AUTH_STATE_SHA256:?Set ROLLBACK_AUTH_STATE_SHA256 to the prior non-secret auth-state contract digest}"
+: "${ROLLBACK_EVIDENCE_DIR:?Set ROLLBACK_EVIDENCE_DIR to the signed prior evidence directory}"
+: "${ROLLBACK_ARTIFACT:?Set ROLLBACK_ARTIFACT to the exact prior app artifact}"
+: "${ROLLBACK_AUTH_STATE_CONTRACT:?Set ROLLBACK_AUTH_STATE_CONTRACT to the signed prior auth-state contract}"
+: "${ROLLBACK_AUTH_STATE_SIGNATURE:?Set ROLLBACK_AUTH_STATE_SIGNATURE to the prior auth-state signature}"
+: "${RELEASE_ALLOWED_SIGNERS:?Set RELEASE_ALLOWED_SIGNERS to the approved signer registry}"
+: "${RELEASE_SIGNER_IDENTITY:?Set RELEASE_SIGNER_IDENTITY to the prior release signer identity}"
 
 [[ "$ORCA_BACKEND_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
   echo "release refused: ORCA_BACKEND_COMMIT must be a full git SHA" >&2
@@ -31,19 +30,12 @@ cd "$root"
   echo "release refused: HOST_BUNDLE_SHA256 must be 64 lowercase hex characters" >&2
   exit 2
 }
-for name in ROLLBACK_ARTIFACT_SHA256 ROLLBACK_MANIFEST_SHA256 ROLLBACK_HOST_BUNDLE_SHA256 ROLLBACK_AUTH_STATE_SHA256; do
-  value="${!name}"
-  [[ "$value" =~ ^[0-9a-f]{64}$ ]] || {
-    echo "release refused: $name must be 64 lowercase hex characters" >&2
-    exit 2
-  }
-done
-[[ "$ROLLBACK_BACKEND_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
-  echo "release refused: ROLLBACK_BACKEND_COMMIT must be a full git SHA" >&2
+[[ -f "$ROLLBACK_EVIDENCE_DIR/manifest.json" && -f "$ROLLBACK_EVIDENCE_DIR/manifest.json.sig" ]] || {
+  echo "release refused: signed rollback evidence is incomplete" >&2
   exit 2
 }
-[[ "$ROLLBACK_BACKEND_IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || {
-  echo "release refused: ROLLBACK_BACKEND_IMAGE_DIGEST must be sha256:<64 hex>" >&2
+[[ -f "$ROLLBACK_ARTIFACT" && -f "$ROLLBACK_AUTH_STATE_CONTRACT" && -f "$ROLLBACK_AUTH_STATE_SIGNATURE" ]] || {
+  echo "release refused: rollback artifact or auth-state evidence is missing" >&2
   exit 2
 }
 
@@ -52,7 +44,10 @@ if [[ -n "$(git status --porcelain)" ]]; then
   exit 2
 fi
 source_commit="$(git rev-parse HEAD)"
-git verify-commit "$source_commit" >/dev/null
+git \
+  -c gpg.format=ssh \
+  -c "gpg.ssh.allowedSignersFile=$RELEASE_ALLOWED_SIGNERS" \
+  verify-commit "$source_commit" >/dev/null
 
 if ! security find-identity -v -p codesigning | grep -Fq "$DEVELOPER_ID_APPLICATION"; then
   echo "release refused: exact Developer ID Application identity is unavailable" >&2
@@ -102,13 +97,13 @@ python3 scripts/generate_release_evidence.py \
   --backend-commit "$ORCA_BACKEND_COMMIT" \
   --backend-image-digest "$ORCA_BACKEND_IMAGE_DIGEST" \
   --host-bundle-sha256 "$HOST_BUNDLE_SHA256" \
-  --rollback-release-ref "$ROLLBACK_RELEASE_REF" \
-  --rollback-artifact-sha256 "$ROLLBACK_ARTIFACT_SHA256" \
-  --rollback-manifest-sha256 "$ROLLBACK_MANIFEST_SHA256" \
-  --rollback-backend-commit "$ROLLBACK_BACKEND_COMMIT" \
-  --rollback-backend-image-digest "$ROLLBACK_BACKEND_IMAGE_DIGEST" \
-  --rollback-host-bundle-sha256 "$ROLLBACK_HOST_BUNDLE_SHA256" \
-  --rollback-auth-state-sha256 "$ROLLBACK_AUTH_STATE_SHA256" \
+  --auth-transition-contract "$root/release/native-auth-transition-v1.json" \
+  --rollback-evidence-dir "$ROLLBACK_EVIDENCE_DIR" \
+  --rollback-artifact "$ROLLBACK_ARTIFACT" \
+  --rollback-auth-state-contract "$ROLLBACK_AUTH_STATE_CONTRACT" \
+  --rollback-auth-state-signature "$ROLLBACK_AUTH_STATE_SIGNATURE" \
+  --release-allowed-signers "$RELEASE_ALLOWED_SIGNERS" \
+  --release-signer-identity "$RELEASE_SIGNER_IDENTITY" \
   --output-dir "$evidence_dir"
 
 ssh-keygen -Y sign \

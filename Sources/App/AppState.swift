@@ -1,4 +1,5 @@
 import Foundation
+import OrcaRuntimeContracts
 import SwiftUI
 
 enum AppConfig {
@@ -254,7 +255,8 @@ final class AppState: ObservableObject {
         request.timeoutInterval = 8   // 8s: Tailscale cold-handshake on device exceeds 3s (Maui 2026-06-17)
         print("[AppState] pingEndpoint: \(urlString)")
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (_, response) = try await OrcaSecureURLSession.make().data(for: request)
+            guard OrcaSecureURLSession.responseStayedOnOrigin(response, requestURL: url) else { return false }
             let status = (response as? HTTPURLResponse)?.statusCode ?? -1
             print("[AppState] pingEndpoint: status=\(status)")
             return true  // Any HTTP response = reachable
@@ -278,11 +280,21 @@ final class AppState: ObservableObject {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue(OrcaDeviceIdentity.current(), forHTTPHeaderField: "X-ORCA-Device-ID")
+        if token.split(separator: ".", omittingEmptySubsequences: false).count == 3,
+           let proof = try? OrcaDeviceIdentity.requestProofHeaders(
+               method: "GET",
+               target: url.path(percentEncoded: true),
+               body: Data(),
+               token: token
+           ) {
+            for (name, value) in proof { request.setValue(value, forHTTPHeaderField: name) }
+        }
         request.timeoutInterval = 15
         print("[AppState] verifyTokenDirectly: GET \(url.absoluteString)")
 
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await OrcaSecureURLSession.make().data(for: request)
+            guard OrcaSecureURLSession.responseStayedOnOrigin(response, requestURL: url) else { return false }
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
             let body = String(data: data, encoding: .utf8) ?? "(no body)"
             print("[AppState] verifyTokenDirectly: status=\(statusCode), body=\(body.prefix(200))")
@@ -400,8 +412,15 @@ final class AppState: ObservableObject {
         }
     }
 
-    func logout() {
-        authManager.signOut()
+    func logout() async {
+        do {
+            try await authManager.signOut()
+        } catch {
+            showError = true
+            errorMessage = "ORCA could not revoke this session. Your credentials remain secured on this device."
+            errorDetails = error.localizedDescription
+            return
+        }
         clearToken()
         isAuthenticated = false
         currentUser = nil

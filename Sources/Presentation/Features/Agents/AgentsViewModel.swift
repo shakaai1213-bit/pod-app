@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import OrcaRuntimeContracts
 
 // MARK: - Agent Profile Enrichment
 // Backend /api/v1/agents returns minimal data (name, status, last_seen_at).
@@ -414,16 +415,20 @@ final class LocalSSEClient: NSObject, URLSessionDataDelegate {
 
     func connect(to path: String, token: String = "", onEvent: @escaping (SSEEvent) -> Void) {
         self.onEvent = onEvent
-        session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
         guard let url = URL(string: "\(baseURL)\(path)") else { return }
 
         var request = URLRequest(url: url)
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         request.timeoutInterval = .infinity
         if !token.isEmpty {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            do {
+                try OrcaDeviceIdentity.authorize(&request, token: token)
+            } catch {
+                return
+            }
         }
 
+        session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
         task = session.dataTask(with: request)
         task?.resume()
     }
@@ -450,6 +455,16 @@ final class LocalSSEClient: NSObject, URLSessionDataDelegate {
             }
         }
         buffer = events.last ?? ""
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        completionHandler(nil)
     }
 }
 

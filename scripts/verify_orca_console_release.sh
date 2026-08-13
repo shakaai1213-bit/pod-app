@@ -29,7 +29,7 @@ from pathlib import Path
 
 manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 artifact = Path(sys.argv[2])
-if manifest.get("schema") != "orca.console.release-manifest.v2":
+if manifest.get("schema") != "orca.console.release-manifest.v3":
     raise SystemExit("release verification failed: unsupported manifest schema")
 source = manifest.get("source") or {}
 if not re.fullmatch(r"[0-9a-f]{40}", str(source.get("commit") or "")):
@@ -61,6 +61,15 @@ if not re.fullmatch(
     str(rollback.get("backend_image_digest") or ""),
 ):
     raise SystemExit("release verification failed: invalid rollback backend image digest")
+if rollback.get("auth_state_schema") != "orca.native-auth.state.v1":
+    raise SystemExit("release verification failed: invalid rollback auth-state schema")
+transition = manifest.get("auth_transition") or {}
+if transition.get("schema") != "orca.native-auth.transition.v1":
+    raise SystemExit("release verification failed: invalid auth transition schema")
+if transition.get("contract") != "native-auth-transition.json":
+    raise SystemExit("release verification failed: auth transition contract is missing")
+if not re.fullmatch(r"[0-9a-f]{64}", str(transition.get("contract_sha256") or "")):
+    raise SystemExit("release verification failed: invalid auth transition digest")
 artifact_row = manifest.get("artifact") or {}
 if artifact_row.get("name") != artifact.name:
     raise SystemExit("release verification failed: artifact name mismatch")
@@ -75,5 +84,9 @@ actual_artifact="$(shasum -a 256 "$artifact" | awk '{print $1}')"
 expected_sbom="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["dependencies"]["sbom_sha256"])' "$manifest")"
 actual_sbom="$(shasum -a 256 "$evidence_dir/sbom.spdx.json" | awk '{print $1}')"
 [[ "$expected_sbom" == "$actual_sbom" ]]
+
+expected_transition="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["auth_transition"]["contract_sha256"])' "$manifest")"
+actual_transition="$(shasum -a 256 "$evidence_dir/native-auth-transition.json" | awk '{print $1}')"
+[[ "$expected_transition" == "$actual_transition" ]]
 
 echo "ORCA Console release evidence verified"

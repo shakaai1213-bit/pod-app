@@ -1,0 +1,7 @@
+{
+  "migration_revision": "20260813_native_device_proof",
+  "rollback_action": "revoke_all_refresh_families_before_schema_downgrade",
+  "rollback_preserves_sessions": false,
+  "schema": "orca.native-auth.transition.v1",
+  "upgrade_action": "require_device_key_proof_for_native_refresh_and_api_requests"
+}

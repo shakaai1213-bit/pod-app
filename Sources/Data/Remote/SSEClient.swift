@@ -145,12 +145,17 @@ public actor SSEStreamManager {
         }
 
         var request = URLRequest(url: url)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         if let afterEventID, !afterEventID.isEmpty {
             request.setValue(afterEventID, forHTTPHeaderField: "Last-Event-ID")
         }
         request.timeoutInterval = .infinity
+        do {
+            try OrcaDeviceIdentity.authorize(&request, token: token)
+        } catch {
+            continuation.finish(throwing: error)
+            return
+        }
 
         let delegate = SSEDelegate(continuation: continuation, manager: self, mode: .chat)
         session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
@@ -205,9 +210,14 @@ public actor SSEStreamManager {
         }
 
         var request = URLRequest(url: url)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         request.timeoutInterval = .infinity
+        do {
+            try OrcaDeviceIdentity.authorize(&request, token: token)
+        } catch {
+            continuation.finish(throwing: error)
+            return
+        }
 
         let delegate = SSEDelegate(continuation: continuation, manager: self, mode: .tickets)
         session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
@@ -261,10 +271,14 @@ public actor SSEStreamManager {
         }
 
         var request = URLRequest(url: url)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue(OrcaDeviceIdentity.current(), forHTTPHeaderField: "X-ORCA-Device-ID")
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         request.timeoutInterval = .infinity
+        do {
+            try OrcaDeviceIdentity.authorize(&request, token: token)
+        } catch {
+            continuation.finish(throwing: error)
+            return
+        }
 
         let delegate = SSEDelegate(continuation: continuation, manager: self, mode: .boards)
         session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
@@ -433,6 +447,16 @@ private final class SSEDelegate: NSObject, URLSessionDataDelegate {
                 eventData = (eventData ?? "") + "\n" + value
             }
         }
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        completionHandler(nil)
     }
 
     func urlSession(

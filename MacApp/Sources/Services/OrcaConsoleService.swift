@@ -1,4 +1,5 @@
 import Foundation
+import OrcaRuntimeContracts
 
 enum OrcaConsoleServiceError: Error, LocalizedError {
     case missingCredential
@@ -26,13 +27,13 @@ actor OrcaConsoleService {
         tokenStore: any RuntimeTokenStoring,
         authService: OrcaNativeAuthService? = nil,
         deviceID: String = OrcaDeviceIdentity.current(),
-        session: URLSession = .shared
+        session: URLSession? = nil
     ) {
         self.serverURL = serverURL
         self.tokenStore = tokenStore
         self.authService = authService
         self.deviceID = deviceID
-        self.session = session
+        self.session = session ?? OrcaSecureURLSession.make()
     }
 
     func snapshot(for section: ConsoleSection) async throws -> ConsoleSectionSnapshot {
@@ -338,9 +339,20 @@ actor OrcaConsoleService {
         request.timeoutInterval = 15
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue(deviceID, forHTTPHeaderField: "X-ORCA-Device-ID")
+        if let authService {
+            let target = url.path(percentEncoded: true) + (url.query(percentEncoded: true).map { "?\($0)" } ?? "")
+            for (name, value) in try await authService.requestProofHeaders(
+                method: "GET", target: target, body: Data(), token: token
+            ) {
+                request.setValue(value, forHTTPHeaderField: name)
+            }
+        }
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw OrcaConsoleServiceError.invalidResponse
+        }
+        guard OrcaSecureURLSession.responseStayedOnOrigin(response, requestURL: url) else {
+            throw OrcaNativeAuthError.unapprovedOrigin
         }
         guard 200..<300 ~= http.statusCode else {
             throw OrcaConsoleServiceError.httpStatus(http.statusCode)

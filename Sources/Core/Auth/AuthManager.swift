@@ -1,12 +1,24 @@
 import Foundation
+import OrcaRuntimeContracts
 import Security
 import AuthenticationServices
 
 // MARK: - Token Manager
 
+protocol TokenManaging: Actor {
+    func storeToken(_ token: StoredToken, for userId: UUID) throws
+    func getToken(for userId: UUID) throws -> StoredToken
+    func getActiveToken() throws -> (userId: UUID, token: StoredToken)?
+    func updateToken(_ token: StoredToken, for userId: UUID) throws
+    func deleteToken(for userId: UUID) throws
+    func deleteAllTokens() throws
+    func setActiveUser(_ userId: UUID)
+    func getStoredUserIds() -> [UUID]
+}
+
 /// Actor responsible for secure token storage, retrieval, and refresh.
 /// Uses iOS Keychain Services for secure storage.
-actor TokenManager {
+actor TokenManager: TokenManaging {
 
     // MARK: - Constants
 
@@ -244,13 +256,20 @@ final class AuthManager {
 
     // MARK: - Private State
 
-    private let tokenManager = TokenManager()
+    private let tokenManager: any TokenManaging
     private let backendURL: String
+    private let session: URLSession
 
     // MARK: - Initialization
 
-    init(backendURL: String? = nil) {
+    init(
+        backendURL: String? = nil,
+        session: URLSession? = nil,
+        tokenManager: any TokenManaging = TokenManager()
+    ) {
         self.backendURL = backendURL ?? Self.defaultBackendURL
+        self.session = session ?? OrcaSecureURLSession.make()
+        self.tokenManager = tokenManager
         Task { await loadStoredUsers() }
     }
 
@@ -350,10 +369,23 @@ final class AuthManager {
         request.httpMethod = "GET"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue(OrcaDeviceIdentity.current(), forHTTPHeaderField: "X-ORCA-Device-ID")
+        if token.split(separator: ".", omittingEmptySubsequences: false).count == 3 {
+            for (name, value) in try OrcaDeviceIdentity.requestProofHeaders(
+                method: "GET",
+                target: url.path(percentEncoded: true),
+                body: Data(),
+                token: token
+            ) {
+                request.setValue(value, forHTTPHeaderField: name)
+            }
+        }
         request.timeoutInterval = 10
 
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (_, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
+            throw AuthError.invalidResponse
+        }
+        guard OrcaSecureURLSession.responseStayedOnOrigin(response, requestURL: url) else {
             throw AuthError.invalidResponse
         }
 
@@ -576,30 +608,41 @@ final class AuthManager {
     // MARK: - Sign Out
 
     /// Signs out the current user. Optionally removes all tokens.
-    func signOut(removeAllUsers: Bool = false) {
-        Task { await revokeAndDelete(removeAllUsers: removeAllUsers) }
-
+    func signOut(removeAllUsers: Bool = false) async throws {
+        try await revokeAndDelete(removeAllUsers: removeAllUsers)
         currentUser = nil
         isAuthenticated = false
         sessionExpiry = nil
         error = nil
 
-        Task { await loadStoredUsers() }
+        await loadStoredUsers()
 
         print("[AuthManager] Signed out")
     }
 
-    private func revokeAndDelete(removeAllUsers: Bool) async {
-        let active = try? await tokenManager.getActiveToken()
-        if let active,
-           let refreshToken = active.token.refreshToken,
-           let challenge = try? await nativeChallenge(operation: "logout"),
-           let signature = try? OrcaDeviceIdentity.proof(
-               operation: "logout",
-               clientID: Self.nativeClientID,
-               nonce: challenge.nonce,
-               token: refreshToken
-           ) {
+    private func revokeAndDelete(removeAllUsers: Bool) async throws {
+        let active = try await tokenManager.getActiveToken()
+        let selected: [(UUID, StoredToken)]
+        if removeAllUsers {
+            var stored: [(UUID, StoredToken)] = []
+            for userID in await tokenManager.getStoredUserIds() {
+                stored.append((userID, try await tokenManager.getToken(for: userID)))
+            }
+            selected = stored
+        } else if let active {
+            selected = [(active.userId, active.token)]
+        } else {
+            selected = []
+        }
+        for (_, token) in selected {
+            guard let refreshToken = token.refreshToken else { continue }
+            let challenge = try await nativeChallenge(operation: "logout")
+            let signature = try OrcaDeviceIdentity.proof(
+                operation: "logout",
+                clientID: Self.nativeClientID,
+                nonce: challenge.nonce,
+                token: refreshToken
+            )
             let request = AuthRefreshRequest(
                 refreshToken: refreshToken,
                 deviceId: OrcaDeviceIdentity.current(),
@@ -608,12 +651,12 @@ final class AuthManager {
                 challengeNonce: challenge.nonce,
                 deviceSignature: signature
             )
-            try? await postAuthVoid(path: "/api/v1/auth/logout", body: request)
+            try await postAuthVoid(path: "/api/v1/auth/logout", body: request)
         }
         if removeAllUsers {
-            try? await tokenManager.deleteAllTokens()
+            try await tokenManager.deleteAllTokens()
         } else if let active {
-            try? await tokenManager.deleteToken(for: active.userId)
+            try await tokenManager.deleteToken(for: active.userId)
         }
         await loadStoredUsers()
     }
@@ -713,8 +756,11 @@ final class AuthManager {
         request.setValue(OrcaDeviceIdentity.current(), forHTTPHeaderField: "X-ORCA-Device-ID")
         request.httpBody = try encoder.encode(AnyEncodable(body))
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
+            throw AuthError.invalidResponse
+        }
+        guard OrcaSecureURLSession.responseStayedOnOrigin(response, requestURL: url) else {
             throw AuthError.invalidResponse
         }
 
@@ -739,7 +785,10 @@ final class AuthManager {
         let encoder = JSONEncoder()
         encoder.keyEncodingStrategy = .convertToSnakeCase
         request.httpBody = try encoder.encode(AnyEncodable(body))
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (_, response) = try await session.data(for: request)
+        guard OrcaSecureURLSession.responseStayedOnOrigin(response, requestURL: url) else {
+            throw AuthError.invalidResponse
+        }
         guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
             throw AuthError.unauthorized
         }
@@ -756,13 +805,15 @@ final class AuthManager {
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        request.setValue("Bearer \(activeTokenInfo.token.accessToken)", forHTTPHeaderField: "Authorization")
-        request.setValue(OrcaDeviceIdentity.current(), forHTTPHeaderField: "X-ORCA-Device-ID")
+        try OrcaDeviceIdentity.authorize(&request, token: activeTokenInfo.token.accessToken)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.timeoutInterval = 15
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
+            throw AuthError.invalidResponse
+        }
+        guard OrcaSecureURLSession.responseStayedOnOrigin(response, requestURL: url) else {
             throw AuthError.invalidResponse
         }
 

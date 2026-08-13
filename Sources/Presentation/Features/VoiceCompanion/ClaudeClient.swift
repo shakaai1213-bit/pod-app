@@ -1,4 +1,5 @@
 import Foundation
+import OrcaRuntimeContracts
 
 actor ClaudeClient {
     private let apiKey: String
@@ -42,7 +43,10 @@ actor ClaudeClient {
                     request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
                     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-                    let (bytes, response) = try await URLSession.shared.bytes(for: request)
+                    let (bytes, response) = try await OrcaSecureURLSession.make().bytes(for: request)
+                    guard OrcaSecureURLSession.responseStayedOnOrigin(response, requestURL: request.url!) else {
+                        throw URLError(.redirectToNonExistentLocation)
+                    }
 
                     if let http = response as? HTTPURLResponse, http.statusCode != 200 {
                         continuation.finish(throwing: NSError(
@@ -92,7 +96,10 @@ actor ClaudeClient {
         request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await OrcaSecureURLSession.make().data(for: request)
+        guard OrcaSecureURLSession.responseStayedOnOrigin(response, requestURL: request.url!) else {
+            throw URLError(.redirectToNonExistentLocation)
+        }
 
         struct Response: Decodable {
             let content: [ContentBlock]

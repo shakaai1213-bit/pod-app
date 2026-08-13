@@ -1,8 +1,10 @@
 import Foundation
+import OrcaRuntimeContracts
 
 actor OpenClawClient {
     private let baseURL: String
     private let tokenProvider: @Sendable () async -> String?
+    private let session: URLSession
 
     init(baseURL: String = AppConfig.backendURL,
          tokenProvider: @escaping @Sendable () async -> String? = {
@@ -10,6 +12,7 @@ actor OpenClawClient {
          }) {
         self.baseURL = baseURL
         self.tokenProvider = tokenProvider
+        self.session = OrcaSecureURLSession.make()
     }
 
     struct MessagePayload: Encodable {
@@ -83,15 +86,15 @@ actor OpenClawClient {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        request.setValue(OrcaDeviceIdentity.current(), forHTTPHeaderField: "X-ORCA-Device-ID")
 
         let payload = MessagePayload(content: content)
         request.httpBody = try JSONEncoder().encode(payload)
+        try OrcaDeviceIdentity.authorize(&request, token: authToken)
 
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (_, response) = try await session.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse,
+              OrcaSecureURLSession.responseStayedOnOrigin(response, requestURL: url),
               (200...299).contains(httpResponse.statusCode) else {
             throw NSError(domain: "OpenClawClient", code: -1, userInfo: [
                 NSLocalizedDescriptionKey: "Failed to post message to ORCA MC"
@@ -104,10 +107,12 @@ actor OpenClawClient {
         let url = URL(string: "\(baseURL)/api/v1/voice/providers")!
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        request.setValue(OrcaDeviceIdentity.current(), forHTTPHeaderField: "X-ORCA-Device-ID")
+        try OrcaDeviceIdentity.authorize(&request, token: authToken)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
+        guard OrcaSecureURLSession.responseStayedOnOrigin(response, requestURL: url) else {
+            throw URLError(.redirectToNonExistentLocation)
+        }
         try validate(response: response, data: data)
         return try JSONDecoder().decode([VoiceProvider].self, from: data)
     }
@@ -118,13 +123,15 @@ actor OpenClawClient {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        request.setValue(OrcaDeviceIdentity.current(), forHTTPHeaderField: "X-ORCA-Device-ID")
         request.httpBody = try JSONEncoder().encode(
             LiveKitSessionRequest(agentSlug: agentSlug, participantName: participantName, ttlSeconds: 1800)
         )
+        try OrcaDeviceIdentity.authorize(&request, token: authToken)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
+        guard OrcaSecureURLSession.responseStayedOnOrigin(response, requestURL: url) else {
+            throw URLError(.redirectToNonExistentLocation)
+        }
         try validate(response: response, data: data)
         return try JSONDecoder().decode(LiveKitSession.self, from: data)
     }

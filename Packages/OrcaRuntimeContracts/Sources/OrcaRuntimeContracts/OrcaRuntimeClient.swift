@@ -2,6 +2,13 @@ import Foundation
 import HTTPTypes
 import OpenAPIRuntime
 
+public typealias OrcaRuntimeRequestProofProvider = @Sendable (
+    _ method: String,
+    _ target: String,
+    _ body: Data,
+    _ token: String
+) async throws -> [String: String]
+
 public enum OrcaRuntimeClientError: Error, Equatable, LocalizedError {
     case incompatibleContract(expected: String, actual: String)
     case incompatibleSchema(expected: String, actual: String)
@@ -50,13 +57,16 @@ public struct OrcaRuntimeCompatibility: Equatable, Sendable {
 public struct OrcaRuntimeAuthorizationMiddleware: ClientMiddleware {
     private let tokenProvider: @Sendable () async -> String?
     private let deviceIDProvider: @Sendable () async -> String?
+    private let requestProofProvider: OrcaRuntimeRequestProofProvider?
 
     public init(
         tokenProvider: @escaping @Sendable () async -> String?,
-        deviceIDProvider: @escaping @Sendable () async -> String? = { nil }
+        deviceIDProvider: @escaping @Sendable () async -> String? = { nil },
+        requestProofProvider: OrcaRuntimeRequestProofProvider? = nil
     ) {
         self.tokenProvider = tokenProvider
         self.deviceIDProvider = deviceIDProvider
+        self.requestProofProvider = requestProofProvider
     }
 
     public func intercept(
@@ -67,13 +77,33 @@ public struct OrcaRuntimeAuthorizationMiddleware: ClientMiddleware {
         next: @Sendable (HTTPRequest, HTTPBody?, URL) async throws -> (HTTPResponse, HTTPBody?)
     ) async throws -> (HTTPResponse, HTTPBody?) {
         var request = request
+        var bufferedBody = body
         if let token = await tokenProvider(), !token.isEmpty {
             request.headerFields[.authorization] = "Bearer \(token)"
+            if let requestProofProvider, token.split(separator: ".", omittingEmptySubsequences: false).count == 3 {
+                let bytes: Data
+                if let body {
+                    bytes = try await Data(collecting: body, upTo: 8 * 1024 * 1024)
+                } else {
+                    bytes = Data()
+                }
+                bufferedBody = bytes.isEmpty ? nil : HTTPBody(bytes)
+                let proof = try await requestProofProvider(
+                    request.method.rawValue,
+                    request.path ?? "/",
+                    bytes,
+                    token
+                )
+                for (name, value) in proof {
+                    guard let fieldName = HTTPField.Name(name) else { continue }
+                    request.headerFields[fieldName] = value
+                }
+            }
         }
         if let deviceID = await deviceIDProvider(), !deviceID.isEmpty {
             request.headerFields[HTTPField.Name("X-ORCA-Device-ID")!] = deviceID
         }
-        return try await next(request, body, baseURL)
+        return try await next(request, bufferedBody, baseURL)
     }
 }
 
@@ -169,16 +199,20 @@ public actor OrcaRuntimeClient {
     public init(
         serverURL: URL,
         tokenProvider: @escaping @Sendable () async -> String?,
-        deviceIDProvider: @escaping @Sendable () async -> String? = { nil }
+        deviceIDProvider: @escaping @Sendable () async -> String? = { nil },
+        requestProofProvider: OrcaRuntimeRequestProofProvider? = nil,
+        session: URLSession = OrcaSecureURLSession.make()
     ) {
         client = OrcaRuntimeContract.makeClient(
             serverURL: serverURL,
             middlewares: [
                 OrcaRuntimeAuthorizationMiddleware(
                     tokenProvider: tokenProvider,
-                    deviceIDProvider: deviceIDProvider
+                    deviceIDProvider: deviceIDProvider,
+                    requestProofProvider: requestProofProvider
                 )
-            ]
+            ],
+            session: session
         )
     }
 

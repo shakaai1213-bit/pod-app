@@ -514,7 +514,7 @@ final class ArmsViewModel {
             method: "POST",
             body: WakeRequest(postedBy: postedBy, note: note, confirm: confirm ? true : nil)
         )
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await apiClient.performData(request)
         guard let http = response as? HTTPURLResponse else {
             throw APIError.unknown
         }

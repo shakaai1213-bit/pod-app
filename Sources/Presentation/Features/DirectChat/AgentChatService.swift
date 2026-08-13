@@ -25,7 +25,16 @@ actor AgentChatService {
     private let agent: AgentInfo
     private static let runtimeClient = OrcaRuntimeClient(
         serverURL: URL(string: AppConfig.backendURL)!,
-        tokenProvider: { await APIClient.shared.currentToken() }
+        tokenProvider: { await APIClient.shared.currentToken() },
+        deviceIDProvider: { OrcaDeviceIdentity.current() },
+        requestProofProvider: { method, target, body, token in
+            try OrcaDeviceIdentity.requestProofHeaders(
+                method: method,
+                target: target,
+                body: body,
+                token: token
+            )
+        }
     )
 
     init(agent: AgentInfo) {

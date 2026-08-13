@@ -7,6 +7,7 @@ final class PodHardeningTests: XCTestCase {
         UserDefaults.standard.removeObject(forKey: "orca_auth_token")
         UserDefaults.standard.removeObject(forKey: "orca_agent_token")
         MockURLProtocol.handler = nil
+        AsyncMockURLProtocol.handler = nil
         super.tearDown()
     }
 
@@ -438,6 +439,71 @@ final class PodHardeningTests: XCTestCase {
         XCTAssertEqual(AgentRosterPolicy.defaultLane(for: "shaka-agent"), .dormantArchive)
     }
 
+    func testLogoutHTTPFailureRetainsCredentialAndAuthenticatedState() async throws {
+        let userID = UUID()
+        let store = MemoryTokenManager(tokens: [userID: storedToken(userID, refresh: "refresh-one")], active: userID)
+        let session = mockSession { request in
+            if request.url?.path == "/api/v1/auth/native/challenge" {
+                return (200, Data(#"{"nonce":"0123456789abcdef0123456789abcdef0123456789abcdef"}"#.utf8))
+            }
+            return (503, Data())
+        }
+        let manager = AuthManager(backendURL: "https://pod-tests.invalid", session: session, tokenManager: store)
+
+        do {
+            try await manager.signOut()
+            XCTFail("Expected logout rejection")
+        } catch {
+            let active = try await store.getActiveToken()
+            let deleted = await store.deletedUsers()
+            XCTAssertNotNil(active)
+            XCTAssertEqual(deleted, [])
+        }
+    }
+
+    func testLogoutTimeoutRetainsCredential() async throws {
+        let userID = UUID()
+        let store = MemoryTokenManager(tokens: [userID: storedToken(userID, refresh: "refresh-timeout")], active: userID)
+        let session = mockSession { _ in throw URLError(.timedOut) }
+        let manager = AuthManager(backendURL: "https://pod-tests.invalid", session: session, tokenManager: store)
+
+        await XCTAssertThrowsErrorAsync(try await manager.signOut())
+        let active = try await store.getActiveToken()
+        let deleted = await store.deletedUsers()
+        XCTAssertNotNil(active)
+        XCTAssertEqual(deleted, [])
+    }
+
+    func testLogoutAllRevokesEveryFamilyBeforeDeletingCredentials() async throws {
+        let first = UUID()
+        let second = UUID()
+        let store = MemoryTokenManager(
+            tokens: [
+                first: storedToken(first, refresh: "refresh-first"),
+                second: storedToken(second, refresh: "refresh-second"),
+            ],
+            active: first
+        )
+        let recorder = LogoutRecorder()
+        let session = mockSession { request in
+            if request.url?.path == "/api/v1/auth/native/challenge" {
+                return (200, Data(#"{"nonce":"0123456789abcdef0123456789abcdef0123456789abcdef"}"#.utf8))
+            }
+            await recorder.record(request.url?.path ?? "")
+            return (204, Data())
+        }
+        let manager = AuthManager(backendURL: "https://pod-tests.invalid", session: session, tokenManager: store)
+
+        try await manager.signOut(removeAllUsers: true)
+
+        let revoked = await recorder.values()
+        let remaining = await store.getStoredUserIds()
+        let deletedAll = await store.didDeleteAll()
+        XCTAssertEqual(revoked, ["/api/v1/auth/logout", "/api/v1/auth/logout"])
+        XCTAssertEqual(remaining, [])
+        XCTAssertTrue(deletedAll)
+    }
+
     private func makeClient(
         keychainToken: String,
         keychainAgentToken: String? = nil
@@ -452,11 +518,100 @@ final class PodHardeningTests: XCTestCase {
         )
     }
 
+    private func mockSession(
+        handler: @escaping @Sendable (URLRequest) async throws -> (Int, Data)
+    ) -> URLSession {
+        AsyncMockURLProtocol.handler = handler
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [AsyncMockURLProtocol.self]
+        return URLSession(configuration: configuration)
+    }
+
+    private func storedToken(_ userID: UUID, refresh: String) -> StoredToken {
+        StoredToken(
+            userId: userID,
+            accessToken: "access-token",
+            refreshToken: refresh,
+            expiresAt: Date().addingTimeInterval(3600),
+            issuedAt: Date()
+        )
+    }
+
     private func encodedString<T: Encodable>(_ value: T, key: String) throws -> String {
         let data = try JSONEncoder().encode(value)
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         return try XCTUnwrap(object[key] as? String)
     }
+}
+
+private func XCTAssertThrowsErrorAsync<T>(
+    _ expression: @autoclosure () async throws -> T,
+    file: StaticString = #filePath,
+    line: UInt = #line
+) async {
+    do {
+        _ = try await expression()
+        XCTFail("Expected error", file: file, line: line)
+    } catch {}
+}
+
+private actor MemoryTokenManager: TokenManaging {
+    private var tokens: [UUID: StoredToken]
+    private var active: UUID?
+    private var deleted: [UUID] = []
+    private var allDeleted = false
+
+    init(tokens: [UUID: StoredToken], active: UUID?) {
+        self.tokens = tokens
+        self.active = active
+    }
+
+    func storeToken(_ token: StoredToken, for userId: UUID) { tokens[userId] = token }
+    func getToken(for userId: UUID) throws -> StoredToken {
+        guard let token = tokens[userId] else { throw KeychainError.itemNotFound }
+        return token
+    }
+    func getActiveToken() throws -> (userId: UUID, token: StoredToken)? {
+        guard let active else { return nil }
+        return (active, try getToken(for: active))
+    }
+    func updateToken(_ token: StoredToken, for userId: UUID) { tokens[userId] = token }
+    func deleteToken(for userId: UUID) { tokens.removeValue(forKey: userId); deleted.append(userId) }
+    func deleteAllTokens() { tokens.removeAll(); active = nil; allDeleted = true }
+    func setActiveUser(_ userId: UUID) { active = userId }
+    func getStoredUserIds() -> [UUID] { Array(tokens.keys) }
+    func deletedUsers() -> [UUID] { deleted }
+    func didDeleteAll() -> Bool { allDeleted }
+}
+
+private actor LogoutRecorder {
+    private var recorded: [String] = []
+    func record(_ value: String) { recorded.append(value) }
+    func values() -> [String] { recorded }
+}
+
+private final class AsyncMockURLProtocol: URLProtocol {
+    static var handler: (@Sendable (URLRequest) async throws -> (Int, Data))?
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        Task {
+            do {
+                let handler = try XCTUnwrap(Self.handler)
+                let (status, data) = try await handler(request)
+                let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
+                client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+                if !data.isEmpty { client?.urlProtocol(self, didLoad: data) }
+                client?.urlProtocolDidFinishLoading(self)
+            } catch {
+                client?.urlProtocol(self, didFailWithError: error)
+            }
+        }
+    }
+
+    override func stopLoading() {}
 }
 
 private final class MockURLProtocol: URLProtocol {

@@ -75,8 +75,6 @@ final class PushNotificationService {
             print("[PushNotificationService] Skipping APNS registration: no active ORCA session token")
             return
         }
-        request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        request.setValue(OrcaDeviceIdentity.current(), forHTTPHeaderField: "X-ORCA-Device-ID")
 
         let deviceName = await MainActor.run { UIDevice.current.name }
         let payload: [String: String] = [
@@ -89,7 +87,8 @@ final class PushNotificationService {
 
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: payload)
-            let (_, response) = try await URLSession.shared.data(for: request)
+            try OrcaDeviceIdentity.authorize(&request, token: authToken)
+            let (_, response) = try await apiClient.performData(request)
             if let http = response as? HTTPURLResponse {
                 if http.statusCode == 200 || http.statusCode == 201 {
                     print("[PushNotificationService] Token registered successfully")
@@ -116,8 +115,6 @@ final class PushNotificationService {
             print("[PushNotificationService] Skipping APNS unregister: no active ORCA session token")
             return
         }
-        request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        request.setValue(OrcaDeviceIdentity.current(), forHTTPHeaderField: "X-ORCA-Device-ID")
 
         let payload: [String: String] = [
             "device_token": token,
@@ -126,7 +123,8 @@ final class PushNotificationService {
 
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: payload)
-            let (_, response) = try await URLSession.shared.data(for: request)
+            try OrcaDeviceIdentity.authorize(&request, token: authToken)
+            let (_, response) = try await apiClient.performData(request)
             if let http = response as? HTTPURLResponse {
                 if http.statusCode == 200 {
                     await MainActor.run { self.deviceToken = nil }
