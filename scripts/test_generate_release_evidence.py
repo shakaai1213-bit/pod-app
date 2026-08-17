@@ -858,6 +858,32 @@ def test_public_shell_verifier_rejects_resigned_unknown_auth_state_field(
     assert "must-never-be-preserved" not in result.stderr
 
 
+def test_public_shell_verifier_rejects_resigned_unknown_auth_state_row_field(
+    tmp_path: Path,
+) -> None:
+    bundle = build_bundle(tmp_path)
+    output = Path(bundle["output"])
+    key = Path(bundle["key"])
+    manifest_path = output / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["rollback"]["auth_state"]["raw_refresh_token"] = (
+        "must-never-be-preserved"
+    )
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    manifest_signature = manifest_path.with_name(manifest_path.name + ".sig")
+    manifest_signature.unlink()
+    sign(manifest_path, key, "orca-release")
+
+    result = verify_with_public_shell(bundle)
+
+    assert result.returncode != 0
+    assert "invalid rollback auth-state row fields" in result.stderr
+    assert "must-never-be-preserved" not in result.stderr
+
+
 @pytest.mark.parametrize(
     "relative_path",
     [

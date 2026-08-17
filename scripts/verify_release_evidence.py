@@ -21,6 +21,18 @@ ROLLBACK_PROCEDURE = (
     "compatibility and G1-G10 canaries"
 )
 
+FILE_ROW_KEYS = frozenset({"name", "sha256", "size_bytes"})
+AUTH_STATE_ROW_KEYS = frozenset(
+    {
+        "name",
+        "sha256",
+        "size_bytes",
+        "signature",
+        "schema",
+        "active_refresh_family_digest",
+    }
+)
+
 
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -645,9 +657,17 @@ def verify_bundle(
         evidence_dir, rollback.get("host_bundle") or {}, "rollback host bundle"
     )
     auth_row = rollback.get("auth_state") or {}
+    if not isinstance(auth_row, dict) or set(auth_row) != AUTH_STATE_ROW_KEYS:
+        raise ValueError("invalid rollback auth-state row fields")
+    auth_signature_row = auth_row.get("signature") or {}
+    if (
+        not isinstance(auth_signature_row, dict)
+        or set(auth_signature_row) != FILE_ROW_KEYS
+    ):
+        raise ValueError("invalid rollback auth-state signature row fields")
     auth_path = resolve_row(evidence_dir, auth_row, "rollback auth state")
     auth_signature = resolve_row(
-        evidence_dir, auth_row.get("signature") or {}, "rollback auth-state signature"
+        evidence_dir, auth_signature_row, "rollback auth-state signature"
     )
     verify_signature(
         auth_path,
