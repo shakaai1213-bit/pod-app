@@ -175,6 +175,20 @@ def token_family_digest(family_hashes: list[str]) -> str:
     return hashlib.sha256(("\n".join(family_hashes) + "\n").encode()).hexdigest()
 
 
+AUTH_STATE_KEYS = frozenset(
+    {
+        "active_refresh_families",
+        "active_refresh_family_digest",
+        "active_refresh_family_hashes",
+        "captured_at",
+        "native_refresh_policy",
+        "runtime_commit",
+        "runtime_host_id",
+        "schema",
+    }
+)
+
+
 def require_utc_timestamp(value: Any, *, label: str) -> datetime:
     if not isinstance(value, str) or not value.endswith("Z"):
         raise ValueError(f"invalid {label}")
@@ -186,6 +200,8 @@ def require_utc_timestamp(value: Any, *, label: str) -> datetime:
 
 def verify_auth_state_contract(path: Path) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or set(payload) - AUTH_STATE_KEYS:
+        raise ValueError("invalid rollback auth-state fields")
     if payload.get("schema") != "orca.native-auth.state.v1":
         raise ValueError("unsupported rollback auth-state contract")
     require_commit(payload.get("runtime_commit"), label="auth-state runtime commit")
