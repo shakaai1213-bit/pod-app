@@ -193,6 +193,10 @@ public struct OrcaRuntimeConversationMessage: Equatable, Sendable {
 }
 
 public actor OrcaRuntimeClient {
+    private static let namedAgentKeys: Set<String> = [
+        "aloha", "chief", "coral", "maui", "reef", "rooster", "shaka",
+    ]
+
     private let client: Client
     private var verifiedCompatibility: OrcaRuntimeCompatibility?
 
@@ -249,6 +253,50 @@ public actor OrcaRuntimeClient {
         )
         verifiedCompatibility = compatibility
         return compatibility
+    }
+
+    public func agentPacks() async throws -> Components.Schemas.ChatRuntimeAgentPackBundleRead {
+        _ = try await verifyCompatibility()
+        let output = try await client.getRuntimeAgentPacks()
+        let bundle: Components.Schemas.ChatRuntimeAgentPackBundleRead
+        switch output {
+        case let .ok(response):
+            bundle = try response.body.json
+        case let .undocumented(statusCode, _):
+            throw OrcaRuntimeClientError.httpStatus(statusCode)
+        }
+        try Self.validateAgentPacks(bundle)
+        return bundle
+    }
+
+    static func validateAgentPacks(
+        _ bundle: Components.Schemas.ChatRuntimeAgentPackBundleRead
+    ) throws {
+        guard bundle.contractVersion?.rawValue == "orca.agent-pack-bundle.v1",
+              bundle.configurationOnly == true,
+              bundle.runtimeAttestationRequired == true,
+              bundle.bundleSha256.count == 64,
+              bundle.packs.count == namedAgentKeys.count,
+              Set(bundle.packs.map(\.agentKey)) == namedAgentKeys else {
+            throw OrcaRuntimeClientError.invalidResponse("agent pack bundle failed closed")
+        }
+        for pack in bundle.packs {
+            guard pack.contractVersion?.rawValue == "orca.agent-pack.v1",
+                  pack.ingressSubject == "agents.\(pack.agentKey).inbox",
+                  pack.lifecycleOwner?.rawValue == "schoolhouse",
+                  pack.routerOwner?.rawValue == "cascade",
+                  pack.terminalReplyOwner?.rawValue == "schoolhouse_wake",
+                  pack.voiceContract?.rawValue == "orca.named-agent-voice.v1",
+                  pack.memoryContract?.rawValue == "orca_managed",
+                  pack.capabilityAttestationRequired == true,
+                  pack.releaseSignatureRequired == true,
+                  pack.payloadSha256.count == 64,
+                  !pack.supportedAdapterIds.isEmpty else {
+                throw OrcaRuntimeClientError.invalidResponse(
+                    "agent pack failed closed for \(pack.agentKey)"
+                )
+            }
+        }
     }
 
     public func send(_ request: OrcaRuntimeDirectTurnRequest) async throws -> OrcaRuntimeDirectTurnResponse {

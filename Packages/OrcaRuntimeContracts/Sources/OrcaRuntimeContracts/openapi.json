@@ -232,6 +232,236 @@
         "title": "ChatRuntimeAdapterRef",
         "type": "object"
       },
+      "ChatRuntimeAgentPackBundleRead": {
+        "description": "Seven-agent configuration bundle; live health remains separately attested.",
+        "properties": {
+          "bundle_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Bundle Sha256",
+            "type": "string"
+          },
+          "configuration_only": {
+            "const": true,
+            "default": true,
+            "title": "Configuration Only",
+            "type": "boolean"
+          },
+          "contract_version": {
+            "const": "orca.agent-pack-bundle.v1",
+            "default": "orca.agent-pack-bundle.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "packs": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeAgentPackRead"
+            },
+            "minItems": 1,
+            "title": "Packs",
+            "type": "array"
+          },
+          "runtime_attestation_required": {
+            "const": true,
+            "default": true,
+            "title": "Runtime Attestation Required",
+            "type": "boolean"
+          },
+          "runtime_manifest_revision": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Runtime Manifest Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runtime_manifest_revision",
+          "bundle_sha256",
+          "packs"
+        ],
+        "title": "ChatRuntimeAgentPackBundleRead",
+        "type": "object"
+      },
+      "ChatRuntimeAgentPackRead": {
+        "description": "Digest-bound declarative identity and runtime policy for one named agent.",
+        "properties": {
+          "agent_key": {
+            "pattern": "^[a-z][a-z0-9-]{1,63}$",
+            "title": "Agent Key",
+            "type": "string"
+          },
+          "approval_notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Approval Notes",
+            "type": "array"
+          },
+          "capability_attestation_required": {
+            "const": true,
+            "default": true,
+            "title": "Capability Attestation Required",
+            "type": "boolean"
+          },
+          "capability_ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Capability Ref",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "orca.agent-pack.v1",
+            "default": "orca.agent-pack.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "escalation_ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Escalation Ref",
+            "type": "string"
+          },
+          "identity_ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Identity Ref",
+            "type": "string"
+          },
+          "ingress_subject": {
+            "pattern": "^agents\\.[a-z][a-z0-9-]{1,63}\\.inbox$",
+            "title": "Ingress Subject",
+            "type": "string"
+          },
+          "lifecycle_owner": {
+            "const": "schoolhouse",
+            "default": "schoolhouse",
+            "title": "Lifecycle Owner",
+            "type": "string"
+          },
+          "locker_ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Locker Ref",
+            "type": "string"
+          },
+          "memory_contract": {
+            "const": "orca_managed",
+            "default": "orca_managed",
+            "title": "Memory Contract",
+            "type": "string"
+          },
+          "memory_ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Memory Ref",
+            "type": "string"
+          },
+          "payload_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Payload Sha256",
+            "type": "string"
+          },
+          "protected_conditions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Protected Conditions",
+            "type": "array"
+          },
+          "release_signature_required": {
+            "const": true,
+            "default": true,
+            "title": "Release Signature Required",
+            "type": "boolean"
+          },
+          "responsibility_domains": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Responsibility Domains",
+            "type": "array"
+          },
+          "roster_lane": {
+            "enum": [
+              "active_main",
+              "support_runtime"
+            ],
+            "title": "Roster Lane",
+            "type": "string"
+          },
+          "router_owner": {
+            "const": "cascade",
+            "default": "cascade",
+            "title": "Router Owner",
+            "type": "string"
+          },
+          "runtime_host": {
+            "enum": [
+              "shaka-mac",
+              "chief-mac"
+            ],
+            "title": "Runtime Host",
+            "type": "string"
+          },
+          "runtime_posture": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Runtime Posture",
+            "type": "string"
+          },
+          "source_refs": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Source Refs",
+            "type": "array"
+          },
+          "supported_adapter_ids": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Supported Adapter Ids",
+            "type": "array"
+          },
+          "terminal_reply_owner": {
+            "const": "schoolhouse_wake",
+            "default": "schoolhouse_wake",
+            "title": "Terminal Reply Owner",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "voice_contract": {
+            "const": "orca.named-agent-voice.v1",
+            "default": "orca.named-agent-voice.v1",
+            "title": "Voice Contract",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_key",
+          "title",
+          "roster_lane",
+          "runtime_host",
+          "runtime_posture",
+          "ingress_subject",
+          "supported_adapter_ids",
+          "identity_ref",
+          "locker_ref",
+          "capability_ref",
+          "memory_ref",
+          "escalation_ref",
+          "source_refs",
+          "payload_sha256"
+        ],
+        "title": "ChatRuntimeAgentPackRead",
+        "type": "object"
+      },
       "ChatRuntimeCompatibilityRouteRead": {
         "properties": {
           "current_route": {
@@ -1091,6 +1321,33 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/chat-runtime/v1/agent-packs": {
+      "get": {
+        "description": "Returns the digest-bound seven-agent identity and configuration bundle. The bundle is configuration-only; live capability still requires fresh host attestation.",
+        "operationId": "getRuntimeAgentPacks",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatRuntimeAgentPackBundleRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read ORCA Chat Runtime v1 Agent Packs",
+        "tags": [
+          "chat-runtime"
+        ]
+      }
+    },
     "/api/v1/chat-runtime/v1/conformance/complete-turn": {
       "get": {
         "description": "Returns a deterministic provider-neutral accepted-to-terminal turn for generated client decoding, ordering, and replay conformance tests.",
@@ -1313,5 +1570,5 @@
     }
   ],
   "x-orca-contract-version": "orca.chat-runtime.v1",
-  "x-orca-schema-sha256": "7e867ff94398b39827dd2bc210505266f0dd08ea0892e28fa19128e392cfe74f"
+  "x-orca-schema-sha256": "ff063235a70235aea2e8ab27b86a56460b5399bd20c4a32cb1b8f94c14d6f354"
 }

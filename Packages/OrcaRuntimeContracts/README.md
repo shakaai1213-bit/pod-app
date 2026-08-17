@@ -1,8 +1,9 @@
 # OrcaRuntimeContracts
 
 Shared provider-neutral ORCA Chat Runtime contract for native iOS and macOS
-clients. Swift types and the client are generated at build time from
-`Sources/OrcaRuntimeContracts/openapi.json`.
+clients. Swift types and the client are generated from
+`Sources/OrcaRuntimeContracts/openapi.json` and checked in so release builds do
+not resolve the generator toolchain.
 
 ## Contract ownership
 
@@ -14,7 +15,9 @@ The canonical schema and OpenAPI exporter live in the Mission Control backend:
 
 Do not hand-edit the copied OpenAPI document or generated Swift. Update the
 backend contract, run its compatibility tests, export the artifact, and then
-copy the reviewed artifact into this package.
+copy the reviewed artifact into this package. Generate `Types.swift` and
+`Client.swift` with `swift-openapi-generator` 1.13.0 using
+`openapi-generator-config.yaml`; the package pins runtime dependencies only.
 
 ## Verification
 

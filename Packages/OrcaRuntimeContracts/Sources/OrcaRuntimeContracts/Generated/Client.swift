@@ -38,6 +38,68 @@ public struct Client: APIProtocol {
     private var converter: Converter {
         client.converter
     }
+    /// Read ORCA Chat Runtime v1 Agent Packs
+    ///
+    /// Returns the digest-bound seven-agent identity and configuration bundle. The bundle is configuration-only; live capability still requires fresh host attestation.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/agent-packs`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/agent-packs/get(getRuntimeAgentPacks)`.
+    public func getRuntimeAgentPacks(_ input: Operations.GetRuntimeAgentPacks.Input) async throws -> Operations.GetRuntimeAgentPacks.Output {
+        try await client.send(
+            input: input,
+            forOperation: Operations.GetRuntimeAgentPacks.id,
+            serializer: { input in
+                let path = try converter.renderedPath(
+                    template: "/api/v1/chat-runtime/v1/agent-packs",
+                    parameters: []
+                )
+                var request: HTTPTypes.HTTPRequest = .init(
+                    soar_path: path,
+                    method: .get
+                )
+                suppressMutabilityWarning(&request)
+                converter.setAcceptHeader(
+                    in: &request.headerFields,
+                    contentTypes: input.headers.accept
+                )
+                return (request, nil)
+            },
+            deserializer: { response, responseBody in
+                switch response.status.code {
+                case 200:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.GetRuntimeAgentPacks.Output.Ok.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas.ChatRuntimeAgentPackBundleRead.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .ok(.init(body: body))
+                default:
+                    return .undocumented(
+                        statusCode: response.status.code,
+                        .init(
+                            headerFields: response.headerFields,
+                            body: responseBody
+                        )
+                    )
+                }
+            }
+        )
+    }
     /// Read ORCA Chat Runtime v1 Complete-Turn Fixture
     ///
     /// Returns a deterministic provider-neutral accepted-to-terminal turn for generated client decoding, ordering, and replay conformance tests.

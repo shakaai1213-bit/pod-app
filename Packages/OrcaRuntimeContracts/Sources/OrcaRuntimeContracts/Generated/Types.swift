@@ -11,6 +11,13 @@ public import struct Foundation.Date
 #endif
 /// A type that performs HTTP operations defined by the OpenAPI document.
 public protocol APIProtocol: Sendable {
+    /// Read ORCA Chat Runtime v1 Agent Packs
+    ///
+    /// Returns the digest-bound seven-agent identity and configuration bundle. The bundle is configuration-only; live capability still requires fresh host attestation.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/agent-packs`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/agent-packs/get(getRuntimeAgentPacks)`.
+    func getRuntimeAgentPacks(_ input: Operations.GetRuntimeAgentPacks.Input) async throws -> Operations.GetRuntimeAgentPacks.Output
     /// Read ORCA Chat Runtime v1 Complete-Turn Fixture
     ///
     /// Returns a deterministic provider-neutral accepted-to-terminal turn for generated client decoding, ordering, and replay conformance tests.
@@ -50,6 +57,15 @@ public protocol APIProtocol: Sendable {
 
 /// Convenience overloads for operation inputs.
 extension APIProtocol {
+    /// Read ORCA Chat Runtime v1 Agent Packs
+    ///
+    /// Returns the digest-bound seven-agent identity and configuration bundle. The bundle is configuration-only; live capability still requires fresh host attestation.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/agent-packs`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/agent-packs/get(getRuntimeAgentPacks)`.
+    public func getRuntimeAgentPacks(headers: Operations.GetRuntimeAgentPacks.Input.Headers = .init()) async throws -> Operations.GetRuntimeAgentPacks.Output {
+        try await getRuntimeAgentPacks(Operations.GetRuntimeAgentPacks.Input(headers: headers))
+    }
     /// Read ORCA Chat Runtime v1 Complete-Turn Fixture
     ///
     /// Returns a deterministic provider-neutral accepted-to-terminal turn for generated client decoding, ordering, and replay conformance tests.
@@ -413,6 +429,256 @@ public enum Components {
                 case hostId = "host_id"
                 case modelId = "model_id"
                 case providerId = "provider_id"
+            }
+        }
+        /// Seven-agent configuration bundle; live health remains separately attested.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackBundleRead`.
+        public struct ChatRuntimeAgentPackBundleRead: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackBundleRead/bundle_sha256`.
+            public var bundleSha256: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackBundleRead/configuration_only`.
+            public var configurationOnly: Swift.Bool?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackBundleRead/contract_version`.
+            @frozen public enum ContractVersionPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case orca_agentPackBundle_v1 = "orca.agent-pack-bundle.v1"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackBundleRead/contract_version`.
+            public var contractVersion: Components.Schemas.ChatRuntimeAgentPackBundleRead.ContractVersionPayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackBundleRead/packs`.
+            public var packs: [Components.Schemas.ChatRuntimeAgentPackRead]
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackBundleRead/runtime_attestation_required`.
+            public var runtimeAttestationRequired: Swift.Bool?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackBundleRead/runtime_manifest_revision`.
+            public var runtimeManifestRevision: Swift.String
+            /// Creates a new `ChatRuntimeAgentPackBundleRead`.
+            ///
+            /// - Parameters:
+            ///   - bundleSha256:
+            ///   - configurationOnly:
+            ///   - contractVersion:
+            ///   - packs:
+            ///   - runtimeAttestationRequired:
+            ///   - runtimeManifestRevision:
+            public init(
+                bundleSha256: Swift.String,
+                configurationOnly: Swift.Bool? = nil,
+                contractVersion: Components.Schemas.ChatRuntimeAgentPackBundleRead.ContractVersionPayload? = nil,
+                packs: [Components.Schemas.ChatRuntimeAgentPackRead],
+                runtimeAttestationRequired: Swift.Bool? = nil,
+                runtimeManifestRevision: Swift.String
+            ) {
+                self.bundleSha256 = bundleSha256
+                self.configurationOnly = configurationOnly
+                self.contractVersion = contractVersion
+                self.packs = packs
+                self.runtimeAttestationRequired = runtimeAttestationRequired
+                self.runtimeManifestRevision = runtimeManifestRevision
+            }
+            public enum CodingKeys: String, CodingKey {
+                case bundleSha256 = "bundle_sha256"
+                case configurationOnly = "configuration_only"
+                case contractVersion = "contract_version"
+                case packs
+                case runtimeAttestationRequired = "runtime_attestation_required"
+                case runtimeManifestRevision = "runtime_manifest_revision"
+            }
+        }
+        /// Digest-bound declarative identity and runtime policy for one named agent.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead`.
+        public struct ChatRuntimeAgentPackRead: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/agent_key`.
+            public var agentKey: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/approval_notes`.
+            public var approvalNotes: [Swift.String]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/capability_attestation_required`.
+            public var capabilityAttestationRequired: Swift.Bool?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/capability_ref`.
+            public var capabilityRef: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/contract_version`.
+            @frozen public enum ContractVersionPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case orca_agentPack_v1 = "orca.agent-pack.v1"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/contract_version`.
+            public var contractVersion: Components.Schemas.ChatRuntimeAgentPackRead.ContractVersionPayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/escalation_ref`.
+            public var escalationRef: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/identity_ref`.
+            public var identityRef: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/ingress_subject`.
+            public var ingressSubject: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/lifecycle_owner`.
+            @frozen public enum LifecycleOwnerPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case schoolhouse = "schoolhouse"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/lifecycle_owner`.
+            public var lifecycleOwner: Components.Schemas.ChatRuntimeAgentPackRead.LifecycleOwnerPayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/locker_ref`.
+            public var lockerRef: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/memory_contract`.
+            @frozen public enum MemoryContractPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case orcaManaged = "orca_managed"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/memory_contract`.
+            public var memoryContract: Components.Schemas.ChatRuntimeAgentPackRead.MemoryContractPayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/memory_ref`.
+            public var memoryRef: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/payload_sha256`.
+            public var payloadSha256: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/protected_conditions`.
+            public var protectedConditions: [Swift.String]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/release_signature_required`.
+            public var releaseSignatureRequired: Swift.Bool?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/responsibility_domains`.
+            public var responsibilityDomains: [Swift.String]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/roster_lane`.
+            @frozen public enum RosterLanePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case activeMain = "active_main"
+                case supportRuntime = "support_runtime"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/roster_lane`.
+            public var rosterLane: Components.Schemas.ChatRuntimeAgentPackRead.RosterLanePayload
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/router_owner`.
+            @frozen public enum RouterOwnerPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case cascade = "cascade"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/router_owner`.
+            public var routerOwner: Components.Schemas.ChatRuntimeAgentPackRead.RouterOwnerPayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/runtime_host`.
+            @frozen public enum RuntimeHostPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case shakaMac = "shaka-mac"
+                case chiefMac = "chief-mac"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/runtime_host`.
+            public var runtimeHost: Components.Schemas.ChatRuntimeAgentPackRead.RuntimeHostPayload
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/runtime_posture`.
+            public var runtimePosture: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/source_refs`.
+            public var sourceRefs: [Swift.String]
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/supported_adapter_ids`.
+            public var supportedAdapterIds: [Swift.String]
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/terminal_reply_owner`.
+            @frozen public enum TerminalReplyOwnerPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case schoolhouseWake = "schoolhouse_wake"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/terminal_reply_owner`.
+            public var terminalReplyOwner: Components.Schemas.ChatRuntimeAgentPackRead.TerminalReplyOwnerPayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/title`.
+            public var title: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/voice_contract`.
+            @frozen public enum VoiceContractPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case orca_namedAgentVoice_v1 = "orca.named-agent-voice.v1"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/voice_contract`.
+            public var voiceContract: Components.Schemas.ChatRuntimeAgentPackRead.VoiceContractPayload?
+            /// Creates a new `ChatRuntimeAgentPackRead`.
+            ///
+            /// - Parameters:
+            ///   - agentKey:
+            ///   - approvalNotes:
+            ///   - capabilityAttestationRequired:
+            ///   - capabilityRef:
+            ///   - contractVersion:
+            ///   - escalationRef:
+            ///   - identityRef:
+            ///   - ingressSubject:
+            ///   - lifecycleOwner:
+            ///   - lockerRef:
+            ///   - memoryContract:
+            ///   - memoryRef:
+            ///   - payloadSha256:
+            ///   - protectedConditions:
+            ///   - releaseSignatureRequired:
+            ///   - responsibilityDomains:
+            ///   - rosterLane:
+            ///   - routerOwner:
+            ///   - runtimeHost:
+            ///   - runtimePosture:
+            ///   - sourceRefs:
+            ///   - supportedAdapterIds:
+            ///   - terminalReplyOwner:
+            ///   - title:
+            ///   - voiceContract:
+            public init(
+                agentKey: Swift.String,
+                approvalNotes: [Swift.String]? = nil,
+                capabilityAttestationRequired: Swift.Bool? = nil,
+                capabilityRef: Swift.String,
+                contractVersion: Components.Schemas.ChatRuntimeAgentPackRead.ContractVersionPayload? = nil,
+                escalationRef: Swift.String,
+                identityRef: Swift.String,
+                ingressSubject: Swift.String,
+                lifecycleOwner: Components.Schemas.ChatRuntimeAgentPackRead.LifecycleOwnerPayload? = nil,
+                lockerRef: Swift.String,
+                memoryContract: Components.Schemas.ChatRuntimeAgentPackRead.MemoryContractPayload? = nil,
+                memoryRef: Swift.String,
+                payloadSha256: Swift.String,
+                protectedConditions: [Swift.String]? = nil,
+                releaseSignatureRequired: Swift.Bool? = nil,
+                responsibilityDomains: [Swift.String]? = nil,
+                rosterLane: Components.Schemas.ChatRuntimeAgentPackRead.RosterLanePayload,
+                routerOwner: Components.Schemas.ChatRuntimeAgentPackRead.RouterOwnerPayload? = nil,
+                runtimeHost: Components.Schemas.ChatRuntimeAgentPackRead.RuntimeHostPayload,
+                runtimePosture: Swift.String,
+                sourceRefs: [Swift.String],
+                supportedAdapterIds: [Swift.String],
+                terminalReplyOwner: Components.Schemas.ChatRuntimeAgentPackRead.TerminalReplyOwnerPayload? = nil,
+                title: Swift.String,
+                voiceContract: Components.Schemas.ChatRuntimeAgentPackRead.VoiceContractPayload? = nil
+            ) {
+                self.agentKey = agentKey
+                self.approvalNotes = approvalNotes
+                self.capabilityAttestationRequired = capabilityAttestationRequired
+                self.capabilityRef = capabilityRef
+                self.contractVersion = contractVersion
+                self.escalationRef = escalationRef
+                self.identityRef = identityRef
+                self.ingressSubject = ingressSubject
+                self.lifecycleOwner = lifecycleOwner
+                self.lockerRef = lockerRef
+                self.memoryContract = memoryContract
+                self.memoryRef = memoryRef
+                self.payloadSha256 = payloadSha256
+                self.protectedConditions = protectedConditions
+                self.releaseSignatureRequired = releaseSignatureRequired
+                self.responsibilityDomains = responsibilityDomains
+                self.rosterLane = rosterLane
+                self.routerOwner = routerOwner
+                self.runtimeHost = runtimeHost
+                self.runtimePosture = runtimePosture
+                self.sourceRefs = sourceRefs
+                self.supportedAdapterIds = supportedAdapterIds
+                self.terminalReplyOwner = terminalReplyOwner
+                self.title = title
+                self.voiceContract = voiceContract
+            }
+            public enum CodingKeys: String, CodingKey {
+                case agentKey = "agent_key"
+                case approvalNotes = "approval_notes"
+                case capabilityAttestationRequired = "capability_attestation_required"
+                case capabilityRef = "capability_ref"
+                case contractVersion = "contract_version"
+                case escalationRef = "escalation_ref"
+                case identityRef = "identity_ref"
+                case ingressSubject = "ingress_subject"
+                case lifecycleOwner = "lifecycle_owner"
+                case lockerRef = "locker_ref"
+                case memoryContract = "memory_contract"
+                case memoryRef = "memory_ref"
+                case payloadSha256 = "payload_sha256"
+                case protectedConditions = "protected_conditions"
+                case releaseSignatureRequired = "release_signature_required"
+                case responsibilityDomains = "responsibility_domains"
+                case rosterLane = "roster_lane"
+                case routerOwner = "router_owner"
+                case runtimeHost = "runtime_host"
+                case runtimePosture = "runtime_posture"
+                case sourceRefs = "source_refs"
+                case supportedAdapterIds = "supported_adapter_ids"
+                case terminalReplyOwner = "terminal_reply_owner"
+                case title
+                case voiceContract = "voice_contract"
             }
         }
         /// - Remark: Generated from `#/components/schemas/ChatRuntimeCompatibilityRouteRead`.
@@ -1523,6 +1789,118 @@ public enum Components {
 
 /// API operations, with input and output types, generated from `#/paths` in the OpenAPI document.
 public enum Operations {
+    /// Read ORCA Chat Runtime v1 Agent Packs
+    ///
+    /// Returns the digest-bound seven-agent identity and configuration bundle. The bundle is configuration-only; live capability still requires fresh host attestation.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/agent-packs`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/agent-packs/get(getRuntimeAgentPacks)`.
+    public enum GetRuntimeAgentPacks {
+        public static let id: Swift.String = "getRuntimeAgentPacks"
+        public struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/agent-packs/GET/header`.
+            public struct Headers: Sendable, Hashable {
+                public var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.GetRuntimeAgentPacks.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                public init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.GetRuntimeAgentPacks.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            public var headers: Operations.GetRuntimeAgentPacks.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - headers:
+            public init(headers: Operations.GetRuntimeAgentPacks.Input.Headers = .init()) {
+                self.headers = headers
+            }
+        }
+        @frozen public enum Output: Sendable, Hashable {
+            public struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/agent-packs/GET/responses/200/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/agent-packs/GET/responses/200/content/application\/json`.
+                    case json(Components.Schemas.ChatRuntimeAgentPackBundleRead)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.ChatRuntimeAgentPackBundleRead {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.GetRuntimeAgentPacks.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.GetRuntimeAgentPacks.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// Successful Response
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/agent-packs/get(getRuntimeAgentPacks)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.GetRuntimeAgentPacks.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            public var ok: Operations.GetRuntimeAgentPacks.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        @frozen public enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            public init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            public var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            public static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
     /// Read ORCA Chat Runtime v1 Complete-Turn Fixture
     ///
     /// Returns a deterministic provider-neutral accepted-to-terminal turn for generated client decoding, ordering, and replay conformance tests.

@@ -20,6 +20,47 @@ private func canonicalTurn() throws -> Components.Schemas.ChatRuntimeTurnRead {
     )
 }
 
+private func canonicalAgentPack(
+    _ agentKey: String
+) -> Components.Schemas.ChatRuntimeAgentPackRead {
+    .init(
+        agentKey: agentKey,
+        capabilityAttestationRequired: true,
+        capabilityRef: "orca://agent-packs/\(agentKey)/capabilities",
+        contractVersion: .orca_agentPack_v1,
+        escalationRef: "orca://agent-packs/\(agentKey)/escalation",
+        identityRef: "orca://agent-packs/\(agentKey)/identity",
+        ingressSubject: "agents.\(agentKey).inbox",
+        lifecycleOwner: .schoolhouse,
+        lockerRef: "orca://agent-packs/\(agentKey)/locker",
+        memoryContract: .orcaManaged,
+        memoryRef: "orca://agent-packs/\(agentKey)/memory",
+        payloadSha256: String(repeating: "a", count: 64),
+        releaseSignatureRequired: true,
+        rosterLane: .activeMain,
+        routerOwner: .cascade,
+        runtimeHost: .shakaMac,
+        runtimePosture: "local-compute-first",
+        sourceRefs: ["app/registries/agent-runtime-manifest.json"],
+        supportedAdapterIds: ["local_compute"],
+        terminalReplyOwner: .schoolhouseWake,
+        title: agentKey.capitalized,
+        voiceContract: .orca_namedAgentVoice_v1
+    )
+}
+
+private func canonicalAgentPackBundle() -> Components.Schemas.ChatRuntimeAgentPackBundleRead {
+    .init(
+        bundleSha256: String(repeating: "b", count: 64),
+        configurationOnly: true,
+        contractVersion: .orca_agentPackBundle_v1,
+        packs: ["aloha", "chief", "coral", "maui", "reef", "rooster", "shaka"]
+            .map(canonicalAgentPack),
+        runtimeAttestationRequired: true,
+        runtimeManifestRevision: "2026-08-17.1"
+    )
+}
+
 @Test(arguments: [301, 302, 303, 307, 308])
 func credentialRedirectsAreNeverFollowed(status: Int) throws {
     let source = try #require(URL(string: "https://orca.test/api/v1/agents"))
@@ -69,7 +110,36 @@ func credentialRedirectsAreNeverFollowed(status: Int) throws {
 
 @Test func contractMetadataIsPinned() {
     #expect(OrcaRuntimeContract.version == "orca.chat-runtime.v1")
-    #expect(OrcaRuntimeContract.schemaSHA256.count == 64)
+    #expect(
+        OrcaRuntimeContract.schemaSHA256
+            == "ff063235a70235aea2e8ab27b86a56460b5399bd20c4a32cb1b8f94c14d6f354"
+    )
+}
+
+@Test func exactSevenAgentPackBundlePassesClientGate() throws {
+    try OrcaRuntimeClient.validateAgentPacks(canonicalAgentPackBundle())
+}
+
+@Test func agentPackBundleCannotMasqueradeAsAttestedRuntime() throws {
+    var bundle = canonicalAgentPackBundle()
+    bundle.runtimeAttestationRequired = false
+    do {
+        try OrcaRuntimeClient.validateAgentPacks(bundle)
+        Issue.record("A configuration-only bundle bypassed runtime attestation")
+    } catch let error as OrcaRuntimeClientError {
+        #expect(error == .invalidResponse("agent pack bundle failed closed"))
+    }
+}
+
+@Test func agentPackBundleRejectsMissingNamedAgent() throws {
+    var bundle = canonicalAgentPackBundle()
+    bundle.packs.removeLast()
+    do {
+        try OrcaRuntimeClient.validateAgentPacks(bundle)
+        Issue.record("A six-agent bundle passed the native client gate")
+    } catch let error as OrcaRuntimeClientError {
+        #expect(error == .invalidResponse("agent pack bundle failed closed"))
+    }
 }
 
 @Test func generatedClientSupportsBothNativeSurfaces() {

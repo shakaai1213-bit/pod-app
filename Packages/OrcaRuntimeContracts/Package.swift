@@ -41,6 +41,10 @@ let package = Package(
                     name: "HTTPTypes",
                     package: "swift-http-types"
                 ),
+            ],
+            exclude: [
+                "openapi-generator-config.yaml",
+                "openapi.json",
             ]
         ),
         .testTarget(
