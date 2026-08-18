@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import HTTPTypes
 import OpenAPIRuntime
@@ -495,11 +496,20 @@ public actor OrcaRuntimeClient {
         let pending = read.pendingProposals ?? []
         let evidenceRefs = snapshot.evidenceRefs ?? []
         let nasRefs = snapshot.nasRefs ?? []
+        let computedContentSHA256: String
+        do {
+            computedContentSHA256 = try conversationMemoryContentSHA256(snapshot)
+        } catch {
+            throw OrcaRuntimeClientError.invalidResponse(
+                "conversation memory failed closed"
+            )
+        }
         guard read.contractVersion == .orca_conversationMemory_v2,
               read.conversationId == expectedConversationID,
               read.organizationId.isEmpty == false,
               read.revision >= 0,
               isSHA256(read.contentSha256),
+              read.contentSha256 == computedContentSHA256,
               (snapshot.activeSummary ?? "").count <= 4_000,
               Set(facts.map(\.factId)).count == facts.count,
               facts.allSatisfy({
@@ -521,6 +531,59 @@ public actor OrcaRuntimeClient {
                 "conversation memory failed closed"
             )
         }
+    }
+
+    static func conversationMemoryContentSHA256(
+        _ snapshot: Components.Schemas.ConversationMemorySnapshot
+    ) throws -> String {
+        let sourceRefs: Any
+        if let payload = snapshot.sourceRefs {
+            let encoded = try JSONEncoder().encode(payload)
+            sourceRefs = try JSONSerialization.jsonObject(with: encoded)
+        } else {
+            sourceRefs = [String: Any]()
+        }
+        let object: [String: Any] = [
+            "active_summary": snapshot.activeSummary ?? "",
+            "blockers": (snapshot.blockers ?? []).map(conversationMemoryFactObject),
+            "commitments": (snapshot.commitments ?? []).map(conversationMemoryFactObject),
+            "decisions": (snapshot.decisions ?? []).map(conversationMemoryFactObject),
+            "evidence_refs": snapshot.evidenceRefs ?? [],
+            "nas_refs": snapshot.nasRefs ?? [],
+            "recent_outcomes": (snapshot.recentOutcomes ?? []).map(
+                conversationMemoryFactObject
+            ),
+            "sensitivity": snapshot.sensitivity?.rawValue ?? "normal",
+            "source_refs": sourceRefs,
+            "visibility": snapshot.visibility?.rawValue ?? "conversation",
+        ]
+        guard JSONSerialization.isValidJSONObject(object) else {
+            throw OrcaRuntimeClientError.invalidResponse(
+                "conversation memory digest payload is invalid"
+            )
+        }
+        let encoded = try JSONSerialization.data(
+            withJSONObject: object,
+            options: [.sortedKeys, .withoutEscapingSlashes]
+        )
+        return SHA256.hash(data: encoded).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func conversationMemoryFactObject(
+        _ fact: Components.Schemas.ConversationMemoryFact
+    ) -> [String: Any] {
+        [
+            "authority": fact.authority ?? NSNull(),
+            "evidence_refs": fact.evidenceRefs ?? [],
+            "fact_id": fact.factId,
+            "occurred_at_ms": fact.occurredAt.map {
+                Int($0.timeIntervalSince1970 * 1_000)
+            } ?? NSNull(),
+            "source_refs": fact.sourceRefs ?? [],
+            "status": fact.status?.rawValue ?? "active",
+            "supersedes_fact_id": fact.supersedesFactId ?? NSNull(),
+            "text": fact.text,
+        ]
     }
 
     private static func isSHA256(_ value: String) -> Bool {

@@ -262,12 +262,13 @@ private func canonicalConversationMemory(
         authority: "captain",
         evidenceRefs: ["orca://evidence/decision-1"],
         factId: "decision-1",
+        occurredAt: Date(timeIntervalSince1970: 1_787_000_000.123),
         sourceRefs: ["orca://tickets/ticket-1"],
         status: .active,
         text: "Use ORCA as the conversation authority."
     )
-    return .init(
-        contentSha256: String(repeating: "a", count: 64),
+    var read = Components.Schemas.ConversationMemoryRead(
+        contentSha256: String(repeating: "0", count: 64),
         contractVersion: .orca_conversationMemory_v2,
         conversationId: conversationID,
         memory: .init(
@@ -276,12 +277,24 @@ private func canonicalConversationMemory(
             evidenceRefs: ["orca://evidence/conversation-v2"],
             nasRefs: ["nas://orca/transcripts/thread-1.jsonl"],
             sensitivity: .normal,
+            sourceRefs: .init(
+                additionalProperties: try! OpenAPIObjectContainer(
+                    unvalidatedValue: [
+                        "checkpoint_ref": "orca://sessions/checkpoint-1",
+                        "nested": ["revision": 2],
+                    ]
+                )
+            ),
             visibility: .agent
         ),
         organizationId: "b28e893d-55ff-430c-a2b6-f3dd1d4085ea",
         pendingProposals: [],
         revision: 1
     )
+    read.contentSha256 = try! OrcaRuntimeClient.conversationMemoryContentSHA256(
+        read.memory
+    )
+    return read
 }
 
 @Test(arguments: [301, 302, 303, 307, 308])
@@ -618,6 +631,11 @@ func credentialRedirectsAreNeverFollowed(status: Int) throws {
 
 @Test func conversationMemoryPassesNativeClientGate() throws {
     let memory = canonicalConversationMemory()
+    #expect(
+        memory.contentSha256
+            == "800cbbec02775dbc83c42bcb8c62e0f4"
+                + "8f4d2e85b9b497441f06c1ff9b850065"
+    )
     try OrcaRuntimeClient.validateConversationMemory(
         memory,
         expectedConversationID: memory.conversationId
@@ -633,6 +651,18 @@ func credentialRedirectsAreNeverFollowed(status: Int) throws {
             expectedConversationID: badHash.conversationId
         )
         Issue.record("Conversation memory accepted an invalid content digest")
+    } catch let error as OrcaRuntimeClientError {
+        #expect(error == .invalidResponse("conversation memory failed closed"))
+    }
+
+    var contentContradiction = canonicalConversationMemory()
+    contentContradiction.memory.activeSummary = "Changed without updating the digest."
+    do {
+        try OrcaRuntimeClient.validateConversationMemory(
+            contentContradiction,
+            expectedConversationID: contentContradiction.conversationId
+        )
+        Issue.record("Conversation memory accepted a content/hash contradiction")
     } catch let error as OrcaRuntimeClientError {
         #expect(error == .invalidResponse("conversation memory failed closed"))
     }
