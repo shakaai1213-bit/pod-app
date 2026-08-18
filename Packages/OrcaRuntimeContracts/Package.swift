@@ -9,7 +9,11 @@ let package = Package(
         .macOS(.v14),
     ],
     products: [
+        .library(name: "OrcaDomain", targets: ["OrcaDomain"]),
+        .library(name: "OrcaAPI", targets: ["OrcaAPI"]),
         .library(name: "OrcaRuntimeContracts", targets: ["OrcaRuntimeContracts"]),
+        .library(name: "OrcaRuntime", targets: ["OrcaRuntime"]),
+        .library(name: "OrcaDesign", targets: ["OrcaDesign"]),
     ],
     dependencies: [
         .package(
@@ -26,6 +30,8 @@ let package = Package(
         ),
     ],
     targets: [
+        .target(name: "OrcaDomain"),
+        .target(name: "OrcaAPI"),
         .target(
             name: "OrcaRuntimeContracts",
             dependencies: [
@@ -46,6 +52,18 @@ let package = Package(
                 "openapi-generator-config.yaml",
                 "openapi.json",
             ]
+        ),
+        .target(
+            name: "OrcaRuntime",
+            dependencies: ["OrcaDomain", "OrcaRuntimeContracts"]
+        ),
+        .target(
+            name: "OrcaDesign",
+            dependencies: ["OrcaDomain"]
+        ),
+        .testTarget(
+            name: "OrcaFoundationTests",
+            dependencies: ["OrcaAPI", "OrcaDesign", "OrcaDomain", "OrcaRuntime"]
         ),
         .testTarget(
             name: "OrcaRuntimeContractsTests",

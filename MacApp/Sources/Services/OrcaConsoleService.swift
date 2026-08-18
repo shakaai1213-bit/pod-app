@@ -50,19 +50,6 @@ actor OrcaConsoleService {
         }
     }
 
-    func agentProfiles() async throws -> [AgentProfile] {
-        let value = try await get("/api/v1/management/agents")
-        return collection(value, keys: ["agents"]).compactMap { object in
-            guard let id = field(object, keys: ["agent_name", "slug"])?.lowercased(),
-                  !id.isEmpty else { return nil }
-            return AgentProfile.fromRuntime(
-                id: id,
-                name: field(object, keys: ["display_name", "agent_name"]),
-                role: field(object, keys: ["title"])
-            )
-        }
-    }
-
     private func overviewSnapshot() async throws -> ConsoleSectionSnapshot {
         async let inbox = get("/api/v1/control-room/captain-inbox")
         async let health = get("/api/v1/control-room/central-agent-health")

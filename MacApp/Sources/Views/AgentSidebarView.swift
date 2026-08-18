@@ -1,3 +1,4 @@
+import OrcaDesign
 import SwiftUI
 
 struct AgentSidebarView: View {
@@ -172,25 +173,4 @@ struct ConnectionDot: View {
         case .credentialsRequired, .runtimeUpgradeRequired, .incompatible, .unavailable: return .orcaCoral
         }
     }
-}
-
-extension AgentProfile.Accent {
-    var color: Color {
-        switch self {
-        case .pink: return Color(red: 0.86, green: 0.25, blue: 0.52)
-        case .orange: return Color(red: 0.91, green: 0.42, blue: 0.13)
-        case .violet: return Color(red: 0.46, green: 0.34, blue: 0.78)
-        case .green: return .orcaGreen
-        case .red: return Color(red: 0.84, green: 0.24, blue: 0.22)
-        case .cyan: return .orcaCyan
-        case .teal: return Color(red: 0.10, green: 0.58, blue: 0.52)
-        }
-    }
-}
-
-extension Color {
-    static let orcaCyan = Color(red: 0.08, green: 0.63, blue: 0.67)
-    static let orcaGreen = Color(red: 0.16, green: 0.62, blue: 0.37)
-    static let orcaAmber = Color(red: 0.88, green: 0.58, blue: 0.14)
-    static let orcaCoral = Color(red: 0.88, green: 0.32, blue: 0.25)
 }

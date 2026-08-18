@@ -41,25 +41,10 @@ final class PodChatPanelModel {
         var nextHealthStatus: String?
 
         do {
-            let contacts: PodChatContactsResponseDTO = try await APIClient.shared.get(path: "/api/v1/sonar/contacts")
-            nextGeneratedAt = contacts.generatedAt
-            nextRoomCount = contacts.contacts.count
-            nextUnreadRoomCount = contacts.contacts.filter { ($0.unreadCount ?? 0) > 0 }.count
-            nextPendingMessageCount = contacts.contacts.reduce(0) { $0 + $1.pendingCount }
-            nextAttentionRoomCount = contacts.contacts.filter {
-                ($0.needsAttention ?? false)
-                    || $0.notificationLevel == "attention"
-                    || $0.notificationLevel == "urgent"
-            }.count
-        } catch {
-            // Locker Cockpit remains the stronger Schoolhouse truth. Keep the
-            // panel useful if the compatibility contact facade is unavailable.
-        }
-
-        do {
-            let health: PodChatHealthDTO = try await APIClient.shared.get(path: "/api/v1/sonar/health")
+            let health: CentralAgentHealth = try await APIClient.shared.get(
+                path: "/api/v1/control-room/central-agent-health"
+            )
             nextHealthStatus = health.status
-            nextGeneratedAt = nextGeneratedAt ?? health.generatedAt
         } catch {
             nextHealthStatus = nil
         }
@@ -77,6 +62,14 @@ final class PodChatPanelModel {
                 failures.append(agent.name)
             }
         }
+
+        nextRoomCount = nextAgents.count
+        nextUnreadRoomCount = nextAgents.filter { $0.unreadCount > 0 }.count
+        nextPendingMessageCount = nextAgents.reduce(0) { $0 + $1.pendingCount }
+        nextAttentionRoomCount = nextAgents.filter {
+            $0.isGated || ["attention", "blocked", "critical"].contains($0.status.lowercased())
+        }.count
+        nextGeneratedAt = Date()
 
         roomCount = nextRoomCount
         unreadRoomCount = nextUnreadRoomCount
@@ -398,39 +391,5 @@ struct PodChatPanelView: View {
         if elapsed < 3600 { return "\(Int(elapsed / 60))m" }
         if elapsed < 86400 { return "\(Int(elapsed / 3600))h" }
         return "\(Int(elapsed / 86400))d"
-    }
-}
-
-private struct PodChatContactsResponseDTO: Decodable {
-    let generatedAt: Date
-    let contacts: [PodChatContactDTO]
-
-    enum CodingKeys: String, CodingKey {
-        case generatedAt = "generated_at"
-        case contacts
-    }
-}
-
-private struct PodChatContactDTO: Decodable {
-    let pendingCount: Int
-    let unreadCount: Int?
-    let needsAttention: Bool?
-    let notificationLevel: String?
-
-    enum CodingKeys: String, CodingKey {
-        case pendingCount = "pending_count"
-        case unreadCount = "unread_count"
-        case needsAttention = "needs_attention"
-        case notificationLevel = "notification_level"
-    }
-}
-
-private struct PodChatHealthDTO: Decodable {
-    let status: String
-    let generatedAt: Date
-
-    enum CodingKeys: String, CodingKey {
-        case status
-        case generatedAt = "generated_at"
     }
 }

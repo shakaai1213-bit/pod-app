@@ -2,12 +2,14 @@ import AuthenticationServices
 import CryptoKit
 import Foundation
 import Observation
+import OrcaAPI
+import OrcaRuntime
 import OrcaRuntimeContracts
 
 @Observable
 @MainActor
 final class OrcaMacModel {
-    static let defaultServerAddress = "http://100.104.72.62:8000"
+    static let defaultServerAddress = OrcaEndpointPolicy.productionOrigin
 
     var selectedAgentID: String
     var selectedSection: ConsoleSection
@@ -171,7 +173,9 @@ final class OrcaMacModel {
                 deviceID: await nextAuthService.boundDeviceID()
             )
             consoleService = nextConsoleService
-            let runtimeAgents = try await nextConsoleService.agentProfiles()
+            let runtimeAgents = try OrcaRuntimeProjection.profiles(
+                from: await nextService.agentPacks()
+            )
             guard !runtimeAgents.isEmpty else { throw OrcaConsoleServiceError.invalidResponse }
             agents = runtimeAgents
             if !agents.contains(where: { $0.id == selectedAgentID }) {
@@ -435,16 +439,7 @@ final class OrcaMacModel {
     }
 
     static func normalizedEndpoint(_ raw: String) -> URL? {
-        var normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return nil }
-        if !normalized.contains("://") { normalized = "http://\(normalized)" }
-        while normalized.hasSuffix("/") { normalized.removeLast() }
-        guard let url = URL(string: normalized),
-              let scheme = url.scheme?.lowercased(),
-              ["http", "https"].contains(scheme),
-              url.host != nil,
-              OrcaServerOrigin.isApproved(url) else { return nil }
-        return url
+        OrcaEndpointPolicy.normalizedEndpoint(raw)
     }
 
     private func beginRefreshLoop() {

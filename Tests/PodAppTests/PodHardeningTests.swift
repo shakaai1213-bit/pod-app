@@ -1,4 +1,5 @@
 import Foundation
+import OrcaDomain
 import XCTest
 @testable import pod
 
@@ -26,6 +27,21 @@ final class PodHardeningTests: XCTestCase {
     func testPhysicalPodUsesCanonicalORCAMiniBackend() {
         XCTAssertEqual(AppConfig.canonicalBackendURL, "http://100.104.72.62:8000")
         XCTAssertNotEqual(AppConfig.canonicalBackendURL, "http://100.76.196.40:8000")
+    }
+
+    func testPodUsesSharedSevenAgentAndOperatingAreaInventory() {
+        XCTAssertEqual(
+            AgentInfo.team.map(\.id),
+            OrcaAgentProfile.fallbackRoster.map(\.id)
+        )
+        XCTAssertEqual(AppTab.dashboard.title, OrcaSurfaceSection.overview.title)
+        XCTAssertEqual(AppTab.work.title, OrcaSurfaceSection.work.title)
+        XCTAssertEqual(AppTab.fund.title, OrcaSurfaceSection.fund.title)
+        XCTAssertEqual(AppTab.crew.title, OrcaSurfaceSection.crew.title)
+        XCTAssertEqual(AppTab.knowledge.title, OrcaSurfaceSection.knowledge.title)
+        XCTAssertEqual(AppTab.lab.title, OrcaSurfaceSection.lab.title)
+        XCTAssertEqual(AppTab.runtime.title, OrcaSurfaceSection.runtime.title)
+        XCTAssertEqual(AppTab.maker.title, OrcaSurfaceSection.maker.title)
     }
 
     func testPodChatHasOneUserFacingEntryInsideWork() throws {

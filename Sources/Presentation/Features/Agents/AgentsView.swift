@@ -1,5 +1,6 @@
-import SwiftUI
 import Observation
+import OrcaDomain
+import SwiftUI
 
 // MARK: - Agents View (Classroom, per SPEC-POD-AGENTS-TAB-2026-05-23)
 // Slice 1: section frames + headers + design tokens wired. Data + actions in subsequent slices.
@@ -1602,16 +1603,8 @@ private struct AgentFocusCard: Identifiable, Hashable {
     var id: String { agentId.lowercased() }
 
     var tint: Color {
-        switch id {
-        case "maui": return AppColors.accentSuccess
-        case "aloha": return Color(hexString: "A855F7")
-        case "chief": return Color(hexString: "22C55E")
-        case "rooster": return AppColors.accentDanger
-        case "coral": return Color(hexString: "06B6D4")
-        case "reef": return Color(hexString: "14B8A6")
-        case "shaka": return Color(hexString: "F97316")
-        default: return AppColors.accentElectric
-        }
+        guard let profile = OrcaAgentProfile.known(id) else { return AppColors.accentElectric }
+        return Color(hexString: profile.colorHex)
     }
 
     var lastUpdatedLabel: String {
@@ -1660,15 +1653,26 @@ private struct AgentFocusDeputy: Identifiable {
 
 private enum AgentFocusDefaults {
     static let mainAgentOrder = ["maui", "aloha", "chief", "rooster", "coral", "reef", "shaka"]
-    static let mainAgentMeta: [String: (name: String, emoji: String, charter: String)] = [
-        "maui": ("Maui", "🌋", "Pod / Lifecycle / Compute / Codex orchestrator"),
-        "aloha": ("Aloha", "🌸", "Backbone / Nerve / Flywheel / Doctrine gate"),
-        "chief": ("Chief", "🦅", "Trading / P&L / Funding"),
-        "rooster": ("Rooster", "🐓", "Security / Research / Knowledge / Team Tooling"),
-        "coral": ("Coral", "🪸", "Ops / Watchdogs / Storage"),
-        "reef": ("Reef", "🐡", "Surfaces / Tools / Watchdogs"),
-        "shaka": ("Shaka", "🤙", "CEO / Decision proxy / Cross-team coordination")
+    private static let emojiByID = [
+        "maui": "🌋",
+        "aloha": "🌸",
+        "chief": "🦅",
+        "rooster": "🐓",
+        "coral": "🪸",
+        "reef": "🐡",
+        "shaka": "🤙",
     ]
+    static let mainAgentMeta: [String: (name: String, emoji: String, charter: String)] =
+        Dictionary(uniqueKeysWithValues: OrcaAgentProfile.fallbackRoster.map { profile in
+            (
+                profile.id,
+                (
+                    name: profile.name,
+                    emoji: emojiByID[profile.id] ?? "",
+                    charter: profile.role
+                )
+            )
+        })
 
 }
 

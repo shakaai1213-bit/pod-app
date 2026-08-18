@@ -15,14 +15,18 @@
 		5C2A1189E3697D57BC6C80C8 /* RuntimeInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DABE2808685236170CD27E3 /* RuntimeInspectorView.swift */; };
 		6AD3BABB3808E52BB0DC5898 /* OrcaConsoleService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8786120F464535F2B5D5335 /* OrcaConsoleService.swift */; };
 		71E73FDFAB0A03A3F2FDE787 /* OrcaMacRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F8F0C6338DDF03277178DE /* OrcaMacRootView.swift */; };
+		78021C04E1A7FB53A3BA7E92 /* OrcaAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 61D73EF3A49F577C43052BE9 /* OrcaAPI */; };
 		7C2A91486F032CABA4D19614 /* RuntimeTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2486F747AFC706EA37D40353 /* RuntimeTokenStore.swift */; };
 		843E40830EFBC5298E907194 /* ConsoleSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61DE8611CB4FA2C9A5F20E42 /* ConsoleSection.swift */; };
 		901A4937A12ACC20DEA8591A /* ConsoleInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67A66FA57C2B25C9565C0BFC /* ConsoleInspectorView.swift */; };
 		99FBE414128793480ED47BF5 /* OrcaRuntimeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E16FB299A152B526B16103E9 /* OrcaRuntimeService.swift */; };
 		9EFDDCA5ABF5BA2B1C232E8A /* OrcaRuntimeContracts in Frameworks */ = {isa = PBXBuildFile; productRef = 116C04D573F5CD68638491FC /* OrcaRuntimeContracts */; };
+		BC491EE8A8B70D534B5D8692 /* OrcaDesign in Frameworks */ = {isa = PBXBuildFile; productRef = 13AA3545C2091927933F5E71 /* OrcaDesign */; };
 		C8422182A7AC9EE7B9C37059 /* OrcaMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AD237E2711945CDB9595F40 /* OrcaMacApp.swift */; };
+		C8FECC1EB9E29740C94FA7E2 /* OrcaRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = 8D0FEBE0A517147987A2E990 /* OrcaRuntime */; };
 		D2E5AE67656BD94A9B758F4F /* RuntimeSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADCFAE90923B128D54DB1670 /* RuntimeSettingsView.swift */; };
 		D456856E9EE405384F9C4A7C /* OrcaMacModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 899EEF8FAFC5B303A787CD4E /* OrcaMacModel.swift */; };
+		E5C1AE4E7D6BA65A5B615D93 /* OrcaDomain in Frameworks */ = {isa = PBXBuildFile; productRef = F7DF9B967A63ECD35AB11454 /* OrcaDomain */; };
 		E6D573CF1B1B9CDB71E5E43F /* OrcaMacModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C2A8295BDFAF1CEDA0E7203 /* OrcaMacModelTests.swift */; };
 		EA78C9ECE5E6F3BFEC5C86D6 /* ConsoleSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBAC885AD2E475E60B8E5316 /* ConsoleSectionView.swift */; };
 		F7C4687328DA11FCDCC454C7 /* OrcaNativeAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C163B310FD43803FA2A73249 /* OrcaNativeAuthService.swift */; };
@@ -68,6 +72,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				9EFDDCA5ABF5BA2B1C232E8A /* OrcaRuntimeContracts in Frameworks */,
+				E5C1AE4E7D6BA65A5B615D93 /* OrcaDomain in Frameworks */,
+				78021C04E1A7FB53A3BA7E92 /* OrcaAPI in Frameworks */,
+				C8FECC1EB9E29740C94FA7E2 /* OrcaRuntime in Frameworks */,
+				BC491EE8A8B70D534B5D8692 /* OrcaDesign in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -190,6 +198,10 @@
 			name = OrcaMac;
 			packageProductDependencies = (
 				116C04D573F5CD68638491FC /* OrcaRuntimeContracts */,
+				F7DF9B967A63ECD35AB11454 /* OrcaDomain */,
+				61D73EF3A49F577C43052BE9 /* OrcaAPI */,
+				8D0FEBE0A517147987A2E990 /* OrcaRuntime */,
+				13AA3545C2091927933F5E71 /* OrcaDesign */,
 			);
 			productName = OrcaMac;
 			productReference = 57572F55993B1FD11A52D669 /* OrcaMac.app */;
@@ -541,6 +553,22 @@
 		116C04D573F5CD68638491FC /* OrcaRuntimeContracts */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = OrcaRuntimeContracts;
+		};
+		13AA3545C2091927933F5E71 /* OrcaDesign */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = OrcaDesign;
+		};
+		61D73EF3A49F577C43052BE9 /* OrcaAPI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = OrcaAPI;
+		};
+		8D0FEBE0A517147987A2E990 /* OrcaRuntime */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = OrcaRuntime;
+		};
+		F7DF9B967A63ECD35AB11454 /* OrcaDomain */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = OrcaDomain;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

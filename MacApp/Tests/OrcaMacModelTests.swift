@@ -218,28 +218,6 @@ final class OrcaMacModelTests: XCTestCase {
         )
     }
 
-    func testAgentRosterLoadsFromCanonicalManagementProjection() async throws {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [TestURLProtocol.self]
-        let session = URLSession(configuration: configuration)
-        TestURLProtocol.response = { request in
-            XCTAssertEqual(request.url?.path, "/api/v1/management/agents")
-            return (200, Data(#"{"agents":[{"agent_name":"coral","display_name":"Coral","title":"Operations and surfaces"},{"agent_name":"reef","display_name":"Reef","title":"Runtime support"}]}"#.utf8))
-        }
-        defer { TestURLProtocol.response = nil }
-
-        let service = OrcaConsoleService(
-            serverURL: URL(string: "http://127.0.0.1:8000")!,
-            tokenStore: TestRuntimeTokenStore(token: "console-token"),
-            deviceID: "test-device-id-0123456789",
-            session: session
-        )
-
-        let profiles = try await service.agentProfiles()
-        XCTAssertEqual(profiles.map(\.id), ["coral", "reef"])
-        XCTAssertEqual(profiles.first?.role, "Operations and surfaces")
-    }
-
     func testConversationPersistenceChangesWithOrganizationAndClearsLegacyKey() {
         let suiteName = "OrcaMacModelTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

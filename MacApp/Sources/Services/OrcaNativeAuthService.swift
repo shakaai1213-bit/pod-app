@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import OrcaAPI
 import OrcaRuntimeContracts
 import Security
 
@@ -21,24 +22,7 @@ enum OrcaNativeAuthError: Error, LocalizedError {
     }
 }
 
-enum OrcaServerOrigin {
-    static let production = "http://100.104.72.62:8000"
-
-    static func normalized(_ url: URL) -> String? {
-        guard let scheme = url.scheme?.lowercased(), let host = url.host?.lowercased() else { return nil }
-        let port = url.port.map { ":\($0)" } ?? ""
-        return "\(scheme)://\(host)\(port)"
-    }
-
-    static func isApproved(_ url: URL) -> Bool {
-        guard let origin = normalized(url) else { return false }
-        if origin == production { return true }
-#if DEBUG
-        if url.scheme?.lowercased() == "http", ["localhost", "127.0.0.1", "::1"].contains(url.host?.lowercased() ?? "") { return true }
-#endif
-        return false
-    }
-}
+typealias OrcaServerOrigin = OrcaEndpointPolicy
 
 enum OrcaDeviceIdentity {
     private static let service = "com.orcamc.mac.device-identity"
