@@ -269,6 +269,38 @@ public actor OrcaRuntimeClient {
         return bundle
     }
 
+    public func capabilities(
+        agentKey: String
+    ) async throws -> Components.Schemas.ChatRuntimeCapabilityBundleRead {
+        _ = try await verifyCompatibility()
+        let normalizedAgentKey = agentKey.lowercased()
+        guard Self.namedAgentKeys.contains(normalizedAgentKey) else {
+            throw OrcaRuntimeClientError.invalidResponse("capability agent is not in roster")
+        }
+        let packs = try await agentPacks()
+        guard let pack = packs.packs.first(where: { $0.agentKey == normalizedAgentKey }) else {
+            throw OrcaRuntimeClientError.invalidResponse("capability agent pack is missing")
+        }
+        let output = try await client.getRuntimeAgentCapabilities(
+            .init(path: .init(agentKey: normalizedAgentKey))
+        )
+        let bundle: Components.Schemas.ChatRuntimeCapabilityBundleRead
+        switch output {
+        case let .ok(response):
+            bundle = try response.body.json
+        case .unprocessableContent:
+            throw OrcaRuntimeClientError.httpStatus(422)
+        case let .undocumented(statusCode, _):
+            throw OrcaRuntimeClientError.httpStatus(statusCode)
+        }
+        try Self.validateCapabilities(
+            bundle,
+            expectedAgentKey: normalizedAgentKey,
+            expectedConfigurationSHA256: pack.payloadSha256
+        )
+        return bundle
+    }
+
     static func validateAgentPacks(
         _ bundle: Components.Schemas.ChatRuntimeAgentPackBundleRead
     ) throws {
@@ -288,12 +320,83 @@ public actor OrcaRuntimeClient {
                   pack.terminalReplyOwner?.rawValue == "schoolhouse_wake",
                   pack.voiceContract?.rawValue == "orca.named-agent-voice.v1",
                   pack.memoryContract?.rawValue == "orca_managed",
+                  pack.capabilityRef
+                    == "/api/v1/chat-runtime/v1/agents/\(pack.agentKey)/capabilities",
                   pack.capabilityAttestationRequired == true,
                   pack.releaseSignatureRequired == true,
                   pack.payloadSha256.count == 64,
                   !pack.supportedAdapterIds.isEmpty else {
                 throw OrcaRuntimeClientError.invalidResponse(
                     "agent pack failed closed for \(pack.agentKey)"
+                )
+            }
+        }
+    }
+
+    static func validateCapabilities(
+        _ bundle: Components.Schemas.ChatRuntimeCapabilityBundleRead,
+        expectedAgentKey: String,
+        expectedConfigurationSHA256: String
+    ) throws {
+        guard namedAgentKeys.contains(expectedAgentKey),
+              bundle.contractVersion?.rawValue == "orca.capability-bundle.v1",
+              bundle.sourceContract?.rawValue == "orca.agent-tools.v1",
+              bundle.authority?.rawValue == "orca",
+              bundle.agentKey == expectedAgentKey,
+              bundle.runtimeManifestRevision.isEmpty == false,
+              bundle.configurationSha256 == expectedConfigurationSHA256,
+              bundle.configurationSha256.count == 64,
+              bundle.bundleSha256.count == 64,
+              bundle.capabilityTruthReply.isEmpty == false,
+              let capabilities = bundle.capabilities,
+              capabilities.isEmpty == false,
+              Set(capabilities.map(\.capabilityId)).count == capabilities.count else {
+            throw OrcaRuntimeClientError.invalidResponse("capability bundle failed closed")
+        }
+
+        for capability in capabilities {
+            let declaredAvailable = capability.declaredStatus == "available"
+            let attested = capability.attestation.state == "attested"
+            let expectedProductionReady = declaredAvailable && attested
+            let endpointValues = capability.endpoints.map {
+                Array($0.additionalProperties.values)
+            } ?? []
+            let attestationFreshAtGeneration = capability.attestation.expiresAt.map {
+                $0 > bundle.generatedAt
+            } ?? true
+            guard capability.capabilityId.isEmpty == false,
+                  capability.label.isEmpty == false,
+                  capability.executionAllowedByCurrentPolicy == declaredAvailable,
+                  capability.productionReady == expectedProductionReady,
+                  capability.attestation.schema.rawValue
+                    == "orca.runtime-capability-attestation.v1",
+                  capability.attestation.enforced == bundle.attestationEnforced,
+                  capability.attestation.configuredStatus == capability.declaredStatus,
+                  capability.attestation.effectiveStatus == capability.declaredStatus,
+                  capability.attestation.executionHost == capability.executionHost,
+                  capability.attestation.mode.isEmpty == false,
+                  capability.attestation.reason.isEmpty == false,
+                  capability.attestation.sourceTag.isEmpty == false,
+                  capability.attestation.recordContractValid,
+                  capability.attestation.evidenceValid,
+                  capability.attestation.rejectedEvidenceCount == 0,
+                  endpointValues.allSatisfy({ $0.hasPrefix("/api/v1/") }),
+                  !(capability.productionReady
+                    && capability.attestation.wouldBlockIfEnforced),
+                  !(capability.productionReady
+                    && !(capability.attestation.missingChecks ?? []).isEmpty),
+                  !(capability.productionReady
+                    && !(capability.attestation.recordContractErrors ?? []).isEmpty),
+                  !(capability.productionReady
+                    && capability.attestation.expectedRoute != nil
+                    && capability.attestation.expectedRoute
+                        != capability.attestation.actualRoute),
+                  !capability.productionReady || attestationFreshAtGeneration,
+                  !(bundle.attestationEnforced
+                    && capability.executionAllowedByCurrentPolicy
+                    && !capability.productionReady) else {
+                throw OrcaRuntimeClientError.invalidResponse(
+                    "capability failed closed for \(capability.capabilityId)"
                 )
             }
         }

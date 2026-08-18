@@ -18,6 +18,13 @@ public protocol APIProtocol: Sendable {
     /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/agent-packs`.
     /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/agent-packs/get(getRuntimeAgentPacks)`.
     func getRuntimeAgentPacks(_ input: Operations.GetRuntimeAgentPacks.Input) async throws -> Operations.GetRuntimeAgentPacks.Output
+    /// Read ORCA Chat Runtime v1 Agent Capability Truth
+    ///
+    /// Returns the typed ORCA-owned capability projection for one exact named agent. Declared availability and fresh runtime attestation remain separate so clients cannot manufacture a production-ready claim.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/agents/{agent_key}/capabilities`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/agents/{agent_key}/capabilities/get(getRuntimeAgentCapabilities)`.
+    func getRuntimeAgentCapabilities(_ input: Operations.GetRuntimeAgentCapabilities.Input) async throws -> Operations.GetRuntimeAgentCapabilities.Output
     /// Read ORCA Chat Runtime v1 Complete-Turn Fixture
     ///
     /// Returns a deterministic provider-neutral accepted-to-terminal turn for generated client decoding, ordering, and replay conformance tests.
@@ -65,6 +72,21 @@ extension APIProtocol {
     /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/agent-packs/get(getRuntimeAgentPacks)`.
     public func getRuntimeAgentPacks(headers: Operations.GetRuntimeAgentPacks.Input.Headers = .init()) async throws -> Operations.GetRuntimeAgentPacks.Output {
         try await getRuntimeAgentPacks(Operations.GetRuntimeAgentPacks.Input(headers: headers))
+    }
+    /// Read ORCA Chat Runtime v1 Agent Capability Truth
+    ///
+    /// Returns the typed ORCA-owned capability projection for one exact named agent. Declared availability and fresh runtime attestation remain separate so clients cannot manufacture a production-ready claim.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/agents/{agent_key}/capabilities`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/agents/{agent_key}/capabilities/get(getRuntimeAgentCapabilities)`.
+    public func getRuntimeAgentCapabilities(
+        path: Operations.GetRuntimeAgentCapabilities.Input.Path,
+        headers: Operations.GetRuntimeAgentCapabilities.Input.Headers = .init()
+    ) async throws -> Operations.GetRuntimeAgentCapabilities.Output {
+        try await getRuntimeAgentCapabilities(Operations.GetRuntimeAgentCapabilities.Input(
+            path: path,
+            headers: headers
+        ))
     }
     /// Read ORCA Chat Runtime v1 Complete-Turn Fixture
     ///
@@ -679,6 +701,421 @@ public enum Components {
                 case terminalReplyOwner = "terminal_reply_owner"
                 case title
                 case voiceContract = "voice_contract"
+            }
+        }
+        /// Pointer-safe live proof for one configured runtime capability.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityAttestationRead`.
+        public struct ChatRuntimeCapabilityAttestationRead: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityAttestationRead/actual_route`.
+            public var actualRoute: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityAttestationRead/attested_execution_host`.
+            public var attestedExecutionHost: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityAttestationRead/configured_status`.
+            public var configuredStatus: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityAttestationRead/effective_status`.
+            public var effectiveStatus: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityAttestationRead/enforced`.
+            public var enforced: Swift.Bool
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityAttestationRead/evidence_refs`.
+            public var evidenceRefs: [Swift.String]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityAttestationRead/evidence_valid`.
+            public var evidenceValid: Swift.Bool
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityAttestationRead/execution_host`.
+            public var executionHost: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityAttestationRead/expected_route`.
+            public var expectedRoute: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityAttestationRead/expires_at`.
+            public var expiresAt: Foundation.Date?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityAttestationRead/missing_checks`.
+            public var missingChecks: [Swift.String]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityAttestationRead/mode`.
+            public var mode: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityAttestationRead/observed_at`.
+            public var observedAt: Foundation.Date?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityAttestationRead/observed_checks`.
+            public struct ObservedChecksPayload: Codable, Hashable, Sendable {
+                /// A container of undocumented properties.
+                public var additionalProperties: [String: Swift.Bool]
+                /// Creates a new `ObservedChecksPayload`.
+                ///
+                /// - Parameters:
+                ///   - additionalProperties: A container of undocumented properties.
+                public init(additionalProperties: [String: Swift.Bool] = .init()) {
+                    self.additionalProperties = additionalProperties
+                }
+                public init(from decoder: any Swift.Decoder) throws {
+                    additionalProperties = try decoder.decodeAdditionalProperties(knownKeys: [])
+                }
+                public func encode(to encoder: any Swift.Encoder) throws {
+                    try encoder.encodeAdditionalProperties(additionalProperties)
+                }
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityAttestationRead/observed_checks`.
+            public var observedChecks: Components.Schemas.ChatRuntimeCapabilityAttestationRead.ObservedChecksPayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityAttestationRead/reason`.
+            public var reason: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityAttestationRead/record_contract_errors`.
+            public var recordContractErrors: [Swift.String]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityAttestationRead/record_contract_valid`.
+            public var recordContractValid: Swift.Bool
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityAttestationRead/record_health`.
+            public var recordHealth: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityAttestationRead/rejected_evidence_count`.
+            public var rejectedEvidenceCount: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityAttestationRead/required_checks`.
+            public var requiredChecks: [Swift.String]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityAttestationRead/schema`.
+            @frozen public enum SchemaPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case orca_runtimeCapabilityAttestation_v1 = "orca.runtime-capability-attestation.v1"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityAttestationRead/schema`.
+            public var schema: Components.Schemas.ChatRuntimeCapabilityAttestationRead.SchemaPayload
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityAttestationRead/source_tag`.
+            public var sourceTag: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityAttestationRead/state`.
+            public var state: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityAttestationRead/would_block_if_enforced`.
+            public var wouldBlockIfEnforced: Swift.Bool
+            /// Creates a new `ChatRuntimeCapabilityAttestationRead`.
+            ///
+            /// - Parameters:
+            ///   - actualRoute:
+            ///   - attestedExecutionHost:
+            ///   - configuredStatus:
+            ///   - effectiveStatus:
+            ///   - enforced:
+            ///   - evidenceRefs:
+            ///   - evidenceValid:
+            ///   - executionHost:
+            ///   - expectedRoute:
+            ///   - expiresAt:
+            ///   - missingChecks:
+            ///   - mode:
+            ///   - observedAt:
+            ///   - observedChecks:
+            ///   - reason:
+            ///   - recordContractErrors:
+            ///   - recordContractValid:
+            ///   - recordHealth:
+            ///   - rejectedEvidenceCount:
+            ///   - requiredChecks:
+            ///   - schema:
+            ///   - sourceTag:
+            ///   - state:
+            ///   - wouldBlockIfEnforced:
+            public init(
+                actualRoute: Swift.String? = nil,
+                attestedExecutionHost: Swift.String? = nil,
+                configuredStatus: Swift.String,
+                effectiveStatus: Swift.String,
+                enforced: Swift.Bool,
+                evidenceRefs: [Swift.String]? = nil,
+                evidenceValid: Swift.Bool,
+                executionHost: Swift.String,
+                expectedRoute: Swift.String? = nil,
+                expiresAt: Foundation.Date? = nil,
+                missingChecks: [Swift.String]? = nil,
+                mode: Swift.String,
+                observedAt: Foundation.Date? = nil,
+                observedChecks: Components.Schemas.ChatRuntimeCapabilityAttestationRead.ObservedChecksPayload? = nil,
+                reason: Swift.String,
+                recordContractErrors: [Swift.String]? = nil,
+                recordContractValid: Swift.Bool,
+                recordHealth: Swift.String,
+                rejectedEvidenceCount: Swift.Int,
+                requiredChecks: [Swift.String]? = nil,
+                schema: Components.Schemas.ChatRuntimeCapabilityAttestationRead.SchemaPayload,
+                sourceTag: Swift.String,
+                state: Swift.String,
+                wouldBlockIfEnforced: Swift.Bool
+            ) {
+                self.actualRoute = actualRoute
+                self.attestedExecutionHost = attestedExecutionHost
+                self.configuredStatus = configuredStatus
+                self.effectiveStatus = effectiveStatus
+                self.enforced = enforced
+                self.evidenceRefs = evidenceRefs
+                self.evidenceValid = evidenceValid
+                self.executionHost = executionHost
+                self.expectedRoute = expectedRoute
+                self.expiresAt = expiresAt
+                self.missingChecks = missingChecks
+                self.mode = mode
+                self.observedAt = observedAt
+                self.observedChecks = observedChecks
+                self.reason = reason
+                self.recordContractErrors = recordContractErrors
+                self.recordContractValid = recordContractValid
+                self.recordHealth = recordHealth
+                self.rejectedEvidenceCount = rejectedEvidenceCount
+                self.requiredChecks = requiredChecks
+                self.schema = schema
+                self.sourceTag = sourceTag
+                self.state = state
+                self.wouldBlockIfEnforced = wouldBlockIfEnforced
+            }
+            public enum CodingKeys: String, CodingKey {
+                case actualRoute = "actual_route"
+                case attestedExecutionHost = "attested_execution_host"
+                case configuredStatus = "configured_status"
+                case effectiveStatus = "effective_status"
+                case enforced
+                case evidenceRefs = "evidence_refs"
+                case evidenceValid = "evidence_valid"
+                case executionHost = "execution_host"
+                case expectedRoute = "expected_route"
+                case expiresAt = "expires_at"
+                case missingChecks = "missing_checks"
+                case mode
+                case observedAt = "observed_at"
+                case observedChecks = "observed_checks"
+                case reason
+                case recordContractErrors = "record_contract_errors"
+                case recordContractValid = "record_contract_valid"
+                case recordHealth = "record_health"
+                case rejectedEvidenceCount = "rejected_evidence_count"
+                case requiredChecks = "required_checks"
+                case schema
+                case sourceTag = "source_tag"
+                case state
+                case wouldBlockIfEnforced = "would_block_if_enforced"
+            }
+        }
+        /// ORCA-owned capability truth for one exact named-agent configuration.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityBundleRead`.
+        public struct ChatRuntimeCapabilityBundleRead: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityBundleRead/agent_id`.
+            public var agentId: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityBundleRead/agent_key`.
+            public var agentKey: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityBundleRead/attestation_enforced`.
+            public var attestationEnforced: Swift.Bool
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityBundleRead/authority`.
+            @frozen public enum AuthorityPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case orca = "orca"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityBundleRead/authority`.
+            public var authority: Components.Schemas.ChatRuntimeCapabilityBundleRead.AuthorityPayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityBundleRead/bundle_sha256`.
+            public var bundleSha256: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityBundleRead/capabilities`.
+            public var capabilities: [Components.Schemas.ChatRuntimeCapabilityRead]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityBundleRead/capability_truth_reply`.
+            public var capabilityTruthReply: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityBundleRead/configuration_sha256`.
+            public var configurationSha256: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityBundleRead/contract_version`.
+            @frozen public enum ContractVersionPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case orca_capabilityBundle_v1 = "orca.capability-bundle.v1"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityBundleRead/contract_version`.
+            public var contractVersion: Components.Schemas.ChatRuntimeCapabilityBundleRead.ContractVersionPayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityBundleRead/gaps`.
+            public var gaps: [Swift.String]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityBundleRead/generated_at`.
+            public var generatedAt: Foundation.Date
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityBundleRead/runtime_manifest_revision`.
+            public var runtimeManifestRevision: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityBundleRead/source_contract`.
+            @frozen public enum SourceContractPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case orca_agentTools_v1 = "orca.agent-tools.v1"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityBundleRead/source_contract`.
+            public var sourceContract: Components.Schemas.ChatRuntimeCapabilityBundleRead.SourceContractPayload?
+            /// Creates a new `ChatRuntimeCapabilityBundleRead`.
+            ///
+            /// - Parameters:
+            ///   - agentId:
+            ///   - agentKey:
+            ///   - attestationEnforced:
+            ///   - authority:
+            ///   - bundleSha256:
+            ///   - capabilities:
+            ///   - capabilityTruthReply:
+            ///   - configurationSha256:
+            ///   - contractVersion:
+            ///   - gaps:
+            ///   - generatedAt:
+            ///   - runtimeManifestRevision:
+            ///   - sourceContract:
+            public init(
+                agentId: Swift.String,
+                agentKey: Swift.String,
+                attestationEnforced: Swift.Bool,
+                authority: Components.Schemas.ChatRuntimeCapabilityBundleRead.AuthorityPayload? = nil,
+                bundleSha256: Swift.String,
+                capabilities: [Components.Schemas.ChatRuntimeCapabilityRead]? = nil,
+                capabilityTruthReply: Swift.String,
+                configurationSha256: Swift.String,
+                contractVersion: Components.Schemas.ChatRuntimeCapabilityBundleRead.ContractVersionPayload? = nil,
+                gaps: [Swift.String]? = nil,
+                generatedAt: Foundation.Date,
+                runtimeManifestRevision: Swift.String,
+                sourceContract: Components.Schemas.ChatRuntimeCapabilityBundleRead.SourceContractPayload? = nil
+            ) {
+                self.agentId = agentId
+                self.agentKey = agentKey
+                self.attestationEnforced = attestationEnforced
+                self.authority = authority
+                self.bundleSha256 = bundleSha256
+                self.capabilities = capabilities
+                self.capabilityTruthReply = capabilityTruthReply
+                self.configurationSha256 = configurationSha256
+                self.contractVersion = contractVersion
+                self.gaps = gaps
+                self.generatedAt = generatedAt
+                self.runtimeManifestRevision = runtimeManifestRevision
+                self.sourceContract = sourceContract
+            }
+            public enum CodingKeys: String, CodingKey {
+                case agentId = "agent_id"
+                case agentKey = "agent_key"
+                case attestationEnforced = "attestation_enforced"
+                case authority
+                case bundleSha256 = "bundle_sha256"
+                case capabilities
+                case capabilityTruthReply = "capability_truth_reply"
+                case configurationSha256 = "configuration_sha256"
+                case contractVersion = "contract_version"
+                case gaps
+                case generatedAt = "generated_at"
+                case runtimeManifestRevision = "runtime_manifest_revision"
+                case sourceContract = "source_contract"
+            }
+        }
+        /// Typed tool/resource capability without transferring execution authority.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityRead`.
+        public struct ChatRuntimeCapabilityRead: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityRead/attestation`.
+            public var attestation: Components.Schemas.ChatRuntimeCapabilityAttestationRead
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityRead/blocked_reasons`.
+            public var blockedReasons: [Swift.String]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityRead/capability_class`.
+            public var capabilityClass: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityRead/capability_id`.
+            public var capabilityId: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityRead/declared_status`.
+            public var declaredStatus: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityRead/endpoints`.
+            public struct EndpointsPayload: Codable, Hashable, Sendable {
+                /// A container of undocumented properties.
+                public var additionalProperties: [String: Swift.String]
+                /// Creates a new `EndpointsPayload`.
+                ///
+                /// - Parameters:
+                ///   - additionalProperties: A container of undocumented properties.
+                public init(additionalProperties: [String: Swift.String] = .init()) {
+                    self.additionalProperties = additionalProperties
+                }
+                public init(from decoder: any Swift.Decoder) throws {
+                    additionalProperties = try decoder.decodeAdditionalProperties(knownKeys: [])
+                }
+                public func encode(to encoder: any Swift.Encoder) throws {
+                    try encoder.encodeAdditionalProperties(additionalProperties)
+                }
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityRead/endpoints`.
+            public var endpoints: Components.Schemas.ChatRuntimeCapabilityRead.EndpointsPayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityRead/evidence_types`.
+            public var evidenceTypes: [Swift.String]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityRead/execution_allowed_by_current_policy`.
+            public var executionAllowedByCurrentPolicy: Swift.Bool
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityRead/execution_host`.
+            public var executionHost: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityRead/label`.
+            public var label: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityRead/mode`.
+            public var mode: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityRead/production_ready`.
+            public var productionReady: Swift.Bool
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityRead/requires_approval`.
+            public var requiresApproval: Swift.Bool
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityRead/result_schema`.
+            public var resultSchema: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityRead/risk`.
+            public var risk: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityRead/scopes`.
+            public var scopes: [Swift.String]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeCapabilityRead/version`.
+            public var version: Swift.String
+            /// Creates a new `ChatRuntimeCapabilityRead`.
+            ///
+            /// - Parameters:
+            ///   - attestation:
+            ///   - blockedReasons:
+            ///   - capabilityClass:
+            ///   - capabilityId:
+            ///   - declaredStatus:
+            ///   - endpoints:
+            ///   - evidenceTypes:
+            ///   - executionAllowedByCurrentPolicy:
+            ///   - executionHost:
+            ///   - label:
+            ///   - mode:
+            ///   - productionReady:
+            ///   - requiresApproval:
+            ///   - resultSchema:
+            ///   - risk:
+            ///   - scopes:
+            ///   - version:
+            public init(
+                attestation: Components.Schemas.ChatRuntimeCapabilityAttestationRead,
+                blockedReasons: [Swift.String]? = nil,
+                capabilityClass: Swift.String,
+                capabilityId: Swift.String,
+                declaredStatus: Swift.String,
+                endpoints: Components.Schemas.ChatRuntimeCapabilityRead.EndpointsPayload? = nil,
+                evidenceTypes: [Swift.String]? = nil,
+                executionAllowedByCurrentPolicy: Swift.Bool,
+                executionHost: Swift.String,
+                label: Swift.String,
+                mode: Swift.String,
+                productionReady: Swift.Bool,
+                requiresApproval: Swift.Bool,
+                resultSchema: Swift.String,
+                risk: Swift.String,
+                scopes: [Swift.String]? = nil,
+                version: Swift.String
+            ) {
+                self.attestation = attestation
+                self.blockedReasons = blockedReasons
+                self.capabilityClass = capabilityClass
+                self.capabilityId = capabilityId
+                self.declaredStatus = declaredStatus
+                self.endpoints = endpoints
+                self.evidenceTypes = evidenceTypes
+                self.executionAllowedByCurrentPolicy = executionAllowedByCurrentPolicy
+                self.executionHost = executionHost
+                self.label = label
+                self.mode = mode
+                self.productionReady = productionReady
+                self.requiresApproval = requiresApproval
+                self.resultSchema = resultSchema
+                self.risk = risk
+                self.scopes = scopes
+                self.version = version
+            }
+            public enum CodingKeys: String, CodingKey {
+                case attestation
+                case blockedReasons = "blocked_reasons"
+                case capabilityClass = "capability_class"
+                case capabilityId = "capability_id"
+                case declaredStatus = "declared_status"
+                case endpoints
+                case evidenceTypes = "evidence_types"
+                case executionAllowedByCurrentPolicy = "execution_allowed_by_current_policy"
+                case executionHost = "execution_host"
+                case label
+                case mode
+                case productionReady = "production_ready"
+                case requiresApproval = "requires_approval"
+                case resultSchema = "result_schema"
+                case risk
+                case scopes
+                case version
             }
         }
         /// - Remark: Generated from `#/components/schemas/ChatRuntimeCompatibilityRouteRead`.
@@ -1865,6 +2302,187 @@ public enum Operations {
                     default:
                         try throwUnexpectedResponseStatus(
                             expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        @frozen public enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            public init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            public var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            public static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// Read ORCA Chat Runtime v1 Agent Capability Truth
+    ///
+    /// Returns the typed ORCA-owned capability projection for one exact named agent. Declared availability and fresh runtime attestation remain separate so clients cannot manufacture a production-ready claim.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/agents/{agent_key}/capabilities`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/agents/{agent_key}/capabilities/get(getRuntimeAgentCapabilities)`.
+    public enum GetRuntimeAgentCapabilities {
+        public static let id: Swift.String = "getRuntimeAgentCapabilities"
+        public struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/agents/{agent_key}/capabilities/GET/path`.
+            public struct Path: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/agents/{agent_key}/capabilities/GET/path/agent_key`.
+                public var agentKey: Swift.String
+                /// Creates a new `Path`.
+                ///
+                /// - Parameters:
+                ///   - agentKey:
+                public init(agentKey: Swift.String) {
+                    self.agentKey = agentKey
+                }
+            }
+            public var path: Operations.GetRuntimeAgentCapabilities.Input.Path
+            /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/agents/{agent_key}/capabilities/GET/header`.
+            public struct Headers: Sendable, Hashable {
+                public var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.GetRuntimeAgentCapabilities.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                public init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.GetRuntimeAgentCapabilities.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            public var headers: Operations.GetRuntimeAgentCapabilities.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - path:
+            ///   - headers:
+            public init(
+                path: Operations.GetRuntimeAgentCapabilities.Input.Path,
+                headers: Operations.GetRuntimeAgentCapabilities.Input.Headers = .init()
+            ) {
+                self.path = path
+                self.headers = headers
+            }
+        }
+        @frozen public enum Output: Sendable, Hashable {
+            public struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/agents/{agent_key}/capabilities/GET/responses/200/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/agents/{agent_key}/capabilities/GET/responses/200/content/application\/json`.
+                    case json(Components.Schemas.ChatRuntimeCapabilityBundleRead)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.ChatRuntimeCapabilityBundleRead {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.GetRuntimeAgentCapabilities.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.GetRuntimeAgentCapabilities.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// Successful Response
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/agents/{agent_key}/capabilities/get(getRuntimeAgentCapabilities)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.GetRuntimeAgentCapabilities.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            public var ok: Operations.GetRuntimeAgentCapabilities.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct UnprocessableContent: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/agents/{agent_key}/capabilities/GET/responses/422/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/agents/{agent_key}/capabilities/GET/responses/422/content/application\/json`.
+                    case json(Components.Schemas.HTTPValidationError)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.HTTPValidationError {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.GetRuntimeAgentCapabilities.Output.UnprocessableContent.Body
+                /// Creates a new `UnprocessableContent`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.GetRuntimeAgentCapabilities.Output.UnprocessableContent.Body) {
+                    self.body = body
+                }
+            }
+            /// Validation Error
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/agents/{agent_key}/capabilities/get(getRuntimeAgentCapabilities)/responses/422`.
+            ///
+            /// HTTP response code: `422 unprocessableContent`.
+            case unprocessableContent(Operations.GetRuntimeAgentCapabilities.Output.UnprocessableContent)
+            /// The associated value of the enum case if `self` is `.unprocessableContent`.
+            ///
+            /// - Throws: An error if `self` is not `.unprocessableContent`.
+            /// - SeeAlso: `.unprocessableContent`.
+            public var unprocessableContent: Operations.GetRuntimeAgentCapabilities.Output.UnprocessableContent {
+                get throws {
+                    switch self {
+                    case let .unprocessableContent(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unprocessableContent",
                             response: self
                         )
                     }

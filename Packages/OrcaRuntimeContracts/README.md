@@ -27,5 +27,6 @@ swift test
 
 The tests decode the backend-produced complete-turn fixture and verify that
 adapter, runtime-session, cursor, event, and terminal-outcome fields survive
-Swift generation. The root Pod project also links this package during its iOS
-build.
+Swift generation. They also fail closed when a named-agent capability bundle
+drifts from its Agent Pack, overstates live attestation, or points execution
+outside ORCA. The root Pod project also links this package during its iOS build.

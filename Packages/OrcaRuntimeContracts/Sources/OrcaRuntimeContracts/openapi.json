@@ -462,6 +462,370 @@
         "title": "ChatRuntimeAgentPackRead",
         "type": "object"
       },
+      "ChatRuntimeCapabilityAttestationRead": {
+        "description": "Pointer-safe live proof for one configured runtime capability.",
+        "properties": {
+          "actual_route": {
+            "maxLength": 512,
+            "title": "Actual Route",
+            "type": "string"
+          },
+          "attested_execution_host": {
+            "maxLength": 128,
+            "title": "Attested Execution Host",
+            "type": "string"
+          },
+          "configured_status": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Configured Status",
+            "type": "string"
+          },
+          "effective_status": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Effective Status",
+            "type": "string"
+          },
+          "enforced": {
+            "title": "Enforced",
+            "type": "boolean"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "evidence_valid": {
+            "title": "Evidence Valid",
+            "type": "boolean"
+          },
+          "execution_host": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Execution Host",
+            "type": "string"
+          },
+          "expected_route": {
+            "maxLength": 512,
+            "title": "Expected Route",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "missing_checks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Checks",
+            "type": "array"
+          },
+          "mode": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Mode",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "observed_checks": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Observed Checks",
+            "type": "object"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "record_contract_errors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Record Contract Errors",
+            "type": "array"
+          },
+          "record_contract_valid": {
+            "title": "Record Contract Valid",
+            "type": "boolean"
+          },
+          "record_health": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Record Health",
+            "type": "string"
+          },
+          "rejected_evidence_count": {
+            "minimum": 0.0,
+            "title": "Rejected Evidence Count",
+            "type": "integer"
+          },
+          "required_checks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Checks",
+            "type": "array"
+          },
+          "schema": {
+            "const": "orca.runtime-capability-attestation.v1",
+            "title": "Schema",
+            "type": "string"
+          },
+          "source_tag": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Source Tag",
+            "type": "string"
+          },
+          "state": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "State",
+            "type": "string"
+          },
+          "would_block_if_enforced": {
+            "title": "Would Block If Enforced",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "schema",
+          "mode",
+          "enforced",
+          "state",
+          "reason",
+          "configured_status",
+          "effective_status",
+          "would_block_if_enforced",
+          "execution_host",
+          "record_health",
+          "record_contract_valid",
+          "evidence_valid",
+          "rejected_evidence_count",
+          "source_tag"
+        ],
+        "title": "ChatRuntimeCapabilityAttestationRead",
+        "type": "object"
+      },
+      "ChatRuntimeCapabilityBundleRead": {
+        "description": "ORCA-owned capability truth for one exact named-agent configuration.",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "agent_key": {
+            "pattern": "^[a-z][a-z0-9-]{1,63}$",
+            "title": "Agent Key",
+            "type": "string"
+          },
+          "attestation_enforced": {
+            "title": "Attestation Enforced",
+            "type": "boolean"
+          },
+          "authority": {
+            "const": "orca",
+            "default": "orca",
+            "title": "Authority",
+            "type": "string"
+          },
+          "bundle_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Bundle Sha256",
+            "type": "string"
+          },
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeCapabilityRead"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "capability_truth_reply": {
+            "title": "Capability Truth Reply",
+            "type": "string"
+          },
+          "configuration_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Configuration Sha256",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "orca.capability-bundle.v1",
+            "default": "orca.capability-bundle.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "gaps": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Gaps",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "runtime_manifest_revision": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Runtime Manifest Revision",
+            "type": "string"
+          },
+          "source_contract": {
+            "const": "orca.agent-tools.v1",
+            "default": "orca.agent-tools.v1",
+            "title": "Source Contract",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_key",
+          "agent_id",
+          "runtime_manifest_revision",
+          "generated_at",
+          "attestation_enforced",
+          "configuration_sha256",
+          "bundle_sha256",
+          "capability_truth_reply"
+        ],
+        "title": "ChatRuntimeCapabilityBundleRead",
+        "type": "object"
+      },
+      "ChatRuntimeCapabilityRead": {
+        "description": "Typed tool/resource capability without transferring execution authority.",
+        "properties": {
+          "attestation": {
+            "$ref": "#/components/schemas/ChatRuntimeCapabilityAttestationRead"
+          },
+          "blocked_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocked Reasons",
+            "type": "array"
+          },
+          "capability_class": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Capability Class",
+            "type": "string"
+          },
+          "capability_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Capability Id",
+            "type": "string"
+          },
+          "declared_status": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Declared Status",
+            "type": "string"
+          },
+          "endpoints": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Endpoints",
+            "type": "object"
+          },
+          "evidence_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Types",
+            "type": "array"
+          },
+          "execution_allowed_by_current_policy": {
+            "title": "Execution Allowed By Current Policy",
+            "type": "boolean"
+          },
+          "execution_host": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Execution Host",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "mode": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Mode",
+            "type": "string"
+          },
+          "production_ready": {
+            "title": "Production Ready",
+            "type": "boolean"
+          },
+          "requires_approval": {
+            "title": "Requires Approval",
+            "type": "boolean"
+          },
+          "result_schema": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Result Schema",
+            "type": "string"
+          },
+          "risk": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Risk",
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          },
+          "version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capability_id",
+          "version",
+          "label",
+          "capability_class",
+          "declared_status",
+          "mode",
+          "execution_host",
+          "risk",
+          "result_schema",
+          "requires_approval",
+          "execution_allowed_by_current_policy",
+          "production_ready",
+          "attestation"
+        ],
+        "title": "ChatRuntimeCapabilityRead",
+        "type": "object"
+      },
       "ChatRuntimeCompatibilityRouteRead": {
         "properties": {
           "current_route": {
@@ -1348,6 +1712,54 @@
         ]
       }
     },
+    "/api/v1/chat-runtime/v1/agents/{agent_key}/capabilities": {
+      "get": {
+        "description": "Returns the typed ORCA-owned capability projection for one exact named agent. Declared availability and fresh runtime attestation remain separate so clients cannot manufacture a production-ready claim.",
+        "operationId": "getRuntimeAgentCapabilities",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_key",
+            "required": true,
+            "schema": {
+              "title": "Agent Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatRuntimeCapabilityBundleRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read ORCA Chat Runtime v1 Agent Capability Truth",
+        "tags": [
+          "chat-runtime"
+        ]
+      }
+    },
     "/api/v1/chat-runtime/v1/conformance/complete-turn": {
       "get": {
         "description": "Returns a deterministic provider-neutral accepted-to-terminal turn for generated client decoding, ordering, and replay conformance tests.",
@@ -1570,5 +1982,5 @@
     }
   ],
   "x-orca-contract-version": "orca.chat-runtime.v1",
-  "x-orca-schema-sha256": "ff063235a70235aea2e8ab27b86a56460b5399bd20c4a32cb1b8f94c14d6f354"
+  "x-orca-schema-sha256": "a3625bd57814ec97e7e3dcd1629e492f71c366df9e467cea9f67ba07f8d3d980"
 }
