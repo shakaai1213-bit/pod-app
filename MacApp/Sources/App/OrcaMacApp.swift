@@ -17,11 +17,7 @@ struct OrcaMacApp: App {
             CommandMenu("ORCA") {
                 Button("Refresh") {
                     Task {
-                        if model.selectedSection == .conversations {
-                            await model.refreshSelectedConversation()
-                        } else {
-                            await model.refreshSelectedSection()
-                        }
+                        await model.refreshCurrentSurface()
                     }
                 }
                 .keyboardShortcut("r", modifiers: .command)

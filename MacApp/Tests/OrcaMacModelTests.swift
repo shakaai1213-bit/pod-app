@@ -1,4 +1,5 @@
 import XCTest
+import OrcaAPI
 @testable import ORCA
 
 private actor TestRuntimeTokenStore: RuntimeTokenStoring {
@@ -27,6 +28,30 @@ private actor TestRuntimeTokenStore: RuntimeTokenStoring {
 
 private final class TestURLProtocol: URLProtocol {
     static var response: ((URLRequest) throws -> (Int, Data))?
+
+    static func bodyData(for request: URLRequest) throws -> Data {
+        if let body = request.httpBody {
+            return body
+        }
+        guard let stream = request.httpBodyStream else {
+            throw URLError(.cannotDecodeRawData)
+        }
+        stream.open()
+        defer { stream.close() }
+
+        var body = Data()
+        var buffer = [UInt8](repeating: 0, count: 4_096)
+        while true {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            if count > 0 {
+                body.append(buffer, count: count)
+            } else if count == 0 {
+                return body
+            } else {
+                throw stream.streamError ?? URLError(.cannotDecodeRawData)
+            }
+        }
+    }
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -63,6 +88,10 @@ final class OrcaMacModelTests: XCTestCase {
             Set(AgentProfile.fallbackRoster.map(\.id)),
             Set(["aloha", "maui", "shaka", "chief", "rooster", "coral", "reef"])
         )
+    }
+
+    func testConsoleExposesReviewedConversationMemory() {
+        _ = OrcaMacModel.applyLatestMemoryProposal
     }
 
     func testCanonicalMergeDeduplicatesAndPreservesPending() {
@@ -154,7 +183,7 @@ final class OrcaMacModelTests: XCTestCase {
     func testConsoleInventoryMatchesPodOperatingAreas() {
         XCTAssertEqual(
             Set(ConsoleSection.allCases),
-            Set([.overview, .conversations, .work, .fund, .crew, .knowledge, .lab, .runtime, .maker])
+            Set([.overview, .conversations, .work, .workbench, .fund, .crew, .knowledge, .lab, .runtime, .maker])
         )
         XCTAssertTrue(ConsoleSection.fund.isProtected)
         XCTAssertFalse(ConsoleSection.work.isProtected)
@@ -273,4 +302,92 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertEqual(oldRuntime, .upgradeRequired)
         XCTAssertEqual(currentRuntime, .available)
     }
+
+    func testWorkbenchServiceUsesTypedTicketBoundRequests() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let operation = Self.workbenchOperationJSON
+        TestURLProtocol.response = { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer console-token")
+            XCTAssertFalse(request.value(forHTTPHeaderField: "X-ORCA-Device-ID")?.isEmpty ?? true)
+            switch (request.httpMethod, request.url?.path) {
+            case ("GET", "/api/v1/tickets"):
+                return (200, Data(#"[{"id":"ticket-c9","title":"Desktop Workbench","status":"open","flow_state":"in_progress","priority":"P1"}]"#.utf8))
+            case ("GET", "/api/v1/engineering-workbench/contract"):
+                XCTAssertEqual(request.url?.query, "agent_slug=coral")
+                return (200, Data(Self.workbenchContractJSON.utf8))
+            case ("GET", "/api/v1/engineering-workbench/tickets/ticket-c9"):
+                XCTAssertEqual(request.url?.query, "agent_slug=coral")
+                let payload = "{\"schema\":\"orca.engineering-workbench-session.v1\",\"ticket_id\":\"ticket-c9\",\"ticket_title\":\"Desktop Workbench\",\"ticket_status\":\"open\",\"contract\":\(Self.workbenchContractJSON),\"operations\":[\(operation)],\"counts\":{\"total\":1,\"queued\":1},\"sources\":[\"/api/v1/tickets/ticket-c9\"]}"
+                return (200, Data(payload.utf8))
+            case ("POST", "/api/v1/engineering-workbench/tickets/ticket-c9/operations"):
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+                let body = try TestURLProtocol.bodyData(for: request)
+                let object = try XCTUnwrap(
+                    JSONSerialization.jsonObject(with: body) as? [String: Any]
+                )
+                XCTAssertEqual(object["agent_slug"] as? String, "coral")
+                XCTAssertEqual(object["action_id"] as? String, "git.status")
+                XCTAssertEqual(object["root_id"] as? String, "pod-client")
+                XCTAssertNil(object["host_path"])
+                XCTAssertNil(object["shell"])
+                let payload = "{\"created\":true,\"operation\":\(operation),\"host\":\(Self.workbenchHostJSON),\"message\":\"Queued\"}"
+                return (201, Data(payload.utf8))
+            case ("POST", "/api/v1/engineering-workbench/operations/run-c9/approval"):
+                let body = try TestURLProtocol.bodyData(for: request)
+                let object = try XCTUnwrap(
+                    JSONSerialization.jsonObject(with: body) as? [String: Any]
+                )
+                XCTAssertEqual(object["decision"] as? String, "approved")
+                XCTAssertNotNil(object["note"])
+                return (200, Data(operation.utf8))
+            default:
+                return (404, Data(#"{"detail":"not found"}"#.utf8))
+            }
+        }
+        defer { TestURLProtocol.response = nil }
+
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+
+        let tickets = try await service.workbenchTickets()
+        let contract = try await service.workbenchContract(agentSlug: "coral")
+        let workbench = try await service.workbenchSession(
+            ticketID: "ticket-c9",
+            agentSlug: "coral"
+        )
+        let created = try await service.createWorkbenchOperation(
+            ticketID: "ticket-c9",
+            payload: OrcaEngineeringOperationCreate(
+                agentSlug: "coral",
+                actionID: "git.status",
+                rootID: "pod-client",
+                idempotencyKey: "workbench-test-1"
+            )
+        )
+        let approved = try await service.decideWorkbenchApproval(
+            runID: "run-c9",
+            decision: OrcaEngineeringApprovalDecision(
+                decision: "approved",
+                note: "Approve exact test run."
+            )
+        )
+
+        XCTAssertEqual(tickets.map(\.id), ["ticket-c9"])
+        XCTAssertEqual(contract.policySHA256, String(repeating: "a", count: 64))
+        XCTAssertEqual(workbench.operations.map(\.id), ["run-c9"])
+        XCTAssertTrue(created.created)
+        XCTAssertEqual(approved.id, "run-c9")
+    }
+
+    private static let workbenchHostJSON = #"{"host_id":"shaka-mac","capability_id":"engineering.workspace","state":"attested","ready":true,"reason":"fresh","observed_at":"2026-08-18T04:00:00Z","expires_at":null,"evidence_refs":["attestation-evidence://shaka-mac/canary"],"policy_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}"#
+
+    private static let workbenchContractJSON = "{\"schema\":\"orca.engineering-workbench.v1\",\"enabled\":true,\"mode\":\"active\",\"host\":\(workbenchHostJSON),\"worker_lane\":\"engineering-host\",\"policy_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"roots\":[{\"id\":\"pod-client\",\"label\":\"Pod and Console\",\"description\":\"Native source\",\"access\":\"read_test\",\"source_mutation\":false}],\"actions\":[{\"id\":\"git.status\",\"label\":\"Git Status\",\"kind\":\"diff\",\"requires_approval\":false,\"mutates_source\":false,\"default_timeout_seconds\":30,\"allowed_root_ids\":[\"pod-client\"],\"available\":true,\"blocked_reasons\":[]}],\"lifecycle\":[\"request.persisted\"],\"guarantees\":[\"AgentRun first\"]}"
+
+    private static let workbenchOperationJSON = #"{"id":"run-c9","ticket_id":"ticket-c9","parent_run_id":null,"trace_id":"engineering-test","status":"queued","action_id":"git.status","action_kind":"diff","root_id":"pod-client","relative_path":".","worker_lane":"engineering-host","agent_slug":"coral","requires_approval":false,"approval_id":null,"approval_status":null,"idempotency_key":"workbench-test-1","outcome":null,"evidence":"Queued","artifacts":{"engineering_request":{"root_id":"pod-client"}},"error":null,"created_at":"2026-08-18T04:00:00Z","updated_at":"2026-08-18T04:00:00Z","started_at":null,"completed_at":null}"#
 }

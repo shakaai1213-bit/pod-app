@@ -15,7 +15,8 @@ final class OrcaFoundationTests: XCTestCase {
     }
 
     func testSurfaceInventoryIsSharedAndFundIsProtected() {
-        XCTAssertEqual(OrcaSurfaceSection.allCases.count, 9)
+        XCTAssertEqual(OrcaSurfaceSection.allCases.count, 10)
+        XCTAssertTrue(OrcaSurfaceSection.allCases.contains(.workbench))
         XCTAssertTrue(OrcaSurfaceSection.fund.isProtected)
         XCTAssertFalse(OrcaSurfaceSection.work.isProtected)
     }
@@ -53,6 +54,23 @@ final class OrcaFoundationTests: XCTestCase {
             runtimeManifestRevision: "test"
         )
         XCTAssertThrowsError(try OrcaRuntimeProjection.profiles(from: bundle))
+    }
+
+    func testEngineeringWorkbenchContractDecodesExactPolicyAndAliases() throws {
+        let payload = Data(
+            #"{"schema":"orca.engineering-workbench.v1","enabled":true,"mode":"active","host":{"host_id":"shaka-mac","capability_id":"engineering.workspace","state":"attested","ready":true,"reason":"fresh","observed_at":"2026-08-18T04:00:00Z","expires_at":null,"evidence_refs":["attestation-evidence://shaka-mac/canary"],"policy_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"worker_lane":"engineering-host","policy_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","roots":[{"id":"pod-client","label":"Pod and Console","description":"Native source","access":"read_test","source_mutation":false}],"actions":[{"id":"git.status","label":"Git Status","kind":"diff","requires_approval":false,"mutates_source":false,"default_timeout_seconds":30,"allowed_root_ids":["pod-client"],"available":true,"blocked_reasons":[]}],"lifecycle":["request.persisted"],"guarantees":["AgentRun first"]}"#.utf8
+        )
+
+        let contract = try JSONDecoder().decode(
+            OrcaEngineeringWorkbenchContract.self,
+            from: payload
+        )
+
+        XCTAssertEqual(contract.host.hostID, "shaka-mac")
+        XCTAssertEqual(contract.workerLane, "engineering-host")
+        XCTAssertEqual(contract.roots.map(\.id), ["pod-client"])
+        XCTAssertEqual(contract.actions.first?.allowedRootIDs, ["pod-client"])
+        XCTAssertTrue(contract.host.ready)
     }
 
     private func message(

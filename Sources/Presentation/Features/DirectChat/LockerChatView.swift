@@ -813,7 +813,7 @@ struct LockerChatView: View {
                         Label(
                             viewModel.applyingMemoryProposalAgents.contains(agent.id)
                                 ? "Applying Review"
-                                : "Review and Apply",
+                                : DirectChatViewModel.memoryReviewActionTitle,
                             systemImage: "checkmark.shield"
                         )
                     }

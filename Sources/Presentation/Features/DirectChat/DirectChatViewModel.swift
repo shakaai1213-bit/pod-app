@@ -10,6 +10,8 @@ extension Notification.Name {
 @Observable
 @MainActor
 final class DirectChatViewModel {
+    static let memoryReviewActionTitle = "Review and Apply"
+
     // MARK: - State
 
     var navigationPath = NavigationPath()

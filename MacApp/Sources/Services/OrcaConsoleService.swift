@@ -1,16 +1,19 @@
 import Foundation
+import OrcaAPI
 import OrcaRuntimeContracts
 
 enum OrcaConsoleServiceError: Error, LocalizedError {
     case missingCredential
     case invalidResponse
-    case httpStatus(Int)
+    case httpStatus(Int, String?)
 
     var errorDescription: String? {
         switch self {
         case .missingCredential: return "ORCA access is not configured."
         case .invalidResponse: return "ORCA returned an unreadable response."
-        case let .httpStatus(code): return "ORCA returned HTTP \(code)."
+        case let .httpStatus(code, detail):
+            return detail.map { "ORCA returned HTTP \(code): \($0)" }
+                ?? "ORCA returned HTTP \(code)."
         }
     }
 }
@@ -41,6 +44,7 @@ actor OrcaConsoleService {
         case .overview: return try await overviewSnapshot()
         case .conversations: return .empty(.conversations)
         case .work: return try await workSnapshot()
+        case .workbench: return .empty(.workbench)
         case .fund: return try await fundSnapshot()
         case .crew: return try await crewSnapshot()
         case .knowledge: return try await knowledgeSnapshot()
@@ -304,7 +308,96 @@ actor OrcaConsoleService {
         )
     }
 
+    func workbenchTickets() async throws -> [WorkbenchTicketSummary] {
+        let value = try await get("/api/v1/tickets")
+        return collection(value, keys: ["items", "tickets"]).compactMap { object in
+            guard let id = field(object, keys: ["id"]),
+                  let title = field(object, keys: ["title"]) else { return nil }
+            return WorkbenchTicketSummary(
+                id: id,
+                title: title,
+                status: field(object, keys: ["status"]) ?? "unknown",
+                flowState: field(object, keys: ["flow_state"]),
+                priority: field(object, keys: ["priority"]),
+                nextAction: field(object, keys: ["next_action", "blocked_on"])
+            )
+        }
+        .sorted { left, right in
+            let leftTerminal = ["closed", "cancelled"].contains(left.status.lowercased())
+            let rightTerminal = ["closed", "cancelled"].contains(right.status.lowercased())
+            if leftTerminal != rightTerminal { return !leftTerminal }
+            return left.title.localizedCaseInsensitiveCompare(right.title) == .orderedAscending
+        }
+    }
+
+    func workbenchContract(agentSlug: String) async throws -> OrcaEngineeringWorkbenchContract {
+        try await requestJSON(
+            method: "GET",
+            path: "/api/v1/engineering-workbench/contract?agent_slug=\(agentSlug)"
+        )
+    }
+
+    func workbenchSession(
+        ticketID: String,
+        agentSlug: String
+    ) async throws -> OrcaEngineeringWorkbenchSession {
+        try await requestJSON(
+            method: "GET",
+            path: "/api/v1/engineering-workbench/tickets/\(ticketID)?agent_slug=\(agentSlug)"
+        )
+    }
+
+    func createWorkbenchOperation(
+        ticketID: String,
+        payload: OrcaEngineeringOperationCreate
+    ) async throws -> OrcaEngineeringOperationCreateResult {
+        try await requestJSON(
+            method: "POST",
+            path: "/api/v1/engineering-workbench/tickets/\(ticketID)/operations",
+            payload: payload
+        )
+    }
+
+    func decideWorkbenchApproval(
+        runID: String,
+        decision: OrcaEngineeringApprovalDecision
+    ) async throws -> OrcaEngineeringOperation {
+        try await requestJSON(
+            method: "POST",
+            path: "/api/v1/engineering-workbench/operations/\(runID)/approval",
+            payload: decision
+        )
+    }
+
     private func get(_ path: String) async throws -> ConsoleJSON {
+        let data = try await requestData(method: "GET", path: path)
+        let value = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+        return try ConsoleJSON(foundationValue: value)
+    }
+
+    private func requestJSON<Response: Decodable>(
+        method: String,
+        path: String
+    ) async throws -> Response {
+        let data = try await requestData(method: method, path: path)
+        return try JSONDecoder().decode(Response.self, from: data)
+    }
+
+    private func requestJSON<Response: Decodable, Payload: Encodable>(
+        method: String,
+        path: String,
+        payload: Payload
+    ) async throws -> Response {
+        let body = try JSONEncoder().encode(payload)
+        let data = try await requestData(method: method, path: path, body: body)
+        return try JSONDecoder().decode(Response.self, from: data)
+    }
+
+    private func requestData(
+        method: String,
+        path: String,
+        body: Data = Data()
+    ) async throws -> Data {
         guard OrcaServerOrigin.isApproved(serverURL),
               let serverOrigin = OrcaServerOrigin.normalized(serverURL) else {
             throw OrcaNativeAuthError.unapprovedOrigin
@@ -323,13 +416,18 @@ actor OrcaConsoleService {
             throw OrcaConsoleServiceError.invalidResponse
         }
         var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.httpBody = body.isEmpty ? nil : body
         request.timeoutInterval = 15
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue(deviceID, forHTTPHeaderField: "X-ORCA-Device-ID")
+        if !body.isEmpty {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
         if let authService {
             let target = url.path(percentEncoded: true) + (url.query(percentEncoded: true).map { "?\($0)" } ?? "")
             for (name, value) in try await authService.requestProofHeaders(
-                method: "GET", target: target, body: Data(), token: token
+                method: method, target: target, body: body, token: token
             ) {
                 request.setValue(value, forHTTPHeaderField: name)
             }
@@ -342,10 +440,11 @@ actor OrcaConsoleService {
             throw OrcaNativeAuthError.unapprovedOrigin
         }
         guard 200..<300 ~= http.statusCode else {
-            throw OrcaConsoleServiceError.httpStatus(http.statusCode)
+            let detail = (try? JSONSerialization.jsonObject(with: data))
+                .flatMap { $0 as? [String: Any] }?["detail"] as? String
+            throw OrcaConsoleServiceError.httpStatus(http.statusCode, detail)
         }
-        let value = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
-        return try ConsoleJSON(foundationValue: value)
+        return data
     }
 
     private func metric(

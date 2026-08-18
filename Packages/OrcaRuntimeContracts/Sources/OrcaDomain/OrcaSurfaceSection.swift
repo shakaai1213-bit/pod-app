@@ -4,6 +4,7 @@ public enum OrcaSurfaceSection: String, CaseIterable, Identifiable, Codable, Sen
     case overview
     case conversations
     case work
+    case workbench
     case fund
     case crew
     case knowledge
@@ -18,6 +19,7 @@ public enum OrcaSurfaceSection: String, CaseIterable, Identifiable, Codable, Sen
         case .overview: return "Overview"
         case .conversations: return "Conversations"
         case .work: return "Work"
+        case .workbench: return "Workbench"
         case .fund: return "Fund"
         case .crew: return "Crew"
         case .knowledge: return "Knowledge"
@@ -32,6 +34,7 @@ public enum OrcaSurfaceSection: String, CaseIterable, Identifiable, Codable, Sen
         case .overview: return "Operating picture"
         case .conversations: return "Named-agent channels"
         case .work: return "Boards, projects, tickets, tasks, and approvals"
+        case .workbench: return "Files, diffs, tests, workers, and evidence"
         case .fund: return "Protected read model"
         case .crew: return "Focus, load, plan, and dispatch"
         case .knowledge: return "Research and durable knowledge"
@@ -46,6 +49,7 @@ public enum OrcaSurfaceSection: String, CaseIterable, Identifiable, Codable, Sen
         case .overview: return "square.grid.2x2"
         case .conversations: return "bubble.left.and.bubble.right"
         case .work: return "square.stack.3d.up"
+        case .workbench: return "hammer"
         case .fund: return "chart.line.uptrend.xyaxis"
         case .crew: return "person.3.sequence"
         case .knowledge: return "books.vertical"
