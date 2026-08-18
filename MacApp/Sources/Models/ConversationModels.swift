@@ -27,6 +27,7 @@ struct TurnRetryIdentity: Equatable, Sendable {
 }
 
 struct RuntimeReceipt: Equatable, Sendable {
+    let turnID: String
     let traceID: String
     let source: String
     let lane: String

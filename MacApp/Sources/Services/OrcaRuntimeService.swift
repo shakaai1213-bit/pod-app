@@ -12,6 +12,17 @@ protocol OrcaRuntimeServing: Sendable {
     func agentPacks() async throws -> Components.Schemas.ChatRuntimeAgentPackBundleRead
     func capabilities(agentKey: String) async throws -> Components.Schemas.ChatRuntimeCapabilityBundleRead
     func workControl(agentKey: String) async throws -> Components.Schemas.ChatRuntimeWorkControlBundleRead
+    func runtimeTurn(turnID: String) async throws -> Components.Schemas.ChatRuntimeTurnRead
+    func conversationMemory(conversationID: String) async throws -> Components.Schemas.ConversationMemoryRead
+    func proposeConversationMemory(
+        conversationID: String,
+        proposal: Components.Schemas.ConversationMemoryProposalCreate
+    ) async throws -> Components.Schemas.ConversationMemoryProposalRead
+    func applyConversationMemoryProposal(
+        conversationID: String,
+        proposalID: String,
+        reason: String?
+    ) async throws -> Components.Schemas.ConversationMemoryRead
     func send(_ request: OrcaRuntimeDirectTurnRequest) async throws -> OrcaRuntimeDirectTurnResponse
     func messages(conversationID: String, offset: Int, limit: Int) async throws -> [OrcaRuntimeConversationMessage]
 }
@@ -83,6 +94,38 @@ actor OrcaRuntimeService: OrcaRuntimeServing {
         agentKey: String
     ) async throws -> Components.Schemas.ChatRuntimeWorkControlBundleRead {
         try await client.workControl(agentKey: agentKey)
+    }
+
+    func runtimeTurn(turnID: String) async throws -> Components.Schemas.ChatRuntimeTurnRead {
+        try await client.runtimeTurn(turnID: turnID)
+    }
+
+    func conversationMemory(
+        conversationID: String
+    ) async throws -> Components.Schemas.ConversationMemoryRead {
+        try await client.conversationMemory(conversationID: conversationID)
+    }
+
+    func proposeConversationMemory(
+        conversationID: String,
+        proposal: Components.Schemas.ConversationMemoryProposalCreate
+    ) async throws -> Components.Schemas.ConversationMemoryProposalRead {
+        try await client.proposeConversationMemory(
+            conversationID: conversationID,
+            proposal: proposal
+        )
+    }
+
+    func applyConversationMemoryProposal(
+        conversationID: String,
+        proposalID: String,
+        reason: String?
+    ) async throws -> Components.Schemas.ConversationMemoryRead {
+        try await client.applyConversationMemoryProposal(
+            conversationID: conversationID,
+            proposalID: proposalID,
+            reason: reason
+        )
     }
 
     func send(_ request: OrcaRuntimeDirectTurnRequest) async throws -> OrcaRuntimeDirectTurnResponse {

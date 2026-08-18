@@ -19,6 +19,8 @@ final class OrcaMacModel {
     var contractVersion: String?
     var schemaSHA256: String?
     var conversations: [String: ConversationState] = [:]
+    var runtimeTurns: [String: Components.Schemas.ChatRuntimeTurnRead] = [:]
+    var conversationMemories: [String: Components.Schemas.ConversationMemoryRead] = [:]
     var sectionSnapshots: [ConsoleSection: ConsoleSectionSnapshot] = [:]
     var lastUpdatedAt: Date?
     var presentedError: String?
@@ -26,6 +28,9 @@ final class OrcaMacModel {
     var serverAddress: String
     var hasStoredCredential = false
     var agents: [AgentProfile] = AgentProfile.fallbackRoster
+    var isLoadingRuntimeEvidence = false
+    var isApplyingMemoryProposal = false
+    var runtimeEvidenceError: String?
 
     @ObservationIgnored private let tokenStore: any RuntimeTokenStoring
     @ObservationIgnored private let defaults: UserDefaults
@@ -63,6 +68,14 @@ final class OrcaMacModel {
     }
 
     var selectedMessages: [TranscriptMessage] { selectedConversation.messages }
+
+    var selectedRuntimeTurn: Components.Schemas.ChatRuntimeTurnRead? {
+        runtimeTurns[selectedAgentID]
+    }
+
+    var selectedConversationMemory: Components.Schemas.ConversationMemoryRead? {
+        conversationMemories[selectedAgentID]
+    }
 
     var selectedSnapshot: ConsoleSectionSnapshot {
         sectionSnapshots[selectedSection] ?? .empty(selectedSection)
@@ -297,6 +310,12 @@ final class OrcaMacModel {
             state.mergeCanonical(remote.map(Self.transcriptMessage))
             conversations[agentID] = state
             lastUpdatedAt = Date()
+            await refreshRuntimeEvidence(
+                agentID: agentID,
+                conversationID: conversationID,
+                turnID: state.messages.last(where: { $0.role == .user })?.id,
+                silent: silent
+            )
         } catch {
             if !silent { presentedError = error.localizedDescription }
         }
@@ -371,6 +390,7 @@ final class OrcaMacModel {
             }
             resolved.resolvePending(id: pendingID, with: canonical)
             resolved.latestReceipt = RuntimeReceipt(
+                turnID: response.userMessageID,
                 traceID: response.traceID,
                 source: response.source,
                 lane: response.lane,
@@ -383,7 +403,11 @@ final class OrcaMacModel {
             )
             conversations[agentID] = resolved
             lastUpdatedAt = Date()
-            await refreshConversation(agentID: agentID, conversationID: response.conversationID)
+            await refreshConversation(
+                agentID: agentID,
+                conversationID: response.conversationID,
+                turnID: response.userMessageID
+            )
         } catch {
             var failed = conversations[agentID] ?? state
             failed.failPending(id: pendingID, reason: error.localizedDescription)
@@ -430,7 +454,32 @@ final class OrcaMacModel {
         }
     }
 
-    private func refreshConversation(agentID: String, conversationID: String) async {
+    func applyLatestMemoryProposal() async {
+        guard let service,
+              let memory = selectedConversationMemory,
+              let proposal = memory.pendingProposals?.first else { return }
+        isApplyingMemoryProposal = true
+        defer { isApplyingMemoryProposal = false }
+        do {
+            let applied = try await service.applyConversationMemoryProposal(
+                conversationID: memory.conversationId,
+                proposalID: proposal.proposalId,
+                reason: "Applied from ORCA Console after owner review."
+            )
+            conversationMemories[selectedAgentID] = applied
+            runtimeEvidenceError = nil
+            lastUpdatedAt = Date()
+        } catch {
+            runtimeEvidenceError = error.localizedDescription
+            presentedError = error.localizedDescription
+        }
+    }
+
+    private func refreshConversation(
+        agentID: String,
+        conversationID: String,
+        turnID: String? = nil
+    ) async {
         guard let service else { return }
         do {
             let remote = try await loadAllMessages(service: service, conversationID: conversationID)
@@ -439,8 +488,56 @@ final class OrcaMacModel {
             state.mergeCanonical(remote.map(Self.transcriptMessage))
             conversations[agentID] = state
             lastUpdatedAt = Date()
+            await refreshRuntimeEvidence(
+                agentID: agentID,
+                conversationID: conversationID,
+                turnID: turnID ?? state.messages.last(where: { $0.role == .user })?.id,
+                silent: true
+            )
         } catch {
             // The immediate persisted response remains visible; polling retries.
+        }
+    }
+
+    private func refreshRuntimeEvidence(
+        agentID: String,
+        conversationID: String,
+        turnID: String?,
+        silent: Bool
+    ) async {
+        guard let service else { return }
+        isLoadingRuntimeEvidence = true
+        defer { isLoadingRuntimeEvidence = false }
+        var errors: [String] = []
+
+        do {
+            conversationMemories[agentID] = try await service.conversationMemory(
+                conversationID: conversationID
+            )
+        } catch {
+            errors.append("Memory: \(error.localizedDescription)")
+        }
+
+        if let turnID, !turnID.isEmpty {
+            do {
+                runtimeTurns[agentID] = try await service.runtimeTurn(turnID: turnID)
+            } catch OrcaRuntimeClientError.httpStatus(404) {
+                runtimeTurns.removeValue(forKey: agentID)
+            } catch {
+                if runtimeTurns[agentID]?.turnId != turnID {
+                    runtimeTurns.removeValue(forKey: agentID)
+                }
+                errors.append("Turn: \(error.localizedDescription)")
+            }
+        } else {
+            runtimeTurns.removeValue(forKey: agentID)
+        }
+
+        if agentID == selectedAgentID {
+            runtimeEvidenceError = errors.isEmpty ? nil : errors.joined(separator: " ")
+            if !silent, let runtimeEvidenceError {
+                presentedError = runtimeEvidenceError
+            }
         }
     }
 
@@ -461,6 +558,8 @@ final class OrcaMacModel {
         if conversationScope?.origin != next.origin
             || conversationScope?.organizationID != next.organizationID {
             conversations.removeAll()
+            runtimeTurns.removeAll()
+            conversationMemories.removeAll()
         }
         conversationScope = next
         for key in defaults.dictionaryRepresentation().keys
@@ -473,6 +572,9 @@ final class OrcaMacModel {
     private func deactivateConversationScope() {
         conversationScope = nil
         conversations.removeAll()
+        runtimeTurns.removeAll()
+        conversationMemories.removeAll()
+        runtimeEvidenceError = nil
     }
 
     private func storedConversationID(for agentID: String) -> String? {

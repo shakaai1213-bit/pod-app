@@ -255,6 +255,35 @@ private func canonicalWorkControlBundle(
     )
 }
 
+private func canonicalConversationMemory(
+    conversationID: String = "90000000-0000-4000-8000-000000000001"
+) -> Components.Schemas.ConversationMemoryRead {
+    let decision = Components.Schemas.ConversationMemoryFact(
+        authority: "captain",
+        evidenceRefs: ["orca://evidence/decision-1"],
+        factId: "decision-1",
+        sourceRefs: ["orca://tickets/ticket-1"],
+        status: .active,
+        text: "Use ORCA as the conversation authority."
+    )
+    return .init(
+        contentSha256: String(repeating: "a", count: 64),
+        contractVersion: .orca_conversationMemory_v2,
+        conversationId: conversationID,
+        memory: .init(
+            activeSummary: "Pod and Console share one ORCA conversation.",
+            decisions: [decision],
+            evidenceRefs: ["orca://evidence/conversation-v2"],
+            nasRefs: ["nas://orca/transcripts/thread-1.jsonl"],
+            sensitivity: .normal,
+            visibility: .agent
+        ),
+        organizationId: "b28e893d-55ff-430c-a2b6-f3dd1d4085ea",
+        pendingProposals: [],
+        revision: 1
+    )
+}
+
 @Test(arguments: [301, 302, 303, 307, 308])
 func credentialRedirectsAreNeverFollowed(status: Int) throws {
     let source = try #require(URL(string: "https://orca.test/api/v1/agents"))
@@ -306,7 +335,7 @@ func credentialRedirectsAreNeverFollowed(status: Int) throws {
     #expect(OrcaRuntimeContract.version == "orca.chat-runtime.v1")
     #expect(
         OrcaRuntimeContract.schemaSHA256
-            == "ba6769ea8bb0a708912bc0b9a942cebd9875f129ca5b463d74763ef67315d6f1"
+            == "d117c8a422aae28bc0314a62717d89524627d251684e55c1bb66be64eb138223"
     )
 }
 
@@ -575,6 +604,50 @@ func credentialRedirectsAreNeverFollowed(status: Int) throws {
     #expect(turn.latestCursor == turn.events?.last?.cursor)
     #expect(turn.terminalOutcome?.state == .completed)
     #expect(turn.terminalOutcome?.errorCode == nil)
+    try OrcaRuntimeClient.validateRuntimeTurn(turn, expectedTurnID: turn.turnId)
+}
+
+@Test func runtimeTurnAllowsEventsFromCanonicalReplyMessages() throws {
+    var turn = try canonicalTurn()
+    var events = try #require(turn.events)
+    events[events.count - 1].messageId = "90000000-0000-4000-8000-000000000099"
+    turn.events = events
+
+    try OrcaRuntimeClient.validateRuntimeTurn(turn, expectedTurnID: turn.turnId)
+}
+
+@Test func conversationMemoryPassesNativeClientGate() throws {
+    let memory = canonicalConversationMemory()
+    try OrcaRuntimeClient.validateConversationMemory(
+        memory,
+        expectedConversationID: memory.conversationId
+    )
+}
+
+@Test func conversationMemoryRejectsHashAndFactIdentityDrift() throws {
+    var badHash = canonicalConversationMemory()
+    badHash.contentSha256 = "not-a-sha"
+    do {
+        try OrcaRuntimeClient.validateConversationMemory(
+            badHash,
+            expectedConversationID: badHash.conversationId
+        )
+        Issue.record("Conversation memory accepted an invalid content digest")
+    } catch let error as OrcaRuntimeClientError {
+        #expect(error == .invalidResponse("conversation memory failed closed"))
+    }
+
+    var duplicate = canonicalConversationMemory()
+    duplicate.memory.commitments = duplicate.memory.decisions
+    do {
+        try OrcaRuntimeClient.validateConversationMemory(
+            duplicate,
+            expectedConversationID: duplicate.conversationId
+        )
+        Issue.record("Conversation memory accepted duplicate cross-section facts")
+    } catch let error as OrcaRuntimeClientError {
+        #expect(error == .invalidResponse("conversation memory failed closed"))
+    }
 }
 
 @Test func incompatibleRuntimePairFailsClosed() throws {
@@ -660,6 +733,30 @@ func credentialRedirectsAreNeverFollowed(status: Int) throws {
     } catch let error as OrcaRuntimeTimelineError {
         #expect(error == .conflictingEvent(first.eventID))
     }
+}
+
+@Test func completedToolEventIsNotMistakenForTerminalReply() throws {
+    let tool = OrcaRuntimeTimelineEvent(
+        eventID: "tool-event",
+        sequence: 0,
+        cursor: "tool:0",
+        turnID: "turn-1",
+        eventType: "tool.completed",
+        state: "completed"
+    )
+    let terminal = OrcaRuntimeTimelineEvent(
+        eventID: "terminal-event",
+        sequence: 1,
+        cursor: "turn:1",
+        turnID: "turn-1",
+        eventType: "turn.completed",
+        state: "completed"
+    )
+    var reducer = OrcaRuntimeTimelineReducer()
+
+    #expect(try reducer.apply(tool) == .applied)
+    #expect(try reducer.apply(terminal) == .applied)
+    #expect(reducer.events.count == 2)
 }
 
 @Test func providerLossIsOneHonestFailedTerminal() throws {

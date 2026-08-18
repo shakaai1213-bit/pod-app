@@ -1849,6 +1849,363 @@
         "title": "ChatRuntimeWorkItemRead",
         "type": "object"
       },
+      "ConversationMemoryApplyRequest": {
+        "properties": {
+          "reason": {
+            "maxLength": 2000,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "title": "ConversationMemoryApplyRequest",
+        "type": "object"
+      },
+      "ConversationMemoryFact": {
+        "description": "One bounded fact with explicit evidence and correction lineage.",
+        "properties": {
+          "authority": {
+            "maxLength": 128,
+            "title": "Authority",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "fact_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Fact Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "source_refs": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Source Refs",
+            "type": "array"
+          },
+          "status": {
+            "default": "active",
+            "enum": [
+              "active",
+              "resolved",
+              "corrected"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "supersedes_fact_id": {
+            "maxLength": 128,
+            "title": "Supersedes Fact Id",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fact_id",
+          "text"
+        ],
+        "title": "ConversationMemoryFact",
+        "type": "object"
+      },
+      "ConversationMemoryProposalCreate": {
+        "properties": {
+          "auto_apply_requested": {
+            "default": false,
+            "title": "Auto Apply Requested",
+            "type": "boolean"
+          },
+          "expected_revision": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "memory": {
+            "$ref": "#/components/schemas/ConversationMemorySnapshot"
+          },
+          "proposal_kind": {
+            "default": "manual",
+            "enum": [
+              "checkpoint",
+              "sleep_checkpoint",
+              "correction",
+              "promotion",
+              "manual"
+            ],
+            "title": "Proposal Kind",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 2000,
+            "title": "Reason",
+            "type": "string"
+          },
+          "trace_id": {
+            "maxLength": 128,
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "memory"
+        ],
+        "title": "ConversationMemoryProposalCreate",
+        "type": "object"
+      },
+      "ConversationMemoryProposalRead": {
+        "properties": {
+          "auto_apply_eligible": {
+            "default": false,
+            "title": "Auto Apply Eligible",
+            "type": "boolean"
+          },
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "expected_revision": {
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "memory": {
+            "$ref": "#/components/schemas/ConversationMemorySnapshot"
+          },
+          "proposal_id": {
+            "format": "uuid",
+            "title": "Proposal Id",
+            "type": "string"
+          },
+          "proposal_kind": {
+            "enum": [
+              "checkpoint",
+              "sleep_checkpoint",
+              "correction",
+              "promotion",
+              "manual"
+            ],
+            "title": "Proposal Kind",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "review_history": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Review History",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "proposal_id",
+          "conversation_id",
+          "status",
+          "proposal_kind",
+          "expected_revision",
+          "memory",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ConversationMemoryProposalRead",
+        "type": "object"
+      },
+      "ConversationMemoryRead": {
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "content_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Content Sha256",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "orca.conversation-memory.v2",
+            "default": "orca.conversation-memory.v2",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "latest_proposal_id": {
+            "format": "uuid",
+            "title": "Latest Proposal Id",
+            "type": "string"
+          },
+          "memory": {
+            "$ref": "#/components/schemas/ConversationMemorySnapshot"
+          },
+          "organization_id": {
+            "format": "uuid",
+            "title": "Organization Id",
+            "type": "string"
+          },
+          "pending_proposals": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationMemoryProposalRead"
+            },
+            "title": "Pending Proposals",
+            "type": "array"
+          },
+          "revision": {
+            "minimum": 0.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "organization_id",
+          "revision",
+          "memory",
+          "content_sha256"
+        ],
+        "title": "ConversationMemoryRead",
+        "type": "object"
+      },
+      "ConversationMemorySnapshot": {
+        "description": "Complete bounded state applied atomically as one memory revision.",
+        "properties": {
+          "active_summary": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Active Summary",
+            "type": "string"
+          },
+          "blockers": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationMemoryFact"
+            },
+            "maxItems": 50,
+            "title": "Blockers",
+            "type": "array"
+          },
+          "commitments": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationMemoryFact"
+            },
+            "maxItems": 50,
+            "title": "Commitments",
+            "type": "array"
+          },
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationMemoryFact"
+            },
+            "maxItems": 50,
+            "title": "Decisions",
+            "type": "array"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "nas_refs": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Nas Refs",
+            "type": "array"
+          },
+          "recent_outcomes": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationMemoryFact"
+            },
+            "maxItems": 50,
+            "title": "Recent Outcomes",
+            "type": "array"
+          },
+          "sensitivity": {
+            "default": "normal",
+            "enum": [
+              "normal",
+              "protected"
+            ],
+            "title": "Sensitivity",
+            "type": "string"
+          },
+          "source_refs": {
+            "additionalProperties": true,
+            "title": "Source Refs",
+            "type": "object"
+          },
+          "visibility": {
+            "default": "conversation",
+            "enum": [
+              "conversation",
+              "agent",
+              "owner_only"
+            ],
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "title": "ConversationMemorySnapshot",
+        "type": "object"
+      },
       "DirectAgentChatMessage": {
         "description": "Prior chat turn supplied by a client during local-to-ORCA transition.",
         "properties": {
@@ -2377,6 +2734,55 @@
         ]
       }
     },
+    "/api/v1/chat-runtime/v1/turns/{turn_id}": {
+      "get": {
+        "description": "Projects the persisted inbound message, canonical WorkEvent sequence, provider adapter, resource envelope, and current terminal outcome into one provider-neutral Flight Recorder view.",
+        "operationId": "getRuntimeTurn",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "turn_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Turn Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatRuntimeTurnRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read one live ORCA Chat Runtime turn",
+        "tags": [
+          "chat-runtime"
+        ]
+      }
+    },
     "/api/v1/chat/channels/{channel_id}/messages": {
       "get": {
         "description": "List messages in a channel.",
@@ -2509,6 +2915,168 @@
         ],
         "x-orca-compatibility-adapter": true
       }
+    },
+    "/api/v1/conversations/{conversation_id}/memory": {
+      "get": {
+        "description": "Read active reviewed memory and the visible pending proposal queue.",
+        "operationId": "getConversationMemory",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationMemoryRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Conversation Memory",
+        "tags": [
+          "conversation-memory"
+        ]
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/memory/proposals": {
+      "post": {
+        "description": "Propose one complete bounded revision without writing hidden memory.",
+        "operationId": "proposeConversationMemory",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationMemoryProposalCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationMemoryProposalRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Propose Conversation Memory",
+        "tags": [
+          "conversation-memory"
+        ]
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/memory/proposals/{proposal_id}/apply": {
+      "post": {
+        "description": "Apply one reviewed proposal with optimistic revision and authority checks.",
+        "operationId": "applyConversationMemoryProposal",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationMemoryApplyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationMemoryRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Apply Conversation Memory Proposal",
+        "tags": [
+          "conversation-memory"
+        ]
+      }
     }
   },
   "tags": [
@@ -2518,5 +3086,5 @@
     }
   ],
   "x-orca-contract-version": "orca.chat-runtime.v1",
-  "x-orca-schema-sha256": "ba6769ea8bb0a708912bc0b9a942cebd9875f129ca5b463d74763ef67315d6f1"
+  "x-orca-schema-sha256": "d117c8a422aae28bc0314a62717d89524627d251684e55c1bb66be64eb138223"
 }

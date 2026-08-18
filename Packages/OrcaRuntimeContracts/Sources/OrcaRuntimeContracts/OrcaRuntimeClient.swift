@@ -333,6 +333,200 @@ public actor OrcaRuntimeClient {
         return bundle
     }
 
+    public func runtimeTurn(
+        turnID: String
+    ) async throws -> Components.Schemas.ChatRuntimeTurnRead {
+        _ = try await verifyCompatibility()
+        let output = try await client.getRuntimeTurn(
+            .init(path: .init(turnId: turnID))
+        )
+        let turn: Components.Schemas.ChatRuntimeTurnRead
+        switch output {
+        case let .ok(response):
+            turn = try response.body.json
+        case .unprocessableContent:
+            throw OrcaRuntimeClientError.httpStatus(422)
+        case let .undocumented(statusCode, _):
+            throw OrcaRuntimeClientError.httpStatus(statusCode)
+        }
+        try Self.validateRuntimeTurn(turn, expectedTurnID: turnID)
+        return turn
+    }
+
+    public func conversationMemory(
+        conversationID: String
+    ) async throws -> Components.Schemas.ConversationMemoryRead {
+        _ = try await verifyCompatibility()
+        let output = try await client.getConversationMemory(
+            .init(path: .init(conversationId: conversationID))
+        )
+        let memory: Components.Schemas.ConversationMemoryRead
+        switch output {
+        case let .ok(response):
+            memory = try response.body.json
+        case .unprocessableContent:
+            throw OrcaRuntimeClientError.httpStatus(422)
+        case let .undocumented(statusCode, _):
+            throw OrcaRuntimeClientError.httpStatus(statusCode)
+        }
+        try Self.validateConversationMemory(
+            memory,
+            expectedConversationID: conversationID
+        )
+        return memory
+    }
+
+    public func proposeConversationMemory(
+        conversationID: String,
+        proposal: Components.Schemas.ConversationMemoryProposalCreate
+    ) async throws -> Components.Schemas.ConversationMemoryProposalRead {
+        _ = try await verifyCompatibility()
+        let output = try await client.proposeConversationMemory(
+            .init(
+                path: .init(conversationId: conversationID),
+                body: .json(proposal)
+            )
+        )
+        let result: Components.Schemas.ConversationMemoryProposalRead
+        switch output {
+        case let .created(response):
+            result = try response.body.json
+        case .unprocessableContent:
+            throw OrcaRuntimeClientError.httpStatus(422)
+        case let .undocumented(statusCode, _):
+            throw OrcaRuntimeClientError.httpStatus(statusCode)
+        }
+        guard result.conversationId == conversationID,
+              result.proposalId.isEmpty == false,
+              result.expectedRevision >= 0,
+              ["proposed", "deferred", "accepted"].contains(result.status) else {
+            throw OrcaRuntimeClientError.invalidResponse(
+                "conversation memory proposal failed closed"
+            )
+        }
+        return result
+    }
+
+    public func applyConversationMemoryProposal(
+        conversationID: String,
+        proposalID: String,
+        reason: String? = nil
+    ) async throws -> Components.Schemas.ConversationMemoryRead {
+        _ = try await verifyCompatibility()
+        let output = try await client.applyConversationMemoryProposal(
+            .init(
+                path: .init(
+                    conversationId: conversationID,
+                    proposalId: proposalID
+                ),
+                body: .json(.init(reason: reason))
+            )
+        )
+        let memory: Components.Schemas.ConversationMemoryRead
+        switch output {
+        case let .ok(response):
+            memory = try response.body.json
+        case .unprocessableContent:
+            throw OrcaRuntimeClientError.httpStatus(422)
+        case let .undocumented(statusCode, _):
+            throw OrcaRuntimeClientError.httpStatus(statusCode)
+        }
+        try Self.validateConversationMemory(
+            memory,
+            expectedConversationID: conversationID
+        )
+        guard memory.latestProposalId == proposalID else {
+            throw OrcaRuntimeClientError.invalidResponse(
+                "applied conversation memory proposal is not active"
+            )
+        }
+        return memory
+    }
+
+    static func validateRuntimeTurn(
+        _ turn: Components.Schemas.ChatRuntimeTurnRead,
+        expectedTurnID: String
+    ) throws {
+        let events = turn.events ?? []
+        let terminalTypes: Set<Components.Schemas.ChatRuntimeEventType> = [
+            .turn_completed,
+            .turn_failed,
+            .turn_cancelled,
+        ]
+        let terminalEvents = events.filter { terminalTypes.contains($0.eventType) }
+        guard turn.turnId == expectedTurnID,
+              turn.messageId.isEmpty == false,
+              turn.conversationId.isEmpty == false,
+              turn.agentId.isEmpty == false,
+              events.isEmpty == false,
+              events.first?.eventType == .message_accepted,
+              events.map(\.sequence) == Array(events.indices),
+              Set(events.map(\.eventId)).count == events.count,
+              Set(events.map(\.cursor)).count == events.count,
+              events.allSatisfy({
+                  $0.turnId == expectedTurnID
+                      && ($0.messageId?.isEmpty != true)
+                      && $0.conversationId == turn.conversationId
+                      && $0.agentId == turn.agentId
+              }),
+              turn.latestCursor == events.last?.cursor,
+              terminalEvents.count <= 1,
+              (turn.terminalOutcome == nil) == terminalEvents.isEmpty else {
+            throw OrcaRuntimeClientError.invalidResponse(
+                "runtime turn failed closed"
+            )
+        }
+        var reducer = OrcaRuntimeTimelineReducer()
+        _ = try reducer.apply(turn)
+    }
+
+    static func validateConversationMemory(
+        _ read: Components.Schemas.ConversationMemoryRead,
+        expectedConversationID: String
+    ) throws {
+        let snapshot = read.memory
+        let factGroups = [
+            snapshot.decisions ?? [],
+            snapshot.commitments ?? [],
+            snapshot.blockers ?? [],
+            snapshot.recentOutcomes ?? [],
+        ]
+        let facts = factGroups.flatMap { $0 }
+        let pending = read.pendingProposals ?? []
+        let evidenceRefs = snapshot.evidenceRefs ?? []
+        let nasRefs = snapshot.nasRefs ?? []
+        guard read.contractVersion == .orca_conversationMemory_v2,
+              read.conversationId == expectedConversationID,
+              read.organizationId.isEmpty == false,
+              read.revision >= 0,
+              isSHA256(read.contentSha256),
+              (snapshot.activeSummary ?? "").count <= 4_000,
+              Set(facts.map(\.factId)).count == facts.count,
+              facts.allSatisfy({
+                  $0.factId.isEmpty == false
+                      && $0.text.isEmpty == false
+                      && Set($0.evidenceRefs ?? []).count == ($0.evidenceRefs ?? []).count
+                      && Set($0.sourceRefs ?? []).count == ($0.sourceRefs ?? []).count
+              }),
+              Set(evidenceRefs).count == evidenceRefs.count,
+              Set(nasRefs).count == nasRefs.count,
+              Set(pending.map(\.proposalId)).count == pending.count,
+              pending.allSatisfy({
+                  $0.conversationId == expectedConversationID
+                      && $0.proposalId.isEmpty == false
+                      && $0.expectedRevision >= 0
+                      && ["proposed", "deferred"].contains($0.status)
+              }) else {
+            throw OrcaRuntimeClientError.invalidResponse(
+                "conversation memory failed closed"
+            )
+        }
+    }
+
+    private static func isSHA256(_ value: String) -> Bool {
+        value.count == 64 && value.allSatisfy("0123456789abcdef".contains)
+    }
+
     static func validateAgentPacks(
         _ bundle: Components.Schemas.ChatRuntimeAgentPackBundleRead
     ) throws {

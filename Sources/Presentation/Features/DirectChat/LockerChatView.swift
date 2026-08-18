@@ -627,6 +627,9 @@ struct LockerChatView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     contextSheetSummary
+                    conversationMemoryPanel
+                    flightRecorderPanel
+                    runtimeEvidenceAttentionPanel
                     ticketContextBar
                     ticketContinuityBar
                     lockerCockpitPanel
@@ -736,9 +739,20 @@ struct LockerChatView: View {
         }
 
         if let summary = lockerSummary {
-            return "\(lockerPolicyText(summary)) · Locker \(summary.reportCardScore)%"
+            let memory = viewModel.conversationMemory(for: agent)
+                .map { "Memory r\($0.revision)" }
+            return [
+                lockerPolicyText(summary),
+                "Locker \(summary.reportCardScore)%",
+                memory,
+            ]
+            .compactMap { $0 }
+            .joined(separator: " · ")
         }
         if viewModel.currentChannelId(for: agent) != nil {
+            if let memory = viewModel.conversationMemory(for: agent) {
+                return "ORCA connected · Memory r\(memory.revision)"
+            }
             return "ORCA connected"
         }
         return deliveryTruthText
@@ -756,6 +770,127 @@ struct LockerChatView: View {
     private var contextSummaryColor: Color {
         if viewModel.activeTicketId != nil { return AppColors.accentSuccess }
         return routeDecisionColor
+    }
+
+    @ViewBuilder
+    private var conversationMemoryPanel: some View {
+        if let memory = viewModel.conversationMemory(for: agent) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Label("Conversation Memory", systemImage: "brain.head.profile")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppColors.accentAgent)
+                    Spacer(minLength: 0)
+                    Text("r\(memory.revision)")
+                        .font(.caption2.monospaced().weight(.semibold))
+                        .foregroundStyle(AppColors.textTertiary)
+                    if !memory.pendingProposalIds.isEmpty {
+                        Label("\(memory.pendingProposalIds.count) review", systemImage: "checkmark.shield")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(AppColors.accentWarning)
+                    }
+                }
+
+                if !memory.activeSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(memory.activeSummary)
+                        .font(.caption)
+                        .foregroundStyle(AppColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                HStack(spacing: 12) {
+                    Label("\(memory.decisions.count) decisions", systemImage: "signpost.right")
+                    Label("\(memory.activeCommitmentCount) commitments", systemImage: "checklist")
+                    Label("\(memory.activeBlockerCount) blockers", systemImage: "exclamationmark.octagon")
+                }
+                .font(.caption2)
+                .foregroundStyle(AppColors.textTertiary)
+
+                if !memory.pendingProposalIds.isEmpty {
+                    Button {
+                        Task { await viewModel.applyLatestMemoryProposal(for: agent) }
+                    } label: {
+                        Label(
+                            viewModel.applyingMemoryProposalAgents.contains(agent.id)
+                                ? "Applying Review"
+                                : "Review and Apply",
+                            systemImage: "checkmark.shield"
+                        )
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(viewModel.applyingMemoryProposalAgents.contains(agent.id))
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(AppColors.backgroundSecondary.opacity(0.82))
+            .overlay(Rectangle().fill(AppColors.border.opacity(0.7)).frame(height: 0.5), alignment: .bottom)
+        } else if viewModel.loadingRuntimeEvidenceAgents.contains(agent.id) {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.mini)
+                Text("Loading conversation memory")
+                    .font(.caption)
+                    .foregroundStyle(AppColors.textTertiary)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(AppColors.backgroundSecondary.opacity(0.82))
+        }
+    }
+
+    @ViewBuilder
+    private var flightRecorderPanel: some View {
+        if let turn = viewModel.runtimeTurn(for: agent) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Label("Flight Recorder", systemImage: "point.topleft.down.curvedto.point.bottomright.up")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppColors.accentElectric)
+                    Spacer(minLength: 0)
+                    Text(turn.state.replacingOccurrences(of: "_", with: " "))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(turn.events.last?.isTerminal == true ? AppColors.accentSuccess : AppColors.accentElectric)
+                }
+
+                ForEach(turn.events.suffix(8)) { event in
+                    HStack(spacing: 8) {
+                        Image(systemName: event.isTerminal ? "checkmark.circle.fill" : "circle.fill")
+                            .font(.system(size: event.isTerminal ? 11 : 5))
+                            .foregroundStyle(event.isTerminal ? AppColors.accentSuccess : AppColors.textTertiary)
+                            .frame(width: 14)
+                        Text(event.type)
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(AppColors.textSecondary)
+                        Spacer(minLength: 0)
+                        Text(event.actor)
+                            .font(.caption2)
+                            .foregroundStyle(AppColors.textTertiary)
+                            .lineLimit(1)
+                    }
+                }
+
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(AppColors.backgroundSecondary.opacity(0.82))
+            .overlay(Rectangle().fill(AppColors.border.opacity(0.7)).frame(height: 0.5), alignment: .bottom)
+        }
+    }
+
+    @ViewBuilder
+    private var runtimeEvidenceAttentionPanel: some View {
+        if let error = viewModel.runtimeEvidenceErrorByAgent[agent.id] {
+            Label(error, systemImage: "exclamationmark.triangle")
+                .font(.caption2)
+                .foregroundStyle(AppColors.accentWarning)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(AppColors.backgroundSecondary.opacity(0.82))
+                .overlay(Rectangle().fill(AppColors.border.opacity(0.7)).frame(height: 0.5), alignment: .bottom)
+        }
     }
 
     @ViewBuilder

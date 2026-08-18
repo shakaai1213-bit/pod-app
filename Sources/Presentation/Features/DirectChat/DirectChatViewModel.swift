@@ -1,4 +1,5 @@
 import Foundation
+import OrcaRuntimeContracts
 import SwiftData
 import SwiftUI
 
@@ -102,6 +103,11 @@ final class DirectChatViewModel {
     var centralAgentHealth: CentralAgentHealth?
     var centralAgentHealthError: String?
     var isLoadingCentralAgentHealth: Bool = false
+    var runtimeTurnByAgent: [String: AgentChatService.RuntimeTurnSummary] = [:]
+    var conversationMemoryByAgent: [String: AgentChatService.ConversationMemorySummary] = [:]
+    var runtimeEvidenceErrorByAgent: [String: String] = [:]
+    var loadingRuntimeEvidenceAgents: Set<String> = []
+    var applyingMemoryProposalAgents: Set<String> = []
 
     // Conversation data from SwiftData
     var conversations: [DMConversation] = []
@@ -313,6 +319,32 @@ final class DirectChatViewModel {
     func shortChannelId(for agent: AgentInfo) -> String? {
         guard let channelId = currentChannelId(for: agent), !channelId.isEmpty else { return nil }
         return String(channelId.prefix(8))
+    }
+
+    func runtimeTurn(for agent: AgentInfo) -> AgentChatService.RuntimeTurnSummary? {
+        runtimeTurnByAgent[agent.id]
+    }
+
+    func conversationMemory(for agent: AgentInfo) -> AgentChatService.ConversationMemorySummary? {
+        conversationMemoryByAgent[agent.id]
+    }
+
+    func applyLatestMemoryProposal(for agent: AgentInfo) async {
+        guard let memory = conversationMemoryByAgent[agent.id],
+              let proposalId = memory.pendingProposalIds.first else { return }
+        applyingMemoryProposalAgents.insert(agent.id)
+        defer { applyingMemoryProposalAgents.remove(agent.id) }
+        do {
+            let service = AgentChatService(agent: agent)
+            conversationMemoryByAgent[agent.id] = try await service.applyConversationMemoryProposal(
+                conversationId: memory.conversationId,
+                proposalId: proposalId,
+                reason: "Applied from Pod after owner review."
+            )
+            runtimeEvidenceErrorByAgent.removeValue(forKey: agent.id)
+        } catch {
+            runtimeEvidenceErrorByAgent[agent.id] = "Memory review: \(error.localizedDescription)"
+        }
     }
 
     func agent(forChannelId channelId: String) -> AgentInfo? {
@@ -828,6 +860,13 @@ final class DirectChatViewModel {
         if let channelId = conversation.orcaChannelId {
             Task { await importORCAChannelHistory(agent: agent, channelId: channelId) }
             Task { await refreshChannelSummary(agent: agent, channelId: channelId) }
+            Task {
+                await refreshRuntimeEvidence(
+                    for: agent,
+                    turnId: currentMessages.last(where: { $0.role == "user" })?.remoteMessageId,
+                    conversationId: channelId
+                )
+            }
             startLiveResponseRefresh(agent: agent, channelId: channelId, excluding: nil)
         }
         if let ticketId = activeTicketId {
@@ -990,6 +1029,11 @@ final class DirectChatViewModel {
         Task {
             await importORCAChannelHistory(agent: agent, channelId: channelId)
             await refreshChannelSummary(agent: agent, channelId: channelId)
+            await refreshRuntimeEvidence(
+                for: agent,
+                turnId: currentMessages.last(where: { $0.role == "user" })?.remoteMessageId,
+                conversationId: channelId
+            )
             if selectedAgent?.id == agent.id {
                 startLiveResponseRefresh(agent: agent, channelId: channelId, excluding: nil)
                 if liveChatStatus?.hasPrefix("Refreshing ORCA channel") == true {
@@ -1346,6 +1390,11 @@ final class DirectChatViewModel {
 
                 isStreaming = false
                 loadConversations()
+                await refreshRuntimeEvidence(
+                    for: agent,
+                    turnId: userMsg.remoteMessageId,
+                    conversationId: conversation.orcaChannelId
+                )
                 if assistantMsg.deliveryState == DMDeliveryState.waitingForLiveAgent.rawValue,
                    let channelId = conversation.orcaChannelId {
                     liveChatStatus = "Sent to \(agent.name)'s inbox. Waiting for a reply."
@@ -1407,6 +1456,47 @@ final class DirectChatViewModel {
                 isStreaming = false
                 loadConversations()
             }
+        }
+    }
+
+    private func refreshRuntimeEvidence(
+        for agent: AgentInfo,
+        turnId: String?,
+        conversationId: String?
+    ) async {
+        guard let conversationId, !conversationId.isEmpty else { return }
+        loadingRuntimeEvidenceAgents.insert(agent.id)
+        defer { loadingRuntimeEvidenceAgents.remove(agent.id) }
+        let service = AgentChatService(agent: agent)
+        var errors: [String] = []
+
+        do {
+            conversationMemoryByAgent[agent.id] = try await service.conversationMemory(
+                conversationId: conversationId
+            )
+        } catch {
+            errors.append("Memory: \(error.localizedDescription)")
+        }
+
+        if let turnId, !turnId.isEmpty {
+            do {
+                runtimeTurnByAgent[agent.id] = try await service.runtimeTurn(turnId: turnId)
+            } catch OrcaRuntimeClientError.httpStatus(404) {
+                runtimeTurnByAgent.removeValue(forKey: agent.id)
+            } catch {
+                if runtimeTurnByAgent[agent.id]?.turnId != turnId {
+                    runtimeTurnByAgent.removeValue(forKey: agent.id)
+                }
+                errors.append("Turn: \(error.localizedDescription)")
+            }
+        } else {
+            runtimeTurnByAgent.removeValue(forKey: agent.id)
+        }
+
+        if errors.isEmpty {
+            runtimeEvidenceErrorByAgent.removeValue(forKey: agent.id)
+        } else {
+            runtimeEvidenceErrorByAgent[agent.id] = errors.joined(separator: " ")
         }
     }
 
@@ -1887,6 +1977,13 @@ final class DirectChatViewModel {
         }
         try? ctx.save()
         loadConversations()
+        Task {
+            await refreshRuntimeEvidence(
+                for: agent,
+                turnId: currentMessages.last(where: { $0.role == "user" })?.remoteMessageId,
+                conversationId: channelId
+            )
+        }
     }
 
     private func importLiveAgentResponses(agent: AgentInfo, channelId: String, excluding acknowledgedMessageId: String?, since minimumCreatedAt: Date?) async {
@@ -1977,6 +2074,11 @@ final class DirectChatViewModel {
             }
             try? ctx.save()
             loadConversations()
+            await refreshRuntimeEvidence(
+                for: agent,
+                turnId: currentMessages.last(where: { $0.role == "user" })?.remoteMessageId,
+                conversationId: channelId
+            )
         } catch {
             if selectedAgent?.id == agent.id {
                 liveChatStatus = "Live response refresh is unavailable."

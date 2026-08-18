@@ -53,6 +53,13 @@ public protocol APIProtocol: Sendable {
     /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/schema-bundle`.
     /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/schema-bundle/get(getRuntimeSchemaBundle)`.
     func getRuntimeSchemaBundle(_ input: Operations.GetRuntimeSchemaBundle.Input) async throws -> Operations.GetRuntimeSchemaBundle.Output
+    /// Read one live ORCA Chat Runtime turn
+    ///
+    /// Projects the persisted inbound message, canonical WorkEvent sequence, provider adapter, resource envelope, and current terminal outcome into one provider-neutral Flight Recorder view.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/turns/{turn_id}`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/turns/{turn_id}/get(getRuntimeTurn)`.
+    func getRuntimeTurn(_ input: Operations.GetRuntimeTurn.Input) async throws -> Operations.GetRuntimeTurn.Output
     /// List Messages
     ///
     /// List messages in a channel.
@@ -67,6 +74,27 @@ public protocol APIProtocol: Sendable {
     /// - Remark: HTTP `POST /api/v1/chat/direct/{agent_slug}/send`.
     /// - Remark: Generated from `#/paths//api/v1/chat/direct/{agent_slug}/send/post(sendDirectAgentTurn)`.
     func sendDirectAgentTurn(_ input: Operations.SendDirectAgentTurn.Input) async throws -> Operations.SendDirectAgentTurn.Output
+    /// Get Conversation Memory
+    ///
+    /// Read active reviewed memory and the visible pending proposal queue.
+    ///
+    /// - Remark: HTTP `GET /api/v1/conversations/{conversation_id}/memory`.
+    /// - Remark: Generated from `#/paths//api/v1/conversations/{conversation_id}/memory/get(getConversationMemory)`.
+    func getConversationMemory(_ input: Operations.GetConversationMemory.Input) async throws -> Operations.GetConversationMemory.Output
+    /// Propose Conversation Memory
+    ///
+    /// Propose one complete bounded revision without writing hidden memory.
+    ///
+    /// - Remark: HTTP `POST /api/v1/conversations/{conversation_id}/memory/proposals`.
+    /// - Remark: Generated from `#/paths//api/v1/conversations/{conversation_id}/memory/proposals/post(proposeConversationMemory)`.
+    func proposeConversationMemory(_ input: Operations.ProposeConversationMemory.Input) async throws -> Operations.ProposeConversationMemory.Output
+    /// Apply Conversation Memory Proposal
+    ///
+    /// Apply one reviewed proposal with optimistic revision and authority checks.
+    ///
+    /// - Remark: HTTP `POST /api/v1/conversations/{conversation_id}/memory/proposals/{proposal_id}/apply`.
+    /// - Remark: Generated from `#/paths//api/v1/conversations/{conversation_id}/memory/proposals/{proposal_id}/apply/post(applyConversationMemoryProposal)`.
+    func applyConversationMemoryProposal(_ input: Operations.ApplyConversationMemoryProposal.Input) async throws -> Operations.ApplyConversationMemoryProposal.Output
 }
 
 /// Convenience overloads for operation inputs.
@@ -137,6 +165,21 @@ extension APIProtocol {
     public func getRuntimeSchemaBundle(headers: Operations.GetRuntimeSchemaBundle.Input.Headers = .init()) async throws -> Operations.GetRuntimeSchemaBundle.Output {
         try await getRuntimeSchemaBundle(Operations.GetRuntimeSchemaBundle.Input(headers: headers))
     }
+    /// Read one live ORCA Chat Runtime turn
+    ///
+    /// Projects the persisted inbound message, canonical WorkEvent sequence, provider adapter, resource envelope, and current terminal outcome into one provider-neutral Flight Recorder view.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/turns/{turn_id}`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/turns/{turn_id}/get(getRuntimeTurn)`.
+    public func getRuntimeTurn(
+        path: Operations.GetRuntimeTurn.Input.Path,
+        headers: Operations.GetRuntimeTurn.Input.Headers = .init()
+    ) async throws -> Operations.GetRuntimeTurn.Output {
+        try await getRuntimeTurn(Operations.GetRuntimeTurn.Input(
+            path: path,
+            headers: headers
+        ))
+    }
     /// List Messages
     ///
     /// List messages in a channel.
@@ -166,6 +209,55 @@ extension APIProtocol {
         body: Operations.SendDirectAgentTurn.Input.Body
     ) async throws -> Operations.SendDirectAgentTurn.Output {
         try await sendDirectAgentTurn(Operations.SendDirectAgentTurn.Input(
+            path: path,
+            headers: headers,
+            body: body
+        ))
+    }
+    /// Get Conversation Memory
+    ///
+    /// Read active reviewed memory and the visible pending proposal queue.
+    ///
+    /// - Remark: HTTP `GET /api/v1/conversations/{conversation_id}/memory`.
+    /// - Remark: Generated from `#/paths//api/v1/conversations/{conversation_id}/memory/get(getConversationMemory)`.
+    public func getConversationMemory(
+        path: Operations.GetConversationMemory.Input.Path,
+        headers: Operations.GetConversationMemory.Input.Headers = .init()
+    ) async throws -> Operations.GetConversationMemory.Output {
+        try await getConversationMemory(Operations.GetConversationMemory.Input(
+            path: path,
+            headers: headers
+        ))
+    }
+    /// Propose Conversation Memory
+    ///
+    /// Propose one complete bounded revision without writing hidden memory.
+    ///
+    /// - Remark: HTTP `POST /api/v1/conversations/{conversation_id}/memory/proposals`.
+    /// - Remark: Generated from `#/paths//api/v1/conversations/{conversation_id}/memory/proposals/post(proposeConversationMemory)`.
+    public func proposeConversationMemory(
+        path: Operations.ProposeConversationMemory.Input.Path,
+        headers: Operations.ProposeConversationMemory.Input.Headers = .init(),
+        body: Operations.ProposeConversationMemory.Input.Body
+    ) async throws -> Operations.ProposeConversationMemory.Output {
+        try await proposeConversationMemory(Operations.ProposeConversationMemory.Input(
+            path: path,
+            headers: headers,
+            body: body
+        ))
+    }
+    /// Apply Conversation Memory Proposal
+    ///
+    /// Apply one reviewed proposal with optimistic revision and authority checks.
+    ///
+    /// - Remark: HTTP `POST /api/v1/conversations/{conversation_id}/memory/proposals/{proposal_id}/apply`.
+    /// - Remark: Generated from `#/paths//api/v1/conversations/{conversation_id}/memory/proposals/{proposal_id}/apply/post(applyConversationMemoryProposal)`.
+    public func applyConversationMemoryProposal(
+        path: Operations.ApplyConversationMemoryProposal.Input.Path,
+        headers: Operations.ApplyConversationMemoryProposal.Input.Headers = .init(),
+        body: Operations.ApplyConversationMemoryProposal.Input.Body
+    ) async throws -> Operations.ApplyConversationMemoryProposal.Output {
+        try await applyConversationMemoryProposal(Operations.ApplyConversationMemoryProposal.Input(
             path: path,
             headers: headers,
             body: body
@@ -2370,6 +2462,443 @@ public enum Components {
                 case workKind = "work_kind"
             }
         }
+        /// - Remark: Generated from `#/components/schemas/ConversationMemoryApplyRequest`.
+        public struct ConversationMemoryApplyRequest: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryApplyRequest/reason`.
+            public var reason: Swift.String?
+            /// Creates a new `ConversationMemoryApplyRequest`.
+            ///
+            /// - Parameters:
+            ///   - reason:
+            public init(reason: Swift.String? = nil) {
+                self.reason = reason
+            }
+            public enum CodingKeys: String, CodingKey {
+                case reason
+            }
+        }
+        /// One bounded fact with explicit evidence and correction lineage.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ConversationMemoryFact`.
+        public struct ConversationMemoryFact: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryFact/authority`.
+            public var authority: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryFact/evidence_refs`.
+            public var evidenceRefs: [Swift.String]?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryFact/fact_id`.
+            public var factId: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryFact/occurred_at`.
+            public var occurredAt: Foundation.Date?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryFact/source_refs`.
+            public var sourceRefs: [Swift.String]?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryFact/status`.
+            @frozen public enum StatusPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case active = "active"
+                case resolved = "resolved"
+                case corrected = "corrected"
+            }
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryFact/status`.
+            public var status: Components.Schemas.ConversationMemoryFact.StatusPayload?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryFact/supersedes_fact_id`.
+            public var supersedesFactId: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryFact/text`.
+            public var text: Swift.String
+            /// Creates a new `ConversationMemoryFact`.
+            ///
+            /// - Parameters:
+            ///   - authority:
+            ///   - evidenceRefs:
+            ///   - factId:
+            ///   - occurredAt:
+            ///   - sourceRefs:
+            ///   - status:
+            ///   - supersedesFactId:
+            ///   - text:
+            public init(
+                authority: Swift.String? = nil,
+                evidenceRefs: [Swift.String]? = nil,
+                factId: Swift.String,
+                occurredAt: Foundation.Date? = nil,
+                sourceRefs: [Swift.String]? = nil,
+                status: Components.Schemas.ConversationMemoryFact.StatusPayload? = nil,
+                supersedesFactId: Swift.String? = nil,
+                text: Swift.String
+            ) {
+                self.authority = authority
+                self.evidenceRefs = evidenceRefs
+                self.factId = factId
+                self.occurredAt = occurredAt
+                self.sourceRefs = sourceRefs
+                self.status = status
+                self.supersedesFactId = supersedesFactId
+                self.text = text
+            }
+            public enum CodingKeys: String, CodingKey {
+                case authority
+                case evidenceRefs = "evidence_refs"
+                case factId = "fact_id"
+                case occurredAt = "occurred_at"
+                case sourceRefs = "source_refs"
+                case status
+                case supersedesFactId = "supersedes_fact_id"
+                case text
+            }
+        }
+        /// - Remark: Generated from `#/components/schemas/ConversationMemoryProposalCreate`.
+        public struct ConversationMemoryProposalCreate: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryProposalCreate/auto_apply_requested`.
+            public var autoApplyRequested: Swift.Bool?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryProposalCreate/expected_revision`.
+            public var expectedRevision: Swift.Int?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryProposalCreate/memory`.
+            public var memory: Components.Schemas.ConversationMemorySnapshot
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryProposalCreate/proposal_kind`.
+            @frozen public enum ProposalKindPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case checkpoint = "checkpoint"
+                case sleepCheckpoint = "sleep_checkpoint"
+                case correction = "correction"
+                case promotion = "promotion"
+                case manual = "manual"
+            }
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryProposalCreate/proposal_kind`.
+            public var proposalKind: Components.Schemas.ConversationMemoryProposalCreate.ProposalKindPayload?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryProposalCreate/reason`.
+            public var reason: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryProposalCreate/trace_id`.
+            public var traceId: Swift.String?
+            /// Creates a new `ConversationMemoryProposalCreate`.
+            ///
+            /// - Parameters:
+            ///   - autoApplyRequested:
+            ///   - expectedRevision:
+            ///   - memory:
+            ///   - proposalKind:
+            ///   - reason:
+            ///   - traceId:
+            public init(
+                autoApplyRequested: Swift.Bool? = nil,
+                expectedRevision: Swift.Int? = nil,
+                memory: Components.Schemas.ConversationMemorySnapshot,
+                proposalKind: Components.Schemas.ConversationMemoryProposalCreate.ProposalKindPayload? = nil,
+                reason: Swift.String? = nil,
+                traceId: Swift.String? = nil
+            ) {
+                self.autoApplyRequested = autoApplyRequested
+                self.expectedRevision = expectedRevision
+                self.memory = memory
+                self.proposalKind = proposalKind
+                self.reason = reason
+                self.traceId = traceId
+            }
+            public enum CodingKeys: String, CodingKey {
+                case autoApplyRequested = "auto_apply_requested"
+                case expectedRevision = "expected_revision"
+                case memory
+                case proposalKind = "proposal_kind"
+                case reason
+                case traceId = "trace_id"
+            }
+        }
+        /// - Remark: Generated from `#/components/schemas/ConversationMemoryProposalRead`.
+        public struct ConversationMemoryProposalRead: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryProposalRead/auto_apply_eligible`.
+            public var autoApplyEligible: Swift.Bool?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryProposalRead/conversation_id`.
+            public var conversationId: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryProposalRead/created_at`.
+            public var createdAt: Foundation.Date
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryProposalRead/created_by`.
+            public var createdBy: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryProposalRead/expected_revision`.
+            public var expectedRevision: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryProposalRead/memory`.
+            public var memory: Components.Schemas.ConversationMemorySnapshot
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryProposalRead/proposal_id`.
+            public var proposalId: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryProposalRead/proposal_kind`.
+            @frozen public enum ProposalKindPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case checkpoint = "checkpoint"
+                case sleepCheckpoint = "sleep_checkpoint"
+                case correction = "correction"
+                case promotion = "promotion"
+                case manual = "manual"
+            }
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryProposalRead/proposal_kind`.
+            public var proposalKind: Components.Schemas.ConversationMemoryProposalRead.ProposalKindPayload
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryProposalRead/reason`.
+            public var reason: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryProposalRead/ReviewHistoryPayload`.
+            public struct ReviewHistoryPayloadPayload: Codable, Hashable, Sendable {
+                /// A container of undocumented properties.
+                public var additionalProperties: OpenAPIRuntime.OpenAPIObjectContainer
+                /// Creates a new `ReviewHistoryPayloadPayload`.
+                ///
+                /// - Parameters:
+                ///   - additionalProperties: A container of undocumented properties.
+                public init(additionalProperties: OpenAPIRuntime.OpenAPIObjectContainer = .init()) {
+                    self.additionalProperties = additionalProperties
+                }
+                public init(from decoder: any Swift.Decoder) throws {
+                    additionalProperties = try decoder.decodeAdditionalProperties(knownKeys: [])
+                }
+                public func encode(to encoder: any Swift.Encoder) throws {
+                    try encoder.encodeAdditionalProperties(additionalProperties)
+                }
+            }
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryProposalRead/review_history`.
+            public typealias ReviewHistoryPayload = [Components.Schemas.ConversationMemoryProposalRead.ReviewHistoryPayloadPayload]
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryProposalRead/review_history`.
+            public var reviewHistory: Components.Schemas.ConversationMemoryProposalRead.ReviewHistoryPayload?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryProposalRead/status`.
+            public var status: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryProposalRead/trace_id`.
+            public var traceId: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryProposalRead/updated_at`.
+            public var updatedAt: Foundation.Date
+            /// Creates a new `ConversationMemoryProposalRead`.
+            ///
+            /// - Parameters:
+            ///   - autoApplyEligible:
+            ///   - conversationId:
+            ///   - createdAt:
+            ///   - createdBy:
+            ///   - expectedRevision:
+            ///   - memory:
+            ///   - proposalId:
+            ///   - proposalKind:
+            ///   - reason:
+            ///   - reviewHistory:
+            ///   - status:
+            ///   - traceId:
+            ///   - updatedAt:
+            public init(
+                autoApplyEligible: Swift.Bool? = nil,
+                conversationId: Swift.String,
+                createdAt: Foundation.Date,
+                createdBy: Swift.String? = nil,
+                expectedRevision: Swift.Int,
+                memory: Components.Schemas.ConversationMemorySnapshot,
+                proposalId: Swift.String,
+                proposalKind: Components.Schemas.ConversationMemoryProposalRead.ProposalKindPayload,
+                reason: Swift.String? = nil,
+                reviewHistory: Components.Schemas.ConversationMemoryProposalRead.ReviewHistoryPayload? = nil,
+                status: Swift.String,
+                traceId: Swift.String? = nil,
+                updatedAt: Foundation.Date
+            ) {
+                self.autoApplyEligible = autoApplyEligible
+                self.conversationId = conversationId
+                self.createdAt = createdAt
+                self.createdBy = createdBy
+                self.expectedRevision = expectedRevision
+                self.memory = memory
+                self.proposalId = proposalId
+                self.proposalKind = proposalKind
+                self.reason = reason
+                self.reviewHistory = reviewHistory
+                self.status = status
+                self.traceId = traceId
+                self.updatedAt = updatedAt
+            }
+            public enum CodingKeys: String, CodingKey {
+                case autoApplyEligible = "auto_apply_eligible"
+                case conversationId = "conversation_id"
+                case createdAt = "created_at"
+                case createdBy = "created_by"
+                case expectedRevision = "expected_revision"
+                case memory
+                case proposalId = "proposal_id"
+                case proposalKind = "proposal_kind"
+                case reason
+                case reviewHistory = "review_history"
+                case status
+                case traceId = "trace_id"
+                case updatedAt = "updated_at"
+            }
+        }
+        /// - Remark: Generated from `#/components/schemas/ConversationMemoryRead`.
+        public struct ConversationMemoryRead: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryRead/agent_id`.
+            public var agentId: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryRead/content_sha256`.
+            public var contentSha256: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryRead/contract_version`.
+            @frozen public enum ContractVersionPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case orca_conversationMemory_v2 = "orca.conversation-memory.v2"
+            }
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryRead/contract_version`.
+            public var contractVersion: Components.Schemas.ConversationMemoryRead.ContractVersionPayload?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryRead/conversation_id`.
+            public var conversationId: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryRead/created_at`.
+            public var createdAt: Foundation.Date?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryRead/latest_proposal_id`.
+            public var latestProposalId: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryRead/memory`.
+            public var memory: Components.Schemas.ConversationMemorySnapshot
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryRead/organization_id`.
+            public var organizationId: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryRead/pending_proposals`.
+            public var pendingProposals: [Components.Schemas.ConversationMemoryProposalRead]?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryRead/revision`.
+            public var revision: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ConversationMemoryRead/updated_at`.
+            public var updatedAt: Foundation.Date?
+            /// Creates a new `ConversationMemoryRead`.
+            ///
+            /// - Parameters:
+            ///   - agentId:
+            ///   - contentSha256:
+            ///   - contractVersion:
+            ///   - conversationId:
+            ///   - createdAt:
+            ///   - latestProposalId:
+            ///   - memory:
+            ///   - organizationId:
+            ///   - pendingProposals:
+            ///   - revision:
+            ///   - updatedAt:
+            public init(
+                agentId: Swift.String? = nil,
+                contentSha256: Swift.String,
+                contractVersion: Components.Schemas.ConversationMemoryRead.ContractVersionPayload? = nil,
+                conversationId: Swift.String,
+                createdAt: Foundation.Date? = nil,
+                latestProposalId: Swift.String? = nil,
+                memory: Components.Schemas.ConversationMemorySnapshot,
+                organizationId: Swift.String,
+                pendingProposals: [Components.Schemas.ConversationMemoryProposalRead]? = nil,
+                revision: Swift.Int,
+                updatedAt: Foundation.Date? = nil
+            ) {
+                self.agentId = agentId
+                self.contentSha256 = contentSha256
+                self.contractVersion = contractVersion
+                self.conversationId = conversationId
+                self.createdAt = createdAt
+                self.latestProposalId = latestProposalId
+                self.memory = memory
+                self.organizationId = organizationId
+                self.pendingProposals = pendingProposals
+                self.revision = revision
+                self.updatedAt = updatedAt
+            }
+            public enum CodingKeys: String, CodingKey {
+                case agentId = "agent_id"
+                case contentSha256 = "content_sha256"
+                case contractVersion = "contract_version"
+                case conversationId = "conversation_id"
+                case createdAt = "created_at"
+                case latestProposalId = "latest_proposal_id"
+                case memory
+                case organizationId = "organization_id"
+                case pendingProposals = "pending_proposals"
+                case revision
+                case updatedAt = "updated_at"
+            }
+        }
+        /// Complete bounded state applied atomically as one memory revision.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ConversationMemorySnapshot`.
+        public struct ConversationMemorySnapshot: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ConversationMemorySnapshot/active_summary`.
+            public var activeSummary: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemorySnapshot/blockers`.
+            public var blockers: [Components.Schemas.ConversationMemoryFact]?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemorySnapshot/commitments`.
+            public var commitments: [Components.Schemas.ConversationMemoryFact]?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemorySnapshot/decisions`.
+            public var decisions: [Components.Schemas.ConversationMemoryFact]?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemorySnapshot/evidence_refs`.
+            public var evidenceRefs: [Swift.String]?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemorySnapshot/nas_refs`.
+            public var nasRefs: [Swift.String]?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemorySnapshot/recent_outcomes`.
+            public var recentOutcomes: [Components.Schemas.ConversationMemoryFact]?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemorySnapshot/sensitivity`.
+            @frozen public enum SensitivityPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case normal = "normal"
+                case protected = "protected"
+            }
+            /// - Remark: Generated from `#/components/schemas/ConversationMemorySnapshot/sensitivity`.
+            public var sensitivity: Components.Schemas.ConversationMemorySnapshot.SensitivityPayload?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemorySnapshot/source_refs`.
+            public struct SourceRefsPayload: Codable, Hashable, Sendable {
+                /// A container of undocumented properties.
+                public var additionalProperties: OpenAPIRuntime.OpenAPIObjectContainer
+                /// Creates a new `SourceRefsPayload`.
+                ///
+                /// - Parameters:
+                ///   - additionalProperties: A container of undocumented properties.
+                public init(additionalProperties: OpenAPIRuntime.OpenAPIObjectContainer = .init()) {
+                    self.additionalProperties = additionalProperties
+                }
+                public init(from decoder: any Swift.Decoder) throws {
+                    additionalProperties = try decoder.decodeAdditionalProperties(knownKeys: [])
+                }
+                public func encode(to encoder: any Swift.Encoder) throws {
+                    try encoder.encodeAdditionalProperties(additionalProperties)
+                }
+            }
+            /// - Remark: Generated from `#/components/schemas/ConversationMemorySnapshot/source_refs`.
+            public var sourceRefs: Components.Schemas.ConversationMemorySnapshot.SourceRefsPayload?
+            /// - Remark: Generated from `#/components/schemas/ConversationMemorySnapshot/visibility`.
+            @frozen public enum VisibilityPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case conversation = "conversation"
+                case agent = "agent"
+                case ownerOnly = "owner_only"
+            }
+            /// - Remark: Generated from `#/components/schemas/ConversationMemorySnapshot/visibility`.
+            public var visibility: Components.Schemas.ConversationMemorySnapshot.VisibilityPayload?
+            /// Creates a new `ConversationMemorySnapshot`.
+            ///
+            /// - Parameters:
+            ///   - activeSummary:
+            ///   - blockers:
+            ///   - commitments:
+            ///   - decisions:
+            ///   - evidenceRefs:
+            ///   - nasRefs:
+            ///   - recentOutcomes:
+            ///   - sensitivity:
+            ///   - sourceRefs:
+            ///   - visibility:
+            public init(
+                activeSummary: Swift.String? = nil,
+                blockers: [Components.Schemas.ConversationMemoryFact]? = nil,
+                commitments: [Components.Schemas.ConversationMemoryFact]? = nil,
+                decisions: [Components.Schemas.ConversationMemoryFact]? = nil,
+                evidenceRefs: [Swift.String]? = nil,
+                nasRefs: [Swift.String]? = nil,
+                recentOutcomes: [Components.Schemas.ConversationMemoryFact]? = nil,
+                sensitivity: Components.Schemas.ConversationMemorySnapshot.SensitivityPayload? = nil,
+                sourceRefs: Components.Schemas.ConversationMemorySnapshot.SourceRefsPayload? = nil,
+                visibility: Components.Schemas.ConversationMemorySnapshot.VisibilityPayload? = nil
+            ) {
+                self.activeSummary = activeSummary
+                self.blockers = blockers
+                self.commitments = commitments
+                self.decisions = decisions
+                self.evidenceRefs = evidenceRefs
+                self.nasRefs = nasRefs
+                self.recentOutcomes = recentOutcomes
+                self.sensitivity = sensitivity
+                self.sourceRefs = sourceRefs
+                self.visibility = visibility
+            }
+            public enum CodingKeys: String, CodingKey {
+                case activeSummary = "active_summary"
+                case blockers
+                case commitments
+                case decisions
+                case evidenceRefs = "evidence_refs"
+                case nasRefs = "nas_refs"
+                case recentOutcomes = "recent_outcomes"
+                case sensitivity
+                case sourceRefs = "source_refs"
+                case visibility
+            }
+        }
         /// Prior chat turn supplied by a client during local-to-ORCA transition.
         ///
         /// - Remark: Generated from `#/components/schemas/DirectAgentChatMessage`.
@@ -3620,6 +4149,187 @@ public enum Operations {
             }
         }
     }
+    /// Read one live ORCA Chat Runtime turn
+    ///
+    /// Projects the persisted inbound message, canonical WorkEvent sequence, provider adapter, resource envelope, and current terminal outcome into one provider-neutral Flight Recorder view.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/turns/{turn_id}`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/turns/{turn_id}/get(getRuntimeTurn)`.
+    public enum GetRuntimeTurn {
+        public static let id: Swift.String = "getRuntimeTurn"
+        public struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/turns/{turn_id}/GET/path`.
+            public struct Path: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/turns/{turn_id}/GET/path/turn_id`.
+                public var turnId: Swift.String
+                /// Creates a new `Path`.
+                ///
+                /// - Parameters:
+                ///   - turnId:
+                public init(turnId: Swift.String) {
+                    self.turnId = turnId
+                }
+            }
+            public var path: Operations.GetRuntimeTurn.Input.Path
+            /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/turns/{turn_id}/GET/header`.
+            public struct Headers: Sendable, Hashable {
+                public var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.GetRuntimeTurn.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                public init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.GetRuntimeTurn.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            public var headers: Operations.GetRuntimeTurn.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - path:
+            ///   - headers:
+            public init(
+                path: Operations.GetRuntimeTurn.Input.Path,
+                headers: Operations.GetRuntimeTurn.Input.Headers = .init()
+            ) {
+                self.path = path
+                self.headers = headers
+            }
+        }
+        @frozen public enum Output: Sendable, Hashable {
+            public struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/turns/{turn_id}/GET/responses/200/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/turns/{turn_id}/GET/responses/200/content/application\/json`.
+                    case json(Components.Schemas.ChatRuntimeTurnRead)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.ChatRuntimeTurnRead {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.GetRuntimeTurn.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.GetRuntimeTurn.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// Successful Response
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/turns/{turn_id}/get(getRuntimeTurn)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.GetRuntimeTurn.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            public var ok: Operations.GetRuntimeTurn.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct UnprocessableContent: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/turns/{turn_id}/GET/responses/422/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/turns/{turn_id}/GET/responses/422/content/application\/json`.
+                    case json(Components.Schemas.HTTPValidationError)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.HTTPValidationError {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.GetRuntimeTurn.Output.UnprocessableContent.Body
+                /// Creates a new `UnprocessableContent`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.GetRuntimeTurn.Output.UnprocessableContent.Body) {
+                    self.body = body
+                }
+            }
+            /// Validation Error
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/turns/{turn_id}/get(getRuntimeTurn)/responses/422`.
+            ///
+            /// HTTP response code: `422 unprocessableContent`.
+            case unprocessableContent(Operations.GetRuntimeTurn.Output.UnprocessableContent)
+            /// The associated value of the enum case if `self` is `.unprocessableContent`.
+            ///
+            /// - Throws: An error if `self` is not `.unprocessableContent`.
+            /// - SeeAlso: `.unprocessableContent`.
+            public var unprocessableContent: Operations.GetRuntimeTurn.Output.UnprocessableContent {
+                get throws {
+                    switch self {
+                    case let .unprocessableContent(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unprocessableContent",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        @frozen public enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            public init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            public var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            public static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
     /// List Messages
     ///
     /// List messages in a channel.
@@ -3971,6 +4681,574 @@ public enum Operations {
             /// - Throws: An error if `self` is not `.unprocessableContent`.
             /// - SeeAlso: `.unprocessableContent`.
             public var unprocessableContent: Operations.SendDirectAgentTurn.Output.UnprocessableContent {
+                get throws {
+                    switch self {
+                    case let .unprocessableContent(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unprocessableContent",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        @frozen public enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            public init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            public var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            public static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// Get Conversation Memory
+    ///
+    /// Read active reviewed memory and the visible pending proposal queue.
+    ///
+    /// - Remark: HTTP `GET /api/v1/conversations/{conversation_id}/memory`.
+    /// - Remark: Generated from `#/paths//api/v1/conversations/{conversation_id}/memory/get(getConversationMemory)`.
+    public enum GetConversationMemory {
+        public static let id: Swift.String = "getConversationMemory"
+        public struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/conversations/{conversation_id}/memory/GET/path`.
+            public struct Path: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/conversations/{conversation_id}/memory/GET/path/conversation_id`.
+                public var conversationId: Swift.String
+                /// Creates a new `Path`.
+                ///
+                /// - Parameters:
+                ///   - conversationId:
+                public init(conversationId: Swift.String) {
+                    self.conversationId = conversationId
+                }
+            }
+            public var path: Operations.GetConversationMemory.Input.Path
+            /// - Remark: Generated from `#/paths/api/v1/conversations/{conversation_id}/memory/GET/header`.
+            public struct Headers: Sendable, Hashable {
+                public var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.GetConversationMemory.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                public init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.GetConversationMemory.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            public var headers: Operations.GetConversationMemory.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - path:
+            ///   - headers:
+            public init(
+                path: Operations.GetConversationMemory.Input.Path,
+                headers: Operations.GetConversationMemory.Input.Headers = .init()
+            ) {
+                self.path = path
+                self.headers = headers
+            }
+        }
+        @frozen public enum Output: Sendable, Hashable {
+            public struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/conversations/{conversation_id}/memory/GET/responses/200/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/conversations/{conversation_id}/memory/GET/responses/200/content/application\/json`.
+                    case json(Components.Schemas.ConversationMemoryRead)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.ConversationMemoryRead {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.GetConversationMemory.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.GetConversationMemory.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// Successful Response
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/conversations/{conversation_id}/memory/get(getConversationMemory)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.GetConversationMemory.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            public var ok: Operations.GetConversationMemory.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct UnprocessableContent: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/conversations/{conversation_id}/memory/GET/responses/422/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/conversations/{conversation_id}/memory/GET/responses/422/content/application\/json`.
+                    case json(Components.Schemas.HTTPValidationError)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.HTTPValidationError {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.GetConversationMemory.Output.UnprocessableContent.Body
+                /// Creates a new `UnprocessableContent`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.GetConversationMemory.Output.UnprocessableContent.Body) {
+                    self.body = body
+                }
+            }
+            /// Validation Error
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/conversations/{conversation_id}/memory/get(getConversationMemory)/responses/422`.
+            ///
+            /// HTTP response code: `422 unprocessableContent`.
+            case unprocessableContent(Operations.GetConversationMemory.Output.UnprocessableContent)
+            /// The associated value of the enum case if `self` is `.unprocessableContent`.
+            ///
+            /// - Throws: An error if `self` is not `.unprocessableContent`.
+            /// - SeeAlso: `.unprocessableContent`.
+            public var unprocessableContent: Operations.GetConversationMemory.Output.UnprocessableContent {
+                get throws {
+                    switch self {
+                    case let .unprocessableContent(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unprocessableContent",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        @frozen public enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            public init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            public var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            public static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// Propose Conversation Memory
+    ///
+    /// Propose one complete bounded revision without writing hidden memory.
+    ///
+    /// - Remark: HTTP `POST /api/v1/conversations/{conversation_id}/memory/proposals`.
+    /// - Remark: Generated from `#/paths//api/v1/conversations/{conversation_id}/memory/proposals/post(proposeConversationMemory)`.
+    public enum ProposeConversationMemory {
+        public static let id: Swift.String = "proposeConversationMemory"
+        public struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/conversations/{conversation_id}/memory/proposals/POST/path`.
+            public struct Path: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/conversations/{conversation_id}/memory/proposals/POST/path/conversation_id`.
+                public var conversationId: Swift.String
+                /// Creates a new `Path`.
+                ///
+                /// - Parameters:
+                ///   - conversationId:
+                public init(conversationId: Swift.String) {
+                    self.conversationId = conversationId
+                }
+            }
+            public var path: Operations.ProposeConversationMemory.Input.Path
+            /// - Remark: Generated from `#/paths/api/v1/conversations/{conversation_id}/memory/proposals/POST/header`.
+            public struct Headers: Sendable, Hashable {
+                public var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ProposeConversationMemory.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                public init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ProposeConversationMemory.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            public var headers: Operations.ProposeConversationMemory.Input.Headers
+            /// - Remark: Generated from `#/paths/api/v1/conversations/{conversation_id}/memory/proposals/POST/requestBody`.
+            @frozen public enum Body: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/conversations/{conversation_id}/memory/proposals/POST/requestBody/content/application\/json`.
+                case json(Components.Schemas.ConversationMemoryProposalCreate)
+            }
+            public var body: Operations.ProposeConversationMemory.Input.Body
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - path:
+            ///   - headers:
+            ///   - body:
+            public init(
+                path: Operations.ProposeConversationMemory.Input.Path,
+                headers: Operations.ProposeConversationMemory.Input.Headers = .init(),
+                body: Operations.ProposeConversationMemory.Input.Body
+            ) {
+                self.path = path
+                self.headers = headers
+                self.body = body
+            }
+        }
+        @frozen public enum Output: Sendable, Hashable {
+            public struct Created: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/conversations/{conversation_id}/memory/proposals/POST/responses/201/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/conversations/{conversation_id}/memory/proposals/POST/responses/201/content/application\/json`.
+                    case json(Components.Schemas.ConversationMemoryProposalRead)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.ConversationMemoryProposalRead {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.ProposeConversationMemory.Output.Created.Body
+                /// Creates a new `Created`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.ProposeConversationMemory.Output.Created.Body) {
+                    self.body = body
+                }
+            }
+            /// Successful Response
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/conversations/{conversation_id}/memory/proposals/post(proposeConversationMemory)/responses/201`.
+            ///
+            /// HTTP response code: `201 created`.
+            case created(Operations.ProposeConversationMemory.Output.Created)
+            /// The associated value of the enum case if `self` is `.created`.
+            ///
+            /// - Throws: An error if `self` is not `.created`.
+            /// - SeeAlso: `.created`.
+            public var created: Operations.ProposeConversationMemory.Output.Created {
+                get throws {
+                    switch self {
+                    case let .created(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "created",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct UnprocessableContent: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/conversations/{conversation_id}/memory/proposals/POST/responses/422/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/conversations/{conversation_id}/memory/proposals/POST/responses/422/content/application\/json`.
+                    case json(Components.Schemas.HTTPValidationError)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.HTTPValidationError {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.ProposeConversationMemory.Output.UnprocessableContent.Body
+                /// Creates a new `UnprocessableContent`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.ProposeConversationMemory.Output.UnprocessableContent.Body) {
+                    self.body = body
+                }
+            }
+            /// Validation Error
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/conversations/{conversation_id}/memory/proposals/post(proposeConversationMemory)/responses/422`.
+            ///
+            /// HTTP response code: `422 unprocessableContent`.
+            case unprocessableContent(Operations.ProposeConversationMemory.Output.UnprocessableContent)
+            /// The associated value of the enum case if `self` is `.unprocessableContent`.
+            ///
+            /// - Throws: An error if `self` is not `.unprocessableContent`.
+            /// - SeeAlso: `.unprocessableContent`.
+            public var unprocessableContent: Operations.ProposeConversationMemory.Output.UnprocessableContent {
+                get throws {
+                    switch self {
+                    case let .unprocessableContent(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unprocessableContent",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        @frozen public enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            public init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            public var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            public static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// Apply Conversation Memory Proposal
+    ///
+    /// Apply one reviewed proposal with optimistic revision and authority checks.
+    ///
+    /// - Remark: HTTP `POST /api/v1/conversations/{conversation_id}/memory/proposals/{proposal_id}/apply`.
+    /// - Remark: Generated from `#/paths//api/v1/conversations/{conversation_id}/memory/proposals/{proposal_id}/apply/post(applyConversationMemoryProposal)`.
+    public enum ApplyConversationMemoryProposal {
+        public static let id: Swift.String = "applyConversationMemoryProposal"
+        public struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/conversations/{conversation_id}/memory/proposals/{proposal_id}/apply/POST/path`.
+            public struct Path: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/conversations/{conversation_id}/memory/proposals/{proposal_id}/apply/POST/path/conversation_id`.
+                public var conversationId: Swift.String
+                /// - Remark: Generated from `#/paths/api/v1/conversations/{conversation_id}/memory/proposals/{proposal_id}/apply/POST/path/proposal_id`.
+                public var proposalId: Swift.String
+                /// Creates a new `Path`.
+                ///
+                /// - Parameters:
+                ///   - conversationId:
+                ///   - proposalId:
+                public init(
+                    conversationId: Swift.String,
+                    proposalId: Swift.String
+                ) {
+                    self.conversationId = conversationId
+                    self.proposalId = proposalId
+                }
+            }
+            public var path: Operations.ApplyConversationMemoryProposal.Input.Path
+            /// - Remark: Generated from `#/paths/api/v1/conversations/{conversation_id}/memory/proposals/{proposal_id}/apply/POST/header`.
+            public struct Headers: Sendable, Hashable {
+                public var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ApplyConversationMemoryProposal.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                public init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ApplyConversationMemoryProposal.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            public var headers: Operations.ApplyConversationMemoryProposal.Input.Headers
+            /// - Remark: Generated from `#/paths/api/v1/conversations/{conversation_id}/memory/proposals/{proposal_id}/apply/POST/requestBody`.
+            @frozen public enum Body: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/conversations/{conversation_id}/memory/proposals/{proposal_id}/apply/POST/requestBody/content/application\/json`.
+                case json(Components.Schemas.ConversationMemoryApplyRequest)
+            }
+            public var body: Operations.ApplyConversationMemoryProposal.Input.Body
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - path:
+            ///   - headers:
+            ///   - body:
+            public init(
+                path: Operations.ApplyConversationMemoryProposal.Input.Path,
+                headers: Operations.ApplyConversationMemoryProposal.Input.Headers = .init(),
+                body: Operations.ApplyConversationMemoryProposal.Input.Body
+            ) {
+                self.path = path
+                self.headers = headers
+                self.body = body
+            }
+        }
+        @frozen public enum Output: Sendable, Hashable {
+            public struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/conversations/{conversation_id}/memory/proposals/{proposal_id}/apply/POST/responses/200/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/conversations/{conversation_id}/memory/proposals/{proposal_id}/apply/POST/responses/200/content/application\/json`.
+                    case json(Components.Schemas.ConversationMemoryRead)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.ConversationMemoryRead {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.ApplyConversationMemoryProposal.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.ApplyConversationMemoryProposal.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// Successful Response
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/conversations/{conversation_id}/memory/proposals/{proposal_id}/apply/post(applyConversationMemoryProposal)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.ApplyConversationMemoryProposal.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            public var ok: Operations.ApplyConversationMemoryProposal.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct UnprocessableContent: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/conversations/{conversation_id}/memory/proposals/{proposal_id}/apply/POST/responses/422/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/conversations/{conversation_id}/memory/proposals/{proposal_id}/apply/POST/responses/422/content/application\/json`.
+                    case json(Components.Schemas.HTTPValidationError)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.HTTPValidationError {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.ApplyConversationMemoryProposal.Output.UnprocessableContent.Body
+                /// Creates a new `UnprocessableContent`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.ApplyConversationMemoryProposal.Output.UnprocessableContent.Body) {
+                    self.body = body
+                }
+            }
+            /// Validation Error
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/conversations/{conversation_id}/memory/proposals/{proposal_id}/apply/post(applyConversationMemoryProposal)/responses/422`.
+            ///
+            /// HTTP response code: `422 unprocessableContent`.
+            case unprocessableContent(Operations.ApplyConversationMemoryProposal.Output.UnprocessableContent)
+            /// The associated value of the enum case if `self` is `.unprocessableContent`.
+            ///
+            /// - Throws: An error if `self` is not `.unprocessableContent`.
+            /// - SeeAlso: `.unprocessableContent`.
+            public var unprocessableContent: Operations.ApplyConversationMemoryProposal.Output.UnprocessableContent {
                 get throws {
                     switch self {
                     case let .unprocessableContent(response):

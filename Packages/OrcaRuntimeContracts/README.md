@@ -31,5 +31,8 @@ Swift generation. They also fail closed when a named-agent capability bundle
 drifts from its Agent Pack, overstates live attestation, or points execution
 outside ORCA. Work Control bundles are likewise bound to the selected Agent Pack
 and reject contradictory readiness, unauthorized approval decisions, count drift,
-or execution pointers outside ORCA. The root Pod project also links this package
-during its iOS build.
+or execution pointers outside ORCA. Conversation V2 reads and reviewed proposals
+use the same generated client, while the Flight Recorder accepts canonical reply
+message identities without relaxing turn, conversation, agent, sequence, cursor,
+or terminal-outcome invariants. The root Pod project and ORCA Console both link
+this package during their native builds.

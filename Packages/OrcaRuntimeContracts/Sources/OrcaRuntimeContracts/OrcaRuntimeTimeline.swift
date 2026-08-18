@@ -76,8 +76,7 @@ public struct OrcaRuntimeTimelineEvent: Equatable, Sendable {
     }
 
     var isTerminal: Bool {
-        ["completed", "failed", "cancelled"].contains(state)
-            || ["turn.completed", "turn.failed", "turn.cancelled"].contains(eventType)
+        ["turn.completed", "turn.failed", "turn.cancelled"].contains(eventType)
     }
 }
 

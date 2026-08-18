@@ -78,6 +78,35 @@ final class PodHardeningTests: XCTestCase {
         }
     }
 
+    func testPodAndConsoleExposeReviewedConversationMemory() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let podViewModel = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Sources/Presentation/Features/DirectChat/DirectChatViewModel.swift"
+            ),
+            encoding: .utf8
+        )
+        let podView = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Sources/Presentation/Features/DirectChat/LockerChatView.swift"
+            ),
+            encoding: .utf8
+        )
+        let consoleModel = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "MacApp/Sources/ViewModels/OrcaMacModel.swift"
+            ),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(podViewModel.contains("func applyLatestMemoryProposal(for agent:"))
+        XCTAssertTrue(podView.contains("Review and Apply"))
+        XCTAssertTrue(consoleModel.contains("func applyLatestMemoryProposal()"))
+    }
+
     func testUserFacingBackendClientsUseAppConfigInsteadOfLegacyShakaProxy() throws {
         let sourceRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
