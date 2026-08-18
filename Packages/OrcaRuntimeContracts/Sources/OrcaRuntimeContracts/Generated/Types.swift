@@ -25,6 +25,13 @@ public protocol APIProtocol: Sendable {
     /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/agents/{agent_key}/capabilities`.
     /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/agents/{agent_key}/capabilities/get(getRuntimeAgentCapabilities)`.
     func getRuntimeAgentCapabilities(_ input: Operations.GetRuntimeAgentCapabilities.Input) async throws -> Operations.GetRuntimeAgentCapabilities.Output
+    /// Read ORCA Chat Runtime v1 Agent Work Control
+    ///
+    /// Returns the typed, digest-bound adapter over existing ORCA tickets, tasks, approvals, Planner, workers, Research, Fish, and governed tools. The route is read-only and does not create a second work ledger.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/agents/{agent_key}/work-control`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/agents/{agent_key}/work-control/get(getRuntimeAgentWorkControl)`.
+    func getRuntimeAgentWorkControl(_ input: Operations.GetRuntimeAgentWorkControl.Input) async throws -> Operations.GetRuntimeAgentWorkControl.Output
     /// Read ORCA Chat Runtime v1 Complete-Turn Fixture
     ///
     /// Returns a deterministic provider-neutral accepted-to-terminal turn for generated client decoding, ordering, and replay conformance tests.
@@ -84,6 +91,21 @@ extension APIProtocol {
         headers: Operations.GetRuntimeAgentCapabilities.Input.Headers = .init()
     ) async throws -> Operations.GetRuntimeAgentCapabilities.Output {
         try await getRuntimeAgentCapabilities(Operations.GetRuntimeAgentCapabilities.Input(
+            path: path,
+            headers: headers
+        ))
+    }
+    /// Read ORCA Chat Runtime v1 Agent Work Control
+    ///
+    /// Returns the typed, digest-bound adapter over existing ORCA tickets, tasks, approvals, Planner, workers, Research, Fish, and governed tools. The route is read-only and does not create a second work ledger.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/agents/{agent_key}/work-control`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/agents/{agent_key}/work-control/get(getRuntimeAgentWorkControl)`.
+    public func getRuntimeAgentWorkControl(
+        path: Operations.GetRuntimeAgentWorkControl.Input.Path,
+        headers: Operations.GetRuntimeAgentWorkControl.Input.Headers = .init()
+    ) async throws -> Operations.GetRuntimeAgentWorkControl.Output {
+        try await getRuntimeAgentWorkControl(Operations.GetRuntimeAgentWorkControl.Input(
             path: path,
             headers: headers
         ))
@@ -1786,6 +1808,568 @@ public enum Components {
                 case turnId = "turn_id"
             }
         }
+        /// One pending first-class approval with canonical registry authority.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead`.
+        public struct ChatRuntimeWorkApprovalRead: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/action_type`.
+            public var actionType: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/approval_id`.
+            public var approvalId: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/authority`.
+            public var authority: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/authorization_reason`.
+            public var authorizationReason: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/created_at`.
+            public var createdAt: Foundation.Date
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/decision_endpoint`.
+            public var decisionEndpoint: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/linked_task_ids`.
+            public var linkedTaskIds: [Swift.String]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/linked_ticket_ids`.
+            public var linkedTicketIds: [Swift.String]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/no_cascade`.
+            public var noCascade: Swift.Bool
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/resolution_enabled`.
+            public var resolutionEnabled: Swift.Bool
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/secondary_authority`.
+            public var secondaryAuthority: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/self_approval_prohibited`.
+            public var selfApprovalProhibited: Swift.Bool
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/stale`.
+            public var stale: Swift.Bool
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/stale_after_hours`.
+            public var staleAfterHours: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/status`.
+            @frozen public enum StatusPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case pending = "pending"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/status`.
+            public var status: Components.Schemas.ChatRuntimeWorkApprovalRead.StatusPayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/target_ref`.
+            public var targetRef: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/target_type`.
+            public var targetType: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/viewer_authorized`.
+            public var viewerAuthorized: Swift.Bool
+            /// Creates a new `ChatRuntimeWorkApprovalRead`.
+            ///
+            /// - Parameters:
+            ///   - actionType:
+            ///   - approvalId:
+            ///   - authority:
+            ///   - authorizationReason:
+            ///   - createdAt:
+            ///   - decisionEndpoint:
+            ///   - linkedTaskIds:
+            ///   - linkedTicketIds:
+            ///   - noCascade:
+            ///   - resolutionEnabled:
+            ///   - secondaryAuthority:
+            ///   - selfApprovalProhibited:
+            ///   - stale:
+            ///   - staleAfterHours:
+            ///   - status:
+            ///   - targetRef:
+            ///   - targetType:
+            ///   - viewerAuthorized:
+            public init(
+                actionType: Swift.String,
+                approvalId: Swift.String,
+                authority: Swift.String,
+                authorizationReason: Swift.String,
+                createdAt: Foundation.Date,
+                decisionEndpoint: Swift.String? = nil,
+                linkedTaskIds: [Swift.String]? = nil,
+                linkedTicketIds: [Swift.String]? = nil,
+                noCascade: Swift.Bool,
+                resolutionEnabled: Swift.Bool,
+                secondaryAuthority: Swift.String? = nil,
+                selfApprovalProhibited: Swift.Bool,
+                stale: Swift.Bool,
+                staleAfterHours: Swift.Int,
+                status: Components.Schemas.ChatRuntimeWorkApprovalRead.StatusPayload? = nil,
+                targetRef: Swift.String? = nil,
+                targetType: Swift.String? = nil,
+                viewerAuthorized: Swift.Bool
+            ) {
+                self.actionType = actionType
+                self.approvalId = approvalId
+                self.authority = authority
+                self.authorizationReason = authorizationReason
+                self.createdAt = createdAt
+                self.decisionEndpoint = decisionEndpoint
+                self.linkedTaskIds = linkedTaskIds
+                self.linkedTicketIds = linkedTicketIds
+                self.noCascade = noCascade
+                self.resolutionEnabled = resolutionEnabled
+                self.secondaryAuthority = secondaryAuthority
+                self.selfApprovalProhibited = selfApprovalProhibited
+                self.stale = stale
+                self.staleAfterHours = staleAfterHours
+                self.status = status
+                self.targetRef = targetRef
+                self.targetType = targetType
+                self.viewerAuthorized = viewerAuthorized
+            }
+            public enum CodingKeys: String, CodingKey {
+                case actionType = "action_type"
+                case approvalId = "approval_id"
+                case authority
+                case authorizationReason = "authorization_reason"
+                case createdAt = "created_at"
+                case decisionEndpoint = "decision_endpoint"
+                case linkedTaskIds = "linked_task_ids"
+                case linkedTicketIds = "linked_ticket_ids"
+                case noCascade = "no_cascade"
+                case resolutionEnabled = "resolution_enabled"
+                case secondaryAuthority = "secondary_authority"
+                case selfApprovalProhibited = "self_approval_prohibited"
+                case stale
+                case staleAfterHours = "stale_after_hours"
+                case status
+                case targetRef = "target_ref"
+                case targetType = "target_type"
+                case viewerAuthorized = "viewer_authorized"
+            }
+        }
+        /// Digest-bound provider-neutral work projection for one named agent.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlBundleRead`.
+        public struct ChatRuntimeWorkControlBundleRead: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlBundleRead/agent_id`.
+            public var agentId: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlBundleRead/agent_key`.
+            public var agentKey: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlBundleRead/approval_inventory`.
+            public var approvalInventory: [Components.Schemas.ChatRuntimeWorkApprovalRead]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlBundleRead/approval_queue`.
+            public var approvalQueue: [Components.Schemas.ChatRuntimeWorkApprovalRead]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlBundleRead/assigned_work`.
+            public var assignedWork: [Components.Schemas.ChatRuntimeWorkItemRead]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlBundleRead/authority`.
+            @frozen public enum AuthorityPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case orca = "orca"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlBundleRead/authority`.
+            public var authority: Components.Schemas.ChatRuntimeWorkControlBundleRead.AuthorityPayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlBundleRead/bundle_sha256`.
+            public var bundleSha256: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlBundleRead/configuration_sha256`.
+            public var configurationSha256: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlBundleRead/contract_version`.
+            @frozen public enum ContractVersionPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case orca_workControlBundle_v1 = "orca.work-control-bundle.v1"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlBundleRead/contract_version`.
+            public var contractVersion: Components.Schemas.ChatRuntimeWorkControlBundleRead.ContractVersionPayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlBundleRead/generated_at`.
+            public var generatedAt: Foundation.Date
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlBundleRead/historical_work`.
+            public var historicalWork: [Components.Schemas.ChatRuntimeWorkItemRead]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlBundleRead/mode`.
+            @frozen public enum ModePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case readOnly = "read_only"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlBundleRead/mode`.
+            public var mode: Components.Schemas.ChatRuntimeWorkControlBundleRead.ModePayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlBundleRead/protected_work`.
+            public var protectedWork: [Components.Schemas.ChatRuntimeWorkItemRead]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlBundleRead/ready_now`.
+            public var readyNow: [Components.Schemas.ChatRuntimeWorkItemRead]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlBundleRead/resources`.
+            public var resources: Components.Schemas.ChatRuntimeWorkControlResourcesRead
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlBundleRead/runtime_manifest_revision`.
+            public var runtimeManifestRevision: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlBundleRead/source_contract`.
+            @frozen public enum SourceContractPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case orca_agentWorkbench_v1 = "orca.agent-workbench.v1"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlBundleRead/source_contract`.
+            public var sourceContract: Components.Schemas.ChatRuntimeWorkControlBundleRead.SourceContractPayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlBundleRead/waiting_on_others`.
+            public var waitingOnOthers: [Components.Schemas.ChatRuntimeWorkItemRead]?
+            /// Creates a new `ChatRuntimeWorkControlBundleRead`.
+            ///
+            /// - Parameters:
+            ///   - agentId:
+            ///   - agentKey:
+            ///   - approvalInventory:
+            ///   - approvalQueue:
+            ///   - assignedWork:
+            ///   - authority:
+            ///   - bundleSha256:
+            ///   - configurationSha256:
+            ///   - contractVersion:
+            ///   - generatedAt:
+            ///   - historicalWork:
+            ///   - mode:
+            ///   - protectedWork:
+            ///   - readyNow:
+            ///   - resources:
+            ///   - runtimeManifestRevision:
+            ///   - sourceContract:
+            ///   - waitingOnOthers:
+            public init(
+                agentId: Swift.String,
+                agentKey: Swift.String,
+                approvalInventory: [Components.Schemas.ChatRuntimeWorkApprovalRead]? = nil,
+                approvalQueue: [Components.Schemas.ChatRuntimeWorkApprovalRead]? = nil,
+                assignedWork: [Components.Schemas.ChatRuntimeWorkItemRead]? = nil,
+                authority: Components.Schemas.ChatRuntimeWorkControlBundleRead.AuthorityPayload? = nil,
+                bundleSha256: Swift.String,
+                configurationSha256: Swift.String,
+                contractVersion: Components.Schemas.ChatRuntimeWorkControlBundleRead.ContractVersionPayload? = nil,
+                generatedAt: Foundation.Date,
+                historicalWork: [Components.Schemas.ChatRuntimeWorkItemRead]? = nil,
+                mode: Components.Schemas.ChatRuntimeWorkControlBundleRead.ModePayload? = nil,
+                protectedWork: [Components.Schemas.ChatRuntimeWorkItemRead]? = nil,
+                readyNow: [Components.Schemas.ChatRuntimeWorkItemRead]? = nil,
+                resources: Components.Schemas.ChatRuntimeWorkControlResourcesRead,
+                runtimeManifestRevision: Swift.String,
+                sourceContract: Components.Schemas.ChatRuntimeWorkControlBundleRead.SourceContractPayload? = nil,
+                waitingOnOthers: [Components.Schemas.ChatRuntimeWorkItemRead]? = nil
+            ) {
+                self.agentId = agentId
+                self.agentKey = agentKey
+                self.approvalInventory = approvalInventory
+                self.approvalQueue = approvalQueue
+                self.assignedWork = assignedWork
+                self.authority = authority
+                self.bundleSha256 = bundleSha256
+                self.configurationSha256 = configurationSha256
+                self.contractVersion = contractVersion
+                self.generatedAt = generatedAt
+                self.historicalWork = historicalWork
+                self.mode = mode
+                self.protectedWork = protectedWork
+                self.readyNow = readyNow
+                self.resources = resources
+                self.runtimeManifestRevision = runtimeManifestRevision
+                self.sourceContract = sourceContract
+                self.waitingOnOthers = waitingOnOthers
+            }
+            public enum CodingKeys: String, CodingKey {
+                case agentId = "agent_id"
+                case agentKey = "agent_key"
+                case approvalInventory = "approval_inventory"
+                case approvalQueue = "approval_queue"
+                case assignedWork = "assigned_work"
+                case authority
+                case bundleSha256 = "bundle_sha256"
+                case configurationSha256 = "configuration_sha256"
+                case contractVersion = "contract_version"
+                case generatedAt = "generated_at"
+                case historicalWork = "historical_work"
+                case mode
+                case protectedWork = "protected_work"
+                case readyNow = "ready_now"
+                case resources
+                case runtimeManifestRevision = "runtime_manifest_revision"
+                case sourceContract = "source_contract"
+                case waitingOnOthers = "waiting_on_others"
+            }
+        }
+        /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlCountsRead`.
+        public struct ChatRuntimeWorkControlCountsRead: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlCountsRead/active_worker_runs`.
+            public var activeWorkerRuns: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlCountsRead/approval_inventory`.
+            public var approvalInventory: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlCountsRead/approval_queue`.
+            public var approvalQueue: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlCountsRead/assigned_work`.
+            public var assignedWork: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlCountsRead/blocking_others`.
+            public var blockingOthers: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlCountsRead/fish_blocked`.
+            public var fishBlocked: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlCountsRead/fish_producing`.
+            public var fishProducing: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlCountsRead/historical_work`.
+            public var historicalWork: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlCountsRead/planner_items`.
+            public var plannerItems: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlCountsRead/project_tasks`.
+            public var projectTasks: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlCountsRead/protected_work`.
+            public var protectedWork: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlCountsRead/ready_now`.
+            public var readyNow: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlCountsRead/research_active_requests`.
+            public var researchActiveRequests: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlCountsRead/research_awaiting_review`.
+            public var researchAwaitingReview: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlCountsRead/stale_work`.
+            public var staleWork: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlCountsRead/tools_declared`.
+            public var toolsDeclared: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlCountsRead/waiting_on_me`.
+            public var waitingOnMe: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlCountsRead/waiting_on_others`.
+            public var waitingOnOthers: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlCountsRead/worker_review_runs`.
+            public var workerReviewRuns: Swift.Int
+            /// Creates a new `ChatRuntimeWorkControlCountsRead`.
+            ///
+            /// - Parameters:
+            ///   - activeWorkerRuns:
+            ///   - approvalInventory:
+            ///   - approvalQueue:
+            ///   - assignedWork:
+            ///   - blockingOthers:
+            ///   - fishBlocked:
+            ///   - fishProducing:
+            ///   - historicalWork:
+            ///   - plannerItems:
+            ///   - projectTasks:
+            ///   - protectedWork:
+            ///   - readyNow:
+            ///   - researchActiveRequests:
+            ///   - researchAwaitingReview:
+            ///   - staleWork:
+            ///   - toolsDeclared:
+            ///   - waitingOnMe:
+            ///   - waitingOnOthers:
+            ///   - workerReviewRuns:
+            public init(
+                activeWorkerRuns: Swift.Int,
+                approvalInventory: Swift.Int,
+                approvalQueue: Swift.Int,
+                assignedWork: Swift.Int,
+                blockingOthers: Swift.Int,
+                fishBlocked: Swift.Int,
+                fishProducing: Swift.Int,
+                historicalWork: Swift.Int,
+                plannerItems: Swift.Int,
+                projectTasks: Swift.Int,
+                protectedWork: Swift.Int,
+                readyNow: Swift.Int,
+                researchActiveRequests: Swift.Int,
+                researchAwaitingReview: Swift.Int,
+                staleWork: Swift.Int,
+                toolsDeclared: Swift.Int,
+                waitingOnMe: Swift.Int,
+                waitingOnOthers: Swift.Int,
+                workerReviewRuns: Swift.Int
+            ) {
+                self.activeWorkerRuns = activeWorkerRuns
+                self.approvalInventory = approvalInventory
+                self.approvalQueue = approvalQueue
+                self.assignedWork = assignedWork
+                self.blockingOthers = blockingOthers
+                self.fishBlocked = fishBlocked
+                self.fishProducing = fishProducing
+                self.historicalWork = historicalWork
+                self.plannerItems = plannerItems
+                self.projectTasks = projectTasks
+                self.protectedWork = protectedWork
+                self.readyNow = readyNow
+                self.researchActiveRequests = researchActiveRequests
+                self.researchAwaitingReview = researchAwaitingReview
+                self.staleWork = staleWork
+                self.toolsDeclared = toolsDeclared
+                self.waitingOnMe = waitingOnMe
+                self.waitingOnOthers = waitingOnOthers
+                self.workerReviewRuns = workerReviewRuns
+            }
+            public enum CodingKeys: String, CodingKey {
+                case activeWorkerRuns = "active_worker_runs"
+                case approvalInventory = "approval_inventory"
+                case approvalQueue = "approval_queue"
+                case assignedWork = "assigned_work"
+                case blockingOthers = "blocking_others"
+                case fishBlocked = "fish_blocked"
+                case fishProducing = "fish_producing"
+                case historicalWork = "historical_work"
+                case plannerItems = "planner_items"
+                case projectTasks = "project_tasks"
+                case protectedWork = "protected_work"
+                case readyNow = "ready_now"
+                case researchActiveRequests = "research_active_requests"
+                case researchAwaitingReview = "research_awaiting_review"
+                case staleWork = "stale_work"
+                case toolsDeclared = "tools_declared"
+                case waitingOnMe = "waiting_on_me"
+                case waitingOnOthers = "waiting_on_others"
+                case workerReviewRuns = "worker_review_runs"
+            }
+        }
+        /// Counts and canonical routes for supporting execution rails.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlResourcesRead`.
+        public struct ChatRuntimeWorkControlResourcesRead: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlResourcesRead/counts`.
+            public var counts: Components.Schemas.ChatRuntimeWorkControlCountsRead
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlResourcesRead/endpoints`.
+            public struct EndpointsPayload: Codable, Hashable, Sendable {
+                /// A container of undocumented properties.
+                public var additionalProperties: [String: Swift.String]
+                /// Creates a new `EndpointsPayload`.
+                ///
+                /// - Parameters:
+                ///   - additionalProperties: A container of undocumented properties.
+                public init(additionalProperties: [String: Swift.String] = .init()) {
+                    self.additionalProperties = additionalProperties
+                }
+                public init(from decoder: any Swift.Decoder) throws {
+                    additionalProperties = try decoder.decodeAdditionalProperties(knownKeys: [])
+                }
+                public func encode(to encoder: any Swift.Encoder) throws {
+                    try encoder.encodeAdditionalProperties(additionalProperties)
+                }
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkControlResourcesRead/endpoints`.
+            public var endpoints: Components.Schemas.ChatRuntimeWorkControlResourcesRead.EndpointsPayload?
+            /// Creates a new `ChatRuntimeWorkControlResourcesRead`.
+            ///
+            /// - Parameters:
+            ///   - counts:
+            ///   - endpoints:
+            public init(
+                counts: Components.Schemas.ChatRuntimeWorkControlCountsRead,
+                endpoints: Components.Schemas.ChatRuntimeWorkControlResourcesRead.EndpointsPayload? = nil
+            ) {
+                self.counts = counts
+                self.endpoints = endpoints
+            }
+            public enum CodingKeys: String, CodingKey {
+                case counts
+                case endpoints
+            }
+        }
+        /// Pointer-safe work truth adapted from the existing agent Workbench.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkItemRead`.
+        public struct ChatRuntimeWorkItemRead: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkItemRead/approval_state`.
+            public var approvalState: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkItemRead/blocked_on`.
+            public var blockedOn: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkItemRead/bucket_reason`.
+            public var bucketReason: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkItemRead/execution_eligible`.
+            public var executionEligible: Swift.Bool
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkItemRead/pending_approval_ids`.
+            public var pendingApprovalIds: [Swift.String]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkItemRead/priority`.
+            public var priority: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkItemRead/safe_title`.
+            public var safeTitle: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkItemRead/source_refs`.
+            public struct SourceRefsPayload: Codable, Hashable, Sendable {
+                /// A container of undocumented properties.
+                public var additionalProperties: OpenAPIRuntime.OpenAPIObjectContainer
+                /// Creates a new `SourceRefsPayload`.
+                ///
+                /// - Parameters:
+                ///   - additionalProperties: A container of undocumented properties.
+                public init(additionalProperties: OpenAPIRuntime.OpenAPIObjectContainer = .init()) {
+                    self.additionalProperties = additionalProperties
+                }
+                public init(from decoder: any Swift.Decoder) throws {
+                    additionalProperties = try decoder.decodeAdditionalProperties(knownKeys: [])
+                }
+                public func encode(to encoder: any Swift.Encoder) throws {
+                    try encoder.encodeAdditionalProperties(additionalProperties)
+                }
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkItemRead/source_refs`.
+            public var sourceRefs: Components.Schemas.ChatRuntimeWorkItemRead.SourceRefsPayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkItemRead/stale`.
+            public var stale: Swift.Bool
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkItemRead/status`.
+            public var status: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkItemRead/updated_at`.
+            public var updatedAt: Foundation.Date
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkItemRead/waiting_on`.
+            public var waitingOn: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkItemRead/work_bucket`.
+            @frozen public enum WorkBucketPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case current = "current"
+                case protected = "protected"
+                case historical = "historical"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkItemRead/work_bucket`.
+            public var workBucket: Components.Schemas.ChatRuntimeWorkItemRead.WorkBucketPayload
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkItemRead/work_id`.
+            public var workId: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkItemRead/work_kind`.
+            @frozen public enum WorkKindPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case ticket = "ticket"
+                case task = "task"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkItemRead/work_kind`.
+            public var workKind: Components.Schemas.ChatRuntimeWorkItemRead.WorkKindPayload
+            /// Creates a new `ChatRuntimeWorkItemRead`.
+            ///
+            /// - Parameters:
+            ///   - approvalState:
+            ///   - blockedOn:
+            ///   - bucketReason:
+            ///   - executionEligible:
+            ///   - pendingApprovalIds:
+            ///   - priority:
+            ///   - safeTitle:
+            ///   - sourceRefs:
+            ///   - stale:
+            ///   - status:
+            ///   - updatedAt:
+            ///   - waitingOn:
+            ///   - workBucket:
+            ///   - workId:
+            ///   - workKind:
+            public init(
+                approvalState: Swift.String,
+                blockedOn: Swift.String? = nil,
+                bucketReason: Swift.String,
+                executionEligible: Swift.Bool,
+                pendingApprovalIds: [Swift.String]? = nil,
+                priority: Swift.String,
+                safeTitle: Swift.String,
+                sourceRefs: Components.Schemas.ChatRuntimeWorkItemRead.SourceRefsPayload? = nil,
+                stale: Swift.Bool,
+                status: Swift.String,
+                updatedAt: Foundation.Date,
+                waitingOn: Swift.String? = nil,
+                workBucket: Components.Schemas.ChatRuntimeWorkItemRead.WorkBucketPayload,
+                workId: Swift.String,
+                workKind: Components.Schemas.ChatRuntimeWorkItemRead.WorkKindPayload
+            ) {
+                self.approvalState = approvalState
+                self.blockedOn = blockedOn
+                self.bucketReason = bucketReason
+                self.executionEligible = executionEligible
+                self.pendingApprovalIds = pendingApprovalIds
+                self.priority = priority
+                self.safeTitle = safeTitle
+                self.sourceRefs = sourceRefs
+                self.stale = stale
+                self.status = status
+                self.updatedAt = updatedAt
+                self.waitingOn = waitingOn
+                self.workBucket = workBucket
+                self.workId = workId
+                self.workKind = workKind
+            }
+            public enum CodingKeys: String, CodingKey {
+                case approvalState = "approval_state"
+                case blockedOn = "blocked_on"
+                case bucketReason = "bucket_reason"
+                case executionEligible = "execution_eligible"
+                case pendingApprovalIds = "pending_approval_ids"
+                case priority
+                case safeTitle = "safe_title"
+                case sourceRefs = "source_refs"
+                case stale
+                case status
+                case updatedAt = "updated_at"
+                case waitingOn = "waiting_on"
+                case workBucket = "work_bucket"
+                case workId = "work_id"
+                case workKind = "work_kind"
+            }
+        }
         /// Prior chat turn supplied by a client during local-to-ORCA transition.
         ///
         /// - Remark: Generated from `#/components/schemas/DirectAgentChatMessage`.
@@ -2476,6 +3060,187 @@ public enum Operations {
             /// - Throws: An error if `self` is not `.unprocessableContent`.
             /// - SeeAlso: `.unprocessableContent`.
             public var unprocessableContent: Operations.GetRuntimeAgentCapabilities.Output.UnprocessableContent {
+                get throws {
+                    switch self {
+                    case let .unprocessableContent(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unprocessableContent",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        @frozen public enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            public init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            public var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            public static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// Read ORCA Chat Runtime v1 Agent Work Control
+    ///
+    /// Returns the typed, digest-bound adapter over existing ORCA tickets, tasks, approvals, Planner, workers, Research, Fish, and governed tools. The route is read-only and does not create a second work ledger.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/agents/{agent_key}/work-control`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/agents/{agent_key}/work-control/get(getRuntimeAgentWorkControl)`.
+    public enum GetRuntimeAgentWorkControl {
+        public static let id: Swift.String = "getRuntimeAgentWorkControl"
+        public struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/agents/{agent_key}/work-control/GET/path`.
+            public struct Path: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/agents/{agent_key}/work-control/GET/path/agent_key`.
+                public var agentKey: Swift.String
+                /// Creates a new `Path`.
+                ///
+                /// - Parameters:
+                ///   - agentKey:
+                public init(agentKey: Swift.String) {
+                    self.agentKey = agentKey
+                }
+            }
+            public var path: Operations.GetRuntimeAgentWorkControl.Input.Path
+            /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/agents/{agent_key}/work-control/GET/header`.
+            public struct Headers: Sendable, Hashable {
+                public var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.GetRuntimeAgentWorkControl.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                public init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.GetRuntimeAgentWorkControl.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            public var headers: Operations.GetRuntimeAgentWorkControl.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - path:
+            ///   - headers:
+            public init(
+                path: Operations.GetRuntimeAgentWorkControl.Input.Path,
+                headers: Operations.GetRuntimeAgentWorkControl.Input.Headers = .init()
+            ) {
+                self.path = path
+                self.headers = headers
+            }
+        }
+        @frozen public enum Output: Sendable, Hashable {
+            public struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/agents/{agent_key}/work-control/GET/responses/200/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/agents/{agent_key}/work-control/GET/responses/200/content/application\/json`.
+                    case json(Components.Schemas.ChatRuntimeWorkControlBundleRead)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.ChatRuntimeWorkControlBundleRead {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.GetRuntimeAgentWorkControl.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.GetRuntimeAgentWorkControl.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// Successful Response
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/agents/{agent_key}/work-control/get(getRuntimeAgentWorkControl)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.GetRuntimeAgentWorkControl.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            public var ok: Operations.GetRuntimeAgentWorkControl.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct UnprocessableContent: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/agents/{agent_key}/work-control/GET/responses/422/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/agents/{agent_key}/work-control/GET/responses/422/content/application\/json`.
+                    case json(Components.Schemas.HTTPValidationError)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.HTTPValidationError {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.GetRuntimeAgentWorkControl.Output.UnprocessableContent.Body
+                /// Creates a new `UnprocessableContent`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.GetRuntimeAgentWorkControl.Output.UnprocessableContent.Body) {
+                    self.body = body
+                }
+            }
+            /// Validation Error
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/agents/{agent_key}/work-control/get(getRuntimeAgentWorkControl)/responses/422`.
+            ///
+            /// HTTP response code: `422 unprocessableContent`.
+            case unprocessableContent(Operations.GetRuntimeAgentWorkControl.Output.UnprocessableContent)
+            /// The associated value of the enum case if `self` is `.unprocessableContent`.
+            ///
+            /// - Throws: An error if `self` is not `.unprocessableContent`.
+            /// - SeeAlso: `.unprocessableContent`.
+            public var unprocessableContent: Operations.GetRuntimeAgentWorkControl.Output.UnprocessableContent {
                 get throws {
                     switch self {
                     case let .unprocessableContent(response):

@@ -1361,6 +1361,494 @@
         "title": "ChatRuntimeTurnRead",
         "type": "object"
       },
+      "ChatRuntimeWorkApprovalRead": {
+        "description": "One pending first-class approval with canonical registry authority.",
+        "properties": {
+          "action_type": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Action Type",
+            "type": "string"
+          },
+          "approval_id": {
+            "format": "uuid",
+            "title": "Approval Id",
+            "type": "string"
+          },
+          "authority": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Authority",
+            "type": "string"
+          },
+          "authorization_reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Authorization Reason",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision_endpoint": {
+            "maxLength": 512,
+            "title": "Decision Endpoint",
+            "type": "string"
+          },
+          "linked_task_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Linked Task Ids",
+            "type": "array"
+          },
+          "linked_ticket_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Linked Ticket Ids",
+            "type": "array"
+          },
+          "no_cascade": {
+            "title": "No Cascade",
+            "type": "boolean"
+          },
+          "resolution_enabled": {
+            "title": "Resolution Enabled",
+            "type": "boolean"
+          },
+          "secondary_authority": {
+            "maxLength": 128,
+            "title": "Secondary Authority",
+            "type": "string"
+          },
+          "self_approval_prohibited": {
+            "title": "Self Approval Prohibited",
+            "type": "boolean"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "stale_after_hours": {
+            "minimum": 1.0,
+            "title": "Stale After Hours",
+            "type": "integer"
+          },
+          "status": {
+            "const": "pending",
+            "default": "pending",
+            "title": "Status",
+            "type": "string"
+          },
+          "target_ref": {
+            "maxLength": 256,
+            "title": "Target Ref",
+            "type": "string"
+          },
+          "target_type": {
+            "maxLength": 64,
+            "title": "Target Type",
+            "type": "string"
+          },
+          "viewer_authorized": {
+            "title": "Viewer Authorized",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "approval_id",
+          "action_type",
+          "authority",
+          "no_cascade",
+          "viewer_authorized",
+          "authorization_reason",
+          "resolution_enabled",
+          "self_approval_prohibited",
+          "stale",
+          "stale_after_hours",
+          "created_at"
+        ],
+        "title": "ChatRuntimeWorkApprovalRead",
+        "type": "object"
+      },
+      "ChatRuntimeWorkControlBundleRead": {
+        "description": "Digest-bound provider-neutral work projection for one named agent.",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "agent_key": {
+            "pattern": "^[a-z][a-z0-9-]{1,63}$",
+            "title": "Agent Key",
+            "type": "string"
+          },
+          "approval_inventory": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeWorkApprovalRead"
+            },
+            "title": "Approval Inventory",
+            "type": "array"
+          },
+          "approval_queue": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeWorkApprovalRead"
+            },
+            "title": "Approval Queue",
+            "type": "array"
+          },
+          "assigned_work": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeWorkItemRead"
+            },
+            "title": "Assigned Work",
+            "type": "array"
+          },
+          "authority": {
+            "const": "orca",
+            "default": "orca",
+            "title": "Authority",
+            "type": "string"
+          },
+          "bundle_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Bundle Sha256",
+            "type": "string"
+          },
+          "configuration_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Configuration Sha256",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "orca.work-control-bundle.v1",
+            "default": "orca.work-control-bundle.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "historical_work": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeWorkItemRead"
+            },
+            "title": "Historical Work",
+            "type": "array"
+          },
+          "mode": {
+            "const": "read_only",
+            "default": "read_only",
+            "title": "Mode",
+            "type": "string"
+          },
+          "protected_work": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeWorkItemRead"
+            },
+            "title": "Protected Work",
+            "type": "array"
+          },
+          "ready_now": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeWorkItemRead"
+            },
+            "title": "Ready Now",
+            "type": "array"
+          },
+          "resources": {
+            "$ref": "#/components/schemas/ChatRuntimeWorkControlResourcesRead"
+          },
+          "runtime_manifest_revision": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Runtime Manifest Revision",
+            "type": "string"
+          },
+          "source_contract": {
+            "const": "orca.agent-workbench.v1",
+            "default": "orca.agent-workbench.v1",
+            "title": "Source Contract",
+            "type": "string"
+          },
+          "waiting_on_others": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeWorkItemRead"
+            },
+            "title": "Waiting On Others",
+            "type": "array"
+          }
+        },
+        "required": [
+          "agent_key",
+          "agent_id",
+          "runtime_manifest_revision",
+          "generated_at",
+          "configuration_sha256",
+          "bundle_sha256",
+          "resources"
+        ],
+        "title": "ChatRuntimeWorkControlBundleRead",
+        "type": "object"
+      },
+      "ChatRuntimeWorkControlCountsRead": {
+        "properties": {
+          "active_worker_runs": {
+            "minimum": 0.0,
+            "title": "Active Worker Runs",
+            "type": "integer"
+          },
+          "approval_inventory": {
+            "minimum": 0.0,
+            "title": "Approval Inventory",
+            "type": "integer"
+          },
+          "approval_queue": {
+            "minimum": 0.0,
+            "title": "Approval Queue",
+            "type": "integer"
+          },
+          "assigned_work": {
+            "minimum": 0.0,
+            "title": "Assigned Work",
+            "type": "integer"
+          },
+          "blocking_others": {
+            "minimum": 0.0,
+            "title": "Blocking Others",
+            "type": "integer"
+          },
+          "fish_blocked": {
+            "minimum": 0.0,
+            "title": "Fish Blocked",
+            "type": "integer"
+          },
+          "fish_producing": {
+            "minimum": 0.0,
+            "title": "Fish Producing",
+            "type": "integer"
+          },
+          "historical_work": {
+            "minimum": 0.0,
+            "title": "Historical Work",
+            "type": "integer"
+          },
+          "planner_items": {
+            "minimum": 0.0,
+            "title": "Planner Items",
+            "type": "integer"
+          },
+          "project_tasks": {
+            "minimum": 0.0,
+            "title": "Project Tasks",
+            "type": "integer"
+          },
+          "protected_work": {
+            "minimum": 0.0,
+            "title": "Protected Work",
+            "type": "integer"
+          },
+          "ready_now": {
+            "minimum": 0.0,
+            "title": "Ready Now",
+            "type": "integer"
+          },
+          "research_active_requests": {
+            "minimum": 0.0,
+            "title": "Research Active Requests",
+            "type": "integer"
+          },
+          "research_awaiting_review": {
+            "minimum": 0.0,
+            "title": "Research Awaiting Review",
+            "type": "integer"
+          },
+          "stale_work": {
+            "minimum": 0.0,
+            "title": "Stale Work",
+            "type": "integer"
+          },
+          "tools_declared": {
+            "minimum": 0.0,
+            "title": "Tools Declared",
+            "type": "integer"
+          },
+          "waiting_on_me": {
+            "minimum": 0.0,
+            "title": "Waiting On Me",
+            "type": "integer"
+          },
+          "waiting_on_others": {
+            "minimum": 0.0,
+            "title": "Waiting On Others",
+            "type": "integer"
+          },
+          "worker_review_runs": {
+            "minimum": 0.0,
+            "title": "Worker Review Runs",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "assigned_work",
+          "ready_now",
+          "waiting_on_me",
+          "waiting_on_others",
+          "blocking_others",
+          "approval_queue",
+          "approval_inventory",
+          "protected_work",
+          "historical_work",
+          "stale_work",
+          "planner_items",
+          "project_tasks",
+          "active_worker_runs",
+          "worker_review_runs",
+          "tools_declared",
+          "research_active_requests",
+          "research_awaiting_review",
+          "fish_producing",
+          "fish_blocked"
+        ],
+        "title": "ChatRuntimeWorkControlCountsRead",
+        "type": "object"
+      },
+      "ChatRuntimeWorkControlResourcesRead": {
+        "description": "Counts and canonical routes for supporting execution rails.",
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/ChatRuntimeWorkControlCountsRead"
+          },
+          "endpoints": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Endpoints",
+            "type": "object"
+          }
+        },
+        "required": [
+          "counts"
+        ],
+        "title": "ChatRuntimeWorkControlResourcesRead",
+        "type": "object"
+      },
+      "ChatRuntimeWorkItemRead": {
+        "description": "Pointer-safe work truth adapted from the existing agent Workbench.",
+        "properties": {
+          "approval_state": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Approval State",
+            "type": "string"
+          },
+          "blocked_on": {
+            "maxLength": 1000,
+            "title": "Blocked On",
+            "type": "string"
+          },
+          "bucket_reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Bucket Reason",
+            "type": "string"
+          },
+          "execution_eligible": {
+            "title": "Execution Eligible",
+            "type": "boolean"
+          },
+          "pending_approval_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Pending Approval Ids",
+            "type": "array"
+          },
+          "priority": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Priority",
+            "type": "string"
+          },
+          "safe_title": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Safe Title",
+            "type": "string"
+          },
+          "source_refs": {
+            "additionalProperties": true,
+            "title": "Source Refs",
+            "type": "object"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "status": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "waiting_on": {
+            "maxLength": 256,
+            "title": "Waiting On",
+            "type": "string"
+          },
+          "work_bucket": {
+            "enum": [
+              "current",
+              "protected",
+              "historical"
+            ],
+            "title": "Work Bucket",
+            "type": "string"
+          },
+          "work_id": {
+            "format": "uuid",
+            "title": "Work Id",
+            "type": "string"
+          },
+          "work_kind": {
+            "enum": [
+              "ticket",
+              "task"
+            ],
+            "title": "Work Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "work_kind",
+          "work_id",
+          "safe_title",
+          "status",
+          "priority",
+          "work_bucket",
+          "bucket_reason",
+          "execution_eligible",
+          "approval_state",
+          "stale",
+          "updated_at"
+        ],
+        "title": "ChatRuntimeWorkItemRead",
+        "type": "object"
+      },
       "DirectAgentChatMessage": {
         "description": "Prior chat turn supplied by a client during local-to-ORCA transition.",
         "properties": {
@@ -1760,6 +2248,54 @@
         ]
       }
     },
+    "/api/v1/chat-runtime/v1/agents/{agent_key}/work-control": {
+      "get": {
+        "description": "Returns the typed, digest-bound adapter over existing ORCA tickets, tasks, approvals, Planner, workers, Research, Fish, and governed tools. The route is read-only and does not create a second work ledger.",
+        "operationId": "getRuntimeAgentWorkControl",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_key",
+            "required": true,
+            "schema": {
+              "title": "Agent Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatRuntimeWorkControlBundleRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read ORCA Chat Runtime v1 Agent Work Control",
+        "tags": [
+          "chat-runtime"
+        ]
+      }
+    },
     "/api/v1/chat-runtime/v1/conformance/complete-turn": {
       "get": {
         "description": "Returns a deterministic provider-neutral accepted-to-terminal turn for generated client decoding, ordering, and replay conformance tests.",
@@ -1982,5 +2518,5 @@
     }
   ],
   "x-orca-contract-version": "orca.chat-runtime.v1",
-  "x-orca-schema-sha256": "a3625bd57814ec97e7e3dcd1629e492f71c366df9e467cea9f67ba07f8d3d980"
+  "x-orca-schema-sha256": "ba6769ea8bb0a708912bc0b9a942cebd9875f129ca5b463d74763ef67315d6f1"
 }

@@ -132,6 +132,129 @@ private func canonicalCapabilityBundle(
     )
 }
 
+private func canonicalWorkItem(
+    id: String = "70000000-0000-4000-8000-000000000001",
+    bucket: Components.Schemas.ChatRuntimeWorkItemRead.WorkBucketPayload = .current,
+    executionEligible: Bool = true,
+    stale: Bool = false,
+    pendingApprovalIDs: [String] = [],
+    blockedOn: String? = nil
+) -> Components.Schemas.ChatRuntimeWorkItemRead {
+    .init(
+        approvalState: pendingApprovalIDs.isEmpty ? "not_required" : "pending",
+        blockedOn: blockedOn,
+        bucketReason: "Current bounded work.",
+        executionEligible: executionEligible,
+        pendingApprovalIds: pendingApprovalIDs,
+        priority: "high",
+        safeTitle: "Prove Work Control",
+        sourceRefs: .init(),
+        stale: stale,
+        status: "open",
+        updatedAt: Date(timeIntervalSince1970: 1_787_000_000),
+        workBucket: bucket,
+        workId: id,
+        workKind: .ticket
+    )
+}
+
+private func canonicalWorkApproval(
+    id: String = "80000000-0000-4000-8000-000000000001",
+    viewerAuthorized: Bool = true,
+    resolutionEnabled: Bool = true,
+    selfApprovalProhibited: Bool = false
+) -> Components.Schemas.ChatRuntimeWorkApprovalRead {
+    let mayDecide = viewerAuthorized && resolutionEnabled && !selfApprovalProhibited
+    return .init(
+        actionType: "sign_standard",
+        approvalId: id,
+        authority: "aloha",
+        authorizationReason: mayDecide ? "Aloha is the registered authority." : "Waiting on Aloha.",
+        createdAt: Date(timeIntervalSince1970: 1_787_000_000),
+        decisionEndpoint: mayDecide ? "/api/v1/approvals/\(id)" : nil,
+        linkedTaskIds: [],
+        linkedTicketIds: [],
+        noCascade: false,
+        resolutionEnabled: resolutionEnabled,
+        selfApprovalProhibited: selfApprovalProhibited,
+        stale: false,
+        staleAfterHours: 72,
+        status: .pending,
+        targetRef: "70000000-0000-4000-8000-000000000001",
+        targetType: "ticket",
+        viewerAuthorized: viewerAuthorized
+    )
+}
+
+private func canonicalWorkControlBundle(
+    assignedWork suppliedAssignedWork: [Components.Schemas.ChatRuntimeWorkItemRead]? = nil,
+    readyNow suppliedReadyNow: [Components.Schemas.ChatRuntimeWorkItemRead]? = nil,
+    approvalInventory: [Components.Schemas.ChatRuntimeWorkApprovalRead] = [],
+    approvalQueue: [Components.Schemas.ChatRuntimeWorkApprovalRead] = []
+) -> Components.Schemas.ChatRuntimeWorkControlBundleRead {
+    let assignedWork = suppliedAssignedWork ?? [canonicalWorkItem()]
+    let readyNow = suppliedReadyNow ?? assignedWork.filter {
+        $0.executionEligible && !$0.stale && $0.workBucket == .current
+    }
+    let waitingOnOthers = assignedWork.filter {
+        $0.workBucket != .historical
+            && (!($0.pendingApprovalIds ?? []).isEmpty
+                || $0.blockedOn != nil
+                || $0.workBucket == .protected)
+    }
+    let protectedWork = assignedWork.filter { $0.workBucket == .protected }
+    let historicalWork = assignedWork.filter { $0.workBucket == .historical }
+    let counts = Components.Schemas.ChatRuntimeWorkControlCountsRead(
+        activeWorkerRuns: 0,
+        approvalInventory: approvalInventory.count,
+        approvalQueue: approvalQueue.count,
+        assignedWork: assignedWork.count,
+        blockingOthers: approvalQueue.count,
+        fishBlocked: 0,
+        fishProducing: 1,
+        historicalWork: historicalWork.count,
+        plannerItems: 1,
+        projectTasks: 1,
+        protectedWork: protectedWork.count,
+        readyNow: readyNow.count,
+        researchActiveRequests: 1,
+        researchAwaitingReview: 0,
+        staleWork: assignedWork.filter(\.stale).count,
+        toolsDeclared: 3,
+        waitingOnMe: approvalQueue.count,
+        waitingOnOthers: waitingOnOthers.count,
+        workerReviewRuns: 0
+    )
+    return .init(
+        agentId: "40000000-0000-4000-8000-000000000001",
+        agentKey: "coral",
+        approvalInventory: approvalInventory,
+        approvalQueue: approvalQueue,
+        assignedWork: assignedWork,
+        authority: .orca,
+        bundleSha256: String(repeating: "d", count: 64),
+        configurationSha256: String(repeating: "a", count: 64),
+        contractVersion: .orca_workControlBundle_v1,
+        generatedAt: Date(timeIntervalSince1970: 1_787_000_000),
+        historicalWork: historicalWork,
+        mode: .readOnly,
+        protectedWork: protectedWork,
+        readyNow: readyNow,
+        resources: .init(
+            counts: counts,
+            endpoints: .init(additionalProperties: [
+                "approvals": "/api/v1/approvals",
+                "research": "/api/v1/research",
+                "tool_runs": "/api/v1/agent/tool-runs",
+                "workbench": "/api/v1/agent/workbench",
+            ])
+        ),
+        runtimeManifestRevision: "2026-08-17.1",
+        sourceContract: .orca_agentWorkbench_v1,
+        waitingOnOthers: waitingOnOthers
+    )
+}
+
 @Test(arguments: [301, 302, 303, 307, 308])
 func credentialRedirectsAreNeverFollowed(status: Int) throws {
     let source = try #require(URL(string: "https://orca.test/api/v1/agents"))
@@ -183,7 +306,7 @@ func credentialRedirectsAreNeverFollowed(status: Int) throws {
     #expect(OrcaRuntimeContract.version == "orca.chat-runtime.v1")
     #expect(
         OrcaRuntimeContract.schemaSHA256
-            == "a3625bd57814ec97e7e3dcd1629e492f71c366df9e467cea9f67ba07f8d3d980"
+            == "ba6769ea8bb0a708912bc0b9a942cebd9875f129ca5b463d74763ef67315d6f1"
     )
 }
 
@@ -307,6 +430,118 @@ func credentialRedirectsAreNeverFollowed(status: Int) throws {
         Issue.record("A capability endpoint outside ORCA was accepted")
     } catch let error as OrcaRuntimeClientError {
         #expect(error == .invalidResponse("capability failed closed for search.orca"))
+    }
+}
+
+@Test func workControlBundlePassesNativeClientGate() throws {
+    try OrcaRuntimeClient.validateWorkControl(
+        canonicalWorkControlBundle(),
+        expectedAgentKey: "coral",
+        expectedConfigurationSHA256: String(repeating: "a", count: 64)
+    )
+}
+
+@Test func workControlRejectsProtectedOrStaleReadyWork() throws {
+    var protectedBundle = canonicalWorkControlBundle()
+    protectedBundle.readyNow?[0].workBucket = .protected
+    do {
+        try OrcaRuntimeClient.validateWorkControl(
+            protectedBundle,
+            expectedAgentKey: "coral",
+            expectedConfigurationSHA256: String(repeating: "a", count: 64)
+        )
+        Issue.record("Protected work appeared in the executable queue")
+    } catch let error as OrcaRuntimeClientError {
+        #expect(
+            error == .invalidResponse(
+                "work-control projection contains contradictory work truth"
+            )
+        )
+    }
+
+    var staleBundle = canonicalWorkControlBundle()
+    staleBundle.readyNow?[0].stale = true
+    do {
+        try OrcaRuntimeClient.validateWorkControl(
+            staleBundle,
+            expectedAgentKey: "coral",
+            expectedConfigurationSHA256: String(repeating: "a", count: 64)
+        )
+        Issue.record("Stale work appeared in the executable queue")
+    } catch let error as OrcaRuntimeClientError {
+        #expect(
+            error == .invalidResponse(
+                "work-control projection contains contradictory work truth"
+            )
+        )
+    }
+}
+
+@Test func workControlRejectsUnauthorizedApprovalQueue() throws {
+    let approval = canonicalWorkApproval(viewerAuthorized: false)
+    do {
+        try OrcaRuntimeClient.validateWorkControl(
+            canonicalWorkControlBundle(
+                approvalInventory: [approval],
+                approvalQueue: [approval]
+            ),
+            expectedAgentKey: "coral",
+            expectedConfigurationSHA256: String(repeating: "a", count: 64)
+        )
+        Issue.record("An unauthorized approval appeared in the decision queue")
+    } catch let error as OrcaRuntimeClientError {
+        #expect(error == .invalidResponse("work-control approval queue failed closed"))
+    }
+}
+
+@Test func workControlRejectsApprovalQueueOutsideInventory() throws {
+    let inventoryApproval = canonicalWorkApproval()
+    let queueApproval = canonicalWorkApproval(
+        id: "80000000-0000-4000-8000-000000000002"
+    )
+    do {
+        try OrcaRuntimeClient.validateWorkControl(
+            canonicalWorkControlBundle(
+                approvalInventory: [inventoryApproval],
+                approvalQueue: [queueApproval]
+            ),
+            expectedAgentKey: "coral",
+            expectedConfigurationSHA256: String(repeating: "a", count: 64)
+        )
+        Issue.record("A detached approval appeared in the decision queue")
+    } catch let error as OrcaRuntimeClientError {
+        #expect(error == .invalidResponse("work-control approval queue failed closed"))
+    }
+}
+
+@Test func workControlRejectsExternalResourceEndpoint() throws {
+    var bundle = canonicalWorkControlBundle()
+    bundle.resources.endpoints?.additionalProperties["research"] =
+        "https://outside.invalid/research"
+    do {
+        try OrcaRuntimeClient.validateWorkControl(
+            bundle,
+            expectedAgentKey: "coral",
+            expectedConfigurationSHA256: String(repeating: "a", count: 64)
+        )
+        Issue.record("A Work Control resource escaped ORCA")
+    } catch let error as OrcaRuntimeClientError {
+        #expect(error == .invalidResponse("work-control endpoints failed closed"))
+    }
+}
+
+@Test func workControlRejectsAgentPackConfigurationDrift() throws {
+    var bundle = canonicalWorkControlBundle()
+    bundle.configurationSha256 = String(repeating: "e", count: 64)
+    do {
+        try OrcaRuntimeClient.validateWorkControl(
+            bundle,
+            expectedAgentKey: "coral",
+            expectedConfigurationSHA256: String(repeating: "a", count: 64)
+        )
+        Issue.record("Work Control detached from its Agent Pack")
+    } catch let error as OrcaRuntimeClientError {
+        #expect(error == .invalidResponse("work-control bundle failed closed"))
     }
 }
 

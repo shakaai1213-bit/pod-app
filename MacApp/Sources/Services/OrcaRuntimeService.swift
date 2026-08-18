@@ -9,6 +9,9 @@ enum RuntimeContractReachability: Equatable, Sendable {
 
 protocol OrcaRuntimeServing: Sendable {
     func verifyCompatibility() async throws -> OrcaRuntimeCompatibility
+    func agentPacks() async throws -> Components.Schemas.ChatRuntimeAgentPackBundleRead
+    func capabilities(agentKey: String) async throws -> Components.Schemas.ChatRuntimeCapabilityBundleRead
+    func workControl(agentKey: String) async throws -> Components.Schemas.ChatRuntimeWorkControlBundleRead
     func send(_ request: OrcaRuntimeDirectTurnRequest) async throws -> OrcaRuntimeDirectTurnResponse
     func messages(conversationID: String, offset: Int, limit: Int) async throws -> [OrcaRuntimeConversationMessage]
 }
@@ -64,6 +67,22 @@ actor OrcaRuntimeService: OrcaRuntimeServing {
 
     func verifyCompatibility() async throws -> OrcaRuntimeCompatibility {
         try await client.verifyCompatibility()
+    }
+
+    func agentPacks() async throws -> Components.Schemas.ChatRuntimeAgentPackBundleRead {
+        try await client.agentPacks()
+    }
+
+    func capabilities(
+        agentKey: String
+    ) async throws -> Components.Schemas.ChatRuntimeCapabilityBundleRead {
+        try await client.capabilities(agentKey: agentKey)
+    }
+
+    func workControl(
+        agentKey: String
+    ) async throws -> Components.Schemas.ChatRuntimeWorkControlBundleRead {
+        try await client.workControl(agentKey: agentKey)
     }
 
     func send(_ request: OrcaRuntimeDirectTurnRequest) async throws -> OrcaRuntimeDirectTurnResponse {

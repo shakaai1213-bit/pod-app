@@ -301,6 +301,38 @@ public actor OrcaRuntimeClient {
         return bundle
     }
 
+    public func workControl(
+        agentKey: String
+    ) async throws -> Components.Schemas.ChatRuntimeWorkControlBundleRead {
+        _ = try await verifyCompatibility()
+        let normalizedAgentKey = agentKey.lowercased()
+        guard Self.namedAgentKeys.contains(normalizedAgentKey) else {
+            throw OrcaRuntimeClientError.invalidResponse("work-control agent is not in roster")
+        }
+        let packs = try await agentPacks()
+        guard let pack = packs.packs.first(where: { $0.agentKey == normalizedAgentKey }) else {
+            throw OrcaRuntimeClientError.invalidResponse("work-control agent pack is missing")
+        }
+        let output = try await client.getRuntimeAgentWorkControl(
+            .init(path: .init(agentKey: normalizedAgentKey))
+        )
+        let bundle: Components.Schemas.ChatRuntimeWorkControlBundleRead
+        switch output {
+        case let .ok(response):
+            bundle = try response.body.json
+        case .unprocessableContent:
+            throw OrcaRuntimeClientError.httpStatus(422)
+        case let .undocumented(statusCode, _):
+            throw OrcaRuntimeClientError.httpStatus(statusCode)
+        }
+        try Self.validateWorkControl(
+            bundle,
+            expectedAgentKey: normalizedAgentKey,
+            expectedConfigurationSHA256: pack.payloadSha256
+        )
+        return bundle
+    }
+
     static func validateAgentPacks(
         _ bundle: Components.Schemas.ChatRuntimeAgentPackBundleRead
     ) throws {
@@ -399,6 +431,184 @@ public actor OrcaRuntimeClient {
                     "capability failed closed for \(capability.capabilityId)"
                 )
             }
+        }
+    }
+
+    static func validateWorkControl(
+        _ bundle: Components.Schemas.ChatRuntimeWorkControlBundleRead,
+        expectedAgentKey: String,
+        expectedConfigurationSHA256: String
+    ) throws {
+        guard namedAgentKeys.contains(expectedAgentKey),
+              bundle.contractVersion?.rawValue == "orca.work-control-bundle.v1",
+              bundle.sourceContract?.rawValue == "orca.agent-workbench.v1",
+              bundle.authority?.rawValue == "orca",
+              bundle.mode?.rawValue == "read_only",
+              bundle.agentKey == expectedAgentKey,
+              bundle.agentId.isEmpty == false,
+              bundle.runtimeManifestRevision.isEmpty == false,
+              bundle.configurationSha256 == expectedConfigurationSHA256,
+              bundle.configurationSha256.count == 64,
+              bundle.bundleSha256.count == 64,
+              let assignedWork = bundle.assignedWork,
+              let readyNow = bundle.readyNow,
+              let waitingOnOthers = bundle.waitingOnOthers,
+              let protectedWork = bundle.protectedWork,
+              let historicalWork = bundle.historicalWork,
+              let approvalQueue = bundle.approvalQueue,
+              let approvalInventory = bundle.approvalInventory else {
+            throw OrcaRuntimeClientError.invalidResponse("work-control bundle failed closed")
+        }
+
+        func identity(_ item: Components.Schemas.ChatRuntimeWorkItemRead) -> String {
+            "\(item.workKind.rawValue):\(item.workId)"
+        }
+
+        let assignedIdentities = assignedWork.map(identity)
+        let assignedSet = Set(assignedIdentities)
+        guard assignedSet.count == assignedIdentities.count else {
+            throw OrcaRuntimeClientError.invalidResponse(
+                "work-control assigned work contains duplicates"
+            )
+        }
+
+        for item in assignedWork {
+            let pendingApprovalIDs = item.pendingApprovalIds ?? []
+            let eligibleTruth = item.workBucket == .current
+                && pendingApprovalIDs.isEmpty
+                && item.blockedOn == nil
+            guard item.workId.isEmpty == false,
+                  item.safeTitle.isEmpty == false,
+                  item.status.isEmpty == false,
+                  item.priority.isEmpty == false,
+                  item.bucketReason.isEmpty == false,
+                  Set(pendingApprovalIDs).count == pendingApprovalIDs.count,
+                  !item.executionEligible || eligibleTruth else {
+                throw OrcaRuntimeClientError.invalidResponse(
+                    "work-control item failed closed for \(item.workId)"
+                )
+            }
+        }
+
+        let projections: [(String, [Components.Schemas.ChatRuntimeWorkItemRead])] = [
+            ("ready_now", readyNow),
+            ("waiting_on_others", waitingOnOthers),
+            ("protected_work", protectedWork),
+            ("historical_work", historicalWork),
+        ]
+        for (label, items) in projections {
+            let identities = items.map(identity)
+            guard Set(identities).count == identities.count,
+                  Set(identities).isSubset(of: assignedSet) else {
+                throw OrcaRuntimeClientError.invalidResponse(
+                    "work-control projection failed closed for \(label)"
+                )
+            }
+        }
+        guard readyNow.allSatisfy({
+            $0.workBucket == .current
+                && $0.executionEligible
+                && ($0.pendingApprovalIds ?? []).isEmpty
+                && $0.blockedOn == nil
+                && !$0.stale
+        }), protectedWork.allSatisfy({ $0.workBucket == .protected }),
+        historicalWork.allSatisfy({ $0.workBucket == .historical }),
+        waitingOnOthers.allSatisfy({
+            $0.workBucket != .historical
+                && (!($0.pendingApprovalIds ?? []).isEmpty
+                    || $0.blockedOn != nil
+                    || $0.workBucket == .protected)
+        }) else {
+            throw OrcaRuntimeClientError.invalidResponse(
+                "work-control projection contains contradictory work truth"
+            )
+        }
+
+        func decisionAllowed(
+            _ approval: Components.Schemas.ChatRuntimeWorkApprovalRead
+        ) -> Bool {
+            approval.viewerAuthorized
+                && approval.resolutionEnabled
+                && !approval.selfApprovalProhibited
+        }
+
+        for approval in approvalInventory {
+            let hasDecisionEndpoint = approval.decisionEndpoint?.isEmpty == false
+            guard approval.approvalId.isEmpty == false,
+                  approval.actionType.isEmpty == false,
+                  approval.authority.isEmpty == false,
+                  approval.authorizationReason.isEmpty == false,
+                  approval.status == .pending,
+                  approval.staleAfterHours > 0,
+                  approval.linkedTicketIds != nil,
+                  approval.linkedTaskIds != nil,
+                  decisionAllowed(approval) == hasDecisionEndpoint,
+                  approval.decisionEndpoint.map({
+                      $0.hasPrefix("/api/v1/approvals/")
+                  }) ?? true else {
+                throw OrcaRuntimeClientError.invalidResponse(
+                    "work-control approval failed closed for \(approval.approvalId)"
+                )
+            }
+        }
+        let inventoryIDs = approvalInventory.map(\.approvalId)
+        let inventorySet = Set(inventoryIDs)
+        let queueIDs = approvalQueue.map(\.approvalId)
+        guard inventorySet.count == inventoryIDs.count,
+              Set(queueIDs).count == queueIDs.count,
+              Set(queueIDs).isSubset(of: inventorySet),
+              approvalQueue.allSatisfy({
+                  decisionAllowed($0)
+                      && $0.decisionEndpoint?.hasPrefix("/api/v1/approvals/") == true
+              }) else {
+            throw OrcaRuntimeClientError.invalidResponse(
+                "work-control approval queue failed closed"
+            )
+        }
+
+        let counts = bundle.resources.counts
+        let countValues = [
+            counts.activeWorkerRuns,
+            counts.approvalInventory,
+            counts.approvalQueue,
+            counts.assignedWork,
+            counts.blockingOthers,
+            counts.fishBlocked,
+            counts.fishProducing,
+            counts.historicalWork,
+            counts.plannerItems,
+            counts.projectTasks,
+            counts.protectedWork,
+            counts.readyNow,
+            counts.researchActiveRequests,
+            counts.researchAwaitingReview,
+            counts.staleWork,
+            counts.toolsDeclared,
+            counts.waitingOnMe,
+            counts.waitingOnOthers,
+            counts.workerReviewRuns,
+        ]
+        guard countValues.allSatisfy({ $0 >= 0 }),
+              counts.assignedWork == assignedWork.count,
+              counts.readyNow == readyNow.count,
+              counts.waitingOnOthers == waitingOnOthers.count,
+              counts.protectedWork == protectedWork.count,
+              counts.historicalWork == historicalWork.count,
+              counts.approvalQueue == approvalQueue.count,
+              counts.approvalInventory == approvalInventory.count else {
+            throw OrcaRuntimeClientError.invalidResponse(
+                "work-control counts failed closed"
+            )
+        }
+
+        guard let endpoints = bundle.resources.endpoints?.additionalProperties,
+              endpoints["workbench"] == "/api/v1/agent/workbench",
+              endpoints["approvals"] == "/api/v1/approvals",
+              endpoints["tool_runs"] == "/api/v1/agent/tool-runs",
+              endpoints.values.allSatisfy({ $0.hasPrefix("/api/v1/") }) else {
+            throw OrcaRuntimeClientError.invalidResponse(
+                "work-control endpoints failed closed"
+            )
         }
     }
 
