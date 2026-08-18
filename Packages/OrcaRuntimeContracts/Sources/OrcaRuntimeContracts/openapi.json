@@ -1029,6 +1029,255 @@
         "title": "ChatRuntimeProvenanceRead",
         "type": "object"
       },
+      "ChatRuntimeProviderControlBundleRead": {
+        "description": "Digest-bound provider truth shared by Pod, Console, and Cascade.",
+        "properties": {
+          "authority": {
+            "const": "orca",
+            "default": "orca",
+            "title": "Authority",
+            "type": "string"
+          },
+          "bundle_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Bundle Sha256",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "orca.provider-control-bundle.v1",
+            "default": "orca.provider-control-bundle.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "invalid_record_count": {
+            "minimum": 0.0,
+            "title": "Invalid Record Count",
+            "type": "integer"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeProviderControlRecordRead"
+            },
+            "title": "Records",
+            "type": "array"
+          },
+          "router": {
+            "const": "cascade",
+            "default": "cascade",
+            "title": "Router",
+            "type": "string"
+          }
+        },
+        "required": [
+          "generated_at",
+          "invalid_record_count",
+          "bundle_sha256"
+        ],
+        "title": "ChatRuntimeProviderControlBundleRead",
+        "type": "object"
+      },
+      "ChatRuntimeProviderControlRecordRead": {
+        "additionalProperties": false,
+        "description": "Server-attested provider state; runtime truth is distinct from data quality.",
+        "properties": {
+          "adapter_id": {
+            "pattern": "^[a-z0-9][a-z0-9_.-]{0,127}$",
+            "title": "Adapter Id",
+            "type": "string"
+          },
+          "auth_state": {
+            "enum": [
+              "unknown",
+              "valid",
+              "invalid",
+              "unavailable"
+            ],
+            "title": "Auth State",
+            "type": "string"
+          },
+          "capacity_reset_at": {
+            "format": "date-time",
+            "title": "Capacity Reset At",
+            "type": "string"
+          },
+          "capacity_state": {
+            "enum": [
+              "unknown",
+              "available",
+              "exhausted"
+            ],
+            "title": "Capacity State",
+            "type": "string"
+          },
+          "circuit_state": {
+            "enum": [
+              "closed",
+              "open",
+              "half_open"
+            ],
+            "title": "Circuit State",
+            "type": "string"
+          },
+          "credential_generation": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Credential Generation",
+            "type": "string"
+          },
+          "credential_ref": {
+            "pattern": "^secret-ref://[a-z0-9][a-z0-9_./-]{0,255}$",
+            "title": "Credential Ref",
+            "type": "string"
+          },
+          "evidence_hash": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Evidence Hash",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "execution_allowed": {
+            "title": "Execution Allowed",
+            "type": "boolean"
+          },
+          "execution_host": {
+            "enum": [
+              "shaka-mac",
+              "chief-mac",
+              "orca-mini"
+            ],
+            "title": "Execution Host",
+            "type": "string"
+          },
+          "failure_count": {
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Failure Count",
+            "type": "integer"
+          },
+          "last_delivery_status": {
+            "enum": [
+              "unknown",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Last Delivery Status",
+            "type": "string"
+          },
+          "last_execution_status": {
+            "enum": [
+              "unknown",
+              "succeeded",
+              "failed",
+              "timeout"
+            ],
+            "title": "Last Execution Status",
+            "type": "string"
+          },
+          "next_probe_at": {
+            "format": "date-time",
+            "title": "Next Probe At",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "provider_id": {
+            "pattern": "^[a-z0-9][a-z0-9_.-]{0,127}$",
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "publisher": {
+            "pattern": "^[a-z][a-z0-9-]{1,63}$",
+            "title": "Publisher",
+            "type": "string"
+          },
+          "publisher_generation": {
+            "minimum": 1.0,
+            "title": "Publisher Generation",
+            "type": "integer"
+          },
+          "publisher_version": {
+            "const": "provider-control/1.0",
+            "default": "provider-control/1.0",
+            "title": "Publisher Version",
+            "type": "string"
+          },
+          "reason_code": {
+            "pattern": "^[a-z0-9][a-z0-9_.:-]{0,127}$",
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "schema": {
+            "const": "orca.provider-control-record.v1",
+            "default": "orca.provider-control-record.v1",
+            "title": "Schema",
+            "type": "string"
+          },
+          "source_ref": {
+            "pattern": "^/api/v1/state-registry/[a-z0-9._-]+$",
+            "title": "Source Ref",
+            "type": "string"
+          },
+          "status_reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Status Reason",
+            "type": "string"
+          },
+          "trust_state": {
+            "enum": [
+              "attested",
+              "stale"
+            ],
+            "title": "Trust State",
+            "type": "string"
+          },
+          "ttl_seconds": {
+            "maximum": 300.0,
+            "minimum": 1.0,
+            "title": "Ttl Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "adapter_id",
+          "provider_id",
+          "execution_host",
+          "credential_ref",
+          "credential_generation",
+          "publisher_generation",
+          "auth_state",
+          "capacity_state",
+          "circuit_state",
+          "reason_code",
+          "last_execution_status",
+          "last_delivery_status",
+          "failure_count",
+          "observed_at",
+          "ttl_seconds",
+          "evidence_hash",
+          "trust_state",
+          "execution_allowed",
+          "source_ref",
+          "publisher",
+          "status_reason"
+        ],
+        "title": "ChatRuntimeProviderControlRecordRead",
+        "type": "object"
+      },
       "ChatRuntimeResourceEnvelope": {
         "description": "Governed execution limits passed to any selected provider adapter.",
         "properties": {
@@ -2707,6 +2956,33 @@
         ]
       }
     },
+    "/api/v1/chat-runtime/v1/provider-control": {
+      "get": {
+        "description": "Returns short-lived, pointer-safe provider adapter truth from authorized runtime hosts. Credential values never enter ORCA.",
+        "operationId": "getRuntimeProviderControl",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatRuntimeProviderControlBundleRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read ORCA Chat Runtime v1 Provider Control",
+        "tags": [
+          "chat-runtime"
+        ]
+      }
+    },
     "/api/v1/chat-runtime/v1/schema-bundle": {
       "get": {
         "description": "Returns deterministic provider-neutral JSON schemas for runtime, event, adapter, resource, and terminal-outcome client generation.",
@@ -3086,5 +3362,5 @@
     }
   ],
   "x-orca-contract-version": "orca.chat-runtime.v1",
-  "x-orca-schema-sha256": "d117c8a422aae28bc0314a62717d89524627d251684e55c1bb66be64eb138223"
+  "x-orca-schema-sha256": "ebeef707c500a880d15340016b6e03b772c0016d76d192491c6dabb630a1fc28"
 }

@@ -334,6 +334,22 @@ public actor OrcaRuntimeClient {
         return bundle
     }
 
+    public func providerControl() async throws
+        -> Components.Schemas.ChatRuntimeProviderControlBundleRead
+    {
+        _ = try await verifyCompatibility()
+        let output = try await client.getRuntimeProviderControl()
+        let bundle: Components.Schemas.ChatRuntimeProviderControlBundleRead
+        switch output {
+        case let .ok(response):
+            bundle = try response.body.json
+        case let .undocumented(statusCode, _):
+            throw OrcaRuntimeClientError.httpStatus(statusCode)
+        }
+        try Self.validateProviderControl(bundle)
+        return bundle
+    }
+
     public func runtimeTurn(
         turnID: String
     ) async throws -> Components.Schemas.ChatRuntimeTurnRead {
@@ -867,6 +883,121 @@ public actor OrcaRuntimeClient {
                 "work-control endpoints failed closed"
             )
         }
+    }
+
+    static func validateProviderControl(
+        _ bundle: Components.Schemas.ChatRuntimeProviderControlBundleRead,
+        now: Date = Date()
+    ) throws {
+        let hostPublishers = [
+            "shaka-mac": "coral",
+            "chief-mac": "reef",
+            "orca-mini": "coral",
+        ]
+        let adapterPolicies: [String: (provider: String, hosts: Set<String>)] = [
+            "claude-cli": ("anthropic", ["shaka-mac", "chief-mac"]),
+            "codex-cli": ("openai", ["shaka-mac", "chief-mac"]),
+            "kimi-code-api": ("moonshot-kimi-code", ["orca-mini"]),
+        ]
+        let records = bundle.records ?? []
+        let identities = records.map { "\($0.executionHost.rawValue):\($0.adapterId)" }
+        guard bundle.contractVersion?.rawValue == "orca.provider-control-bundle.v1",
+              bundle.authority?.rawValue == "orca",
+              bundle.router?.rawValue == "cascade",
+              isSHA256(bundle.bundleSha256),
+              bundle.invalidRecordCount >= 0,
+              bundle.generatedAt <= now.addingTimeInterval(30),
+              Set(identities).count == identities.count else {
+            throw OrcaRuntimeClientError.invalidResponse(
+                "provider-control bundle failed closed"
+            )
+        }
+
+        for record in records {
+            let host = record.executionHost.rawValue
+            let identity = "\(host):\(record.adapterId)"
+            guard let publisher = hostPublishers[host],
+                  let policy = adapterPolicies[record.adapterId],
+                  policy.provider == record.providerId,
+                  policy.hosts.contains(host),
+                  record.publisher == publisher,
+                  record.sourceRef
+                    == "/api/v1/state-registry/provider_control.\(host).\(record.adapterId)",
+                  record.schema?.rawValue == "orca.provider-control-record.v1",
+                  record.publisherVersion?.rawValue == "provider-control/1.0",
+                  isSafeProviderSecretRef(record.credentialRef),
+                  isSHA256(record.credentialGeneration),
+                  isSHA256(record.evidenceHash),
+                  record.publisherGeneration >= 1,
+                  record.failureCount >= 0,
+                  record.failureCount <= 1_000_000,
+                  (1 ... 300).contains(record.ttlSeconds),
+                  record.reasonCode.isEmpty == false,
+                  record.statusReason.isEmpty == false,
+                  record.statusReason.count <= 500 else {
+                throw OrcaRuntimeClientError.invalidResponse(
+                    "provider-control record failed closed for \(identity)"
+                )
+            }
+
+            let evidenceRefs = record.evidenceRefs ?? []
+            guard evidenceRefs.count <= 16,
+                  Set(evidenceRefs).count == evidenceRefs.count,
+                  evidenceRefs.allSatisfy(isSafeProviderEvidenceRef) else {
+                throw OrcaRuntimeClientError.invalidResponse(
+                    "provider-control evidence failed closed for \(identity)"
+                )
+            }
+
+            let expiresAt = record.observedAt.addingTimeInterval(
+                TimeInterval(record.ttlSeconds)
+            )
+            let staleAtGeneration = bundle.generatedAt > expiresAt
+            let staleNow = now > expiresAt
+            let expectedTrust = staleAtGeneration ? "stale" : "attested"
+            let executionAllowed = !staleNow
+                && expectedTrust == "attested"
+                && record.circuitState == .closed
+                && record.authState != .invalid
+                && record.authState != .unavailable
+                && record.capacityState != .exhausted
+            guard record.observedAt <= bundle.generatedAt.addingTimeInterval(30),
+                  record.trustState.rawValue == expectedTrust,
+                  record.executionAllowed == executionAllowed,
+                  (record.capacityState != .exhausted || record.capacityResetAt != nil),
+                  (record.circuitState == .closed || record.nextProbeAt != nil),
+                  !(record.circuitState == .closed
+                    && (record.authState == .invalid
+                        || record.authState == .unavailable
+                        || record.capacityState == .exhausted)) else {
+                throw OrcaRuntimeClientError.invalidResponse(
+                    "provider-control state failed closed for \(identity)"
+                )
+            }
+        }
+    }
+
+    private static func isSafeProviderEvidenceRef(_ value: String) -> Bool {
+        guard value.isEmpty == false,
+              value.count <= 512,
+              !value.contains("?"),
+              !value.contains("#"),
+              value.allSatisfy({
+                  $0.isLowercase || $0.isNumber || "._:/-".contains($0)
+              }) else {
+            return false
+        }
+        return value.hasPrefix("orca://")
+            || value.hasPrefix("provider-evidence://")
+            || value.hasPrefix("/api/v1/")
+    }
+
+    private static func isSafeProviderSecretRef(_ value: String) -> Bool {
+        value.hasPrefix("secret-ref://")
+            && value.count <= 269
+            && value.allSatisfy({
+                $0.isLowercase || $0.isNumber || "._:/-".contains($0)
+            })
     }
 
     public func send(_ request: OrcaRuntimeDirectTurnRequest) async throws -> OrcaRuntimeDirectTurnResponse {

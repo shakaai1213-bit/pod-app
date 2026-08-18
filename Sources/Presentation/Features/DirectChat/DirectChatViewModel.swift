@@ -108,6 +108,9 @@ final class DirectChatViewModel {
     var runtimeEvidenceErrorByAgent: [String: String] = [:]
     var loadingRuntimeEvidenceAgents: Set<String> = []
     var applyingMemoryProposalAgents: Set<String> = []
+    var providerControl: Components.Schemas.ChatRuntimeProviderControlBundleRead?
+    var providerControlError: String?
+    var isLoadingProviderControl = false
 
     // Conversation data from SwiftData
     var conversations: [DMConversation] = []
@@ -128,6 +131,7 @@ final class DirectChatViewModel {
     private var roomAutoRefreshTask: Task<Void, Never>?
     private var presenceRefreshTask: Task<Void, Never>?
     private var centralAgentHealthTask: Task<Void, Never>?
+    private var providerControlTask: Task<Void, Never>?
     private var pendingTicketContinuation: (ticketId: String, ticketTitle: String, agentId: String, channelId: String?)?
 
     // MARK: - Setup
@@ -822,6 +826,7 @@ final class DirectChatViewModel {
 
     func selectAgent(_ agent: AgentInfo) {
         stopCentralAgentHealthMonitoring()
+        stopProviderControlMonitoring()
         selectedAgent = agent
         selectedRoom = nil
         stopRoomAutoRefresh()
@@ -847,6 +852,7 @@ final class DirectChatViewModel {
         Task { await loadAgentToolsForActiveTicket(agent: agent) }
         Task { await loadAgentToolRuns(for: agent) }
         startCentralAgentHealthMonitoring(for: agent)
+        startProviderControlMonitoring(for: agent)
         applyPendingTicketContinuationIfNeeded(for: agent)
         guard modelContext != nil else {
             currentMessages = []
@@ -881,6 +887,7 @@ final class DirectChatViewModel {
 
     func clearSelection() {
         stopCentralAgentHealthMonitoring()
+        stopProviderControlMonitoring()
         selectedAgent = nil
         currentService = nil
         liveRefreshTask?.cancel()
@@ -966,6 +973,38 @@ final class DirectChatViewModel {
         agentToolRuns = []
         agentToolRunsError = nil
         isLoadingAgentToolRuns = false
+    }
+
+    func loadProviderControl(for agent: AgentInfo) async {
+        isLoadingProviderControl = providerControl == nil
+        defer { isLoadingProviderControl = false }
+        do {
+            let bundle = try await AgentChatService(agent: agent).providerControl()
+            guard selectedAgent?.id == agent.id else { return }
+            providerControl = bundle
+            providerControlError = nil
+        } catch {
+            guard selectedAgent?.id == agent.id else { return }
+            providerControlError = error.localizedDescription
+        }
+    }
+
+    private func startProviderControlMonitoring(for agent: AgentInfo) {
+        providerControlTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled, self.selectedAgent?.id == agent.id {
+                await self.loadProviderControl(for: agent)
+                await TaskSafeSleep.sleep(seconds: 60)
+            }
+        }
+    }
+
+    private func stopProviderControlMonitoring() {
+        providerControlTask?.cancel()
+        providerControlTask = nil
+        providerControl = nil
+        providerControlError = nil
+        isLoadingProviderControl = false
     }
 
     func loadAgentLocker(for agent: AgentInfo) async {

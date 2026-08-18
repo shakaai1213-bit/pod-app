@@ -880,8 +880,16 @@ struct LockerChatView: View {
 
     @ViewBuilder
     private var runtimeEvidenceAttentionPanel: some View {
-        if let error = viewModel.runtimeEvidenceErrorByAgent[agent.id] {
-            Label(error, systemImage: "exclamationmark.triangle")
+        let providerWarnings = (viewModel.providerControl?.records ?? [])
+            .filter { !$0.executionAllowed }
+            .map { "\($0.providerId) on \($0.executionHost.rawValue): \($0.statusReason)" }
+        let messages = [
+            viewModel.runtimeEvidenceErrorByAgent[agent.id],
+            viewModel.providerControlError.map { "Provider control: \($0)" },
+            providerWarnings.isEmpty ? nil : providerWarnings.joined(separator: " "),
+        ].compactMap { $0 }
+        if !messages.isEmpty {
+            Label(messages.joined(separator: " "), systemImage: "exclamationmark.triangle")
                 .font(.caption2)
                 .foregroundStyle(AppColors.accentWarning)
                 .fixedSize(horizontal: false, vertical: true)

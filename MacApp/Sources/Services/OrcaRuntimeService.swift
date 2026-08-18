@@ -12,6 +12,7 @@ protocol OrcaRuntimeServing: Sendable {
     func agentPacks() async throws -> Components.Schemas.ChatRuntimeAgentPackBundleRead
     func capabilities(agentKey: String) async throws -> Components.Schemas.ChatRuntimeCapabilityBundleRead
     func workControl(agentKey: String) async throws -> Components.Schemas.ChatRuntimeWorkControlBundleRead
+    func providerControl() async throws -> Components.Schemas.ChatRuntimeProviderControlBundleRead
     func runtimeTurn(turnID: String) async throws -> Components.Schemas.ChatRuntimeTurnRead
     func conversationMemory(conversationID: String) async throws -> Components.Schemas.ConversationMemoryRead
     func proposeConversationMemory(
@@ -94,6 +95,12 @@ actor OrcaRuntimeService: OrcaRuntimeServing {
         agentKey: String
     ) async throws -> Components.Schemas.ChatRuntimeWorkControlBundleRead {
         try await client.workControl(agentKey: agentKey)
+    }
+
+    func providerControl() async throws
+        -> Components.Schemas.ChatRuntimeProviderControlBundleRead
+    {
+        try await client.providerControl()
     }
 
     func runtimeTurn(turnID: String) async throws -> Components.Schemas.ChatRuntimeTurnRead {

@@ -31,6 +31,9 @@ final class OrcaMacModel {
     var isLoadingRuntimeEvidence = false
     var isApplyingMemoryProposal = false
     var runtimeEvidenceError: String?
+    var providerControl: Components.Schemas.ChatRuntimeProviderControlBundleRead?
+    var providerControlError: String?
+    var isLoadingProviderControl = false
 
     @ObservationIgnored private let tokenStore: any RuntimeTokenStoring
     @ObservationIgnored private let defaults: UserDefaults
@@ -38,6 +41,7 @@ final class OrcaMacModel {
     @ObservationIgnored private var consoleService: OrcaConsoleService?
     @ObservationIgnored private var authService: OrcaNativeAuthService?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
+    @ObservationIgnored private var providerRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var conversationScope: (origin: String, organizationID: String)?
 
     init(
@@ -113,6 +117,7 @@ final class OrcaMacModel {
 
     func connect() async {
         refreshTask?.cancel()
+        providerRefreshTask?.cancel()
         guard let endpoint = Self.normalizedEndpoint(serverAddress) else {
             connectionState = .unavailable("Invalid ORCA server address.")
             return
@@ -175,12 +180,14 @@ final class OrcaMacModel {
             contractVersion = compatibility.contractVersion
             schemaSHA256 = compatibility.schemaSHA256
             connectionState = .ready
+            await refreshProviderControl(silent: true)
             if selectedSection == .conversations {
                 await refreshSelectedConversation(silent: true)
             } else {
                 await refreshSelectedSection(silent: true)
             }
             beginRefreshLoop()
+            beginProviderRefreshLoop()
         } catch let error as OrcaRuntimeClientError {
             service = nil
             consoleService = nil
@@ -243,6 +250,7 @@ final class OrcaMacModel {
             authService = nil
             deactivateConversationScope()
             refreshTask?.cancel()
+            providerRefreshTask?.cancel()
             await connect()
         } catch {
             presentedError = error.localizedDescription
@@ -454,6 +462,30 @@ final class OrcaMacModel {
         }
     }
 
+    func refreshProviderControl(silent: Bool = false) async {
+        guard let service else { return }
+        isLoadingProviderControl = providerControl == nil
+        defer { isLoadingProviderControl = false }
+        do {
+            providerControl = try await service.providerControl()
+            providerControlError = nil
+        } catch {
+            providerControlError = error.localizedDescription
+            if !silent { presentedError = error.localizedDescription }
+        }
+    }
+
+    private func beginProviderRefreshLoop() {
+        providerRefreshTask?.cancel()
+        providerRefreshTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                guard !Task.isCancelled, let self else { return }
+                await self.refreshProviderControl(silent: true)
+            }
+        }
+    }
+
     func applyLatestMemoryProposal() async {
         guard let service,
               let memory = selectedConversationMemory,
@@ -575,6 +607,9 @@ final class OrcaMacModel {
         runtimeTurns.removeAll()
         conversationMemories.removeAll()
         runtimeEvidenceError = nil
+        providerControl = nil
+        providerControlError = nil
+        isLoadingProviderControl = false
     }
 
     private func storedConversationID(for agentID: String) -> String? {

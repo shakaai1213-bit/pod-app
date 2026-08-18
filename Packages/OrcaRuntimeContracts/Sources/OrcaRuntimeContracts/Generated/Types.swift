@@ -46,6 +46,13 @@ public protocol APIProtocol: Sendable {
     /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/contract`.
     /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/contract/get(getRuntimeContract)`.
     func getRuntimeContract(_ input: Operations.GetRuntimeContract.Input) async throws -> Operations.GetRuntimeContract.Output
+    /// Read ORCA Chat Runtime v1 Provider Control
+    ///
+    /// Returns short-lived, pointer-safe provider adapter truth from authorized runtime hosts. Credential values never enter ORCA.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/provider-control`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/provider-control/get(getRuntimeProviderControl)`.
+    func getRuntimeProviderControl(_ input: Operations.GetRuntimeProviderControl.Input) async throws -> Operations.GetRuntimeProviderControl.Output
     /// Read ORCA Chat Runtime v1 Schema Bundle
     ///
     /// Returns deterministic provider-neutral JSON schemas for runtime, event, adapter, resource, and terminal-outcome client generation.
@@ -155,6 +162,15 @@ extension APIProtocol {
     /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/contract/get(getRuntimeContract)`.
     public func getRuntimeContract(headers: Operations.GetRuntimeContract.Input.Headers = .init()) async throws -> Operations.GetRuntimeContract.Output {
         try await getRuntimeContract(Operations.GetRuntimeContract.Input(headers: headers))
+    }
+    /// Read ORCA Chat Runtime v1 Provider Control
+    ///
+    /// Returns short-lived, pointer-safe provider adapter truth from authorized runtime hosts. Credential values never enter ORCA.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/provider-control`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/provider-control/get(getRuntimeProviderControl)`.
+    public func getRuntimeProviderControl(headers: Operations.GetRuntimeProviderControl.Input.Headers = .init()) async throws -> Operations.GetRuntimeProviderControl.Output {
+        try await getRuntimeProviderControl(Operations.GetRuntimeProviderControl.Input(headers: headers))
     }
     /// Read ORCA Chat Runtime v1 Schema Bundle
     ///
@@ -1468,6 +1484,428 @@ public enum Components {
                 case evidenceRefs = "evidence_refs"
                 case sourceRef = "source_ref"
                 case traceId = "trace_id"
+            }
+        }
+        /// Digest-bound provider truth shared by Pod, Console, and Cascade.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlBundleRead`.
+        public struct ChatRuntimeProviderControlBundleRead: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlBundleRead/authority`.
+            @frozen public enum AuthorityPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case orca = "orca"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlBundleRead/authority`.
+            public var authority: Components.Schemas.ChatRuntimeProviderControlBundleRead.AuthorityPayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlBundleRead/bundle_sha256`.
+            public var bundleSha256: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlBundleRead/contract_version`.
+            @frozen public enum ContractVersionPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case orca_providerControlBundle_v1 = "orca.provider-control-bundle.v1"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlBundleRead/contract_version`.
+            public var contractVersion: Components.Schemas.ChatRuntimeProviderControlBundleRead.ContractVersionPayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlBundleRead/generated_at`.
+            public var generatedAt: Foundation.Date
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlBundleRead/invalid_record_count`.
+            public var invalidRecordCount: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlBundleRead/records`.
+            public var records: [Components.Schemas.ChatRuntimeProviderControlRecordRead]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlBundleRead/router`.
+            @frozen public enum RouterPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case cascade = "cascade"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlBundleRead/router`.
+            public var router: Components.Schemas.ChatRuntimeProviderControlBundleRead.RouterPayload?
+            /// Creates a new `ChatRuntimeProviderControlBundleRead`.
+            ///
+            /// - Parameters:
+            ///   - authority:
+            ///   - bundleSha256:
+            ///   - contractVersion:
+            ///   - generatedAt:
+            ///   - invalidRecordCount:
+            ///   - records:
+            ///   - router:
+            public init(
+                authority: Components.Schemas.ChatRuntimeProviderControlBundleRead.AuthorityPayload? = nil,
+                bundleSha256: Swift.String,
+                contractVersion: Components.Schemas.ChatRuntimeProviderControlBundleRead.ContractVersionPayload? = nil,
+                generatedAt: Foundation.Date,
+                invalidRecordCount: Swift.Int,
+                records: [Components.Schemas.ChatRuntimeProviderControlRecordRead]? = nil,
+                router: Components.Schemas.ChatRuntimeProviderControlBundleRead.RouterPayload? = nil
+            ) {
+                self.authority = authority
+                self.bundleSha256 = bundleSha256
+                self.contractVersion = contractVersion
+                self.generatedAt = generatedAt
+                self.invalidRecordCount = invalidRecordCount
+                self.records = records
+                self.router = router
+            }
+            public enum CodingKeys: String, CodingKey {
+                case authority
+                case bundleSha256 = "bundle_sha256"
+                case contractVersion = "contract_version"
+                case generatedAt = "generated_at"
+                case invalidRecordCount = "invalid_record_count"
+                case records
+                case router
+            }
+        }
+        /// Server-attested provider state; runtime truth is distinct from data quality.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead`.
+        public struct ChatRuntimeProviderControlRecordRead: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/adapter_id`.
+            public var adapterId: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/auth_state`.
+            @frozen public enum AuthStatePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case unknown = "unknown"
+                case valid = "valid"
+                case invalid = "invalid"
+                case unavailable = "unavailable"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/auth_state`.
+            public var authState: Components.Schemas.ChatRuntimeProviderControlRecordRead.AuthStatePayload
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/capacity_reset_at`.
+            public var capacityResetAt: Foundation.Date?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/capacity_state`.
+            @frozen public enum CapacityStatePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case unknown = "unknown"
+                case available = "available"
+                case exhausted = "exhausted"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/capacity_state`.
+            public var capacityState: Components.Schemas.ChatRuntimeProviderControlRecordRead.CapacityStatePayload
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/circuit_state`.
+            @frozen public enum CircuitStatePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case closed = "closed"
+                case open = "open"
+                case halfOpen = "half_open"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/circuit_state`.
+            public var circuitState: Components.Schemas.ChatRuntimeProviderControlRecordRead.CircuitStatePayload
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/credential_generation`.
+            public var credentialGeneration: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/credential_ref`.
+            public var credentialRef: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/evidence_hash`.
+            public var evidenceHash: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/evidence_refs`.
+            public var evidenceRefs: [Swift.String]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/execution_allowed`.
+            public var executionAllowed: Swift.Bool
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/execution_host`.
+            @frozen public enum ExecutionHostPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case shakaMac = "shaka-mac"
+                case chiefMac = "chief-mac"
+                case orcaMini = "orca-mini"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/execution_host`.
+            public var executionHost: Components.Schemas.ChatRuntimeProviderControlRecordRead.ExecutionHostPayload
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/failure_count`.
+            public var failureCount: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/last_delivery_status`.
+            @frozen public enum LastDeliveryStatusPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case unknown = "unknown"
+                case succeeded = "succeeded"
+                case failed = "failed"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/last_delivery_status`.
+            public var lastDeliveryStatus: Components.Schemas.ChatRuntimeProviderControlRecordRead.LastDeliveryStatusPayload
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/last_execution_status`.
+            @frozen public enum LastExecutionStatusPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case unknown = "unknown"
+                case succeeded = "succeeded"
+                case failed = "failed"
+                case timeout = "timeout"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/last_execution_status`.
+            public var lastExecutionStatus: Components.Schemas.ChatRuntimeProviderControlRecordRead.LastExecutionStatusPayload
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/next_probe_at`.
+            public var nextProbeAt: Foundation.Date?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/observed_at`.
+            public var observedAt: Foundation.Date
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/provider_id`.
+            public var providerId: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/publisher`.
+            public var publisher: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/publisher_generation`.
+            public var publisherGeneration: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/publisher_version`.
+            @frozen public enum PublisherVersionPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case providerControl1_0 = "provider-control/1.0"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/publisher_version`.
+            public var publisherVersion: Components.Schemas.ChatRuntimeProviderControlRecordRead.PublisherVersionPayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/reason_code`.
+            public var reasonCode: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/schema`.
+            @frozen public enum SchemaPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case orca_providerControlRecord_v1 = "orca.provider-control-record.v1"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/schema`.
+            public var schema: Components.Schemas.ChatRuntimeProviderControlRecordRead.SchemaPayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/source_ref`.
+            public var sourceRef: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/status_reason`.
+            public var statusReason: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/trust_state`.
+            @frozen public enum TrustStatePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case attested = "attested"
+                case stale = "stale"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/trust_state`.
+            public var trustState: Components.Schemas.ChatRuntimeProviderControlRecordRead.TrustStatePayload
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeProviderControlRecordRead/ttl_seconds`.
+            public var ttlSeconds: Swift.Int
+            /// Creates a new `ChatRuntimeProviderControlRecordRead`.
+            ///
+            /// - Parameters:
+            ///   - adapterId:
+            ///   - authState:
+            ///   - capacityResetAt:
+            ///   - capacityState:
+            ///   - circuitState:
+            ///   - credentialGeneration:
+            ///   - credentialRef:
+            ///   - evidenceHash:
+            ///   - evidenceRefs:
+            ///   - executionAllowed:
+            ///   - executionHost:
+            ///   - failureCount:
+            ///   - lastDeliveryStatus:
+            ///   - lastExecutionStatus:
+            ///   - nextProbeAt:
+            ///   - observedAt:
+            ///   - providerId:
+            ///   - publisher:
+            ///   - publisherGeneration:
+            ///   - publisherVersion:
+            ///   - reasonCode:
+            ///   - schema:
+            ///   - sourceRef:
+            ///   - statusReason:
+            ///   - trustState:
+            ///   - ttlSeconds:
+            public init(
+                adapterId: Swift.String,
+                authState: Components.Schemas.ChatRuntimeProviderControlRecordRead.AuthStatePayload,
+                capacityResetAt: Foundation.Date? = nil,
+                capacityState: Components.Schemas.ChatRuntimeProviderControlRecordRead.CapacityStatePayload,
+                circuitState: Components.Schemas.ChatRuntimeProviderControlRecordRead.CircuitStatePayload,
+                credentialGeneration: Swift.String,
+                credentialRef: Swift.String,
+                evidenceHash: Swift.String,
+                evidenceRefs: [Swift.String]? = nil,
+                executionAllowed: Swift.Bool,
+                executionHost: Components.Schemas.ChatRuntimeProviderControlRecordRead.ExecutionHostPayload,
+                failureCount: Swift.Int,
+                lastDeliveryStatus: Components.Schemas.ChatRuntimeProviderControlRecordRead.LastDeliveryStatusPayload,
+                lastExecutionStatus: Components.Schemas.ChatRuntimeProviderControlRecordRead.LastExecutionStatusPayload,
+                nextProbeAt: Foundation.Date? = nil,
+                observedAt: Foundation.Date,
+                providerId: Swift.String,
+                publisher: Swift.String,
+                publisherGeneration: Swift.Int,
+                publisherVersion: Components.Schemas.ChatRuntimeProviderControlRecordRead.PublisherVersionPayload? = nil,
+                reasonCode: Swift.String,
+                schema: Components.Schemas.ChatRuntimeProviderControlRecordRead.SchemaPayload? = nil,
+                sourceRef: Swift.String,
+                statusReason: Swift.String,
+                trustState: Components.Schemas.ChatRuntimeProviderControlRecordRead.TrustStatePayload,
+                ttlSeconds: Swift.Int
+            ) {
+                self.adapterId = adapterId
+                self.authState = authState
+                self.capacityResetAt = capacityResetAt
+                self.capacityState = capacityState
+                self.circuitState = circuitState
+                self.credentialGeneration = credentialGeneration
+                self.credentialRef = credentialRef
+                self.evidenceHash = evidenceHash
+                self.evidenceRefs = evidenceRefs
+                self.executionAllowed = executionAllowed
+                self.executionHost = executionHost
+                self.failureCount = failureCount
+                self.lastDeliveryStatus = lastDeliveryStatus
+                self.lastExecutionStatus = lastExecutionStatus
+                self.nextProbeAt = nextProbeAt
+                self.observedAt = observedAt
+                self.providerId = providerId
+                self.publisher = publisher
+                self.publisherGeneration = publisherGeneration
+                self.publisherVersion = publisherVersion
+                self.reasonCode = reasonCode
+                self.schema = schema
+                self.sourceRef = sourceRef
+                self.statusReason = statusReason
+                self.trustState = trustState
+                self.ttlSeconds = ttlSeconds
+            }
+            public enum CodingKeys: String, CodingKey {
+                case adapterId = "adapter_id"
+                case authState = "auth_state"
+                case capacityResetAt = "capacity_reset_at"
+                case capacityState = "capacity_state"
+                case circuitState = "circuit_state"
+                case credentialGeneration = "credential_generation"
+                case credentialRef = "credential_ref"
+                case evidenceHash = "evidence_hash"
+                case evidenceRefs = "evidence_refs"
+                case executionAllowed = "execution_allowed"
+                case executionHost = "execution_host"
+                case failureCount = "failure_count"
+                case lastDeliveryStatus = "last_delivery_status"
+                case lastExecutionStatus = "last_execution_status"
+                case nextProbeAt = "next_probe_at"
+                case observedAt = "observed_at"
+                case providerId = "provider_id"
+                case publisher
+                case publisherGeneration = "publisher_generation"
+                case publisherVersion = "publisher_version"
+                case reasonCode = "reason_code"
+                case schema
+                case sourceRef = "source_ref"
+                case statusReason = "status_reason"
+                case trustState = "trust_state"
+                case ttlSeconds = "ttl_seconds"
+            }
+            public init(from decoder: any Swift.Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.adapterId = try container.decode(
+                    Swift.String.self,
+                    forKey: .adapterId
+                )
+                self.authState = try container.decode(
+                    Components.Schemas.ChatRuntimeProviderControlRecordRead.AuthStatePayload.self,
+                    forKey: .authState
+                )
+                self.capacityResetAt = try container.decodeIfPresent(
+                    Foundation.Date.self,
+                    forKey: .capacityResetAt
+                )
+                self.capacityState = try container.decode(
+                    Components.Schemas.ChatRuntimeProviderControlRecordRead.CapacityStatePayload.self,
+                    forKey: .capacityState
+                )
+                self.circuitState = try container.decode(
+                    Components.Schemas.ChatRuntimeProviderControlRecordRead.CircuitStatePayload.self,
+                    forKey: .circuitState
+                )
+                self.credentialGeneration = try container.decode(
+                    Swift.String.self,
+                    forKey: .credentialGeneration
+                )
+                self.credentialRef = try container.decode(
+                    Swift.String.self,
+                    forKey: .credentialRef
+                )
+                self.evidenceHash = try container.decode(
+                    Swift.String.self,
+                    forKey: .evidenceHash
+                )
+                self.evidenceRefs = try container.decodeIfPresent(
+                    [Swift.String].self,
+                    forKey: .evidenceRefs
+                )
+                self.executionAllowed = try container.decode(
+                    Swift.Bool.self,
+                    forKey: .executionAllowed
+                )
+                self.executionHost = try container.decode(
+                    Components.Schemas.ChatRuntimeProviderControlRecordRead.ExecutionHostPayload.self,
+                    forKey: .executionHost
+                )
+                self.failureCount = try container.decode(
+                    Swift.Int.self,
+                    forKey: .failureCount
+                )
+                self.lastDeliveryStatus = try container.decode(
+                    Components.Schemas.ChatRuntimeProviderControlRecordRead.LastDeliveryStatusPayload.self,
+                    forKey: .lastDeliveryStatus
+                )
+                self.lastExecutionStatus = try container.decode(
+                    Components.Schemas.ChatRuntimeProviderControlRecordRead.LastExecutionStatusPayload.self,
+                    forKey: .lastExecutionStatus
+                )
+                self.nextProbeAt = try container.decodeIfPresent(
+                    Foundation.Date.self,
+                    forKey: .nextProbeAt
+                )
+                self.observedAt = try container.decode(
+                    Foundation.Date.self,
+                    forKey: .observedAt
+                )
+                self.providerId = try container.decode(
+                    Swift.String.self,
+                    forKey: .providerId
+                )
+                self.publisher = try container.decode(
+                    Swift.String.self,
+                    forKey: .publisher
+                )
+                self.publisherGeneration = try container.decode(
+                    Swift.Int.self,
+                    forKey: .publisherGeneration
+                )
+                self.publisherVersion = try container.decodeIfPresent(
+                    Components.Schemas.ChatRuntimeProviderControlRecordRead.PublisherVersionPayload.self,
+                    forKey: .publisherVersion
+                )
+                self.reasonCode = try container.decode(
+                    Swift.String.self,
+                    forKey: .reasonCode
+                )
+                self.schema = try container.decodeIfPresent(
+                    Components.Schemas.ChatRuntimeProviderControlRecordRead.SchemaPayload.self,
+                    forKey: .schema
+                )
+                self.sourceRef = try container.decode(
+                    Swift.String.self,
+                    forKey: .sourceRef
+                )
+                self.statusReason = try container.decode(
+                    Swift.String.self,
+                    forKey: .statusReason
+                )
+                self.trustState = try container.decode(
+                    Components.Schemas.ChatRuntimeProviderControlRecordRead.TrustStatePayload.self,
+                    forKey: .trustState
+                )
+                self.ttlSeconds = try container.decode(
+                    Swift.Int.self,
+                    forKey: .ttlSeconds
+                )
+                try decoder.ensureNoAdditionalProperties(knownKeys: [
+                    "adapter_id",
+                    "auth_state",
+                    "capacity_reset_at",
+                    "capacity_state",
+                    "circuit_state",
+                    "credential_generation",
+                    "credential_ref",
+                    "evidence_hash",
+                    "evidence_refs",
+                    "execution_allowed",
+                    "execution_host",
+                    "failure_count",
+                    "last_delivery_status",
+                    "last_execution_status",
+                    "next_probe_at",
+                    "observed_at",
+                    "provider_id",
+                    "publisher",
+                    "publisher_generation",
+                    "publisher_version",
+                    "reason_code",
+                    "schema",
+                    "source_ref",
+                    "status_reason",
+                    "trust_state",
+                    "ttl_seconds"
+                ])
             }
         }
         /// Governed execution limits passed to any selected provider adapter.
@@ -3994,6 +4432,118 @@ public enum Operations {
             /// - Throws: An error if `self` is not `.ok`.
             /// - SeeAlso: `.ok`.
             public var ok: Operations.GetRuntimeContract.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        @frozen public enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            public init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            public var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            public static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// Read ORCA Chat Runtime v1 Provider Control
+    ///
+    /// Returns short-lived, pointer-safe provider adapter truth from authorized runtime hosts. Credential values never enter ORCA.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/provider-control`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/provider-control/get(getRuntimeProviderControl)`.
+    public enum GetRuntimeProviderControl {
+        public static let id: Swift.String = "getRuntimeProviderControl"
+        public struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/provider-control/GET/header`.
+            public struct Headers: Sendable, Hashable {
+                public var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.GetRuntimeProviderControl.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                public init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.GetRuntimeProviderControl.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            public var headers: Operations.GetRuntimeProviderControl.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - headers:
+            public init(headers: Operations.GetRuntimeProviderControl.Input.Headers = .init()) {
+                self.headers = headers
+            }
+        }
+        @frozen public enum Output: Sendable, Hashable {
+            public struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/provider-control/GET/responses/200/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/provider-control/GET/responses/200/content/application\/json`.
+                    case json(Components.Schemas.ChatRuntimeProviderControlBundleRead)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.ChatRuntimeProviderControlBundleRead {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.GetRuntimeProviderControl.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.GetRuntimeProviderControl.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// Successful Response
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/provider-control/get(getRuntimeProviderControl)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.GetRuntimeProviderControl.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            public var ok: Operations.GetRuntimeProviderControl.Output.Ok {
                 get throws {
                     switch self {
                     case let .ok(response):

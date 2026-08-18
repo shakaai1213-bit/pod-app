@@ -396,6 +396,68 @@ public struct Client: APIProtocol {
             }
         )
     }
+    /// Read ORCA Chat Runtime v1 Provider Control
+    ///
+    /// Returns short-lived, pointer-safe provider adapter truth from authorized runtime hosts. Credential values never enter ORCA.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/provider-control`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/provider-control/get(getRuntimeProviderControl)`.
+    public func getRuntimeProviderControl(_ input: Operations.GetRuntimeProviderControl.Input) async throws -> Operations.GetRuntimeProviderControl.Output {
+        try await client.send(
+            input: input,
+            forOperation: Operations.GetRuntimeProviderControl.id,
+            serializer: { input in
+                let path = try converter.renderedPath(
+                    template: "/api/v1/chat-runtime/v1/provider-control",
+                    parameters: []
+                )
+                var request: HTTPTypes.HTTPRequest = .init(
+                    soar_path: path,
+                    method: .get
+                )
+                suppressMutabilityWarning(&request)
+                converter.setAcceptHeader(
+                    in: &request.headerFields,
+                    contentTypes: input.headers.accept
+                )
+                return (request, nil)
+            },
+            deserializer: { response, responseBody in
+                switch response.status.code {
+                case 200:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.GetRuntimeProviderControl.Output.Ok.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas.ChatRuntimeProviderControlBundleRead.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .ok(.init(body: body))
+                default:
+                    return .undocumented(
+                        statusCode: response.status.code,
+                        .init(
+                            headerFields: response.headerFields,
+                            body: responseBody
+                        )
+                    )
+                }
+            }
+        )
+    }
     /// Read ORCA Chat Runtime v1 Schema Bundle
     ///
     /// Returns deterministic provider-neutral JSON schemas for runtime, event, adapter, resource, and terminal-outcome client generation.

@@ -132,6 +132,48 @@ private func canonicalCapabilityBundle(
     )
 }
 
+private func canonicalProviderControlBundle(
+    generatedAt: Date = Date(),
+    deliveryStatus: Components.Schemas.ChatRuntimeProviderControlRecordRead.LastDeliveryStatusPayload = .succeeded
+) -> Components.Schemas.ChatRuntimeProviderControlBundleRead {
+    let observedAt = generatedAt.addingTimeInterval(-5)
+    let record = Components.Schemas.ChatRuntimeProviderControlRecordRead(
+        adapterId: "codex-cli",
+        authState: .valid,
+        capacityState: .available,
+        circuitState: .closed,
+        credentialGeneration: String(repeating: "a", count: 64),
+        credentialRef: "secret-ref://keychain/codex-cli",
+        evidenceHash: String(repeating: "b", count: 64),
+        evidenceRefs: ["provider-evidence://shaka-mac/codex-cli/latest"],
+        executionAllowed: true,
+        executionHost: .shakaMac,
+        failureCount: 0,
+        lastDeliveryStatus: deliveryStatus,
+        lastExecutionStatus: .succeeded,
+        observedAt: observedAt,
+        providerId: "openai",
+        publisher: "coral",
+        publisherGeneration: 4,
+        publisherVersion: .providerControl1_0,
+        reasonCode: "healthy",
+        schema: .orca_providerControlRecord_v1,
+        sourceRef: "/api/v1/state-registry/provider_control.shaka-mac.codex-cli",
+        statusReason: "Provider adapter is available for execution.",
+        trustState: .attested,
+        ttlSeconds: 120
+    )
+    return .init(
+        authority: .orca,
+        bundleSha256: String(repeating: "c", count: 64),
+        contractVersion: .orca_providerControlBundle_v1,
+        generatedAt: generatedAt,
+        invalidRecordCount: 0,
+        records: [record],
+        router: .cascade
+    )
+}
+
 private func canonicalWorkItem(
     id: String = "70000000-0000-4000-8000-000000000001",
     bucket: Components.Schemas.ChatRuntimeWorkItemRead.WorkBucketPayload = .current,
@@ -348,8 +390,55 @@ func credentialRedirectsAreNeverFollowed(status: Int) throws {
     #expect(OrcaRuntimeContract.version == "orca.chat-runtime.v1")
     #expect(
         OrcaRuntimeContract.schemaSHA256
-            == "d117c8a422aae28bc0314a62717d89524627d251684e55c1bb66be64eb138223"
+            == "ebeef707c500a880d15340016b6e03b772c0016d76d192491c6dabb630a1fc28"
     )
+}
+
+@Test func providerControlBundlePassesNativeClientGate() throws {
+    let now = Date()
+    try OrcaRuntimeClient.validateProviderControl(
+        canonicalProviderControlBundle(generatedAt: now),
+        now: now
+    )
+}
+
+@Test func providerDeliveryFailureDoesNotDisableExecution() throws {
+    let now = Date()
+    let bundle = canonicalProviderControlBundle(
+        generatedAt: now,
+        deliveryStatus: .failed
+    )
+    try OrcaRuntimeClient.validateProviderControl(bundle, now: now)
+    #expect(bundle.records?.first?.executionAllowed == true)
+}
+
+@Test func providerControlRejectsForgedOrStaleTruth() throws {
+    let now = Date()
+    var forged = canonicalProviderControlBundle(generatedAt: now)
+    forged.records?[0].publisher = "maui"
+    do {
+        try OrcaRuntimeClient.validateProviderControl(forged, now: now)
+        Issue.record("An unauthorized provider publisher passed the native client gate")
+    } catch let error as OrcaRuntimeClientError {
+        #expect(
+            error == .invalidResponse(
+                "provider-control record failed closed for shaka-mac:codex-cli"
+            )
+        )
+    }
+
+    let staleGeneratedAt = now.addingTimeInterval(-600)
+    let stale = canonicalProviderControlBundle(generatedAt: staleGeneratedAt)
+    do {
+        try OrcaRuntimeClient.validateProviderControl(stale, now: now)
+        Issue.record("Expired provider truth remained executable")
+    } catch let error as OrcaRuntimeClientError {
+        #expect(
+            error == .invalidResponse(
+                "provider-control state failed closed for shaka-mac:codex-cli"
+            )
+        )
+    }
 }
 
 @Test func exactSevenAgentPackBundlePassesClientGate() throws {

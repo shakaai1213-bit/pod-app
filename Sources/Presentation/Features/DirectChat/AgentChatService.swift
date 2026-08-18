@@ -687,6 +687,12 @@ actor AgentChatService {
         )
     }
 
+    func providerControl() async throws
+        -> Components.Schemas.ChatRuntimeProviderControlBundleRead
+    {
+        try await Self.runtimeClient.providerControl()
+    }
+
     func applyConversationMemoryProposal(
         conversationId: String,
         proposalId: String,
