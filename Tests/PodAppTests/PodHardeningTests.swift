@@ -376,6 +376,43 @@ final class PodHardeningTests: XCTestCase {
         XCTAssertTrue(sse.contains("forHTTPHeaderField: \"Last-Event-ID\""))
     }
 
+    func testVoiceCompanionUsesORCARuntimeWithoutProviderCredentials() throws {
+        let sourceRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources")
+        let voiceRoot = sourceRoot.appendingPathComponent(
+            "Presentation/Features/VoiceCompanion"
+        )
+        let viewModel = try String(
+            contentsOf: voiceRoot.appendingPathComponent("VoiceCompanionViewModel.swift"),
+            encoding: .utf8
+        )
+        let voiceSources = try FileManager.default.contentsOfDirectory(
+            at: voiceRoot,
+            includingPropertiesForKeys: nil
+        )
+        .filter { $0.pathExtension == "swift" }
+        .map { try String(contentsOf: $0, encoding: .utf8) }
+        .joined(separator: "\n")
+
+        XCTAssertTrue(viewModel.contains("AgentChatService"))
+        XCTAssertTrue(viewModel.contains("deliveryMode: .auto"))
+        XCTAssertTrue(viewModel.contains("chatThreadId: orcaConversationID"))
+        XCTAssertTrue(viewModel.contains("orcaConversationID = channelID"))
+        XCTAssertFalse(viewModel.contains("postVoiceExchange"))
+        for forbidden in [
+            "ANTHROPIC_API_KEY",
+            "api.anthropic.com",
+            "api.moonshot.cn",
+            "x-api-key",
+            "ClaudeClient",
+        ] {
+            XCTAssertFalse(voiceSources.contains(forbidden), "Voice source contains \(forbidden)")
+        }
+    }
+
     func testChatPresentationKeepsLifecyclePrimaryAndExceptionsVisible() {
         let completeSteps = [
             DirectChatProgressStep(id: "reply", title: "Reply", icon: "checkmark", state: .done)

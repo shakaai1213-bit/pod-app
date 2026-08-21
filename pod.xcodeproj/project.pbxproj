@@ -26,7 +26,6 @@
 		26713644C40F552A4331AC34 /* OrcaAPI in Frameworks */ = {isa = PBXBuildFile; productRef = D4D89BDBC1B522061EDE75DB /* OrcaAPI */; };
 		283E5B81FDD5BEDF1B7E6B17 /* StandardRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AB0691F93E9F5494A3A79B1 /* StandardRepository.swift */; };
 		2C0F9BDAFA4025431D6952B6 /* AppTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84961F81D6C2F51B1A1EC335 /* AppTab.swift */; };
-		2E01CCD350BCB92DC2E85AF9 /* OpenClawClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E3B24352E6EA572EDFD8493 /* OpenClawClient.swift */; };
 		2F7D6DB607F64FAEFC5A39F8 /* LabSystemContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = F33539E9E5F23B69193ED2C1 /* LabSystemContent.swift */; };
 		30E2F95F8E6639796DE75463 /* TradingViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A893BBA804C06676605D8A94 /* TradingViewModel.swift */; };
 		32C299FC9E7655E4250BDFC6 /* TradingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B176EE740BDAAB1D3841B4F7 /* TradingView.swift */; };
@@ -67,7 +66,6 @@
 		82E9235090E750FDADF97077 /* UserNameCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = C49A1876596C226FEB029C28 /* UserNameCache.swift */; };
 		82F2A5830A17E9D6B807A0F9 /* WallDisplayModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21631C3CC9A1DF3FB91BE6F0 /* WallDisplayModifier.swift */; };
 		861A20FEDA754C6D9F1E55AE /* TaskSafeSleep.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55C5EA92AF78A2BD257AA7E1 /* TaskSafeSleep.swift */; };
-		86591B7A5B04085131D89111 /* ClaudeClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A72A5151CFC379FFABAD5E84 /* ClaudeClient.swift */; };
 		86593144A1BCAD9B03792FD0 /* LabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39AC4A4AC88444FC3C79EECF /* LabView.swift */; };
 		8703A17F3CEAFF881EA6F5CA /* LogStreamView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28ED6950C2F15EC07D3C1331 /* LogStreamView.swift */; };
 		8A13C4AF85DE8A89B8F5A443 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E18BACE3C1681D62AFA8498 /* Theme.swift */; };
@@ -89,6 +87,7 @@
 		A8FE72A35A611141FE6C1494 /* ResearchRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ED4159151441CB032A8460F /* ResearchRepository.swift */; };
 		AADDFD64686449D8343A6080 /* AppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 669E5C6A23ECCE8F11F520BF /* AppIntents.swift */; };
 		AB04FB9D1CBCD50B1271BFD6 /* TicketsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A555838FA2C96A3ADB7AB1C3 /* TicketsViewModel.swift */; };
+		AB1AEB5C50759D1DE3E23FC9 /* OrcaVoiceClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAD50F93230B385341D60F64 /* OrcaVoiceClient.swift */; };
 		AFA32AEFFC89649770ED335E /* NotificationRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 574CFE0B1AC9C1B0155DA6F7 /* NotificationRouter.swift */; };
 		B01399BF898AE50C4E5A0226 /* FundTradesRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45F28581565C7BE7CD10E1DA /* FundTradesRepository.swift */; };
 		B17C9AC16965A323E12068E8 /* SpeechRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBC7D0B7FA46F3CE605D98CB /* SpeechRecorder.swift */; };
@@ -183,7 +182,6 @@
 		3AB0691F93E9F5494A3A79B1 /* StandardRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandardRepository.swift; sourceTree = "<group>"; };
 		3B0D00C9AD7DFCF672218C0B /* Knowledge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Knowledge.swift; sourceTree = "<group>"; };
 		3C0D215A37D20015C3281815 /* FlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowLayout.swift; sourceTree = "<group>"; };
-		3E3B24352E6EA572EDFD8493 /* OpenClawClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenClawClient.swift; sourceTree = "<group>"; };
 		3E4E290EBCFA3FCCA5B6D6F8 /* ResearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResearchViewModel.swift; sourceTree = "<group>"; };
 		3ECF09C31E0CCB3C58FAA879 /* KnowledgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeView.swift; sourceTree = "<group>"; };
 		3F4CCB4395C49C6788871A98 /* WallDisplayViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallDisplayViewModel.swift; sourceTree = "<group>"; };
@@ -243,7 +241,6 @@
 		A64DD3D67E6C43B2B5AEC318 /* PodChatPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PodChatPanel.swift; sourceTree = "<group>"; };
 		A671A61727D2A6622982C99A /* PriorityBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PriorityBadge.swift; sourceTree = "<group>"; };
 		A729C35216CFE6E3C3B8A5C5 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		A72A5151CFC379FFABAD5E84 /* ClaudeClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeClient.swift; sourceTree = "<group>"; };
 		A893BBA804C06676605D8A94 /* TradingViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TradingViewModel.swift; sourceTree = "<group>"; };
 		AAC3FB7EBC81243BD3E32D8F /* OnboardingPageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingPageView.swift; sourceTree = "<group>"; };
 		ADFE23926127563B96F166CC /* LockerChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockerChatView.swift; sourceTree = "<group>"; };
@@ -260,6 +257,7 @@
 		C1E75CB63EBA420B1C8624C8 /* AuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthManager.swift; sourceTree = "<group>"; };
 		C1F48EDBD1C94A943212ECDE /* pod.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = pod.entitlements; sourceTree = "<group>"; };
 		C49A1876596C226FEB029C28 /* UserNameCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserNameCache.swift; sourceTree = "<group>"; };
+		CAD50F93230B385341D60F64 /* OrcaVoiceClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrcaVoiceClient.swift; sourceTree = "<group>"; };
 		CBD062EB03F1386CFB3A77D5 /* User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
 		CE5C64116BF8AF83ACAB134E /* OrcaRuntimeContracts */ = {isa = PBXFileReference; lastKnownFileType = folder; name = OrcaRuntimeContracts; path = Packages/OrcaRuntimeContracts; sourceTree = SOURCE_ROOT; };
 		D18D78CE9147C58BF929B8A0 /* AgentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentsView.swift; sourceTree = "<group>"; };
@@ -338,9 +336,8 @@
 		11D06A5303C4235EC623115D /* VoiceCompanion */ = {
 			isa = PBXGroup;
 			children = (
-				A72A5151CFC379FFABAD5E84 /* ClaudeClient.swift */,
 				B94D45A038CEDC2E86B74A9F /* LiveKitVoiceConnection.swift */,
-				3E3B24352E6EA572EDFD8493 /* OpenClawClient.swift */,
+				CAD50F93230B385341D60F64 /* OrcaVoiceClient.swift */,
 				FBC7D0B7FA46F3CE605D98CB /* SpeechRecorder.swift */,
 				123B9D533AE21BBEEF5A4607 /* VoiceCompanionView.swift */,
 				30A2E30B6BCD93E8C0D2E71C /* VoiceCompanionViewModel.swift */,
@@ -897,7 +894,6 @@
 				59202E155A36185F02416841 /* ChannelRepository.swift in Sources */,
 				EEB7FD53570A06DB48B7954B /* Chat.swift in Sources */,
 				50CCE7E17C21A642DDA65C63 /* ChiefFundContent.swift in Sources */,
-				86591B7A5B04085131D89111 /* ClaudeClient.swift in Sources */,
 				3C135990C2E55C1E5079A33C /* CockpitSignQueueSection.swift in Sources */,
 				3AB34F50F3630DA8760A6CFA /* Colors.swift in Sources */,
 				FB8DA55BA89EED1C1CA9FC8D /* ContentView.swift in Sources */,
@@ -935,8 +931,8 @@
 				A119987125AF2585A9FF89CC /* OnboardingPageView.swift in Sources */,
 				7220D0BB4926EC9516B9ADC5 /* OnboardingView.swift in Sources */,
 				115714EE9EE458D6F1609B08 /* OnboardingViewModel.swift in Sources */,
-				2E01CCD350BCB92DC2E85AF9 /* OpenClawClient.swift in Sources */,
 				37CFE090C6AB10FA2B72A53B /* OrcaDeviceIdentity.swift in Sources */,
+				AB1AEB5C50759D1DE3E23FC9 /* OrcaVoiceClient.swift in Sources */,
 				B6A18A87316F363D14025CFF /* ParkingLotView.swift in Sources */,
 				99EA3523D26347EF51CBB81E /* PersistenceController.swift in Sources */,
 				CFBE8E0C7689E2DD9B87DE63 /* PlanningTimelineView.swift in Sources */,
