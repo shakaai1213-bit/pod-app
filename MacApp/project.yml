@@ -51,6 +51,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.orcamc.mac.tests
         PRODUCT_MODULE_NAME: OrcaMacTests
         GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: "5H23S6WPV2"
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/ORCA Console.app/Contents/MacOS/ORCA Console"
         BUNDLE_LOADER: $(TEST_HOST)
 schemes:
