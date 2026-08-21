@@ -19,10 +19,20 @@ that commit object and every runtime artifact. A signed rollback commit must use
 `git-ssh-signed`; the verifier rejects dishonest trust-mode selection. Upgrade
 releases never permit legacy commit attestation.
 
-The release manifest uses `orca.console.release-manifest.v5` and records either
+The release manifest uses `orca.console.release-manifest.v6` and records either
 `rollback.mode=initial-install` or `rollback.mode=upgrade`. Public verification
 rejects mixed modes, an app-present claim, stale or future-dated preinstall
 evidence, signature or digest tampering, and runtime/host mismatches.
+
+Before archive creation, `audit_orca_console_installations.py` inventories
+`/Applications`, `~/Applications`, `~/Desktop`, and `~/Downloads`. It verifies
+the canonical `com.orcamc.mac` identity, refuses malformed or symlinked apps,
+and emits a preserve-first quarantine plan for every installed or loose copy.
+DerivedData and explicitly supplied evidence roots are classified as build
+evidence and never mistaken for installed products. The release stays closed
+until the plan is empty. The exact fresh inventory is copied into the evidence
+bundle and hash-bound by manifest v6; the independent verifier checks mode,
+age, identity, counts, readiness, and canonical-install parity.
 
 For the initial lab bootstrap, the rollback auth-state packet must be captured
 from the production runtime immediately before release. It identifies active

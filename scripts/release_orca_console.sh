@@ -88,11 +88,17 @@ artifact_path="$release_root/ORCA-Console-$source_commit.zip"
 submission_path="$release_root/ORCA-Console-$source_commit-notary-submission.zip"
 evidence_dir="$release_root/evidence"
 derived_data="${DERIVED_DATA_DIR:-$release_root/DerivedData}"
+installation_inventory="$release_root/console-installation-inventory.json"
 if [[ -e "$evidence_dir/manifest.json" ]]; then
   echo "release refused: immutable release evidence already exists for $source_commit" >&2
   exit 2
 fi
 mkdir -p "$release_root" "$evidence_dir" "$derived_data"
+
+python3 scripts/audit_orca_console_installations.py \
+  --mode "$INSTALL_MODE" \
+  --output "$installation_inventory" \
+  --strict
 
 xcodebuild archive \
   -project MacApp/OrcaMac.xcodeproj \
@@ -163,6 +169,7 @@ python3 scripts/generate_release_evidence.py \
   --backend-image "$ORCA_BACKEND_IMAGE" \
   --host-bundle "$HOST_BUNDLE" \
   --auth-transition-contract "$root/release/native-auth-transition-v1.json" \
+  --installation-inventory "$installation_inventory" \
   --install-mode "$INSTALL_MODE" \
   "${rollback_mode_args[@]}" \
   --rollback-backend-root "$ROLLBACK_BACKEND_ROOT" \

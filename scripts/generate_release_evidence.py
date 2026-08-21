@@ -246,6 +246,122 @@ def verify_auth_transition_contract(path: Path) -> dict[str, Any]:
     return payload
 
 
+def verify_installation_inventory(path: Path, *, install_mode: str) -> dict[str, Any]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    expected_keys = {
+        "app_host_id",
+        "canonical_bundle_id",
+        "canonical_install_path",
+        "canonical_product_name",
+        "counts",
+        "entries",
+        "mode",
+        "observed_at",
+        "quarantine_plan",
+        "ready",
+        "scan_roots",
+        "schema",
+        "violations",
+    }
+    if not isinstance(payload, dict) or set(payload) != expected_keys:
+        raise ValueError("invalid Console installation inventory fields")
+    if payload.get("schema") != "orca.console.installation-inventory.v1":
+        raise ValueError("unsupported Console installation inventory")
+    if payload.get("mode") != install_mode:
+        raise ValueError("Console installation inventory mode mismatch")
+    if payload.get("canonical_bundle_id") != "com.orcamc.mac":
+        raise ValueError("invalid Console installation bundle identifier")
+    if payload.get("canonical_product_name") != "ORCA Console":
+        raise ValueError("invalid Console installation product name")
+    if payload.get("canonical_install_path") != "/Applications/ORCA Console.app":
+        raise ValueError("invalid Console installation target")
+    if payload.get("ready") is not True or payload.get("violations") != []:
+        raise ValueError("Console installation inventory is not release-ready")
+    if payload.get("quarantine_plan") != []:
+        raise ValueError("Console quarantine plan must be empty before release")
+    observed_at = require_utc_timestamp(
+        payload.get("observed_at"), label="Console inventory observation time"
+    )
+    age = datetime.now(timezone.utc) - observed_at
+    if age.total_seconds() < -60 or age.total_seconds() > 900:
+        raise ValueError("Console installation inventory is stale or future-dated")
+    host_id = payload.get("app_host_id")
+    if not isinstance(host_id, str) or re.fullmatch(
+        r"[A-Za-z0-9._-]{1,255}", host_id
+    ) is None:
+        raise ValueError("invalid Console inventory host identifier")
+    counts = payload.get("counts")
+    if not isinstance(counts, dict) or set(counts) != {
+        "build_evidence",
+        "canonical_install",
+        "installed_duplicate",
+        "loose_copy",
+    }:
+        raise ValueError("invalid Console installation counts")
+    if any(type(value) is not int or value < 0 for value in counts.values()):
+        raise ValueError("invalid Console installation count value")
+    expected_canonical = 0 if install_mode == "initial-install" else 1
+    if counts["canonical_install"] != expected_canonical:
+        raise ValueError("Console canonical installation count mismatch")
+    if counts["installed_duplicate"] != 0 or counts["loose_copy"] != 0:
+        raise ValueError("Console user-facing duplicate remains")
+    entries = payload.get("entries")
+    if not isinstance(entries, list):
+        raise ValueError("invalid Console installation entries")
+    classifications = {
+        "build_evidence",
+        "canonical_install",
+        "installed_duplicate",
+        "loose_copy",
+    }
+    if any(
+        not isinstance(row, dict) or row.get("classification") not in classifications
+        for row in entries
+    ):
+        raise ValueError("invalid Console installation entry")
+    derived_counts = {
+        classification: sum(
+            1 for row in entries if row.get("classification") == classification
+        )
+        for classification in classifications
+    }
+    if counts != derived_counts:
+        raise ValueError("Console installation counts disagree with entries")
+    canonical_entries = [
+        row
+        for row in entries
+        if isinstance(row, dict) and row.get("classification") == "canonical_install"
+    ]
+    if len(canonical_entries) != expected_canonical:
+        raise ValueError("Console canonical entry count mismatch")
+    if canonical_entries and canonical_entries[0].get("canonical_identity") is not True:
+        raise ValueError("Console canonical identity is not verified")
+    scan_roots = payload.get("scan_roots")
+    if not isinstance(scan_roots, list) or any(
+        not isinstance(row, dict)
+        or set(row) != {"kind", "path"}
+        or row.get("kind") not in {"install", "loose", "evidence"}
+        or not Path(str(row.get("path") or "")).is_absolute()
+        for row in scan_roots
+    ):
+        raise ValueError("invalid Console installation scan roots")
+    install_paths = {
+        str(row["path"]) for row in scan_roots if row["kind"] == "install"
+    }
+    loose_paths = {
+        str(row["path"]) for row in scan_roots if row["kind"] == "loose"
+    }
+    if "/Applications" not in install_paths or not any(
+        path != "/Applications" and Path(path).name == "Applications"
+        for path in install_paths
+    ):
+        raise ValueError("Console installation roots are incomplete")
+    loose_names = {Path(path).name for path in loose_paths}
+    if not {"Desktop", "Downloads"}.issubset(loose_names):
+        raise ValueError("Console loose-copy roots are incomplete")
+    return payload
+
+
 def verify_preinstall_state_contract(path: Path) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     expected_keys = {
@@ -404,6 +520,7 @@ def main() -> int:
     parser.add_argument("--backend-image", type=Path, required=True)
     parser.add_argument("--host-bundle", type=Path, required=True)
     parser.add_argument("--auth-transition-contract", type=Path, required=True)
+    parser.add_argument("--installation-inventory", type=Path, required=True)
     parser.add_argument(
         "--install-mode", choices=("upgrade", "initial-install"), default="upgrade"
     )
@@ -635,8 +752,15 @@ def main() -> int:
             )
     transition_path = args.auth_transition_contract.resolve()
     verify_auth_transition_contract(transition_path)
+    inventory_path = args.installation_inventory.resolve()
+    installation_inventory = verify_installation_inventory(
+        inventory_path, install_mode=args.install_mode
+    )
     transition_output = output / "native-auth-transition.json"
     transition_output.write_bytes(transition_path.read_bytes())
+    inventory_output = output / "installation-inventory.json"
+    inventory_row = copy_file(inventory_path, inventory_output)
+    inventory_row["name"] = inventory_output.name
     source_object = write_git_commit_object(
         root,
         args.source_commit,
@@ -802,7 +926,7 @@ def main() -> int:
     )
 
     manifest = {
-        "schema": "orca.console.release-manifest.v5",
+        "schema": "orca.console.release-manifest.v6",
         "created_at": created_at,
         "source": {
             "commit": args.source_commit,
@@ -836,6 +960,19 @@ def main() -> int:
             "contract": transition_output.name,
             "contract_sha256": sha256(transition_output),
             "schema": "orca.native-auth.transition.v1",
+        },
+        "installation": {
+            **inventory_row,
+            "schema": installation_inventory["schema"],
+            "mode": installation_inventory["mode"],
+            "ready": True,
+            "canonical_install_path": installation_inventory[
+                "canonical_install_path"
+            ],
+            "canonical_bundle_id": installation_inventory["canonical_bundle_id"],
+            "canonical_install_count": installation_inventory["counts"][
+                "canonical_install"
+            ],
         },
         "rollback": rollback_contract,
     }

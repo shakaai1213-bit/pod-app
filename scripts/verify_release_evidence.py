@@ -273,6 +273,127 @@ def verify_preinstall_state(path: Path) -> dict[str, Any]:
     return payload
 
 
+def verify_installation_inventory(
+    path: Path,
+    *,
+    install_mode: str,
+    release_created_at: datetime,
+) -> dict[str, Any]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    expected_keys = {
+        "app_host_id",
+        "canonical_bundle_id",
+        "canonical_install_path",
+        "canonical_product_name",
+        "counts",
+        "entries",
+        "mode",
+        "observed_at",
+        "quarantine_plan",
+        "ready",
+        "scan_roots",
+        "schema",
+        "violations",
+    }
+    if not isinstance(payload, dict) or set(payload) != expected_keys:
+        raise ValueError("invalid Console installation inventory fields")
+    if payload.get("schema") != "orca.console.installation-inventory.v1":
+        raise ValueError("invalid Console installation inventory schema")
+    if payload.get("mode") != install_mode:
+        raise ValueError("Console installation inventory mode mismatch")
+    if payload.get("canonical_bundle_id") != "com.orcamc.mac":
+        raise ValueError("invalid Console installation bundle identifier")
+    if payload.get("canonical_product_name") != "ORCA Console":
+        raise ValueError("invalid Console installation product name")
+    if payload.get("canonical_install_path") != "/Applications/ORCA Console.app":
+        raise ValueError("invalid Console installation target")
+    if payload.get("ready") is not True or payload.get("violations") != []:
+        raise ValueError("Console installation inventory is not release-ready")
+    if payload.get("quarantine_plan") != []:
+        raise ValueError("Console quarantine plan was not drained")
+    observed_at = require_utc_timestamp(
+        payload.get("observed_at"), "Console inventory observation time"
+    )
+    age = release_created_at.astimezone(timezone.utc) - observed_at
+    if age.total_seconds() < -60 or age.total_seconds() > 900:
+        raise ValueError("Console installation inventory is stale or future-dated")
+    host_id = payload.get("app_host_id")
+    if not isinstance(host_id, str) or re.fullmatch(
+        r"[A-Za-z0-9._-]{1,255}", host_id
+    ) is None:
+        raise ValueError("invalid Console inventory host identifier")
+    counts = payload.get("counts")
+    if not isinstance(counts, dict) or set(counts) != {
+        "build_evidence",
+        "canonical_install",
+        "installed_duplicate",
+        "loose_copy",
+    }:
+        raise ValueError("invalid Console installation counts")
+    if any(type(value) is not int or value < 0 for value in counts.values()):
+        raise ValueError("invalid Console installation count value")
+    expected_canonical = 0 if install_mode == "initial-install" else 1
+    if counts["canonical_install"] != expected_canonical:
+        raise ValueError("Console canonical installation count mismatch")
+    if counts["installed_duplicate"] != 0 or counts["loose_copy"] != 0:
+        raise ValueError("Console user-facing duplicate remains")
+    entries = payload.get("entries")
+    if not isinstance(entries, list):
+        raise ValueError("invalid Console installation entries")
+    classifications = {
+        "build_evidence",
+        "canonical_install",
+        "installed_duplicate",
+        "loose_copy",
+    }
+    if any(
+        not isinstance(row, dict) or row.get("classification") not in classifications
+        for row in entries
+    ):
+        raise ValueError("invalid Console installation entry")
+    derived_counts = {
+        classification: sum(
+            1 for row in entries if row.get("classification") == classification
+        )
+        for classification in classifications
+    }
+    if counts != derived_counts:
+        raise ValueError("Console installation counts disagree with entries")
+    canonical_entries = [
+        row
+        for row in entries
+        if isinstance(row, dict) and row.get("classification") == "canonical_install"
+    ]
+    if len(canonical_entries) != expected_canonical:
+        raise ValueError("Console canonical entry count mismatch")
+    if canonical_entries and canonical_entries[0].get("canonical_identity") is not True:
+        raise ValueError("Console canonical identity is not verified")
+    scan_roots = payload.get("scan_roots")
+    if not isinstance(scan_roots, list) or any(
+        not isinstance(row, dict)
+        or set(row) != {"kind", "path"}
+        or row.get("kind") not in {"install", "loose", "evidence"}
+        or not Path(str(row.get("path") or "")).is_absolute()
+        for row in scan_roots
+    ):
+        raise ValueError("invalid Console installation scan roots")
+    install_paths = {
+        str(row["path"]) for row in scan_roots if row["kind"] == "install"
+    }
+    loose_paths = {
+        str(row["path"]) for row in scan_roots if row["kind"] == "loose"
+    }
+    if "/Applications" not in install_paths or not any(
+        path != "/Applications" and Path(path).name == "Applications"
+        for path in install_paths
+    ):
+        raise ValueError("Console installation roots are incomplete")
+    loose_names = {Path(path).name for path in loose_paths}
+    if not {"Desktop", "Downloads"}.issubset(loose_names):
+        raise ValueError("Console loose-copy roots are incomplete")
+    return payload
+
+
 def verify_upgrade_rollback(
     evidence_dir: Path,
     rollback: dict[str, Any],
@@ -327,6 +448,7 @@ def verify_upgrade_rollback(
         "orca.console.release-manifest.v3",
         "orca.console.release-manifest.v4",
         "orca.console.release-manifest.v5",
+        "orca.console.release-manifest.v6",
     }:
         raise ValueError("unsupported rollback manifest schema")
     prior_source = prior.get("source") or {}
@@ -523,7 +645,7 @@ def verify_bundle(
         namespace="orca-release",
     )
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if manifest.get("schema") != "orca.console.release-manifest.v5":
+    if manifest.get("schema") != "orca.console.release-manifest.v6":
         raise ValueError("unsupported release manifest schema")
     trust = manifest.get("trust") or {}
     if trust.get("allowed_signers_sha256") != trusted_hash:
@@ -612,8 +734,45 @@ def verify_bundle(
     )
     verify_transition(transition_path)
 
+    installation = manifest.get("installation") or {}
+    if set(installation) != {
+        "canonical_bundle_id",
+        "canonical_install_count",
+        "canonical_install_path",
+        "mode",
+        "name",
+        "ready",
+        "schema",
+        "sha256",
+        "size_bytes",
+    }:
+        raise ValueError("invalid Console installation manifest fields")
+    installation_path = resolve_row(
+        evidence_dir, installation, "Console installation inventory"
+    )
+    installation_payload = verify_installation_inventory(
+        installation_path,
+        install_mode=str(installation.get("mode") or ""),
+        release_created_at=release_created_at,
+    )
+    if installation.get("schema") != installation_payload["schema"]:
+        raise ValueError("Console installation schema mismatch")
+    if installation.get("ready") is not True:
+        raise ValueError("Console installation readiness is false")
+    if (
+        installation.get("canonical_install_path")
+        != installation_payload["canonical_install_path"]
+        or installation.get("canonical_bundle_id")
+        != installation_payload["canonical_bundle_id"]
+        or installation.get("canonical_install_count")
+        != installation_payload["counts"]["canonical_install"]
+    ):
+        raise ValueError("Console installation manifest summary mismatch")
+
     rollback = manifest.get("rollback") or {}
     mode = rollback.get("mode")
+    if installation_payload["mode"] != mode:
+        raise ValueError("Console installation and rollback modes disagree")
     if mode == "upgrade":
         (
             prior_runtime_commit,

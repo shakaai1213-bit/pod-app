@@ -128,6 +128,7 @@ def build_bundle(
     rollback_commit_trust: str = "git-ssh-signed",
     preinstall_overrides: dict[str, object] | None = None,
     auth_state_overrides: dict[str, object] | None = None,
+    installation_overrides: dict[str, object] | None = None,
     extra_generator_args: list[str] | None = None,
 ) -> dict[str, object]:
     key = tmp_path / "release-key"
@@ -223,6 +224,59 @@ def build_bundle(
         (ROOT / "release/native-auth-transition-v1.json").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
+    installation_inventory = tmp_path / "installation-inventory.json"
+    canonical_count = 0 if install_mode == "initial-install" else 1
+    canonical_entries = []
+    if canonical_count:
+        canonical_entries.append(
+            {
+                "path": "/Applications/ORCA Console.app",
+                "classification": "canonical_install",
+                "is_symlink": False,
+                "canonical_identity": True,
+                "bundle_id": "com.orcamc.mac",
+                "bundle_name": "ORCA Console",
+                "bundle_version": "1",
+                "executable_name": "OrcaMac",
+                "executable_sha256": "f" * 64,
+                "identity_valid": True,
+            }
+        )
+    installation_payload = {
+                "schema": "orca.console.installation-inventory.v1",
+                "mode": install_mode,
+                "observed_at": datetime.now(timezone.utc)
+                .isoformat(timespec="seconds")
+                .replace("+00:00", "Z"),
+                "app_host_id": "release-test-app-host",
+                "canonical_install_path": "/Applications/ORCA Console.app",
+                "canonical_bundle_id": "com.orcamc.mac",
+                "canonical_product_name": "ORCA Console",
+                "scan_roots": [
+                    {"kind": "install", "path": "/Applications"},
+                    {
+                        "kind": "install",
+                        "path": "/Users/release-test/Applications",
+                    },
+                    {"kind": "loose", "path": "/Users/release-test/Desktop"},
+                    {"kind": "loose", "path": "/Users/release-test/Downloads"},
+                ],
+                "counts": {
+                    "canonical_install": canonical_count,
+                    "installed_duplicate": 0,
+                    "loose_copy": 0,
+                    "build_evidence": 0,
+                },
+                "entries": canonical_entries,
+                "quarantine_plan": [],
+                "violations": [],
+        "ready": True,
+    }
+    installation_payload.update(installation_overrides or {})
+    installation_inventory.write_text(
+        json.dumps(installation_payload, sort_keys=True),
+        encoding="utf-8",
+    )
     artifact = tmp_path / "ORCA-Console-current.zip"
     artifact.write_bytes(b"verified current app")
     current_image = tmp_path / "current-runtime-image.tar"
@@ -275,6 +329,8 @@ def build_bundle(
         str(current_host),
         "--auth-transition-contract",
         str(transition),
+        "--installation-inventory",
+        str(installation_inventory),
         "--install-mode",
         install_mode,
         "--rollback-backend-root",
@@ -328,6 +384,7 @@ def build_bundle(
         "artifact": artifact,
         "allowed": allowed,
         "identity": identity,
+        "installation_inventory": installation_inventory,
         "key": key,
         "output": output,
         "preinstall_state": preinstall_state,
@@ -395,7 +452,6 @@ def test_initial_install_bundle_is_self_contained_and_verifiable(
     bundle = build_bundle(tmp_path, install_mode="initial-install")
 
     verify(bundle)
-
     output = Path(bundle["output"])
     manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["rollback"]["mode"] == "initial-install"
@@ -404,6 +460,63 @@ def test_initial_install_bundle_is_self_contained_and_verifiable(
     assert (output / "rollback/preinstall-state.json.sig").is_file()
     assert not (output / "rollback/manifest.json").exists()
     assert verify_with_public_shell(bundle).returncode == 0
+
+
+def test_release_manifest_binds_canonical_installation_inventory(
+    tmp_path: Path,
+) -> None:
+    bundle = build_bundle(tmp_path)
+    output = Path(bundle["output"])
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    installation = manifest["installation"]
+    assert manifest["schema"] == "orca.console.release-manifest.v6"
+    assert installation["schema"] == "orca.console.installation-inventory.v1"
+    assert installation["mode"] == "upgrade"
+    assert installation["canonical_install_count"] == 1
+    assert installation["canonical_bundle_id"] == "com.orcamc.mac"
+    assert installation["canonical_install_path"] == "/Applications/ORCA Console.app"
+    assert installation["ready"] is True
+    verify(bundle)
+
+
+def test_release_verifier_rejects_tampered_installation_inventory(
+    tmp_path: Path,
+) -> None:
+    bundle = build_bundle(tmp_path)
+    inventory = Path(bundle["output"]) / "installation-inventory.json"
+    inventory.write_bytes(inventory.read_bytes() + b"tamper")
+    with pytest.raises((ValueError, subprocess.CalledProcessError)):
+        verify(bundle)
+
+
+def test_generator_rejects_nonready_or_wrong_mode_installation_inventory(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(
+            tmp_path / "nonready",
+            installation_overrides={
+                "ready": False,
+                "violations": [
+                    {
+                        "path": "/Users/test/Downloads/ORCA Console.app",
+                        "reason": "loose_copy",
+                    }
+                ],
+            },
+        )
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(
+            tmp_path / "wrong-mode",
+            installation_overrides={"mode": "initial-install"},
+        )
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(
+            tmp_path / "incomplete-roots",
+            installation_overrides={
+                "scan_roots": [{"kind": "install", "path": "/Applications"}]
+            },
+        )
 
 
 def test_initial_install_accepts_release_attested_legacy_runtime(
