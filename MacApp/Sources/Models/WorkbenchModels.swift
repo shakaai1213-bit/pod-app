@@ -10,6 +10,9 @@ enum WorkbenchPane: String, CaseIterable, Identifiable {
     case evidence
     case approvals
 
+    static let minimumBarWidth: CGFloat = 520
+    static let minimumControlWidth: CGFloat = 60
+
     var id: String { rawValue }
 
     var title: String {

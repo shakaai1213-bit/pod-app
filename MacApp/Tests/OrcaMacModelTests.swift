@@ -190,6 +190,20 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertFalse(ConsoleSection.work.isProtected)
     }
 
+    func testWorkbenchPaneBarFitsTheMinimumContentColumn() {
+        let panes = WorkbenchPane.allCases
+
+        XCTAssertEqual(
+            panes.map(\.rawValue),
+            ["workspace", "files", "diff", "tests", "terminal", "workers", "evidence", "approvals"]
+        )
+        XCTAssertEqual(Set(panes.map(\.title)).count, panes.count)
+        XCTAssertLessThanOrEqual(
+            CGFloat(panes.count) * WorkbenchPane.minimumControlWidth,
+            WorkbenchPane.minimumBarWidth
+        )
+    }
+
     func testConsoleJSONPreservesStructuredValues() throws {
         let value = try JSONDecoder().decode(
             ConsoleJSON.self,

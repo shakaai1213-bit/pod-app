@@ -19,7 +19,7 @@ struct OrcaMacRootView: View {
                     ConsoleSectionView(section: model.selectedSection)
                 }
             }
-            .navigationSplitViewColumnWidth(min: 520, ideal: 720)
+            .navigationSplitViewColumnWidth(min: WorkbenchPane.minimumBarWidth, ideal: 720)
         } detail: {
             Group {
                 if model.selectedSection == .conversations {

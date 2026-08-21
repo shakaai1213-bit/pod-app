@@ -75,37 +75,45 @@ struct EngineeringWorkbenchView: View {
     }
 
     private var paneBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 0) {
-                ForEach(WorkbenchPane.allCases) { pane in
-                    Button {
-                        model.selectedWorkbenchPane = pane
-                    } label: {
-                        VStack(spacing: 5) {
-                            Label(pane.title, systemImage: pane.symbol)
-                                .font(.caption.weight(.medium))
-                                .foregroundStyle(
-                                    model.selectedWorkbenchPane == pane
-                                        ? Color.primary
-                                        : Color.secondary
-                                )
-                            Rectangle()
-                                .fill(
-                                    model.selectedWorkbenchPane == pane
-                                        ? Color.orcaCyan
-                                        : Color.clear
-                                )
-                                .frame(height: 2)
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.top, 9)
+        HStack(spacing: 0) {
+            ForEach(WorkbenchPane.allCases) { pane in
+                Button {
+                    model.selectedWorkbenchPane = pane
+                } label: {
+                    VStack(spacing: 3) {
+                        Image(systemName: pane.symbol)
+                            .font(.system(size: 11, weight: .semibold))
+                        Text(pane.title)
+                            .font(.caption2.weight(.medium))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.82)
+                        Rectangle()
+                            .fill(
+                                model.selectedWorkbenchPane == pane
+                                    ? Color.orcaCyan
+                                    : Color.clear
+                            )
+                            .frame(height: 2)
                     }
-                    .buttonStyle(.plain)
-                    .help(pane.title)
+                    .foregroundStyle(
+                        model.selectedWorkbenchPane == pane
+                            ? Color.primary
+                            : Color.secondary
+                    )
+                    .frame(
+                        minWidth: WorkbenchPane.minimumControlWidth,
+                        maxWidth: .infinity
+                    )
+                    .padding(.horizontal, 2)
+                    .padding(.top, 6)
                 }
+                .buttonStyle(.plain)
+                .help(pane.title)
+                .accessibilityLabel(pane.title)
             }
         }
-        .frame(height: 42)
+        .frame(maxWidth: .infinity)
+        .frame(height: 50)
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
