@@ -39,11 +39,16 @@ actor OrcaConsoleService {
         self.session = session ?? OrcaSecureURLSession.make()
     }
 
-    func snapshot(for section: ConsoleSection) async throws -> ConsoleSectionSnapshot {
+    func snapshot(
+        for section: ConsoleSection,
+        workControl: Components.Schemas.ChatRuntimeWorkControlBundleRead?
+    ) async throws -> ConsoleSectionSnapshot {
         switch section {
         case .overview: return try await overviewSnapshot()
         case .conversations: return .empty(.conversations)
-        case .work: return try await workSnapshot()
+        case .work:
+            guard let workControl else { throw OrcaConsoleServiceError.invalidResponse }
+            return .workControl(OrcaWorkControlProjection(workControl))
         case .workbench: return .empty(.workbench)
         case .fund: return try await fundSnapshot()
         case .crew: return try await crewSnapshot()
@@ -98,66 +103,6 @@ actor OrcaConsoleService {
                 "/api/v1/control-room/central-agent-health",
                 "/api/v1/startup/status",
             ],
-            updatedAt: Date()
-        )
-    }
-
-    private func workSnapshot() async throws -> ConsoleSectionSnapshot {
-        async let boards = get("/api/v1/boards")
-        async let projects = get("/api/v1/projects/")
-        async let tickets = get("/api/v1/tickets")
-        async let inbox = get("/api/v1/control-room/captain-inbox")
-        let values = try await (boards, projects, tickets, inbox)
-        let approvals = collection(values.3, keys: ["items"]).filter {
-            field($0, keys: ["kind"])?.lowercased() == "approval"
-        }
-
-        var output = records(
-            from: values.0,
-            collectionKeys: ["items"],
-            group: "Boards",
-            titleKeys: ["name", "slug"],
-            subtitleKeys: ["objective", "description"],
-            statusKeys: ["status", "priority"],
-            limit: 100
-        )
-        output += records(
-            from: values.1,
-            collectionKeys: ["items", "projects"],
-            group: "Projects",
-            titleKeys: ["name", "title"],
-            subtitleKeys: ["objective", "description"],
-            statusKeys: ["status", "state"],
-            limit: 80
-        )
-        output += recordObjects(
-            approvals,
-            group: "Approvals",
-            titleKeys: ["title", "summary"],
-            subtitleKeys: ["summary", "agent_slug"],
-            statusKeys: ["severity", "status"],
-            limit: 40
-        )
-        output += records(
-            from: values.2,
-            collectionKeys: [],
-            group: "Tickets",
-            titleKeys: ["title"],
-            subtitleKeys: ["next_action", "blocked_on", "desired_outcome"],
-            statusKeys: ["flow_state", "status", "priority"],
-            limit: 100
-        )
-
-        return ConsoleSectionSnapshot(
-            section: .work,
-            metrics: [
-                metric("boards", "Boards", integer(values.0, key: "total")),
-                metric("projects", "Projects", rootCount(values.1, collectionKeys: ["items", "projects"])),
-                metric("tickets", "Loaded Tickets", rootCount(values.2)),
-                ConsoleMetric(id: "approvals", label: "Approvals", value: "\(approvals.count)", status: approvals.isEmpty ? "ok" : "attention"),
-            ],
-            records: output,
-            sources: ["/api/v1/boards", "/api/v1/projects/", "/api/v1/tickets", "/api/v1/control-room/captain-inbox"],
             updatedAt: Date()
         )
     }

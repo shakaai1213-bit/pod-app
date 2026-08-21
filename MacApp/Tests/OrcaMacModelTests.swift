@@ -1,5 +1,6 @@
 import XCTest
 import OrcaAPI
+import OrcaRuntimeContracts
 @testable import ORCA
 
 private actor TestRuntimeTokenStore: RuntimeTokenStoring {
@@ -200,50 +201,29 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertEqual(value.objectValue?["items"]?.displayValue, "1 items")
     }
 
-    func testWorkSnapshotProjectsCanonicalBoardsProjectsApprovalsAndTickets() async throws {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [TestURLProtocol.self]
-        let session = URLSession(configuration: configuration)
-        TestURLProtocol.response = { request in
-            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer console-token")
-            XCTAssertNil(request.value(forHTTPHeaderField: "X-Api-Key"))
-            XCTAssertFalse(request.value(forHTTPHeaderField: "X-ORCA-Device-ID")?.isEmpty ?? true)
-            let payload: String
-            switch request.url?.path {
-            case "/api/v1/boards":
-                payload = #"{"total":1,"items":[{"id":"board-pod","name":"Pod","status":"active"}]}"#
-            case "/api/v1/projects", "/api/v1/projects/":
-                payload = #"{"items":[{"id":"project-console","name":"ORCA Console","status":"active"}]}"#
-            case "/api/v1/tickets":
-                payload = #"[{"id":"ticket-runtime","title":"Promote Runtime API v1","flow_state":"ready"}]"#
-            case "/api/v1/control-room/captain-inbox":
-                payload = #"{"items":[{"id":"approval-release","kind":"approval","title":"Release review","status":"pending"}]}"#
-            default:
-                return (404, Data(#"{"detail":"not found"}"#.utf8))
-            }
-            return (200, Data(payload.utf8))
-        }
-        defer { TestURLProtocol.response = nil }
-
+    func testWorkSnapshotProjectsValidatedRuntimeWorkControl() async throws {
         let service = OrcaConsoleService(
             serverURL: URL(string: "http://127.0.0.1:8000")!,
             tokenStore: TestRuntimeTokenStore(token: "console-token"),
-            deviceID: "test-device-id-0123456789",
-            session: session
+            deviceID: "test-device-id-0123456789"
         )
-        let snapshot = try await service.snapshot(for: .work)
+        let snapshot = try await service.snapshot(
+            for: .work,
+            workControl: Self.workControlBundle
+        )
 
-        XCTAssertEqual(snapshot.metrics.first(where: { $0.id == "boards" })?.value, "1")
-        XCTAssertEqual(snapshot.metrics.first(where: { $0.id == "projects" })?.value, "1")
+        XCTAssertEqual(snapshot.metrics.first(where: { $0.id == "ready" })?.value, "1")
+        XCTAssertEqual(snapshot.metrics.first(where: { $0.id == "assigned" })?.value, "1")
         XCTAssertEqual(snapshot.metrics.first(where: { $0.id == "approvals" })?.value, "1")
-        XCTAssertEqual(Set(snapshot.records.map(\.group)), Set(["Boards", "Projects", "Approvals", "Tickets"]))
-        XCTAssertEqual(
-            Set(snapshot.records.map(\.title)),
-            Set(["Pod", "ORCA Console", "Release review", "Promote Runtime API v1"])
-        )
+        XCTAssertEqual(Set(snapshot.records.map(\.group)), Set(["Ready Now", "Assigned", "Approvals"]))
+        XCTAssertEqual(Set(snapshot.records.map(\.title)), Set(["Prove Work Control", "Sign Standard"]))
         XCTAssertEqual(
             Set(snapshot.sources),
-            Set(["/api/v1/boards", "/api/v1/projects/", "/api/v1/tickets", "/api/v1/control-room/captain-inbox"])
+            Set([
+                "/api/v1/chat-runtime/v1/agents/coral/work-control",
+                "orca.agent-workbench.v1",
+                "bundle:\(String(repeating: "d", count: 64))",
+            ])
         )
     }
 
@@ -390,4 +370,81 @@ final class OrcaMacModelTests: XCTestCase {
     private static let workbenchContractJSON = "{\"schema\":\"orca.engineering-workbench.v1\",\"enabled\":true,\"mode\":\"active\",\"host\":\(workbenchHostJSON),\"worker_lane\":\"engineering-host\",\"policy_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"roots\":[{\"id\":\"pod-client\",\"label\":\"Pod and Console\",\"description\":\"Native source\",\"access\":\"read_test\",\"source_mutation\":false}],\"actions\":[{\"id\":\"git.status\",\"label\":\"Git Status\",\"kind\":\"diff\",\"requires_approval\":false,\"mutates_source\":false,\"default_timeout_seconds\":30,\"allowed_root_ids\":[\"pod-client\"],\"available\":true,\"blocked_reasons\":[]}],\"lifecycle\":[\"request.persisted\"],\"guarantees\":[\"AgentRun first\"]}"
 
     private static let workbenchOperationJSON = #"{"id":"run-c9","ticket_id":"ticket-c9","parent_run_id":null,"trace_id":"engineering-test","status":"queued","action_id":"git.status","action_kind":"diff","root_id":"pod-client","relative_path":".","worker_lane":"engineering-host","agent_slug":"coral","requires_approval":false,"approval_id":null,"approval_status":null,"idempotency_key":"workbench-test-1","outcome":null,"evidence":"Queued","artifacts":{"engineering_request":{"root_id":"pod-client"}},"error":null,"created_at":"2026-08-18T04:00:00Z","updated_at":"2026-08-18T04:00:00Z","started_at":null,"completed_at":null}"#
+
+    private static let workControlBundle: Components.Schemas.ChatRuntimeWorkControlBundleRead = {
+        let item = Components.Schemas.ChatRuntimeWorkItemRead(
+            approvalState: "not_required",
+            bucketReason: "Current bounded work.",
+            executionEligible: true,
+            priority: "high",
+            safeTitle: "Prove Work Control",
+            sourceRefs: .init(),
+            stale: false,
+            status: "open",
+            updatedAt: Date(timeIntervalSince1970: 1_787_000_000),
+            workBucket: .current,
+            workId: "ticket-runtime",
+            workKind: .ticket
+        )
+        let approval = Components.Schemas.ChatRuntimeWorkApprovalRead(
+            actionType: "sign_standard",
+            approvalId: "approval-release",
+            authority: "aloha",
+            authorizationReason: "Aloha is the registered authority.",
+            createdAt: Date(timeIntervalSince1970: 1_787_000_000),
+            decisionEndpoint: "/api/v1/approvals/approval-release",
+            linkedTaskIds: [],
+            linkedTicketIds: ["ticket-runtime"],
+            noCascade: false,
+            resolutionEnabled: true,
+            selfApprovalProhibited: false,
+            stale: false,
+            staleAfterHours: 72,
+            status: .pending,
+            targetRef: "ticket-runtime",
+            targetType: "ticket",
+            viewerAuthorized: true
+        )
+        let counts = Components.Schemas.ChatRuntimeWorkControlCountsRead(
+            activeWorkerRuns: 0,
+            approvalInventory: 1,
+            approvalQueue: 1,
+            assignedWork: 1,
+            blockingOthers: 1,
+            fishBlocked: 0,
+            fishProducing: 0,
+            historicalWork: 0,
+            plannerItems: 0,
+            projectTasks: 0,
+            protectedWork: 0,
+            readyNow: 1,
+            researchActiveRequests: 0,
+            researchAwaitingReview: 0,
+            staleWork: 0,
+            toolsDeclared: 1,
+            waitingOnMe: 1,
+            waitingOnOthers: 0,
+            workerReviewRuns: 0
+        )
+        return .init(
+            agentId: "agent-coral",
+            agentKey: "coral",
+            approvalInventory: [approval],
+            approvalQueue: [approval],
+            assignedWork: [item],
+            authority: .orca,
+            bundleSha256: String(repeating: "d", count: 64),
+            configurationSha256: String(repeating: "a", count: 64),
+            contractVersion: .orca_workControlBundle_v1,
+            generatedAt: Date(timeIntervalSince1970: 1_787_000_000),
+            historicalWork: [],
+            mode: .readOnly,
+            protectedWork: [],
+            readyNow: [item],
+            resources: .init(counts: counts),
+            runtimeManifestRevision: "2026-08-21.1",
+            sourceContract: .orca_agentWorkbench_v1,
+            waitingOnOthers: []
+        )
+    }()
 }

@@ -572,6 +572,23 @@ func credentialRedirectsAreNeverFollowed(status: Int) throws {
     )
 }
 
+@Test func workControlProjectionPreservesCanonicalCountsAndIdentifiers() {
+    let approval = canonicalWorkApproval()
+    let bundle = canonicalWorkControlBundle(
+        approvalInventory: [approval],
+        approvalQueue: [approval]
+    )
+    let projection = OrcaWorkControlProjection(bundle)
+
+    #expect(projection.agentKey == "coral")
+    #expect(projection.counts.assigned == bundle.resources.counts.assignedWork)
+    #expect(projection.counts.readyNow == bundle.resources.counts.readyNow)
+    #expect(projection.readyNow.map(\.id) == (bundle.readyNow ?? []).map(\.workId))
+    #expect(projection.approvals.map(\.id) == [approval.approvalId])
+    #expect(projection.sourceContract == "orca.agent-workbench.v1")
+    #expect(projection.resourceEndpoints["workbench"] == "/api/v1/agent/workbench")
+}
+
 @Test func workControlRejectsProtectedOrStaleReadyWork() throws {
     var protectedBundle = canonicalWorkControlBundle()
     protectedBundle.readyNow?[0].workBucket = .protected

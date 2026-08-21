@@ -34,6 +34,7 @@ final class OrcaMacModel {
     var isApplyingMemoryProposal = false
     var runtimeEvidenceError: String?
     var providerControl: Components.Schemas.ChatRuntimeProviderControlBundleRead?
+    var workControl: OrcaWorkControlProjection?
     var providerControlError: String?
     var isLoadingProviderControl = false
     var selectedWorkbenchPane: WorkbenchPane = .workspace
@@ -304,6 +305,14 @@ final class OrcaMacModel {
         Task { await refreshCurrentSurface(silent: true) }
     }
 
+    func selectWorkControlAgent(_ id: String) {
+        guard agents.contains(where: { $0.id == id }) else { return }
+        selectedAgentID = id
+        selectedRecordID = nil
+        defaults.set(id, forKey: "orca.mac.selected-agent")
+        Task { await refreshSelectedSection(silent: true) }
+    }
+
     func selectRecord(_ id: String?) {
         selectedRecordID = id
     }
@@ -315,7 +324,15 @@ final class OrcaMacModel {
         let section = selectedSection
         isLoadingSection = true
         do {
-            let snapshot = try await consoleService.snapshot(for: section)
+            let bundle: Components.Schemas.ChatRuntimeWorkControlBundleRead?
+            if section == .work {
+                guard let service else { throw OrcaConsoleServiceError.invalidResponse }
+                bundle = try await service.workControl(agentKey: selectedAgentID)
+                workControl = bundle.map(OrcaWorkControlProjection.init)
+            } else {
+                bundle = nil
+            }
+            let snapshot = try await consoleService.snapshot(for: section, workControl: bundle)
             sectionSnapshots[section] = snapshot
             sectionError = nil
             lastUpdatedAt = snapshot.updatedAt

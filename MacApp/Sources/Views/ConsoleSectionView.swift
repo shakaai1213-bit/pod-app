@@ -38,6 +38,16 @@ struct ConsoleSectionView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            if section == .work {
+                Picker("Agent", selection: workControlAgentSelection) {
+                    ForEach(model.agents) { agent in
+                        Text(agent.name).tag(agent.id)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 130)
+                .help("Choose named agent work control")
+            }
             if model.isLoadingSection {
                 ProgressView()
                     .controlSize(.small)
@@ -142,6 +152,13 @@ struct ConsoleSectionView: View {
         Binding(
             get: { model.selectedRecordID },
             set: { model.selectRecord($0) }
+        )
+    }
+
+    private var workControlAgentSelection: Binding<String> {
+        Binding(
+            get: { model.selectedAgentID },
+            set: { model.selectWorkControlAgent($0) }
         )
     }
 
