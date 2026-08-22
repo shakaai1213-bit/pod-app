@@ -21,6 +21,7 @@
 		901A4937A12ACC20DEA8591A /* ConsoleInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67A66FA57C2B25C9565C0BFC /* ConsoleInspectorView.swift */; };
 		99FBE414128793480ED47BF5 /* OrcaRuntimeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E16FB299A152B526B16103E9 /* OrcaRuntimeService.swift */; };
 		9EFDDCA5ABF5BA2B1C232E8A /* OrcaRuntimeContracts in Frameworks */ = {isa = PBXBuildFile; productRef = 116C04D573F5CD68638491FC /* OrcaRuntimeContracts */; };
+		A03A6C6CF62234FC521D488A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 993C2B98225C7EEE3B079D3D /* Assets.xcassets */; };
 		BC491EE8A8B70D534B5D8692 /* OrcaDesign in Frameworks */ = {isa = PBXBuildFile; productRef = 13AA3545C2091927933F5E71 /* OrcaDesign */; };
 		C82CAA1241F1EC815FC46901 /* EngineeringWorkbenchInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98F96012807E65FDD9205D1F /* EngineeringWorkbenchInspectorView.swift */; };
 		C8422182A7AC9EE7B9C37059 /* OrcaMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AD237E2711945CDB9595F40 /* OrcaMacApp.swift */; };
@@ -60,6 +61,7 @@
 		899EEF8FAFC5B303A787CD4E /* OrcaMacModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrcaMacModel.swift; sourceTree = "<group>"; };
 		95DC6E995F1BAAFDE0312D01 /* OrcaRuntimeContracts */ = {isa = PBXFileReference; lastKnownFileType = folder; name = OrcaRuntimeContracts; path = ../Packages/OrcaRuntimeContracts; sourceTree = SOURCE_ROOT; };
 		98F96012807E65FDD9205D1F /* EngineeringWorkbenchInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineeringWorkbenchInspectorView.swift; sourceTree = "<group>"; };
+		993C2B98225C7EEE3B079D3D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		9C2A8295BDFAF1CEDA0E7203 /* OrcaMacModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrcaMacModelTests.swift; sourceTree = "<group>"; };
 		ADCFAE90923B128D54DB1670 /* RuntimeSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeSettingsView.swift; sourceTree = "<group>"; };
 		C163B310FD43803FA2A73249 /* OrcaNativeAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrcaNativeAuthService.swift; sourceTree = "<group>"; };
@@ -148,10 +150,19 @@
 			isa = PBXGroup;
 			children = (
 				2CBB4234ED0FC4EC97429DA4 /* Packages */,
+				D149BF9E69E01A3370B45835 /* Resources */,
 				1731FE9A3C8AAC193DE8B15C /* Sources */,
 				809EA961BE03F8A8CF27F377 /* Tests */,
 				AA8C30B3ACA081735A53DBAF /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		D149BF9E69E01A3370B45835 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				993C2B98225C7EEE3B079D3D /* Assets.xcassets */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 		DCD4C2A367541216743CE7A4 /* App */ = {
@@ -198,6 +209,7 @@
 			buildConfigurationList = 1AA71174273782950BCA5B45 /* Build configuration list for PBXNativeTarget "OrcaMac" */;
 			buildPhases = (
 				38ACB733076C30477EA469E4 /* Sources */,
+				79566B9E90EE546BAD85D260 /* Resources */,
 				E282588B48BD56189CC3D79D /* Frameworks */,
 			);
 			buildRules = (
@@ -275,6 +287,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		79566B9E90EE546BAD85D260 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A03A6C6CF62234FC521D488A /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		38ACB733076C30477EA469E4 /* Sources */ = {
