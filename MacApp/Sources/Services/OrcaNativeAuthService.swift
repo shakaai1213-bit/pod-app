@@ -131,15 +131,25 @@ actor OrcaNativeAuthService {
     private let devicePublicKey: String
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
+    private var refreshInFlight: (id: UUID, task: Task<RuntimeCredential, Error>)?
 
-    init(serverURL: URL, tokenStore: any RuntimeTokenStoring, session: URLSession? = nil) throws {
+    init(
+        serverURL: URL,
+        tokenStore: any RuntimeTokenStoring,
+        session: URLSession? = nil,
+        signingKey: Curve25519.Signing.PrivateKey? = nil
+    ) throws {
         self.serverURL = serverURL
         serverOrigin = OrcaServerOrigin.normalized(serverURL) ?? ""
         self.tokenStore = tokenStore
         self.session = session ?? OrcaSecureURLSession.make()
-        signingKey = try OrcaDeviceIdentity.privateKey()
-        deviceID = OrcaDeviceIdentity.deviceID(signingKey)
-        devicePublicKey = OrcaDeviceIdentity.publicKey(signingKey)
+        if let signingKey {
+            self.signingKey = signingKey
+        } else {
+            self.signingKey = try OrcaDeviceIdentity.privateKey()
+        }
+        deviceID = OrcaDeviceIdentity.deviceID(self.signingKey)
+        devicePublicKey = OrcaDeviceIdentity.publicKey(self.signingKey)
         encoder = JSONEncoder()
         encoder.keyEncodingStrategy = .convertToSnakeCase
         decoder = JSONDecoder()
@@ -164,17 +174,60 @@ actor OrcaNativeAuthService {
             throw OrcaNativeAuthError.missingSession
         }
         if credential.needsRefresh {
-            let proof = try await proof(operation: "refresh", token: credential.refreshToken)
-            let response = try await post("/api/v1/auth/refresh", RefreshRequest(
-                refreshToken: credential.refreshToken, deviceId: proof.deviceId,
-                clientId: proof.clientId, devicePublicKey: proof.devicePublicKey,
-                challengeNonce: proof.challengeNonce, deviceSignature: proof.deviceSignature
-            ))
-            guard response.organizationId == credential.organizationID else { throw OrcaNativeAuthError.invalidResponse }
-            try await store(response)
-            return response.accessToken
+            return try await refreshedCredential(from: credential).accessToken
         }
         return credential.accessToken
+    }
+
+    private func refreshedCredential(from credential: RuntimeCredential) async throws -> RuntimeCredential {
+        if let refreshInFlight {
+            return try await refreshInFlight.task.value
+        }
+
+        let id = UUID()
+        let task = Task { try await self.performRefresh(credential) }
+        refreshInFlight = (id, task)
+        do {
+            let refreshed = try await task.value
+            clearRefreshTask(id: id)
+            return refreshed
+        } catch {
+            clearRefreshTask(id: id)
+            if case let OrcaNativeAuthError.rejected(status, _) = error,
+               status == 401 || status == 403 {
+                try? await tokenStore.deleteCredential(for: serverOrigin)
+                throw OrcaNativeAuthError.missingSession
+            }
+            throw error
+        }
+    }
+
+    private func performRefresh(_ credential: RuntimeCredential) async throws -> RuntimeCredential {
+        let proof = try await proof(operation: "refresh", token: credential.refreshToken)
+        let response = try await post("/api/v1/auth/refresh", RefreshRequest(
+            refreshToken: credential.refreshToken, deviceId: proof.deviceId,
+            clientId: proof.clientId, devicePublicKey: proof.devicePublicKey,
+            challengeNonce: proof.challengeNonce, deviceSignature: proof.deviceSignature
+        ))
+        guard response.organizationId == credential.organizationID else {
+            throw OrcaNativeAuthError.invalidResponse
+        }
+        let refreshed = RuntimeCredential(
+            accessToken: response.accessToken,
+            refreshToken: response.refreshToken,
+            expiresAt: Date().addingTimeInterval(TimeInterval(response.expiresIn)),
+            clientID: Self.clientID,
+            deviceID: deviceID,
+            serverOrigin: serverOrigin,
+            organizationID: response.organizationId
+        )
+        try await tokenStore.storeCredential(refreshed)
+        return refreshed
+    }
+
+    private func clearRefreshTask(id: UUID) {
+        guard refreshInFlight?.id == id else { return }
+        refreshInFlight = nil
     }
 
     func logout() async throws {

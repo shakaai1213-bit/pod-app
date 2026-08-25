@@ -1,3 +1,4 @@
+import CryptoKit
 import XCTest
 import OrcaAPI
 import OrcaRuntimeContracts
@@ -20,11 +21,17 @@ private actor TestRuntimeTokenStore: RuntimeTokenStoring {
         }
     }
 
+    init(credential: RuntimeCredential?) {
+        self.credential = credential
+    }
+
     func loadCredential(for serverOrigin: String) -> RuntimeCredential? {
         credential?.serverOrigin == serverOrigin ? credential : nil
     }
     func storeCredential(_ credential: RuntimeCredential) { self.credential = credential }
     func deleteCredential(for serverOrigin: String) { credential = nil }
+
+    func setCredential(_ credential: RuntimeCredential?) { self.credential = credential }
 }
 
 private final class TestURLProtocol: URLProtocol {
@@ -388,6 +395,58 @@ final class OrcaMacModelTests: XCTestCase {
 
         XCTAssertEqual(oldRuntime, .upgradeRequired)
         XCTAssertEqual(currentRuntime, .available)
+    }
+
+    func testNativeAuthCoalescesConcurrentRefreshes() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let lock = NSLock()
+        var challengeCount = 0
+        var refreshCount = 0
+        TestURLProtocol.response = { request in
+            switch request.url?.path {
+            case "/api/v1/auth/native/challenge":
+                lock.withLock { challengeCount += 1 }
+                return (200, Data(#"{"nonce":"single-flight-nonce"}"#.utf8))
+            case "/api/v1/auth/refresh":
+                lock.withLock { refreshCount += 1 }
+                Thread.sleep(forTimeInterval: 0.05)
+                return (200, Data(#"{"access_token":"fresh-access","refresh_token":"fresh-refresh","expires_in":3600,"organization_id":"test-organization"}"#.utf8))
+            default:
+                return (404, Data(#"{"detail":"not found"}"#.utf8))
+            }
+        }
+        defer { TestURLProtocol.response = nil }
+
+        let store = TestRuntimeTokenStore(credential: nil)
+        let auth = try OrcaNativeAuthService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: store,
+            session: session,
+            signingKey: Curve25519.Signing.PrivateKey()
+        )
+        let deviceID = await auth.boundDeviceID()
+        await store.setCredential(RuntimeCredential(
+            accessToken: "expired-access",
+            refreshToken: "rotating-refresh",
+            expiresAt: Date().addingTimeInterval(-60),
+            clientID: OrcaNativeAuthService.clientID,
+            deviceID: deviceID,
+            serverOrigin: "http://127.0.0.1:8000",
+            organizationID: "test-organization"
+        ))
+
+        let tokens = try await withThrowingTaskGroup(of: String.self) { group in
+            for _ in 0..<8 {
+                group.addTask { try await auth.validAccessToken() }
+            }
+            return try await group.reduce(into: []) { $0.append($1) }
+        }
+
+        XCTAssertEqual(Set(tokens), ["fresh-access"])
+        XCTAssertEqual(lock.withLock { challengeCount }, 1)
+        XCTAssertEqual(lock.withLock { refreshCount }, 1)
     }
 
     func testWorkbenchServiceUsesTypedTicketBoundRequests() async throws {
