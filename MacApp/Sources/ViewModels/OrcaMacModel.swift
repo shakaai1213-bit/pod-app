@@ -210,6 +210,10 @@ final class OrcaMacModel {
             if !agents.contains(where: { $0.id == selectedAgentID }) {
                 selectedAgentID = agents[0].id
             }
+            let channelIDs = try await nextConsoleService.directAgentChannelIDs(
+                allowedAgentIDs: Set(agents.map(\.id))
+            )
+            hydrateCanonicalConversationIDs(channelIDs)
             contractVersion = compatibility.contractVersion
             schemaSHA256 = compatibility.schemaSHA256
             connectionState = .ready
@@ -786,6 +790,22 @@ final class OrcaMacModel {
             where key.hasPrefix("orca.mac.conversation.")
                 && !key.hasPrefix("orca.mac.conversation.v2.") {
             defaults.removeObject(forKey: key)
+        }
+    }
+
+    func hydrateCanonicalConversationIDs(_ channelIDs: [String: String]) {
+        guard conversationScope != nil else { return }
+        for agent in agents {
+            guard let canonicalID = channelIDs[agent.id], !canonicalID.isEmpty else { continue }
+            let current = conversations[agent.id]
+            if current?.conversationID == canonicalID {
+                storeConversationID(canonicalID, for: agent.id)
+                continue
+            }
+            conversations[agent.id] = ConversationState(conversationID: canonicalID)
+            runtimeTurns.removeValue(forKey: agent.id)
+            conversationMemories.removeValue(forKey: agent.id)
+            storeConversationID(canonicalID, for: agent.id)
         }
     }
 

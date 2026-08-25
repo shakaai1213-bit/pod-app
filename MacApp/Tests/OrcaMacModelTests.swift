@@ -275,6 +275,99 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertNotEqual(orgAKey, orgBKey)
     }
 
+    func testCanonicalChannelHydrationReplacesStaleLocalPointer() {
+        let suiteName = "OrcaMacModelTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let origin = "http://100.104.72.62:8000"
+        let key = OrcaMacModel.conversationDefaultsKey(
+            origin: origin,
+            organizationID: "canonical-organization",
+            agentID: "coral"
+        )
+        defaults.set("stale-local-channel", forKey: key)
+        let model = OrcaMacModel(
+            tokenStore: TestRuntimeTokenStore(token: nil),
+            defaults: defaults
+        )
+        model.activateConversationScope(
+            origin: origin,
+            organizationID: "canonical-organization"
+        )
+        model.conversations["coral"] = ConversationState(
+            conversationID: "stale-local-channel"
+        )
+
+        model.hydrateCanonicalConversationIDs(["coral": "orca-canonical-channel"])
+
+        XCTAssertEqual(model.conversations["coral"]?.conversationID, "orca-canonical-channel")
+        XCTAssertEqual(defaults.string(forKey: key), "orca-canonical-channel")
+    }
+
+    func testConsoleDiscoversOnlyCanonicalNamedAgentChannels() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        TestURLProtocol.response = { request in
+            XCTAssertEqual(request.httpMethod, "GET")
+            XCTAssertEqual(request.url?.path, "/api/v1/chat/channels")
+            return (200, Data(#"""
+            [
+              {"id":"00000000-0000-4000-8000-000000000001","name":"direct:coral","type":"direct","channel_purpose":"direct_agent"},
+              {"id":"00000000-0000-4000-8000-000000000002","name":"direct:maui","type":"direct","channel_purpose":"direct_agent"},
+              {"id":"00000000-0000-4000-8000-000000000003","name":"team","type":"general","channel_purpose":"general"},
+              {"id":"00000000-0000-4000-8000-000000000004","name":"direct:unknown","type":"direct","channel_purpose":"direct_agent"}
+            ]
+            """#.utf8))
+        }
+        defer { TestURLProtocol.response = nil }
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+
+        let channels = try await service.directAgentChannelIDs(
+            allowedAgentIDs: ["coral", "maui"]
+        )
+
+        XCTAssertEqual(channels, [
+            "coral": "00000000-0000-4000-8000-000000000001",
+            "maui": "00000000-0000-4000-8000-000000000002",
+        ])
+    }
+
+    func testConsoleRejectsDuplicateCanonicalAgentChannels() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        TestURLProtocol.response = { _ in
+            (200, Data(#"""
+            [
+              {"id":"00000000-0000-4000-8000-000000000001","name":"direct:coral","type":"direct","channel_purpose":"direct_agent"},
+              {"id":"00000000-0000-4000-8000-000000000002","name":"direct:coral","type":"direct","channel_purpose":"direct_agent"}
+            ]
+            """#.utf8))
+        }
+        defer { TestURLProtocol.response = nil }
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+
+        do {
+            _ = try await service.directAgentChannelIDs(allowedAgentIDs: ["coral"])
+            XCTFail("Duplicate canonical channels must fail closed")
+        } catch let error as OrcaConsoleServiceError {
+            guard case .invalidResponse = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+    }
+
     func testRuntimeContractProbeSeparatesUpgradeFromCredentialGate() async {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [TestURLProtocol.self]

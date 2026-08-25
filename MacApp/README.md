@@ -12,7 +12,8 @@ provider credentials.
 - seven named-agent conversation lanes;
 - Runtime API v1 compatibility handshake;
 - Keychain-backed ORCA client credential;
-- persisted conversation identifiers per agent;
+- server-discovered canonical direct-agent channels shared with Pod, with
+  organization-scoped local persistence;
 - canonical message refresh and duplicate-safe merge;
 - visible route and trace receipts;
 - Mac-native sidebar, list/detail views, conversation, inspector, settings,

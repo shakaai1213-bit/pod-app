@@ -314,6 +314,29 @@ actor OrcaConsoleService {
         )
     }
 
+    func directAgentChannelIDs(
+        allowedAgentIDs: Set<String>
+    ) async throws -> [String: String] {
+        let channels: [ConsoleChatChannelReference] = try await requestJSON(
+            method: "GET",
+            path: "/api/v1/chat/channels"
+        )
+        var output: [String: String] = [:]
+        for channel in channels {
+            guard channel.type == "direct",
+                  channel.channelPurpose == "direct_agent",
+                  channel.name.hasPrefix("direct:"),
+                  UUID(uuidString: channel.id) != nil else { continue }
+            let agentID = String(channel.name.dropFirst("direct:".count)).lowercased()
+            guard allowedAgentIDs.contains(agentID) else { continue }
+            if let existing = output[agentID], existing != channel.id {
+                throw OrcaConsoleServiceError.invalidResponse
+            }
+            output[agentID] = channel.id
+        }
+        return output
+    }
+
     private func get(_ path: String) async throws -> ConsoleJSON {
         let data = try await requestData(method: "GET", path: path)
         let value = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
@@ -494,5 +517,17 @@ actor OrcaConsoleService {
             if let value = object[key]?.displayValue, !value.isEmpty { return value }
         }
         return nil
+    }
+}
+
+private struct ConsoleChatChannelReference: Decodable {
+    let id: String
+    let name: String
+    let type: String
+    let channelPurpose: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, type
+        case channelPurpose = "channel_purpose"
     }
 }
