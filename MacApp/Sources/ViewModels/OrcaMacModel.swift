@@ -59,6 +59,7 @@ final class OrcaMacModel {
     @ObservationIgnored private var authService: OrcaNativeAuthService?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var providerRefreshTask: Task<Void, Never>?
+    @ObservationIgnored private var connectInFlight: (id: UUID, task: Task<Void, Never>)?
     @ObservationIgnored private var conversationScope: (origin: String, organizationID: String)?
 
     init(
@@ -147,6 +148,24 @@ final class OrcaMacModel {
     }
 
     func connect() async {
+        if let connectInFlight {
+            await connectInFlight.task.value
+            return
+        }
+
+        let id = UUID()
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.performConnect()
+        }
+        connectInFlight = (id, task)
+        await task.value
+        if connectInFlight?.id == id {
+            connectInFlight = nil
+        }
+    }
+
+    private func performConnect() async {
         refreshTask?.cancel()
         providerRefreshTask?.cancel()
         guard let endpoint = Self.normalizedEndpoint(serverAddress) else {
