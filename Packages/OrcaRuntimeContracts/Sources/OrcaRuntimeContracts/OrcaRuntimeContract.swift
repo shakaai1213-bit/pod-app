@@ -34,7 +34,21 @@ struct OrcaAPIDateTranscoder: DateTranscoder {
         do {
             return try fractional.decode(value)
         } catch {
-            return try standard.decode(value)
+            do {
+                return try standard.decode(value)
+            } catch {
+                guard value.range(
+                    of: #"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$"#,
+                    options: .regularExpression
+                ) != nil else {
+                    throw error
+                }
+                let assumedUTC = "\(value)Z"
+                if value.contains(".") {
+                    return try fractional.decode(assumedUTC)
+                }
+                return try standard.decode(assumedUTC)
+            }
         }
     }
 }

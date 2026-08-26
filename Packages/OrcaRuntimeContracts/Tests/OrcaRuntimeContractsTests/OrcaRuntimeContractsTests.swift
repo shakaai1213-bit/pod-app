@@ -9,9 +9,13 @@ func runtimeDateTranscoderAcceptsORCAFormats() throws {
     let transcoder = OrcaAPIDateTranscoder()
     let whole = try transcoder.decode("2026-08-26T17:24:52Z")
     let fractional = try transcoder.decode("2026-08-26T17:24:52.123456+00:00")
+    let bareUTC = try transcoder.decode("2026-08-26T17:24:52.123456")
+    let bareWholeUTC = try transcoder.decode("2026-08-26T17:24:52")
 
     #expect(whole.timeIntervalSince1970 == 1_787_765_092)
     #expect(abs(fractional.timeIntervalSince1970 - 1_787_765_092.123456) < 0.001)
+    #expect(bareUTC == fractional)
+    #expect(bareWholeUTC == whole)
     #expect(try transcoder.decode(transcoder.encode(fractional)) == fractional)
 }
 
