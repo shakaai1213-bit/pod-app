@@ -4,6 +4,17 @@ import OpenAPIRuntime
 import Testing
 @testable import OrcaRuntimeContracts
 
+@Test("ORCA runtime dates accept fractional and whole-second ISO-8601")
+func runtimeDateTranscoderAcceptsORCAFormats() throws {
+    let transcoder = OrcaAPIDateTranscoder()
+    let whole = try transcoder.decode("2026-08-26T17:24:52Z")
+    let fractional = try transcoder.decode("2026-08-26T17:24:52.123456+00:00")
+
+    #expect(whole.timeIntervalSince1970 == 1_787_765_092)
+    #expect(abs(fractional.timeIntervalSince1970 - 1_787_765_092.123456) < 0.001)
+    #expect(try transcoder.decode(transcoder.encode(fractional)) == fractional)
+}
+
 private func canonicalTurn() throws -> Components.Schemas.ChatRuntimeTurnRead {
     let fixtureURL = try #require(
         Bundle.module.url(

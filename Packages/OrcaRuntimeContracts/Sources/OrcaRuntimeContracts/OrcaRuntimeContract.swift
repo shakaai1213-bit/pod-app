@@ -13,9 +13,29 @@ public enum OrcaRuntimeContract: Sendable {
     ) -> Client {
         Client(
             serverURL: serverURL,
+            configuration: .init(dateTranscoder: OrcaAPIDateTranscoder()),
             transport: URLSessionTransport(configuration: .init(session: session)),
             middlewares: middlewares
         )
+    }
+}
+
+struct OrcaAPIDateTranscoder: DateTranscoder {
+    private let standard = ISO8601DateTranscoder()
+    private let fractional = ISO8601DateTranscoder(
+        options: [.withInternetDateTime, .withFractionalSeconds]
+    )
+
+    func encode(_ date: Date) throws -> String {
+        try fractional.encode(date)
+    }
+
+    func decode(_ value: String) throws -> Date {
+        do {
+            return try fractional.decode(value)
+        } catch {
+            return try standard.decode(value)
+        }
     }
 }
 
