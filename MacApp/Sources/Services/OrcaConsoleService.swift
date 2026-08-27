@@ -253,20 +253,12 @@ actor OrcaConsoleService {
         )
     }
 
-    func workbenchTickets() async throws -> [WorkbenchTicketSummary] {
-        let value = try await get("/api/v1/tickets")
-        return collection(value, keys: ["items", "tickets"]).compactMap { object in
-            guard let id = field(object, keys: ["id"]),
-                  let title = field(object, keys: ["title"]) else { return nil }
-            return WorkbenchTicketSummary(
-                id: id,
-                title: title,
-                status: field(object, keys: ["status"]) ?? "unknown",
-                flowState: field(object, keys: ["flow_state"]),
-                priority: field(object, keys: ["priority"]),
-                nextAction: field(object, keys: ["next_action", "blocked_on"])
-            )
-        }
+    func workbenchTickets(agentSlug: String) async throws -> [WorkbenchTicketSummary] {
+        let tickets: [WorkbenchTicketSummary] = try await requestJSON(
+            method: "GET",
+            path: "/api/v1/engineering-workbench/tickets?agent_slug=\(agentSlug)"
+        )
+        return tickets
         .sorted { left, right in
             let leftTerminal = ["closed", "cancelled"].contains(left.status.lowercased())
             let rightTerminal = ["closed", "cancelled"].contains(right.status.lowercased())

@@ -406,7 +406,7 @@ final class OrcaMacModel {
         defer { isLoadingWorkbench = false }
         do {
             async let contract = consoleService.workbenchContract(agentSlug: selectedAgentID)
-            async let tickets = consoleService.workbenchTickets()
+            async let tickets = consoleService.workbenchTickets(agentSlug: selectedAgentID)
             let (nextContract, nextTickets) = try await (contract, tickets)
             workbenchContract = nextContract
             workbenchTickets = nextTickets

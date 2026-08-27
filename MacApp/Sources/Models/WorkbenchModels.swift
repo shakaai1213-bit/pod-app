@@ -42,11 +42,20 @@ enum WorkbenchPane: String, CaseIterable, Identifiable {
     }
 }
 
-struct WorkbenchTicketSummary: Identifiable, Equatable, Sendable {
+struct WorkbenchTicketSummary: Decodable, Identifiable, Equatable, Sendable {
     let id: String
     let title: String
     let status: String
     let flowState: String?
     let priority: String?
     let nextAction: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case status
+        case flowState = "flow_state"
+        case priority
+        case nextAction = "next_action"
+    }
 }

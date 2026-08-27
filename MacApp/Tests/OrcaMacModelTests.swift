@@ -458,7 +458,8 @@ final class OrcaMacModelTests: XCTestCase {
             XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer console-token")
             XCTAssertFalse(request.value(forHTTPHeaderField: "X-ORCA-Device-ID")?.isEmpty ?? true)
             switch (request.httpMethod, request.url?.path) {
-            case ("GET", "/api/v1/tickets"):
+            case ("GET", "/api/v1/engineering-workbench/tickets"):
+                XCTAssertEqual(request.url?.query, "agent_slug=coral")
                 return (200, Data(#"[{"id":"ticket-c9","title":"Desktop Workbench","status":"open","flow_state":"in_progress","priority":"P1"}]"#.utf8))
             case ("GET", "/api/v1/engineering-workbench/contract"):
                 XCTAssertEqual(request.url?.query, "agent_slug=coral")
@@ -501,7 +502,7 @@ final class OrcaMacModelTests: XCTestCase {
             session: session
         )
 
-        let tickets = try await service.workbenchTickets()
+        let tickets = try await service.workbenchTickets(agentSlug: "coral")
         let contract = try await service.workbenchContract(agentSlug: "coral")
         let workbench = try await service.workbenchSession(
             ticketID: "ticket-c9",
