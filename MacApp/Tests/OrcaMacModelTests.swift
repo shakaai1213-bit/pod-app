@@ -197,6 +197,12 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertFalse(ConsoleSection.work.isProtected)
     }
 
+    func testConsoleWorkSeparatesPortfolioFromAgentQueue() {
+        XCTAssertEqual(ConsoleWorkMode.allCases.map(\.rawValue), ["portfolio", "agentWork"])
+        XCTAssertEqual(ConsoleWorkMode.portfolio.title, "Portfolio")
+        XCTAssertEqual(ConsoleWorkMode.agentWork.title, "Agent Work")
+    }
+
     func testWorkbenchPaneBarFitsTheMinimumContentColumn() {
         let panes = WorkbenchPane.allCases
 

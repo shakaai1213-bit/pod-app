@@ -35,6 +35,13 @@ final class OrcaMacModel {
     var runtimeEvidenceError: String?
     var providerControl: Components.Schemas.ChatRuntimeProviderControlBundleRead?
     var workControl: OrcaWorkControlProjection?
+    var workMode: ConsoleWorkMode = .portfolio
+    var boards: [OrcaBoardDirectoryItem] = []
+    var boardPlansByID: [UUID: OrcaBoardPlan] = [:]
+    var selectedBoardID: UUID?
+    var boardPlan: OrcaBoardPlan?
+    var isLoadingBoardPlan = false
+    var boardPlanError: String?
     var providerControlError: String?
     var isLoadingProviderControl = false
     var selectedWorkbenchPane: WorkbenchPane = .workspace
@@ -336,6 +343,21 @@ final class OrcaMacModel {
         Task { await refreshSelectedSection(silent: true) }
     }
 
+    func selectWorkMode(_ mode: ConsoleWorkMode) {
+        workMode = mode
+        selectedRecordID = nil
+        if mode == .portfolio, boardPlan == nil {
+            Task { await refreshBoardPortfolio(silent: true) }
+        }
+    }
+
+    func selectBoard(_ id: UUID) {
+        guard boards.contains(where: { $0.id == id }) else { return }
+        selectedBoardID = id
+        boardPlan = nil
+        Task { await refreshSelectedBoardPlan(silent: true) }
+    }
+
     func selectRecord(_ id: String?) {
         selectedRecordID = id
     }
@@ -363,11 +385,85 @@ final class OrcaMacModel {
                !snapshot.records.contains(where: { $0.id == selectedRecordID }) {
                 self.selectedRecordID = nil
             }
+            if section == .work {
+                await refreshBoardPortfolio(silent: true)
+            }
         } catch {
             sectionError = error.localizedDescription
             if !silent { presentedError = error.localizedDescription }
         }
         isLoadingSection = false
+    }
+
+    func refreshBoardPortfolio(silent: Bool = false) async {
+        guard let consoleService, !isLoadingBoardPlan else { return }
+        isLoadingBoardPlan = true
+        defer { isLoadingBoardPlan = false }
+        do {
+            let directory = try await consoleService.boardDirectory()
+            boards = directory.items
+                .filter { !$0.isProtected }
+                .sorted { left, right in
+                    if left.slug == "pod" { return true }
+                    if right.slug == "pod" { return false }
+                    return left.displayName.localizedCaseInsensitiveCompare(right.displayName) == .orderedAscending
+                }
+            if selectedBoardID == nil || !boards.contains(where: { $0.id == selectedBoardID }) {
+                selectedBoardID = boards.first(where: { $0.slug == "pod" })?.id ?? boards.first?.id
+            }
+            boardPlansByID = await loadProductBoardPlans(
+                service: consoleService,
+                boards: Array(boards.filter(\.isProduct).prefix(6))
+            )
+            try await loadSelectedBoardPlan()
+            boardPlanError = nil
+        } catch {
+            boardPlanError = error.localizedDescription
+            if !silent { presentedError = error.localizedDescription }
+        }
+    }
+
+    func refreshSelectedBoardPlan(silent: Bool = false) async {
+        guard !isLoadingBoardPlan else { return }
+        isLoadingBoardPlan = true
+        defer { isLoadingBoardPlan = false }
+        do {
+            try await loadSelectedBoardPlan()
+            boardPlanError = nil
+        } catch {
+            boardPlanError = error.localizedDescription
+            if !silent { presentedError = error.localizedDescription }
+        }
+    }
+
+    private func loadSelectedBoardPlan() async throws {
+        guard let consoleService, let selectedBoardID else {
+            boardPlan = nil
+            return
+        }
+        if let cached = boardPlansByID[selectedBoardID] {
+            boardPlan = cached
+        } else {
+            boardPlan = try await consoleService.boardPlan(boardID: selectedBoardID)
+        }
+    }
+
+    private func loadProductBoardPlans(
+        service: OrcaConsoleService,
+        boards: [OrcaBoardDirectoryItem]
+    ) async -> [UUID: OrcaBoardPlan] {
+        await withTaskGroup(of: (UUID, OrcaBoardPlan?).self) { group in
+            for board in boards {
+                group.addTask {
+                    (board.id, try? await service.boardPlan(boardID: board.id))
+                }
+            }
+            var plans: [UUID: OrcaBoardPlan] = [:]
+            for await (id, plan) in group {
+                if let plan { plans[id] = plan }
+            }
+            return plans
+        }
     }
 
     func refreshCurrentSurface(silent: Bool = false) async {

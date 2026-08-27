@@ -267,6 +267,17 @@ actor OrcaConsoleService {
         }
     }
 
+    func boardDirectory() async throws -> OrcaBoardDirectory {
+        try await requestJSON(method: "GET", path: "/api/v1/boards")
+    }
+
+    func boardPlan(boardID: UUID) async throws -> OrcaBoardPlan {
+        try await requestJSON(
+            method: "GET",
+            path: "/api/v1/management/boards/\(boardID.uuidString)/plan"
+        )
+    }
+
     func workbenchContract(agentSlug: String) async throws -> OrcaEngineeringWorkbenchContract {
         try await requestJSON(
             method: "GET",
@@ -340,7 +351,7 @@ actor OrcaConsoleService {
         path: String
     ) async throws -> Response {
         let data = try await requestData(method: method, path: path)
-        return try JSONDecoder().decode(Response.self, from: data)
+        return try Self.decoder().decode(Response.self, from: data)
     }
 
     private func requestJSON<Response: Decodable, Payload: Encodable>(
@@ -350,7 +361,38 @@ actor OrcaConsoleService {
     ) async throws -> Response {
         let body = try JSONEncoder().encode(payload)
         let data = try await requestData(method: method, path: path, body: body)
-        return try JSONDecoder().decode(Response.self, from: data)
+        return try Self.decoder().decode(Response.self, from: data)
+    }
+
+    private static func decoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let value = try container.decode(String.self)
+            let fractional = ISO8601DateFormatter()
+            fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = fractional.date(from: value) { return date }
+            let standard = ISO8601DateFormatter()
+            standard.formatOptions = [.withInternetDateTime]
+            if let date = standard.date(from: value) { return date }
+            for format in [
+                "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
+                "yyyy-MM-dd'T'HH:mm:ss.SSS",
+                "yyyy-MM-dd'T'HH:mm:ss",
+            ] {
+                let formatter = DateFormatter()
+                formatter.calendar = Calendar(identifier: .iso8601)
+                formatter.locale = Locale(identifier: "en_US_POSIX")
+                formatter.timeZone = TimeZone(secondsFromGMT: 0)
+                formatter.dateFormat = format
+                if let date = formatter.date(from: value) { return date }
+            }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Invalid ORCA date: \(value)"
+            )
+        }
+        return decoder
     }
 
     private func requestData(

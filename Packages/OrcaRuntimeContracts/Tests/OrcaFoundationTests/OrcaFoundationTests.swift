@@ -21,6 +21,26 @@ final class OrcaFoundationTests: XCTestCase {
         XCTAssertFalse(OrcaSurfaceSection.work.isProtected)
     }
 
+    func testBoardDirectoryAndPlanPreserveCanonicalIdentifiers() throws {
+        let directory = try JSONDecoder().decode(
+            OrcaBoardDirectory.self,
+            from: Data(#"{"items":[{"id":"00000000-0000-4000-8000-000000000001","slug":"pod","name":"Pod","component":"Pod","description":"[product] Native clients","project_count":3,"active_count":2,"ticket_count":5}]}"#.utf8)
+        )
+        XCTAssertEqual(directory.items.map(\.slug), ["pod"])
+        XCTAssertEqual(directory.items.first?.projectCount, 3)
+        XCTAssertTrue(directory.items.first?.isProduct == true)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let plan = try decoder.decode(
+            OrcaBoardPlan.self,
+            from: Data(#"{"computed_at":"2026-08-27T03:00:00Z","board_id":"00000000-0000-4000-8000-000000000001","board_name":"Pod","board_slug":"pod","selection_mode":"canonical","pins":[],"lanes":[{"key":"in_progress","title":"In Progress","cards":[]}],"counts":{"in_progress":0},"source_refs":["/api/v1/tickets"]}"#.utf8)
+        )
+        XCTAssertEqual(plan.boardId, directory.items.first?.id)
+        XCTAssertEqual(plan.lanes.map(\.key), ["in_progress"])
+        XCTAssertEqual(plan.sourceRefs, ["/api/v1/tickets"])
+    }
+
     func testEndpointPolicyApprovesOnlyCanonicalOrExplicitLoopback() {
         XCTAssertNotNil(OrcaEndpointPolicy.normalizedEndpoint("100.104.72.62:8000/"))
         XCTAssertNil(OrcaEndpointPolicy.normalizedEndpoint(

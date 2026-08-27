@@ -1,6 +1,15 @@
 import CoreFoundation
 import Foundation
+import OrcaAPI
 import OrcaRuntimeContracts
+
+enum ConsoleWorkMode: String, CaseIterable, Identifiable {
+    case portfolio
+    case agentWork
+
+    var id: String { rawValue }
+    var title: String { self == .portfolio ? "Portfolio" : "Agent Work" }
+}
 
 struct ConsoleMetric: Identifiable, Equatable, Sendable {
     let id: String

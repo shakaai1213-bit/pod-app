@@ -1,4 +1,5 @@
 import Foundation
+import OrcaAPI
 
 struct ManagementSourceStateDTO: Decodable, Hashable {
     let state: String
@@ -6,134 +7,14 @@ struct ManagementSourceStateDTO: Decodable, Hashable {
     let refs: [String]
 }
 
-struct ManagementEvidenceRefDTO: Decodable, Hashable {
-    let kind: String
-    let ref: String
-    let occurredAt: Date?
-    let source: String?
-
-    enum CodingKeys: String, CodingKey {
-        case kind, ref, source
-        case occurredAt = "occurred_at"
-    }
-}
-
-struct ManagementBoardDirectoryDTO: Decodable, Identifiable, Hashable {
-    let id: UUID
-    let slug: String
-    let name: String
-}
-
-struct ManagementBoardDirectoryResponseDTO: Decodable {
-    let items: [ManagementBoardDirectoryDTO]
-
-    init(from decoder: Decoder) throws {
-        if var container = try? decoder.unkeyedContainer() {
-            var result: [ManagementBoardDirectoryDTO] = []
-            while !container.isAtEnd {
-                result.append(try container.decode(ManagementBoardDirectoryDTO.self))
-            }
-            items = result
-            return
-        }
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        items = try container.decode([ManagementBoardDirectoryDTO].self, forKey: .items)
-    }
-
-    private enum CodingKeys: String, CodingKey { case items }
-}
-
-struct BoardPlanPinDTO: Decodable, Identifiable, Hashable {
-    let id: UUID
-    let boardId: UUID
-    let objectType: String
-    let objectId: UUID
-    let rank: Int
-    let createdAt: Date
-    let updatedAt: Date
-
-    enum CodingKeys: String, CodingKey {
-        case id, rank
-        case boardId = "board_id"
-        case objectType = "object_type"
-        case objectId = "object_id"
-        case createdAt = "created_at"
-        case updatedAt = "updated_at"
-    }
-}
-
-struct BoardPlanPinRequestDTO: Encodable {
-    let objectType: String
-    let objectId: UUID
-    let rank: Int
-}
-
-struct BoardPlanCardDTO: Decodable, Identifiable, Hashable {
-    let id: String
-    let objectType: String
-    let objectId: UUID
-    let title: String
-    let subtitle: String?
-    let column: String
-    let canonicalState: String
-    let priority: String?
-    let ownerAgentId: UUID?
-    let ownerName: String?
-    let waitReason: String?
-    let waitKind: String?
-    let pinned: Bool
-    let rank: Int
-    let latestEvidence: ManagementEvidenceRefDTO?
-    let evidenceState: String
-    let projectIds: [UUID]
-    let runIds: [UUID]
-    let canonicalRef: String
-
-    enum CodingKeys: String, CodingKey {
-        case id, title, subtitle, column, priority, pinned, rank
-        case objectType = "object_type"
-        case objectId = "object_id"
-        case canonicalState = "canonical_state"
-        case ownerAgentId = "owner_agent_id"
-        case ownerName = "owner_name"
-        case waitReason = "wait_reason"
-        case waitKind = "wait_kind"
-        case latestEvidence = "latest_evidence"
-        case evidenceState = "evidence_state"
-        case projectIds = "project_ids"
-        case runIds = "run_ids"
-        case canonicalRef = "canonical_ref"
-    }
-}
-
-struct BoardPlanLaneDTO: Decodable, Identifiable, Hashable {
-    let key: String
-    let title: String
-    let cards: [BoardPlanCardDTO]
-    var id: String { key }
-}
-
-struct BoardPlanResponseDTO: Decodable, Hashable {
-    let computedAt: Date
-    let boardId: UUID
-    let boardName: String
-    let boardSlug: String
-    let selectionMode: String
-    let pins: [BoardPlanPinDTO]
-    let lanes: [BoardPlanLaneDTO]
-    let counts: [String: Int]
-    let sourceRefs: [String]
-
-    enum CodingKeys: String, CodingKey {
-        case pins, lanes, counts
-        case computedAt = "computed_at"
-        case boardId = "board_id"
-        case boardName = "board_name"
-        case boardSlug = "board_slug"
-        case selectionMode = "selection_mode"
-        case sourceRefs = "source_refs"
-    }
-}
+typealias ManagementEvidenceRefDTO = OrcaEvidenceReference
+typealias ManagementBoardDirectoryDTO = OrcaBoardDirectoryItem
+typealias ManagementBoardDirectoryResponseDTO = OrcaBoardDirectory
+typealias BoardPlanPinDTO = OrcaBoardPlanPin
+typealias BoardPlanPinRequestDTO = OrcaBoardPlanPinRequest
+typealias BoardPlanCardDTO = OrcaBoardPlanCard
+typealias BoardPlanLaneDTO = OrcaBoardPlanLane
+typealias BoardPlanResponseDTO = OrcaBoardPlan
 
 struct AgentFocusItemDTO: Decodable, Identifiable, Hashable {
     let title: String
