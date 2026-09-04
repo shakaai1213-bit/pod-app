@@ -282,6 +282,15 @@ struct CaptainDecisionDTO: Decodable, Identifiable, Hashable {
     let ownerName: String?
     let waitingSince: Date
     let canonicalRef: String
+    let queueKind: String?
+    let attentionType: String?
+    let requiresCaptainDecision: Bool?
+    let itemCount: Int?
+    let protected: Bool?
+    let drillRefs: [String]?
+
+    var isCaptainDecision: Bool { requiresCaptainDecision ?? true }
+    var effectiveItemCount: Int { max(itemCount ?? 1, 1) }
 
     enum CodingKeys: String, CodingKey {
         case id, title, reason
@@ -289,6 +298,12 @@ struct CaptainDecisionDTO: Decodable, Identifiable, Hashable {
         case ownerName = "owner_name"
         case waitingSince = "waiting_since"
         case canonicalRef = "canonical_ref"
+        case queueKind = "queue_kind"
+        case attentionType = "attention_type"
+        case requiresCaptainDecision = "requires_captain_decision"
+        case itemCount = "item_count"
+        case protected
+        case drillRefs = "drill_refs"
     }
 }
 

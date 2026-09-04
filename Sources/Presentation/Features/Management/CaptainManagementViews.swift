@@ -895,30 +895,62 @@ struct LoopGaugeView: View {
 
     @ViewBuilder
     private func captainQueue(_ queue: [CaptainDecisionDTO]) -> some View {
+        let decisionCount = queue
+            .filter(\.isCaptainDecision)
+            .reduce(0) { $0 + $1.effectiveItemCount }
+        let attentionCount = queue
+            .filter { !$0.isCaptainDecision }
+            .reduce(0) { $0 + $1.effectiveItemCount }
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("CAPTAIN DECISIONS")
+                Text("WORK CONTROL")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(AppColors.textTertiary)
                 Spacer()
-                Text("\(queue.count)")
+                Text("\(decisionCount) decide · \(attentionCount) attention")
                     .font(.caption2.weight(.bold).monospacedDigit())
-                    .foregroundStyle(queue.isEmpty ? AppColors.accentSuccess : AppColors.accentWarning)
+                    .foregroundStyle(
+                        decisionCount == 0 && attentionCount == 0
+                            ? AppColors.accentSuccess
+                            : AppColors.accentWarning
+                    )
             }
             if queue.isEmpty {
-                Label("No explicit Captain gate is waiting", systemImage: "checkmark.circle.fill")
+                Label("No work-control signal is waiting", systemImage: "checkmark.circle.fill")
                     .font(.caption)
                     .foregroundStyle(AppColors.accentSuccess)
             } else {
-                ForEach(queue.prefix(4)) { item in
+                ForEach(queue.prefix(6)) { item in
                     HStack(alignment: .top, spacing: 8) {
-                        Image(systemName: "person.crop.circle.badge.exclamationmark")
-                            .foregroundStyle(AppColors.accentWarning)
+                        Image(
+                            systemName: item.isCaptainDecision
+                                ? "person.crop.circle.badge.exclamationmark"
+                                : "wrench.and.screwdriver.fill"
+                        )
+                        .foregroundStyle(
+                            item.isCaptainDecision
+                                ? AppColors.accentWarning
+                                : AppColors.accentElectric
+                        )
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(item.title)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(AppColors.textPrimary)
-                                .lineLimit(2)
+                            HStack(spacing: 5) {
+                                Text(item.isCaptainDecision ? "DECIDE" : "ATTENTION")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundStyle(
+                                        item.isCaptainDecision
+                                            ? AppColors.accentWarning
+                                            : AppColors.accentElectric
+                                    )
+                                if item.effectiveItemCount > 1 {
+                                    Text("\(item.effectiveItemCount)")
+                                        .font(.caption2.weight(.bold).monospacedDigit())
+                                        .foregroundStyle(AppColors.textTertiary)
+                                }
+                                Text(item.title)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(AppColors.textPrimary)
+                                    .lineLimit(2)
+                            }
                             Text(item.reason)
                                 .font(.caption2)
                                 .foregroundStyle(AppColors.textSecondary)

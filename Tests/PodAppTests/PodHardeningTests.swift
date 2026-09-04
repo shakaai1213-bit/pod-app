@@ -255,7 +255,25 @@ final class PodHardeningTests: XCTestCase {
                 "freshness_at":"2026-07-13T23:09:56.183641","cause":"Open canonical intake",
                 "drill_refs":["/api/v1/tickets"]
               }],
-              "captain_queue":[],
+              "captain_queue":[
+                {
+                  "id":"71a5f76b-87f4-4020-baa5-065e3107ad7e",
+                  "object_type":"approval","title":"Release approval",
+                  "reason":"Tony-only action is waiting.","owner_name":"tony",
+                  "waiting_since":"2026-07-13T23:09:56Z",
+                  "canonical_ref":"/api/v1/approvals"
+                },
+                {
+                  "id":"5c0d591c-9946-4a88-909d-ea9a2410223a",
+                  "object_type":"ticket_group","title":"12 current work items need scope review",
+                  "reason":"Scope fields need review.","owner_name":null,
+                  "waiting_since":"2026-07-13T23:09:56Z",
+                  "canonical_ref":"/api/v1/tickets/work-control/integrity",
+                  "queue_kind":"work_control_attention","attention_type":"scope_gap",
+                  "requires_captain_decision":false,"item_count":12,"protected":false,
+                  "drill_refs":["/api/v1/tickets/work-control/integrity"]
+                }
+              ],
               "source_refs":["/api/v1/lab/velocity","/api/v1/tickets"]
             }
             """#
@@ -267,7 +285,12 @@ final class PodHardeningTests: XCTestCase {
 
         XCTAssertEqual(atlas.gauge.map(\.key), ["sense"])
         XCTAssertEqual(atlas.lanes.map(\.key), ["intake"])
-        XCTAssertTrue(atlas.captainQueue.isEmpty)
+        XCTAssertEqual(atlas.captainQueue.count, 2)
+        XCTAssertTrue(atlas.captainQueue[0].isCaptainDecision)
+        XCTAssertEqual(atlas.captainQueue[0].effectiveItemCount, 1)
+        XCTAssertFalse(atlas.captainQueue[1].isCaptainDecision)
+        XCTAssertEqual(atlas.captainQueue[1].effectiveItemCount, 12)
+        XCTAssertEqual(atlas.captainQueue[1].attentionType, "scope_gap")
     }
 
     func testCaptainsDeskProtectedPointerDecodesWithoutFullTicketFields() throws {
