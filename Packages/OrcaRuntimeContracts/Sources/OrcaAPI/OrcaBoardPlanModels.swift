@@ -136,6 +136,25 @@ public struct OrcaBoardPlanPinRequest: Encodable, Sendable {
     }
 }
 
+public struct OrcaBoardPlanFacet: Decodable, Identifiable, Hashable, Sendable {
+    public let id: String
+    public let objectType: String
+    public let objectId: UUID
+    public let relationship: String
+    public let title: String?
+    public let state: String
+    public let boardId: UUID?
+    public let canonicalRef: String
+
+    private enum CodingKeys: String, CodingKey {
+        case id, relationship, title, state
+        case objectType = "object_type"
+        case objectId = "object_id"
+        case boardId = "board_id"
+        case canonicalRef = "canonical_ref"
+    }
+}
+
 public struct OrcaBoardPlanCard: Decodable, Identifiable, Hashable, Sendable {
     public let id: String
     public let objectType: String
@@ -156,6 +175,15 @@ public struct OrcaBoardPlanCard: Decodable, Identifiable, Hashable, Sendable {
     public let projectIds: [UUID]
     public let runIds: [UUID]
     public let canonicalRef: String
+    public let canonicalWorkId: String?
+    public let facets: [OrcaBoardPlanFacet]?
+    public let pinIds: [UUID]?
+    public let integrityWarnings: [String]?
+
+    public var resolvedCanonicalWorkId: String { canonicalWorkId ?? id }
+    public var resolvedFacets: [OrcaBoardPlanFacet] { facets ?? [] }
+    public var resolvedPinIds: [UUID] { pinIds ?? [] }
+    public var resolvedIntegrityWarnings: [String] { integrityWarnings ?? [] }
 
     private enum CodingKeys: String, CodingKey {
         case id, title, subtitle, column, priority, pinned, rank
@@ -171,6 +199,10 @@ public struct OrcaBoardPlanCard: Decodable, Identifiable, Hashable, Sendable {
         case projectIds = "project_ids"
         case runIds = "run_ids"
         case canonicalRef = "canonical_ref"
+        case canonicalWorkId = "canonical_work_id"
+        case facets
+        case pinIds = "pin_ids"
+        case integrityWarnings = "integrity_warnings"
     }
 }
 

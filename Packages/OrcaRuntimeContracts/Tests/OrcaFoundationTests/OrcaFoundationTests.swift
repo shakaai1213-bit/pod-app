@@ -41,6 +41,21 @@ final class OrcaFoundationTests: XCTestCase {
         XCTAssertEqual(plan.sourceRefs, ["/api/v1/tickets"])
     }
 
+    func testBoardPlanCardDecodesCanonicalLifecycleFacets() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let plan = try decoder.decode(
+            OrcaBoardPlan.self,
+            from: Data(#"{"computed_at":"2026-09-04T20:00:00Z","board_id":"00000000-0000-4000-8000-000000000001","board_name":"Pod","board_slug":"pod","selection_mode":"pins_plus_canonical","pins":[],"lanes":[{"key":"in_progress","title":"In Progress","cards":[{"id":"ticket:00000000-0000-4000-8000-000000000002","object_type":"ticket","object_id":"00000000-0000-4000-8000-000000000002","title":"Runtime delivery","subtitle":"runtime","column":"in_progress","canonical_state":"in_progress","priority":"high","owner_agent_id":null,"owner_name":"coral","wait_reason":null,"wait_kind":null,"pinned":true,"rank":12,"latest_evidence":null,"evidence_state":"missing","project_ids":[],"run_ids":["00000000-0000-4000-8000-000000000004"],"canonical_ref":"/api/v1/tickets/00000000-0000-4000-8000-000000000002","canonical_work_id":"ticket:00000000-0000-4000-8000-000000000002","facets":[{"id":"ticket:00000000-0000-4000-8000-000000000002","object_type":"ticket","object_id":"00000000-0000-4000-8000-000000000002","relationship":"canonical","title":"Runtime delivery","state":"in_progress","board_id":"00000000-0000-4000-8000-000000000001","canonical_ref":"/api/v1/tickets/00000000-0000-4000-8000-000000000002"},{"id":"task:00000000-0000-4000-8000-000000000003","object_type":"task","object_id":"00000000-0000-4000-8000-000000000003","relationship":"delivery","title":"Seven-agent canary","state":"in_progress","board_id":"00000000-0000-4000-8000-000000000001","canonical_ref":"/api/v1/boards/00000000-0000-4000-8000-000000000001/tasks/00000000-0000-4000-8000-000000000003"},{"id":"agent_run:00000000-0000-4000-8000-000000000004","object_type":"agent_run","object_id":"00000000-0000-4000-8000-000000000004","relationship":"execution","title":"Canary","state":"queued","board_id":null,"canonical_ref":"/api/v1/agent-runs/00000000-0000-4000-8000-000000000004/trace"}],"pin_ids":["00000000-0000-4000-8000-000000000005"],"integrity_warnings":[]}]}],"counts":{"in_progress":1},"source_refs":["/api/v1/tickets"]}"#.utf8)
+        )
+
+        let card = try XCTUnwrap(plan.lanes.first?.cards.first)
+        XCTAssertEqual(card.resolvedCanonicalWorkId, card.id)
+        XCTAssertEqual(card.resolvedFacets.map(\.objectType), ["ticket", "task", "agent_run"])
+        XCTAssertEqual(card.resolvedPinIds.count, 1)
+        XCTAssertTrue(card.resolvedIntegrityWarnings.isEmpty)
+    }
+
     func testEndpointPolicyApprovesOnlyCanonicalOrExplicitLoopback() {
         XCTAssertNotNil(OrcaEndpointPolicy.normalizedEndpoint("100.104.72.62:8000/"))
         XCTAssertNil(OrcaEndpointPolicy.normalizedEndpoint(

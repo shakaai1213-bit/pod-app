@@ -92,12 +92,21 @@ final class CaptainBoardPlanViewModel {
         mutatingCardId = card.id
         defer { mutatingCardId = nil }
         do {
-            if let pin = plan?.pins.first(where: {
+            let collapsedPins = plan?.pins.filter {
+                card.resolvedPinIds.contains($0.id)
+            } ?? []
+            let canonicalPin = plan?.pins.first(where: {
                 $0.objectType == card.objectType && $0.objectId == card.objectId
-            }) {
-                try await apiClient.delete(
-                    path: "/api/v1/management/boards/\(selectedBoardId.uuidString)/pins/\(pin.id.uuidString)"
-                )
+            })
+            let pinsToRemove = collapsedPins.isEmpty
+                ? canonicalPin.map { [$0] } ?? []
+                : collapsedPins
+            if !pinsToRemove.isEmpty {
+                for pin in pinsToRemove {
+                    try await apiClient.delete(
+                        path: "/api/v1/management/boards/\(selectedBoardId.uuidString)/pins/\(pin.id.uuidString)"
+                    )
+                }
             } else {
                 let request = BoardPlanPinRequestDTO(
                     objectType: card.objectType,
@@ -342,7 +351,17 @@ private struct BoardPlanCardView: View {
             }
 
             HStack(spacing: 6) {
-                Label(card.objectType.capitalized, systemImage: objectIcon)
+                if card.resolvedFacets.isEmpty {
+                    Label(card.objectType.capitalized, systemImage: objectIcon)
+                } else {
+                    ForEach(["ticket", "task", "agent_run"], id: \.self) { type in
+                        let count = card.resolvedFacets.filter { $0.objectType == type }.count
+                        if count > 0 {
+                            Label("\(count)", systemImage: facetIcon(type))
+                                .accessibilityLabel("\(count) \(facetLabel(type, count: count))")
+                        }
+                    }
+                }
                 if let ownerName = card.ownerName, !ownerName.isEmpty {
                     Label(ownerName.capitalized, systemImage: "person.fill")
                 }
@@ -366,11 +385,21 @@ private struct BoardPlanCardView: View {
     }
 
     private var objectIcon: String {
-        switch card.objectType {
+        facetIcon(card.objectType)
+    }
+
+    private func facetIcon(_ type: String) -> String {
+        switch type {
         case "ticket": return "ticket.fill"
         case "project": return "square.stack.3d.up.fill"
+        case "agent_run": return "play.circle.fill"
         default: return "checklist"
         }
+    }
+
+    private func facetLabel(_ type: String, count: Int) -> String {
+        let label = type == "agent_run" ? "run" : type
+        return count == 1 ? label : "\(label)s"
     }
 }
 
@@ -390,6 +419,36 @@ private struct BoardPlanCardDetail: View {
                 if let reason = card.waitReason {
                     Section("Waiting On") { Text(reason) }
                 }
+                if !card.resolvedFacets.isEmpty {
+                    Section("Lifecycle") {
+                        ForEach(card.resolvedFacets) { facet in
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack {
+                                    Label(
+                                        facet.objectType == "agent_run" ? "Run" : facet.objectType.capitalized,
+                                        systemImage: facetIcon(facet.objectType)
+                                    )
+                                    Spacer()
+                                    Text(facet.state.replacingOccurrences(of: "_", with: " ").capitalized)
+                                        .foregroundStyle(managementColor(facet.state))
+                                }
+                                if let title = facet.title, title != card.title {
+                                    Text(title)
+                                        .font(.caption)
+                                        .foregroundStyle(AppColors.textSecondary)
+                                }
+                            }
+                        }
+                    }
+                }
+                if !card.resolvedIntegrityWarnings.isEmpty {
+                    Section("Integrity") {
+                        ForEach(card.resolvedIntegrityWarnings, id: \.self) { warning in
+                            Label(warning, systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(AppColors.accentDanger)
+                        }
+                    }
+                }
                 Section("Evidence") {
                     if let evidence = card.latestEvidence {
                         LabeledContent(evidence.kind.replacingOccurrences(of: "_", with: " ").capitalized, value: evidence.ref)
@@ -406,6 +465,15 @@ private struct BoardPlanCardDetail: View {
                     Button { dismiss() } label: { Image(systemName: "xmark") }
                 }
             }
+        }
+    }
+
+    private func facetIcon(_ type: String) -> String {
+        switch type {
+        case "ticket": return "ticket.fill"
+        case "project": return "square.stack.3d.up.fill"
+        case "agent_run": return "play.circle.fill"
+        default: return "checklist"
         }
     }
 }

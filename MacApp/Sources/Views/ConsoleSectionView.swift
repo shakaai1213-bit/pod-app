@@ -362,8 +362,24 @@ private struct WorkPortfolioView: View {
                                 .foregroundStyle(.secondary)
                                 .lineLimit(2)
                         }
+                        if let warning = card.resolvedIntegrityWarnings.first {
+                            Label(warning, systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption2)
+                                .foregroundStyle(.red)
+                                .lineLimit(2)
+                        }
                         HStack {
-                            Text(card.objectType.capitalized)
+                            if card.resolvedFacets.isEmpty {
+                                Label(card.objectType.capitalized, systemImage: facetIcon(card.objectType))
+                            } else {
+                                ForEach(["ticket", "task", "agent_run"], id: \.self) { type in
+                                    let count = card.resolvedFacets.filter { $0.objectType == type }.count
+                                    if count > 0 {
+                                        Label("\(count)", systemImage: facetIcon(type))
+                                            .help("\(count) \(facetLabel(type, count: count))")
+                                    }
+                                }
+                            }
                             Spacer()
                             Text(card.canonicalState.replacingOccurrences(of: "_", with: " ").capitalized)
                         }
@@ -378,6 +394,20 @@ private struct WorkPortfolioView: View {
             }
         }
         .frame(width: 260, alignment: .top)
+    }
+
+    private func facetIcon(_ type: String) -> String {
+        switch type {
+        case "ticket": return "ticket.fill"
+        case "project": return "square.stack.3d.up.fill"
+        case "agent_run": return "play.circle.fill"
+        default: return "checklist"
+        }
+    }
+
+    private func facetLabel(_ type: String, count: Int) -> String {
+        let label = type == "agent_run" ? "run" : type
+        return count == 1 ? label : "\(label)s"
     }
 
     private func portfolioMetric(_ value: Int?, _ label: String) -> some View {
