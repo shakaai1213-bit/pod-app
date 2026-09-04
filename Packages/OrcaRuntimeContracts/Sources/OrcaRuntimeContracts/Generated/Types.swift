@@ -710,6 +710,12 @@ public enum Components {
             public var allowedRuntimeHosts: Components.Schemas.ChatRuntimeAgentPackRead.AllowedRuntimeHostsPayload
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/approval_notes`.
             public var approvalNotes: [Swift.String]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/authority_owner`.
+            @frozen public enum AuthorityOwnerPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case orca = "orca"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/authority_owner`.
+            public var authorityOwner: Components.Schemas.ChatRuntimeAgentPackRead.AuthorityOwnerPayload?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/capability_attestation_required`.
             public var capabilityAttestationRequired: Swift.Bool?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/capability_ref`.
@@ -722,14 +728,21 @@ public enum Components {
             }
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/contract_version`.
             public var contractVersion: Components.Schemas.ChatRuntimeAgentPackRead.ContractVersionPayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/controller_host`.
+            @frozen public enum ControllerHostPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case orcaMini = "orca-mini"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/controller_host`.
+            public var controllerHost: Components.Schemas.ChatRuntimeAgentPackRead.ControllerHostPayload?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/escalation_ref`.
             public var escalationRef: Swift.String
-            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/harness_adapter_id`.
-            @frozen public enum HarnessAdapterIdPayload: String, Codable, Hashable, Sendable, CaseIterable {
-                case openclawHarness = "openclaw_harness"
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/home_capability_host`.
+            @frozen public enum HomeCapabilityHostPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case shakaMac = "shaka-mac"
+                case chiefMac = "chief-mac"
             }
-            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/harness_adapter_id`.
-            public var harnessAdapterId: Components.Schemas.ChatRuntimeAgentPackRead.HarnessAdapterIdPayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/home_capability_host`.
+            public var homeCapabilityHost: Components.Schemas.ChatRuntimeAgentPackRead.HomeCapabilityHostPayload
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/identity_ref`.
             public var identityRef: Swift.String
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/ingress_subject`.
@@ -753,7 +766,11 @@ public enum Components {
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/payload_sha256`.
             public var payloadSha256: Swift.String
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/primary_adapter_id`.
-            public var primaryAdapterId: Swift.String
+            @frozen public enum PrimaryAdapterIdPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case openclawHarness = "openclaw_harness"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/primary_adapter_id`.
+            public var primaryAdapterId: Components.Schemas.ChatRuntimeAgentPackRead.PrimaryAdapterIdPayload?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/protected_conditions`.
             public var protectedConditions: [Swift.String]?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/release_signature_required`.
@@ -773,13 +790,6 @@ public enum Components {
             }
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/router_owner`.
             public var routerOwner: Components.Schemas.ChatRuntimeAgentPackRead.RouterOwnerPayload?
-            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/runtime_host`.
-            @frozen public enum RuntimeHostPayload: String, Codable, Hashable, Sendable, CaseIterable {
-                case shakaMac = "shaka-mac"
-                case chiefMac = "chief-mac"
-            }
-            /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/runtime_host`.
-            public var runtimeHost: Components.Schemas.ChatRuntimeAgentPackRead.RuntimeHostPayload
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/runtime_posture`.
             public var runtimePosture: Swift.String
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeAgentPackRead/source_refs`.
@@ -809,12 +819,14 @@ public enum Components {
             ///   - agentKey:
             ///   - allowedRuntimeHosts:
             ///   - approvalNotes:
+            ///   - authorityOwner:
             ///   - capabilityAttestationRequired:
             ///   - capabilityRef:
             ///   - checkpointRef:
             ///   - contractVersion:
+            ///   - controllerHost:
             ///   - escalationRef:
-            ///   - harnessAdapterId:
+            ///   - homeCapabilityHost:
             ///   - identityRef:
             ///   - ingressSubject:
             ///   - lifecycleOwner:
@@ -828,7 +840,6 @@ public enum Components {
             ///   - responsibilityDomains:
             ///   - rosterLane:
             ///   - routerOwner:
-            ///   - runtimeHost:
             ///   - runtimePosture:
             ///   - sourceRefs:
             ///   - supportedAdapterIds:
@@ -841,12 +852,14 @@ public enum Components {
                 agentKey: Swift.String,
                 allowedRuntimeHosts: Components.Schemas.ChatRuntimeAgentPackRead.AllowedRuntimeHostsPayload,
                 approvalNotes: [Swift.String]? = nil,
+                authorityOwner: Components.Schemas.ChatRuntimeAgentPackRead.AuthorityOwnerPayload? = nil,
                 capabilityAttestationRequired: Swift.Bool? = nil,
                 capabilityRef: Swift.String,
                 checkpointRef: Swift.String,
                 contractVersion: Components.Schemas.ChatRuntimeAgentPackRead.ContractVersionPayload? = nil,
+                controllerHost: Components.Schemas.ChatRuntimeAgentPackRead.ControllerHostPayload? = nil,
                 escalationRef: Swift.String,
-                harnessAdapterId: Components.Schemas.ChatRuntimeAgentPackRead.HarnessAdapterIdPayload? = nil,
+                homeCapabilityHost: Components.Schemas.ChatRuntimeAgentPackRead.HomeCapabilityHostPayload,
                 identityRef: Swift.String,
                 ingressSubject: Swift.String,
                 lifecycleOwner: Components.Schemas.ChatRuntimeAgentPackRead.LifecycleOwnerPayload? = nil,
@@ -854,13 +867,12 @@ public enum Components {
                 memoryContract: Components.Schemas.ChatRuntimeAgentPackRead.MemoryContractPayload? = nil,
                 memoryRef: Swift.String,
                 payloadSha256: Swift.String,
-                primaryAdapterId: Swift.String,
+                primaryAdapterId: Components.Schemas.ChatRuntimeAgentPackRead.PrimaryAdapterIdPayload? = nil,
                 protectedConditions: [Swift.String]? = nil,
                 releaseSignatureRequired: Swift.Bool? = nil,
                 responsibilityDomains: [Swift.String]? = nil,
                 rosterLane: Components.Schemas.ChatRuntimeAgentPackRead.RosterLanePayload,
                 routerOwner: Components.Schemas.ChatRuntimeAgentPackRead.RouterOwnerPayload? = nil,
-                runtimeHost: Components.Schemas.ChatRuntimeAgentPackRead.RuntimeHostPayload,
                 runtimePosture: Swift.String,
                 sourceRefs: [Swift.String],
                 supportedAdapterIds: [Swift.String],
@@ -873,12 +885,14 @@ public enum Components {
                 self.agentKey = agentKey
                 self.allowedRuntimeHosts = allowedRuntimeHosts
                 self.approvalNotes = approvalNotes
+                self.authorityOwner = authorityOwner
                 self.capabilityAttestationRequired = capabilityAttestationRequired
                 self.capabilityRef = capabilityRef
                 self.checkpointRef = checkpointRef
                 self.contractVersion = contractVersion
+                self.controllerHost = controllerHost
                 self.escalationRef = escalationRef
-                self.harnessAdapterId = harnessAdapterId
+                self.homeCapabilityHost = homeCapabilityHost
                 self.identityRef = identityRef
                 self.ingressSubject = ingressSubject
                 self.lifecycleOwner = lifecycleOwner
@@ -892,7 +906,6 @@ public enum Components {
                 self.responsibilityDomains = responsibilityDomains
                 self.rosterLane = rosterLane
                 self.routerOwner = routerOwner
-                self.runtimeHost = runtimeHost
                 self.runtimePosture = runtimePosture
                 self.sourceRefs = sourceRefs
                 self.supportedAdapterIds = supportedAdapterIds
@@ -906,12 +919,14 @@ public enum Components {
                 case agentKey = "agent_key"
                 case allowedRuntimeHosts = "allowed_runtime_hosts"
                 case approvalNotes = "approval_notes"
+                case authorityOwner = "authority_owner"
                 case capabilityAttestationRequired = "capability_attestation_required"
                 case capabilityRef = "capability_ref"
                 case checkpointRef = "checkpoint_ref"
                 case contractVersion = "contract_version"
+                case controllerHost = "controller_host"
                 case escalationRef = "escalation_ref"
-                case harnessAdapterId = "harness_adapter_id"
+                case homeCapabilityHost = "home_capability_host"
                 case identityRef = "identity_ref"
                 case ingressSubject = "ingress_subject"
                 case lifecycleOwner = "lifecycle_owner"
@@ -925,7 +940,6 @@ public enum Components {
                 case responsibilityDomains = "responsibility_domains"
                 case rosterLane = "roster_lane"
                 case routerOwner = "router_owner"
-                case runtimeHost = "runtime_host"
                 case runtimePosture = "runtime_posture"
                 case sourceRefs = "source_refs"
                 case supportedAdapterIds = "supported_adapter_ids"

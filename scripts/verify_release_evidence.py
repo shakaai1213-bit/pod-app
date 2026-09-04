@@ -42,6 +42,16 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def canonical_json_sha256(payload: Any) -> str:
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def require_digest(value: Any, label: str) -> str:
     text = str(value or "")
     if re.fullmatch(r"[0-9a-f]{64}", text) is None:
@@ -73,6 +83,91 @@ def resolve_row(root: Path, row: dict[str, Any], label: str) -> Path:
     if require_digest(row.get("sha256"), f"{label} digest") != sha256(path):
         raise ValueError(f"{label} digest mismatch")
     return path
+
+
+def verify_runtime_contract_compatibility(
+    evidence_dir: Path,
+    contract: dict[str, Any],
+) -> None:
+    if set(contract) != {
+        "backend",
+        "client",
+        "compatible",
+        "contract_version",
+        "declared_schema_sha256",
+        "native_schema_pin",
+        "schema",
+        "semantic_sha256",
+    }:
+        raise ValueError("invalid Runtime API compatibility fields")
+    if contract.get("schema") != "orca.runtime-contract-compatibility.v1":
+        raise ValueError("unsupported Runtime API compatibility schema")
+    if contract.get("compatible") is not True:
+        raise ValueError("Runtime API compatibility is not proven")
+    if contract.get("contract_version") != "orca.chat-runtime.v1":
+        raise ValueError("unsupported Runtime API contract version")
+    declared = require_digest(
+        contract.get("declared_schema_sha256"), "Runtime API declared schema digest"
+    )
+    semantic = require_digest(
+        contract.get("semantic_sha256"), "Runtime API semantic digest"
+    )
+    payloads: list[dict[str, Any]] = []
+    expected_paths = {
+        "client": "Packages/OrcaRuntimeContracts/Sources/OrcaRuntimeContracts/openapi.json",
+        "backend": "contracts/orca-chat-runtime-v1.openapi.json",
+    }
+    for side in ("client", "backend"):
+        side_contract = contract.get(side) or {}
+        if set(side_contract) != {"artifact", "source_path"}:
+            raise ValueError(f"invalid {side} Runtime API contract fields")
+        if side_contract.get("source_path") != expected_paths[side]:
+            raise ValueError(f"invalid {side} Runtime API source path")
+        artifact = side_contract.get("artifact") or {}
+        if not isinstance(artifact, dict) or set(artifact) != FILE_ROW_KEYS:
+            raise ValueError(f"invalid {side} Runtime API artifact fields")
+        path = resolve_row(
+            evidence_dir,
+            artifact,
+            f"{side} Runtime API contract",
+        )
+        try:
+            payload = json.loads(path.read_bytes())
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError(f"invalid {side} Runtime API JSON") from exc
+        if not isinstance(payload, dict):
+            raise ValueError(f"invalid {side} Runtime API document")
+        if payload.get("x-orca-contract-version") != contract["contract_version"]:
+            raise ValueError(f"{side} Runtime API contract version mismatch")
+        if payload.get("x-orca-schema-sha256") != declared:
+            raise ValueError(f"{side} Runtime API declared schema digest mismatch")
+        if canonical_json_sha256(payload) != semantic:
+            raise ValueError(f"{side} Runtime API semantic digest mismatch")
+        payloads.append(payload)
+    if payloads[0] != payloads[1]:
+        raise ValueError("client and backend Runtime API contracts differ")
+    pin = contract.get("native_schema_pin") or {}
+    if set(pin) != {"artifact", "source_path"}:
+        raise ValueError("invalid native Runtime API schema pin fields")
+    if pin.get("source_path") != (
+        "Packages/OrcaRuntimeContracts/Sources/OrcaRuntimeContracts/"
+        "OrcaRuntimeContract.swift"
+    ):
+        raise ValueError("invalid native Runtime API schema pin path")
+    pin_artifact = pin.get("artifact") or {}
+    if not isinstance(pin_artifact, dict) or set(pin_artifact) != FILE_ROW_KEYS:
+        raise ValueError("invalid native Runtime API schema pin artifact")
+    pin_path = resolve_row(
+        evidence_dir,
+        pin_artifact,
+        "native Runtime API schema pin",
+    )
+    pin_matches = re.findall(
+        rb'public static let schemaSHA256 = "([0-9a-f]{64})"',
+        pin_path.read_bytes(),
+    )
+    if pin_matches != [declared.encode("ascii")]:
+        raise ValueError("native Runtime API schema pin mismatch")
 
 
 def verify_signature(
@@ -449,6 +544,7 @@ def verify_upgrade_rollback(
         "orca.console.release-manifest.v4",
         "orca.console.release-manifest.v5",
         "orca.console.release-manifest.v6",
+        "orca.console.release-manifest.v7",
     }:
         raise ValueError("unsupported rollback manifest schema")
     prior_source = prior.get("source") or {}
@@ -645,7 +741,7 @@ def verify_bundle(
         namespace="orca-release",
     )
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if manifest.get("schema") != "orca.console.release-manifest.v6":
+    if manifest.get("schema") != "orca.console.release-manifest.v7":
         raise ValueError("unsupported release manifest schema")
     trust = manifest.get("trust") or {}
     if trust.get("allowed_signers_sha256") != trusted_hash:
@@ -718,6 +814,10 @@ def verify_bundle(
         evidence_dir, runtime.get("backend_image") or {}, "current runtime image"
     )
     resolve_row(evidence_dir, runtime.get("host_bundle") or {}, "current host bundle")
+    runtime_contract = manifest.get("runtime_contract") or {}
+    if not isinstance(runtime_contract, dict):
+        raise ValueError("invalid Runtime API compatibility contract")
+    verify_runtime_contract_compatibility(evidence_dir, runtime_contract)
     transition = manifest.get("auth_transition") or {}
     transition_path = resolve_row(
         evidence_dir,

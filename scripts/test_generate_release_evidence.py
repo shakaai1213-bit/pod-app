@@ -129,6 +129,8 @@ def build_bundle(
     preinstall_overrides: dict[str, object] | None = None,
     auth_state_overrides: dict[str, object] | None = None,
     installation_overrides: dict[str, object] | None = None,
+    runtime_contract_mismatch: bool = False,
+    runtime_pin_mismatch: bool = False,
     extra_generator_args: list[str] | None = None,
 ) -> dict[str, object]:
     key = tmp_path / "release-key"
@@ -153,6 +155,61 @@ def build_bundle(
         runtime, prior_runtime, current_runtime = signed_history(
             tmp_path, "runtime", key, identity
         )
+
+    runtime_contract = {
+        "openapi": "3.1.0",
+        "info": {"title": "ORCA Chat Runtime API", "version": "1.0.0"},
+        "paths": {},
+        "x-orca-contract-version": "orca.chat-runtime.v1",
+        "x-orca-schema-sha256": "d" * 64,
+    }
+    client_contract = source / release_evidence.CLIENT_RUNTIME_CONTRACT_PATH
+    client_contract.parent.mkdir(parents=True)
+    client_contract.write_text(
+        json.dumps(runtime_contract, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    client_pin = source / release_evidence.CLIENT_RUNTIME_CONTRACT_PIN_PATH
+    pin_digest = "e" * 64 if runtime_pin_mismatch else "d" * 64
+    client_pin.write_text(
+        "public enum OrcaRuntimeContract {\n"
+        f'    public static let schemaSHA256 = "{pin_digest}"\n'
+        "}\n",
+        encoding="utf-8",
+    )
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(source),
+            "add",
+            str(release_evidence.CLIENT_RUNTIME_CONTRACT_PATH),
+            str(release_evidence.CLIENT_RUNTIME_CONTRACT_PIN_PATH),
+        ],
+        check=True,
+    )
+    current_source = signed_commit(source, key, identity, "source runtime contract\n")
+    runtime_backend = runtime / "workspace-mission-control" / "backend"
+    backend_contract = runtime_backend / release_evidence.BACKEND_RUNTIME_CONTRACT_PATH
+    backend_contract.parent.mkdir(parents=True)
+    backend_payload = dict(runtime_contract)
+    if runtime_contract_mismatch:
+        backend_payload["paths"] = {"/drift": {}}
+    backend_contract.write_text(
+        json.dumps(backend_payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(runtime_backend),
+            "add",
+            str(release_evidence.BACKEND_RUNTIME_CONTRACT_PATH),
+        ],
+        check=True,
+    )
+    current_runtime = signed_commit(runtime, key, identity, "backend runtime contract\n")
 
     prior_artifact = tmp_path / "ORCA-Console-prior.zip"
     prior_artifact.write_bytes(b"verified prior app")
@@ -322,7 +379,7 @@ def build_bundle(
         "--backend-commit",
         current_runtime,
         "--backend-root",
-        str(runtime),
+        str(runtime_backend),
         "--backend-image",
         str(current_image),
         "--host-bundle",
@@ -334,7 +391,7 @@ def build_bundle(
         "--install-mode",
         install_mode,
         "--rollback-backend-root",
-        str(runtime),
+        str(runtime_backend),
         "--rollback-backend-image",
         str(prior_image),
         "--rollback-host-bundle",
@@ -433,6 +490,9 @@ def test_release_bundle_is_self_contained_and_independently_verifiable(
     output = Path(bundle["output"])
     assert (output / "source-commit.object").is_file()
     assert (output / "runtime/current-runtime-image.tar").is_file()
+    assert (output / "contracts/client-orca-chat-runtime-v1.openapi.json").is_file()
+    assert (output / "contracts/backend-orca-chat-runtime-v1.openapi.json").is_file()
+    assert (output / "contracts/OrcaRuntimeContract.swift").is_file()
     assert (output / "rollback/runtime-commit.object").is_file()
     assert (output / "rollback/rollback-auth-state.json.sig").is_file()
 
@@ -469,7 +529,9 @@ def test_release_manifest_binds_canonical_installation_inventory(
     output = Path(bundle["output"])
     manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
     installation = manifest["installation"]
-    assert manifest["schema"] == "orca.console.release-manifest.v6"
+    assert manifest["schema"] == "orca.console.release-manifest.v7"
+    assert manifest["runtime_contract"]["compatible"] is True
+    assert manifest["runtime_contract"]["contract_version"] == "orca.chat-runtime.v1"
     assert installation["schema"] == "orca.console.installation-inventory.v1"
     assert installation["mode"] == "upgrade"
     assert installation["canonical_install_count"] == 1
@@ -477,6 +539,27 @@ def test_release_manifest_binds_canonical_installation_inventory(
     assert installation["canonical_install_path"] == "/Applications/ORCA Console.app"
     assert installation["ready"] is True
     verify(bundle)
+
+
+def test_generator_rejects_client_backend_runtime_contract_drift(tmp_path: Path) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(tmp_path, runtime_contract_mismatch=True)
+
+
+def test_generator_rejects_native_runtime_schema_pin_drift(tmp_path: Path) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(tmp_path, runtime_pin_mismatch=True)
+
+
+def test_release_verifier_rejects_tampered_runtime_contract(tmp_path: Path) -> None:
+    bundle = build_bundle(tmp_path)
+    contract = (
+        Path(bundle["output"])
+        / "contracts/client-orca-chat-runtime-v1.openapi.json"
+    )
+    contract.write_bytes(contract.read_bytes() + b" ")
+    with pytest.raises((ValueError, subprocess.CalledProcessError)):
+        verify(bundle)
 
 
 def test_release_verifier_rejects_tampered_installation_inventory(

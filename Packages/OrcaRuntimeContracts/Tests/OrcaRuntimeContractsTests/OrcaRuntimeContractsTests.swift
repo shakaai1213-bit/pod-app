@@ -42,11 +42,14 @@ private func canonicalAgentPack(
         activationContextRef: "/api/v1/agents/\(agentKey)/activation-context",
         agentKey: agentKey,
         allowedRuntimeHosts: [.orcaMini, .shakaMac],
+        authorityOwner: .orca,
         capabilityAttestationRequired: true,
         capabilityRef: "/api/v1/chat-runtime/v1/agents/\(agentKey)/capabilities",
         checkpointRef: "orca://agent-packs/\(agentKey)/checkpoint",
         contractVersion: .orca_agentPack_v1,
+        controllerHost: .orcaMini,
         escalationRef: "orca://agent-packs/\(agentKey)/escalation",
+        homeCapabilityHost: .shakaMac,
         identityRef: "orca://agent-packs/\(agentKey)/identity",
         ingressSubject: "agents.\(agentKey).inbox",
         lifecycleOwner: .schoolhouse,
@@ -54,14 +57,17 @@ private func canonicalAgentPack(
         memoryContract: .orcaManaged,
         memoryRef: "orca://agent-packs/\(agentKey)/memory",
         payloadSha256: String(repeating: "a", count: 64),
-        primaryAdapterId: "local_compute",
+        primaryAdapterId: .openclawHarness,
         releaseSignatureRequired: true,
         rosterLane: .activeMain,
         routerOwner: .cascade,
-        runtimeHost: .shakaMac,
         runtimePosture: "local-compute-first",
-        sourceRefs: ["app/registries/agent-runtime-manifest.json"],
-        supportedAdapterIds: ["local_compute"],
+        sourceRefs: [
+            "app/registries/agent-runtime-manifest.json",
+            "app/registries/agent-responsibility-registry.yaml",
+            "app/services/agent_roster_policy.py",
+        ],
+        supportedAdapterIds: ["openclaw_harness"],
         terminalReplyOwner: .schoolhouseWake,
         title: agentKey.capitalized,
         voiceContract: .orca_namedAgentVoice_v1,
@@ -418,7 +424,7 @@ func credentialRedirectsAreNeverFollowed(status: Int) throws {
     #expect(OrcaRuntimeContract.version == "orca.chat-runtime.v1")
     #expect(
         OrcaRuntimeContract.schemaSHA256
-            == "7385bf810d32489f4a611c9aa2b80aac42627dbc9dd3497f807a2c2f643e017a"
+            == "40a298668534e87d47abc42279d4777334e1e2c9ae92dc6e291818a8a76cfbeb"
     )
 }
 
@@ -501,6 +507,26 @@ func credentialRedirectsAreNeverFollowed(status: Int) throws {
     do {
         try OrcaRuntimeClient.validateAgentPacks(bundle)
         Issue.record("A legacy capability pointer passed the native client gate")
+    } catch let error as OrcaRuntimeClientError {
+        #expect(error == .invalidResponse("agent pack failed closed for aloha"))
+    }
+}
+
+@Test func agentPackBundleRejectsControllerOrHarnessDrift() throws {
+    var bundle = canonicalAgentPackBundle()
+    bundle.packs[0].allowedRuntimeHosts = [.shakaMac, .orcaMini]
+    do {
+        try OrcaRuntimeClient.validateAgentPacks(bundle)
+        Issue.record("A home-host-first Agent Pack bypassed the Mini controller")
+    } catch let error as OrcaRuntimeClientError {
+        #expect(error == .invalidResponse("agent pack failed closed for aloha"))
+    }
+
+    bundle = canonicalAgentPackBundle()
+    bundle.packs[0].supportedAdapterIds = ["local_compute"]
+    do {
+        try OrcaRuntimeClient.validateAgentPacks(bundle)
+        Issue.record("An Agent Pack without the OpenClaw harness passed the client gate")
     } catch let error as OrcaRuntimeClientError {
         #expect(error == .invalidResponse("agent pack failed closed for aloha"))
     }

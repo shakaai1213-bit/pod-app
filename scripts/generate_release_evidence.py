@@ -21,6 +21,16 @@ ROLLBACK_PROCEDURE = (
     "compatibility and G1-G10 canaries"
 )
 
+CLIENT_RUNTIME_CONTRACT_PATH = Path(
+    "Packages/OrcaRuntimeContracts/Sources/OrcaRuntimeContracts/openapi.json"
+)
+CLIENT_RUNTIME_CONTRACT_PIN_PATH = Path(
+    "Packages/OrcaRuntimeContracts/Sources/OrcaRuntimeContracts/OrcaRuntimeContract.swift"
+)
+BACKEND_RUNTIME_CONTRACT_PATH = Path(
+    "contracts/orca-chat-runtime-v1.openapi.json"
+)
+
 
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -147,6 +157,103 @@ def file_row(path: Path, *, name: str | None = None) -> dict[str, Any]:
         "name": name or path.name,
         "sha256": sha256(path),
         "size_bytes": path.stat().st_size,
+    }
+
+
+def canonical_json_sha256(payload: Any) -> str:
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def git_file_at_commit(root: Path, commit: str, relative_path: Path) -> bytes:
+    prefix = subprocess.check_output(
+        ["git", "-C", str(root), "rev-parse", "--show-prefix"],
+        text=True,
+    ).strip()
+    repository_path = (Path(prefix) / relative_path).as_posix()
+    return subprocess.check_output(
+        ["git", "-C", str(root), "show", f"{commit}:{repository_path}"]
+    )
+
+
+def freeze_runtime_contract_compatibility(
+    *,
+    source_root: Path,
+    source_commit: str,
+    backend_root: Path,
+    backend_commit: str,
+    output: Path,
+) -> dict[str, Any]:
+    client_bytes = git_file_at_commit(
+        source_root, source_commit, CLIENT_RUNTIME_CONTRACT_PATH
+    )
+    client_pin_bytes = git_file_at_commit(
+        source_root, source_commit, CLIENT_RUNTIME_CONTRACT_PIN_PATH
+    )
+    backend_bytes = git_file_at_commit(
+        backend_root, backend_commit, BACKEND_RUNTIME_CONTRACT_PATH
+    )
+    try:
+        client_payload = json.loads(client_bytes)
+        backend_payload = json.loads(backend_bytes)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("runtime contract is not valid JSON") from exc
+    if not isinstance(client_payload, dict) or not isinstance(backend_payload, dict):
+        raise ValueError("runtime contract must be a JSON object")
+    if client_payload != backend_payload:
+        raise ValueError("client and backend Runtime API contracts do not match")
+    if client_payload.get("x-orca-contract-version") != "orca.chat-runtime.v1":
+        raise ValueError("unsupported Runtime API contract version")
+    declared_schema_sha256 = require_digest(
+        client_payload.get("x-orca-schema-sha256"),
+        label="Runtime API declared schema digest",
+    )
+    pin_matches = re.findall(
+        rb'public static let schemaSHA256 = "([0-9a-f]{64})"',
+        client_pin_bytes,
+    )
+    if pin_matches != [declared_schema_sha256.encode("ascii")]:
+        raise ValueError("native Runtime API schema pin does not match OpenAPI")
+    semantic_sha256 = canonical_json_sha256(client_payload)
+    contract_dir = output / "contracts"
+    client_output = contract_dir / "client-orca-chat-runtime-v1.openapi.json"
+    backend_output = contract_dir / "backend-orca-chat-runtime-v1.openapi.json"
+    pin_output = contract_dir / "OrcaRuntimeContract.swift"
+    contract_dir.mkdir(parents=True, exist_ok=True)
+    client_output.write_bytes(client_bytes)
+    backend_output.write_bytes(backend_bytes)
+    pin_output.write_bytes(client_pin_bytes)
+    client_row = file_row(client_output)
+    backend_row = file_row(backend_output)
+    pin_row = file_row(pin_output)
+    client_row["name"] = "contracts/client-orca-chat-runtime-v1.openapi.json"
+    backend_row["name"] = "contracts/backend-orca-chat-runtime-v1.openapi.json"
+    return {
+        "schema": "orca.runtime-contract-compatibility.v1",
+        "compatible": True,
+        "contract_version": "orca.chat-runtime.v1",
+        "declared_schema_sha256": declared_schema_sha256,
+        "semantic_sha256": semantic_sha256,
+        "client": {
+            "source_path": CLIENT_RUNTIME_CONTRACT_PATH.as_posix(),
+            "artifact": client_row,
+        },
+        "backend": {
+            "source_path": BACKEND_RUNTIME_CONTRACT_PATH.as_posix(),
+            "artifact": backend_row,
+        },
+        "native_schema_pin": {
+            "source_path": CLIENT_RUNTIME_CONTRACT_PIN_PATH.as_posix(),
+            "artifact": {
+                **pin_row,
+                "name": "contracts/OrcaRuntimeContract.swift",
+            },
+        },
     }
 
 
@@ -452,6 +559,8 @@ def verify_prior_release(
         "orca.console.release-manifest.v3",
         "orca.console.release-manifest.v4",
         "orca.console.release-manifest.v5",
+        "orca.console.release-manifest.v6",
+        "orca.console.release-manifest.v7",
     }:
         raise ValueError("unsupported prior release manifest")
     source = manifest.get("source") or {}
@@ -616,6 +725,16 @@ def main() -> int:
         raise SystemExit(
             "release evidence refused: backend commit signature is not verified"
         )
+    try:
+        runtime_contract = freeze_runtime_contract_compatibility(
+            source_root=root,
+            source_commit=args.source_commit,
+            backend_root=backend_root,
+            backend_commit=backend_commit,
+            output=output,
+        )
+    except (ValueError, subprocess.CalledProcessError) as exc:
+        raise SystemExit(f"release evidence refused: {exc}") from exc
     auth_state_path = args.rollback_auth_state_contract.resolve()
     verify_signature(
         auth_state_path,
@@ -926,7 +1045,7 @@ def main() -> int:
     )
 
     manifest = {
-        "schema": "orca.console.release-manifest.v6",
+        "schema": "orca.console.release-manifest.v7",
         "created_at": created_at,
         "source": {
             "commit": args.source_commit,
@@ -956,6 +1075,7 @@ def main() -> int:
             "backend_image": current_image,
             "host_bundle": current_host,
         },
+        "runtime_contract": runtime_contract,
         "auth_transition": {
             "contract": transition_output.name,
             "contract_sha256": sha256(transition_output),

@@ -45,7 +45,7 @@ public enum OrcaRuntimeProjection {
             guard let pack = packs[profile.id] else { return nil }
             return OrcaRuntimeAgent(
                 profile: profile,
-                runtimeHost: pack.runtimeHost.rawValue,
+                runtimeHost: pack.homeCapabilityHost.rawValue,
                 runtimePosture: pack.runtimePosture,
                 supportedAdapterIDs: pack.supportedAdapterIds.sorted(),
                 configurationSHA256: pack.payloadSha256

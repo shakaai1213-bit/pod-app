@@ -622,6 +622,15 @@ public actor OrcaRuntimeClient {
         }
         for pack in bundle.packs {
             guard pack.contractVersion?.rawValue == "orca.agent-pack.v1",
+                  pack.authorityOwner?.rawValue == "orca",
+                  pack.controllerHost?.rawValue == "orca-mini",
+                  pack.allowedRuntimeHosts.first?.rawValue == "orca-mini",
+                  pack.allowedRuntimeHosts.count >= 2,
+                  pack.allowedRuntimeHosts.contains(where: {
+                      $0.rawValue == pack.homeCapabilityHost.rawValue
+                  }),
+                  pack.primaryAdapterId?.rawValue == "openclaw_harness",
+                  pack.supportedAdapterIds.contains("openclaw_harness"),
                   pack.ingressSubject == "agents.\(pack.agentKey).inbox",
                   pack.lifecycleOwner?.rawValue == "schoolhouse",
                   pack.routerOwner?.rawValue == "cascade",
@@ -632,8 +641,7 @@ public actor OrcaRuntimeClient {
                     == "/api/v1/chat-runtime/v1/agents/\(pack.agentKey)/capabilities",
                   pack.capabilityAttestationRequired == true,
                   pack.releaseSignatureRequired == true,
-                  pack.payloadSha256.count == 64,
-                  !pack.supportedAdapterIds.isEmpty else {
+                  pack.payloadSha256.count == 64 else {
                 throw OrcaRuntimeClientError.invalidResponse(
                     "agent pack failed closed for \(pack.agentKey)"
                 )

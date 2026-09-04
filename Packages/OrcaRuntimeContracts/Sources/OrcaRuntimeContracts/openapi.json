@@ -262,7 +262,8 @@
             "items": {
               "$ref": "#/components/schemas/ChatRuntimeAgentPackRead"
             },
-            "minItems": 1,
+            "maxItems": 7,
+            "minItems": 7,
             "title": "Packs",
             "type": "array"
           },
@@ -319,7 +320,7 @@
               ],
               "type": "string"
             },
-            "minItems": 1,
+            "minItems": 2,
             "title": "Allowed Runtime Hosts",
             "type": "array"
           },
@@ -329,6 +330,12 @@
             },
             "title": "Approval Notes",
             "type": "array"
+          },
+          "authority_owner": {
+            "const": "orca",
+            "default": "orca",
+            "title": "Authority Owner",
+            "type": "string"
           },
           "capability_attestation_required": {
             "const": true,
@@ -354,16 +361,24 @@
             "title": "Contract Version",
             "type": "string"
           },
+          "controller_host": {
+            "const": "orca-mini",
+            "default": "orca-mini",
+            "title": "Controller Host",
+            "type": "string"
+          },
           "escalation_ref": {
             "maxLength": 256,
             "minLength": 1,
             "title": "Escalation Ref",
             "type": "string"
           },
-          "harness_adapter_id": {
-            "const": "openclaw_harness",
-            "default": "openclaw_harness",
-            "title": "Harness Adapter Id",
+          "home_capability_host": {
+            "enum": [
+              "shaka-mac",
+              "chief-mac"
+            ],
+            "title": "Home Capability Host",
             "type": "string"
           },
           "identity_ref": {
@@ -407,8 +422,8 @@
             "type": "string"
           },
           "primary_adapter_id": {
-            "maxLength": 128,
-            "minLength": 1,
+            "const": "openclaw_harness",
+            "default": "openclaw_harness",
             "title": "Primary Adapter Id",
             "type": "string"
           },
@@ -444,14 +459,6 @@
             "const": "cascade",
             "default": "cascade",
             "title": "Router Owner",
-            "type": "string"
-          },
-          "runtime_host": {
-            "enum": [
-              "shaka-mac",
-              "chief-mac"
-            ],
-            "title": "Runtime Host",
             "type": "string"
           },
           "runtime_posture": {
@@ -505,12 +512,11 @@
           "agent_key",
           "title",
           "roster_lane",
-          "runtime_host",
+          "home_capability_host",
           "allowed_runtime_hosts",
           "runtime_posture",
-          "primary_adapter_id",
-          "ingress_subject",
           "supported_adapter_ids",
+          "ingress_subject",
           "identity_ref",
           "locker_ref",
           "activation_context_ref",
@@ -3705,5 +3711,5 @@
     }
   ],
   "x-orca-contract-version": "orca.chat-runtime.v1",
-  "x-orca-schema-sha256": "7385bf810d32489f4a611c9aa2b80aac42627dbc9dd3497f807a2c2f643e017a"
+  "x-orca-schema-sha256": "40a298668534e87d47abc42279d4777334e1e2c9ae92dc6e291818a8a76cfbeb"
 }
