@@ -684,6 +684,7 @@ final class OrcaMacModel {
                     agentSlug: agentID,
                     content: content,
                     history: Array(history.suffix(20)),
+                    sourceSurface: "console",
                     deliveryMode: "agent_inbox",
                     asyncResponse: true,
                     traceID: traceID,

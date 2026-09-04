@@ -39,9 +39,12 @@ private func canonicalAgentPack(
     _ agentKey: String
 ) -> Components.Schemas.ChatRuntimeAgentPackRead {
     .init(
+        activationContextRef: "/api/v1/agents/\(agentKey)/activation-context",
         agentKey: agentKey,
+        allowedRuntimeHosts: [.orcaMini, .shakaMac],
         capabilityAttestationRequired: true,
         capabilityRef: "/api/v1/chat-runtime/v1/agents/\(agentKey)/capabilities",
+        checkpointRef: "orca://agent-packs/\(agentKey)/checkpoint",
         contractVersion: .orca_agentPack_v1,
         escalationRef: "orca://agent-packs/\(agentKey)/escalation",
         identityRef: "orca://agent-packs/\(agentKey)/identity",
@@ -51,6 +54,7 @@ private func canonicalAgentPack(
         memoryContract: .orcaManaged,
         memoryRef: "orca://agent-packs/\(agentKey)/memory",
         payloadSha256: String(repeating: "a", count: 64),
+        primaryAdapterId: "local_compute",
         releaseSignatureRequired: true,
         rosterLane: .activeMain,
         routerOwner: .cascade,
@@ -60,7 +64,8 @@ private func canonicalAgentPack(
         supportedAdapterIds: ["local_compute"],
         terminalReplyOwner: .schoolhouseWake,
         title: agentKey.capitalized,
-        voiceContract: .orca_namedAgentVoice_v1
+        voiceContract: .orca_namedAgentVoice_v1,
+        workControlRef: "/api/v1/chat-runtime/v1/agents/\(agentKey)/work-control"
     )
 }
 
@@ -72,7 +77,15 @@ private func canonicalAgentPackBundle() -> Components.Schemas.ChatRuntimeAgentPa
         packs: ["aloha", "chief", "coral", "maui", "reef", "rooster", "shaka"]
             .map(canonicalAgentPack),
         runtimeAttestationRequired: true,
-        runtimeManifestRevision: "2026-08-17.1"
+        runtimeManifestRevision: "2026-08-17.1",
+        sourceSha256: .init(
+            additionalProperties: [
+                "app/registries/agent-runtime-manifest.json": String(
+                    repeating: "c",
+                    count: 64
+                ),
+            ]
+        )
     )
 }
 
@@ -405,7 +418,7 @@ func credentialRedirectsAreNeverFollowed(status: Int) throws {
     #expect(OrcaRuntimeContract.version == "orca.chat-runtime.v1")
     #expect(
         OrcaRuntimeContract.schemaSHA256
-            == "ebeef707c500a880d15340016b6e03b772c0016d76d192491c6dabb630a1fc28"
+            == "7385bf810d32489f4a611c9aa2b80aac42627dbc9dd3497f807a2c2f643e017a"
     )
 }
 
@@ -732,6 +745,22 @@ func credentialRedirectsAreNeverFollowed(status: Int) throws {
     )
 
     #expect(request.idempotencyKey == "orca-runtime-turn:pod-chat-trace-1")
+    #expect(request.sourceSurface == "pod")
+}
+
+@Test func directTurnCarriesConsoleSourceWithoutChangingIdentity() {
+    let request = OrcaRuntimeDirectTurnRequest(
+        agentSlug: "coral",
+        content: "Continue this turn",
+        sourceSurface: "console",
+        deliveryMode: "agent_inbox",
+        asyncResponse: true,
+        traceID: "shared-native-trace-1",
+        idempotencyKey: "shared-native-turn-1"
+    )
+
+    #expect(request.sourceSurface == "console")
+    #expect(request.idempotencyKey == "shared-native-turn-1")
 }
 
 @Test func generatedTypesDecodeCanonicalCompleteTurn() throws {

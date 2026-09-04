@@ -252,6 +252,12 @@
             "title": "Contract Version",
             "type": "string"
           },
+          "frozen": {
+            "const": true,
+            "default": true,
+            "title": "Frozen",
+            "type": "boolean"
+          },
           "packs": {
             "items": {
               "$ref": "#/components/schemas/ChatRuntimeAgentPackRead"
@@ -271,10 +277,19 @@
             "minLength": 1,
             "title": "Runtime Manifest Revision",
             "type": "string"
+          },
+          "source_sha256": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "minProperties": 1,
+            "title": "Source Sha256",
+            "type": "object"
           }
         },
         "required": [
           "runtime_manifest_revision",
+          "source_sha256",
           "bundle_sha256",
           "packs"
         ],
@@ -284,10 +299,29 @@
       "ChatRuntimeAgentPackRead": {
         "description": "Digest-bound declarative identity and runtime policy for one named agent.",
         "properties": {
+          "activation_context_ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Activation Context Ref",
+            "type": "string"
+          },
           "agent_key": {
             "pattern": "^[a-z][a-z0-9-]{1,63}$",
             "title": "Agent Key",
             "type": "string"
+          },
+          "allowed_runtime_hosts": {
+            "items": {
+              "enum": [
+                "orca-mini",
+                "shaka-mac",
+                "chief-mac"
+              ],
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Allowed Runtime Hosts",
+            "type": "array"
           },
           "approval_notes": {
             "items": {
@@ -308,6 +342,12 @@
             "title": "Capability Ref",
             "type": "string"
           },
+          "checkpoint_ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Checkpoint Ref",
+            "type": "string"
+          },
           "contract_version": {
             "const": "orca.agent-pack.v1",
             "default": "orca.agent-pack.v1",
@@ -318,6 +358,12 @@
             "maxLength": 256,
             "minLength": 1,
             "title": "Escalation Ref",
+            "type": "string"
+          },
+          "harness_adapter_id": {
+            "const": "openclaw_harness",
+            "default": "openclaw_harness",
+            "title": "Harness Adapter Id",
             "type": "string"
           },
           "identity_ref": {
@@ -358,6 +404,12 @@
           "payload_sha256": {
             "pattern": "^[a-f0-9]{64}$",
             "title": "Payload Sha256",
+            "type": "string"
+          },
+          "primary_adapter_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Primary Adapter Id",
             "type": "string"
           },
           "protected_conditions": {
@@ -441,6 +493,12 @@
             "default": "orca.named-agent-voice.v1",
             "title": "Voice Contract",
             "type": "string"
+          },
+          "work_control_ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Work Control Ref",
+            "type": "string"
           }
         },
         "required": [
@@ -448,11 +506,16 @@
           "title",
           "roster_lane",
           "runtime_host",
+          "allowed_runtime_hosts",
           "runtime_posture",
+          "primary_adapter_id",
           "ingress_subject",
           "supported_adapter_ids",
           "identity_ref",
           "locker_ref",
+          "activation_context_ref",
+          "work_control_ref",
+          "checkpoint_ref",
           "capability_ref",
           "memory_ref",
           "escalation_ref",
@@ -966,6 +1029,32 @@
         ],
         "title": "ChatRuntimeEventType",
         "type": "string"
+      },
+      "ChatRuntimeHistoryMessage": {
+        "description": "Bounded prior turn context supplied by a native ORCA client.",
+        "properties": {
+          "content": {
+            "maxLength": 12000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "user",
+              "assistant",
+              "system"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "ChatRuntimeHistoryMessage",
+        "type": "object"
       },
       "ChatRuntimeInvariantRead": {
         "properties": {
@@ -1539,6 +1628,104 @@
         "title": "ChatRuntimeTurnContractRead",
         "type": "object"
       },
+      "ChatRuntimeTurnCreate": {
+        "description": "Create one provider-neutral named-agent turn through ORCA.",
+        "properties": {
+          "active_ticket_id": {
+            "format": "uuid",
+            "title": "Active Ticket Id",
+            "type": "string"
+          },
+          "async_response": {
+            "default": false,
+            "title": "Async Response",
+            "type": "boolean"
+          },
+          "content": {
+            "maxLength": 12000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "delivery_mode": {
+            "default": "auto",
+            "enum": [
+              "auto",
+              "compute",
+              "agent_inbox"
+            ],
+            "title": "Delivery Mode",
+            "type": "string"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeHistoryMessage"
+            },
+            "maxItems": 30,
+            "title": "History",
+            "type": "array"
+          },
+          "idempotency_key": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "origin_chat_id": {
+            "minimum": 1.0,
+            "title": "Origin Chat Id",
+            "type": "integer"
+          },
+          "origin_request_id": {
+            "maxLength": 160,
+            "title": "Origin Request Id",
+            "type": "string"
+          },
+          "origin_thread_id": {
+            "maxLength": 160,
+            "title": "Origin Thread Id",
+            "type": "string"
+          },
+          "source_surface": {
+            "default": "pod",
+            "enum": [
+              "pod",
+              "console",
+              "imessage"
+            ],
+            "title": "Source Surface",
+            "type": "string"
+          },
+          "trace_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "triage_id": {
+            "maxLength": 128,
+            "title": "Triage Id",
+            "type": "string"
+          },
+          "triage_trace_id": {
+            "maxLength": 128,
+            "title": "Triage Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content",
+          "idempotency_key",
+          "trace_id"
+        ],
+        "title": "ChatRuntimeTurnCreate",
+        "type": "object"
+      },
       "ChatRuntimeTurnRead": {
         "description": "Canonical provider-independent read model for one accepted turn.",
         "properties": {
@@ -1608,6 +1795,104 @@
           "resources"
         ],
         "title": "ChatRuntimeTurnRead",
+        "type": "object"
+      },
+      "ChatRuntimeTurnSubmissionRead": {
+        "description": "Accepted turn plus the immediate durable reply projection for clients.",
+        "properties": {
+          "agent_key": {
+            "pattern": "^[a-z][a-z0-9-]{1,63}$",
+            "title": "Agent Key",
+            "type": "string"
+          },
+          "compute_run_id": {
+            "maxLength": 128,
+            "title": "Compute Run Id",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "orca.chat-runtime.turn-submission.v1",
+            "default": "orca.chat-runtime.turn-submission.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "delivery_mode": {
+            "enum": [
+              "auto",
+              "compute",
+              "agent_inbox"
+            ],
+            "title": "Delivery Mode",
+            "type": "string"
+          },
+          "provenance": {
+            "maxLength": 64,
+            "title": "Provenance",
+            "type": "string"
+          },
+          "reply_content": {
+            "title": "Reply Content",
+            "type": "string"
+          },
+          "reply_lane": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Reply Lane",
+            "type": "string"
+          },
+          "reply_message_id": {
+            "format": "uuid",
+            "title": "Reply Message Id",
+            "type": "string"
+          },
+          "reply_source": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Reply Source",
+            "type": "string"
+          },
+          "reply_state": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Reply State",
+            "type": "string"
+          },
+          "tier": {
+            "maxLength": 128,
+            "title": "Tier",
+            "type": "string"
+          },
+          "token_count": {
+            "minimum": 0.0,
+            "title": "Token Count",
+            "type": "integer"
+          },
+          "trace_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "triage_id": {
+            "maxLength": 128,
+            "title": "Triage Id",
+            "type": "string"
+          },
+          "turn": {
+            "$ref": "#/components/schemas/ChatRuntimeTurnRead"
+          }
+        },
+        "required": [
+          "agent_key",
+          "turn",
+          "reply_message_id",
+          "reply_content",
+          "reply_state",
+          "reply_source",
+          "reply_lane",
+          "trace_id"
+        ],
+        "title": "ChatRuntimeTurnSubmissionRead",
         "type": "object"
       },
       "ChatRuntimeWorkApprovalRead": {
@@ -2577,7 +2862,7 @@
           },
           "channel_of_origin": {
             "default": "pod-chat",
-            "pattern": "^(pod-chat|imessage)$",
+            "pattern": "^(pod-chat|console|imessage)$",
             "title": "Channel Of Origin",
             "type": "string"
           },
@@ -2849,6 +3134,64 @@
           }
         ],
         "summary": "Read ORCA Chat Runtime v1 Agent Capability Truth",
+        "tags": [
+          "chat-runtime"
+        ]
+      }
+    },
+    "/api/v1/chat-runtime/v1/agents/{agent_key}/turns": {
+      "post": {
+        "description": "Persists one idempotent named-agent turn through the canonical ORCA conversation controller and returns its immediate reply plus the provider-neutral Flight Recorder projection.",
+        "operationId": "createRuntimeTurn",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_key",
+            "required": true,
+            "schema": {
+              "title": "Agent Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRuntimeTurnCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatRuntimeTurnSubmissionRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create one ORCA Chat Runtime v1 turn",
         "tags": [
           "chat-runtime"
         ]
@@ -3362,5 +3705,5 @@
     }
   ],
   "x-orca-contract-version": "orca.chat-runtime.v1",
-  "x-orca-schema-sha256": "ebeef707c500a880d15340016b6e03b772c0016d76d192491c6dabb630a1fc28"
+  "x-orca-schema-sha256": "7385bf810d32489f4a611c9aa2b80aac42627dbc9dd3497f807a2c2f643e017a"
 }

@@ -122,6 +122,7 @@ public struct OrcaRuntimeDirectTurnRequest: Equatable, Sendable {
     public let agentSlug: String
     public let content: String
     public let history: [OrcaRuntimeHistoryMessage]
+    public let sourceSurface: String
     public let deliveryMode: String
     public let asyncResponse: Bool
     public let idempotencyKey: String
@@ -135,6 +136,7 @@ public struct OrcaRuntimeDirectTurnRequest: Equatable, Sendable {
         agentSlug: String,
         content: String,
         history: [OrcaRuntimeHistoryMessage] = [],
+        sourceSurface: String = "pod",
         deliveryMode: String,
         asyncResponse: Bool,
         traceID: String,
@@ -147,6 +149,7 @@ public struct OrcaRuntimeDirectTurnRequest: Equatable, Sendable {
         self.agentSlug = agentSlug
         self.content = content
         self.history = history
+        self.sourceSurface = sourceSurface
         self.deliveryMode = deliveryMode
         self.asyncResponse = asyncResponse
         self.idempotencyKey = idempotencyKey ?? "orca-runtime-turn:\(traceID)"
@@ -1001,25 +1004,44 @@ public actor OrcaRuntimeClient {
     }
 
     public func send(_ request: OrcaRuntimeDirectTurnRequest) async throws -> OrcaRuntimeDirectTurnResponse {
-        let body = Components.Schemas.DirectAgentChatRequest(
+        guard let sourceSurface = Components.Schemas.ChatRuntimeTurnCreate.SourceSurfacePayload(
+            rawValue: request.sourceSurface
+        ) else {
+            throw OrcaRuntimeClientError.invalidResponse("unsupported source surface")
+        }
+        guard let deliveryMode = Components.Schemas.ChatRuntimeTurnCreate.DeliveryModePayload(
+            rawValue: request.deliveryMode
+        ) else {
+            throw OrcaRuntimeClientError.invalidResponse("unsupported delivery mode")
+        }
+        let history = try request.history.suffix(20).map { item in
+            guard let role = Components.Schemas.ChatRuntimeHistoryMessage.RolePayload(
+                rawValue: item.role
+            ) else {
+                throw OrcaRuntimeClientError.invalidResponse("unsupported history role")
+            }
+            return Components.Schemas.ChatRuntimeHistoryMessage(
+                content: item.content,
+                role: role
+            )
+        }
+        let body = Components.Schemas.ChatRuntimeTurnCreate(
             activeTicketId: request.activeTicketID,
             asyncResponse: request.asyncResponse,
-            channelOfOrigin: "pod-chat",
-            chatThreadId: request.conversationID,
             content: request.content,
-            deliveryMode: request.deliveryMode,
-            history: request.history.suffix(20).map {
-                Components.Schemas.DirectAgentChatMessage(content: $0.content, role: $0.role)
-            },
+            conversationId: request.conversationID,
+            deliveryMode: deliveryMode,
+            history: history,
             idempotencyKey: request.idempotencyKey,
+            sourceSurface: sourceSurface,
             traceId: request.traceID,
             triageId: request.triageID,
             triageTraceId: request.triageTraceID
         )
-        let output = try await client.sendDirectAgentTurn(
-            .init(path: .init(agentSlug: request.agentSlug), body: .json(body))
+        let output = try await client.createRuntimeTurn(
+            .init(path: .init(agentKey: request.agentSlug), body: .json(body))
         )
-        let response: Components.Schemas.DirectAgentChatResponse
+        let response: Components.Schemas.ChatRuntimeTurnSubmissionRead
         switch output {
         case let .ok(value):
             response = try value.body.json
@@ -1028,25 +1050,34 @@ public actor OrcaRuntimeClient {
         case let .undocumented(statusCode, _):
             throw OrcaRuntimeClientError.httpStatus(statusCode)
         }
-        let metadata = response.metadata
+        try Self.validateRuntimeTurn(response.turn, expectedTurnID: response.turn.turnId)
+        guard response.contractVersion == .orca_chatRuntime_turnSubmission_v1,
+              response.agentKey == request.agentSlug.lowercased(),
+              response.turn.idempotencyKey == request.idempotencyKey,
+              response.turn.conversationId.isEmpty == false,
+              response.turn.messageId.isEmpty == false,
+              response.replyMessageId.isEmpty == false,
+              response.traceId == request.traceID else {
+            throw OrcaRuntimeClientError.invalidResponse("runtime turn submission failed closed")
+        }
         return OrcaRuntimeDirectTurnResponse(
-            conversationID: response.channelId,
-            userMessageID: response.userMessageId,
-            assistantMessageID: response.assistantMessageId,
-            content: response.content,
-            agentSlug: response.agentSlug,
-            traceID: metadata.traceId,
-            source: metadata.source,
-            lane: metadata.lane,
-            deliveryMode: metadata.deliveryMode,
-            provenance: metadata.provenance,
-            responseState: metadata.responseState,
-            provider: metadata.backend,
-            model: metadata.model,
-            tier: metadata.tier,
-            tokenCount: metadata.tokenCount,
-            triageID: metadata.triageId,
-            computeRunID: metadata.computeRunId
+            conversationID: response.turn.conversationId,
+            userMessageID: response.turn.messageId,
+            assistantMessageID: response.replyMessageId,
+            content: response.replyContent,
+            agentSlug: response.agentKey,
+            traceID: response.traceId,
+            source: response.replySource,
+            lane: response.replyLane,
+            deliveryMode: response.deliveryMode?.rawValue,
+            provenance: response.provenance,
+            responseState: response.replyState,
+            provider: response.turn.adapter?.providerId,
+            model: response.turn.adapter?.modelId,
+            tier: response.tier,
+            tokenCount: response.tokenCount,
+            triageID: response.triageId,
+            computeRunID: response.computeRunId
         )
     }
 

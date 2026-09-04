@@ -186,6 +186,101 @@ public struct Client: APIProtocol {
             }
         )
     }
+    /// Create one ORCA Chat Runtime v1 turn
+    ///
+    /// Persists one idempotent named-agent turn through the canonical ORCA conversation controller and returns its immediate reply plus the provider-neutral Flight Recorder projection.
+    ///
+    /// - Remark: HTTP `POST /api/v1/chat-runtime/v1/agents/{agent_key}/turns`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/agents/{agent_key}/turns/post(createRuntimeTurn)`.
+    public func createRuntimeTurn(_ input: Operations.CreateRuntimeTurn.Input) async throws -> Operations.CreateRuntimeTurn.Output {
+        try await client.send(
+            input: input,
+            forOperation: Operations.CreateRuntimeTurn.id,
+            serializer: { input in
+                let path = try converter.renderedPath(
+                    template: "/api/v1/chat-runtime/v1/agents/{}/turns",
+                    parameters: [
+                        input.path.agentKey
+                    ]
+                )
+                var request: HTTPTypes.HTTPRequest = .init(
+                    soar_path: path,
+                    method: .post
+                )
+                suppressMutabilityWarning(&request)
+                converter.setAcceptHeader(
+                    in: &request.headerFields,
+                    contentTypes: input.headers.accept
+                )
+                let body: OpenAPIRuntime.HTTPBody?
+                switch input.body {
+                case let .json(value):
+                    body = try converter.setRequiredRequestBodyAsJSON(
+                        value,
+                        headerFields: &request.headerFields,
+                        contentType: "application/json; charset=utf-8"
+                    )
+                }
+                return (request, body)
+            },
+            deserializer: { response, responseBody in
+                switch response.status.code {
+                case 200:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.CreateRuntimeTurn.Output.Ok.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas.ChatRuntimeTurnSubmissionRead.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .ok(.init(body: body))
+                case 422:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.CreateRuntimeTurn.Output.UnprocessableContent.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas.HTTPValidationError.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .unprocessableContent(.init(body: body))
+                default:
+                    return .undocumented(
+                        statusCode: response.status.code,
+                        .init(
+                            headerFields: response.headerFields,
+                            body: responseBody
+                        )
+                    )
+                }
+            }
+        )
+    }
     /// Read ORCA Chat Runtime v1 Agent Work Control
     ///
     /// Returns the typed, digest-bound adapter over existing ORCA tickets, tasks, approvals, Planner, workers, Research, Fish, and governed tools. The route is read-only and does not create a second work ledger.

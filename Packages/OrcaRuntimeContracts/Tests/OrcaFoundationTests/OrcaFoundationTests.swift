@@ -71,7 +71,8 @@ final class OrcaFoundationTests: XCTestCase {
         let bundle = Components.Schemas.ChatRuntimeAgentPackBundleRead(
             bundleSha256: String(repeating: "a", count: 64),
             packs: [],
-            runtimeManifestRevision: "test"
+            runtimeManifestRevision: "test",
+            sourceSha256: .init(additionalProperties: [:])
         )
         XCTAssertThrowsError(try OrcaRuntimeProjection.profiles(from: bundle))
     }

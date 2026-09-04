@@ -242,7 +242,10 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertEqual(snapshot.metrics.first(where: { $0.id == "ready" })?.value, "1")
         XCTAssertEqual(snapshot.metrics.first(where: { $0.id == "assigned" })?.value, "1")
         XCTAssertEqual(snapshot.metrics.first(where: { $0.id == "approvals" })?.value, "1")
-        XCTAssertEqual(Set(snapshot.records.map(\.group)), Set(["Ready Now", "Assigned", "Approvals"]))
+        XCTAssertEqual(
+            Set(snapshot.records.map(\.group)),
+            Set(["Ready Now", "Assigned", "Decision Queue"])
+        )
         XCTAssertEqual(Set(snapshot.records.map(\.title)), Set(["Prove Work Control", "Sign Standard"]))
         XCTAssertEqual(
             Set(snapshot.sources),
