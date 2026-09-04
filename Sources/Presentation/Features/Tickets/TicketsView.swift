@@ -5706,7 +5706,11 @@ struct TicketDetailSheet: View {
 
     private func approvalRow(_ approval: TicketApprovalRecord) -> some View {
         let normalizedStatus = approval.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let authority = viewModel.approvalAuthoritySpec(for: approval.actionType)
+        let registryAuthority = viewModel.approvalAuthoritySpec(for: approval.actionType)
+        let authorityLabel = approval.authority == "unregistered"
+            ? registryAuthority?.authorityLabel ?? "registry unknown"
+            : approval.authorityLabel
+        let canResolve = approval.canResolveFromTicket(ticket.id)
         let color: Color
         switch normalizedStatus {
         case "approved":
@@ -5744,7 +5748,7 @@ struct TicketDetailSheet: View {
             HStack(spacing: 8) {
                 runMetaPill(approval.statusLabel)
                 runMetaPill("confidence \(Int(approval.confidence))")
-                runMetaPill(authority?.authorityLabel ?? "registry unknown")
+                runMetaPill(authorityLabel)
                 if let lane = approval.lane, !lane.isEmpty {
                     runMetaPill(lane)
                 }
@@ -5757,10 +5761,14 @@ struct TicketDetailSheet: View {
                 traceReferenceButton(label: "Trace", traceId: traceId)
             }
 
-            if let authority {
-                Label(authority.authorityLabel, systemImage: authority.noCascade ? "lock.shield" : "person.2.badge.gearshape")
+            if approval.authority != "unregistered" {
+                Label(approval.authorityLabel, systemImage: approval.noCascade ? "lock.shield" : "person.2.badge.gearshape")
                     .font(.caption2)
                     .foregroundColor(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Label(approval.authorizationReason, systemImage: canResolve ? "checkmark.shield" : "arrow.triangle.branch")
+                    .font(.caption2)
+                    .foregroundColor(canResolve ? AppColors.accentSuccess : AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             } else if let message = viewModel.approvalRegistryErrorMessage {
                 Label(message, systemImage: "exclamationmark.triangle")
@@ -5774,46 +5782,96 @@ struct TicketDetailSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if normalizedStatus == "pending" {
-                HStack(spacing: 8) {
-                    Button {
-                        Task {
-                            await viewModel.resolveApproval(
-                                ticketId: ticket.id,
-                                approvalId: approval.id,
-                                approved: true,
-                                reason: "Approved from Pod ticket evidence review."
-                            )
-                        }
-                    } label: {
-                        Label("Approve", systemImage: "checkmark.shield")
-                            .font(.caption.weight(.semibold))
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(AppColors.accentSuccess)
+            if let targetType = approval.targetType,
+               let targetReference = approval.targetReference,
+               !targetType.isEmpty,
+               !targetReference.isEmpty {
+                Label("\(targetType.capitalized) \(targetReference.prefix(8))", systemImage: "scope")
+                    .font(.caption2.monospaced())
+                    .foregroundColor(AppColors.textSecondary)
+            }
 
-                    Button(role: .destructive) {
-                        Task {
-                            await viewModel.resolveApproval(
-                                ticketId: ticket.id,
-                                approvalId: approval.id,
-                                approved: false,
-                                reason: "Rejected from Pod ticket evidence review."
+            if !approval.linkedTasks.isEmpty {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Linked work")
+                        .font(.caption2.weight(.bold))
+                        .foregroundColor(AppColors.textSecondary)
+
+                    ForEach(approval.linkedTasks) { linkedTask in
+                        Button {
+                            guard let taskID = UUID(uuidString: linkedTask.id) else { return }
+                            dismiss()
+                            appState.route(
+                                .taskAssigned(taskId: taskID, title: linkedTask.title)
                             )
+                        } label: {
+                            HStack(spacing: 7) {
+                                Image(systemName: "checklist")
+                                Text(linkedTask.title)
+                                    .lineLimit(1)
+                                Spacer()
+                                runMetaPill(linkedTask.statusLabel)
+                                Image(systemName: "arrow.up.right.square")
+                            }
+                            .font(.caption)
+                            .foregroundColor(AppColors.accentElectric)
                         }
-                    } label: {
-                        Label("Reject", systemImage: "xmark.shield")
-                            .font(.caption.weight(.semibold))
-                            .frame(maxWidth: .infinity)
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.bordered)
                 }
-                .padding(.top, 2)
-
-                Text("Authority action: this requests ORCA to resolve the approval. ORCA checks the approval registry before accepting the decision.")
+            } else if !approval.linkedTaskIDs.isEmpty {
+                Label("\(approval.linkedTaskIDs.count) linked task references", systemImage: "checklist")
                     .font(.caption2)
-                    .foregroundColor(AppColors.textTertiary)
+                    .foregroundColor(AppColors.textSecondary)
+            }
+
+            if normalizedStatus == "pending" {
+                if canResolve {
+                    HStack(spacing: 8) {
+                        Button {
+                            Task {
+                                await viewModel.resolveApproval(
+                                    ticketId: ticket.id,
+                                    approvalId: approval.id,
+                                    approved: true,
+                                    reason: "Approved from Pod ticket evidence review."
+                                )
+                            }
+                        } label: {
+                            Label("Approve", systemImage: "checkmark.shield")
+                                .font(.caption.weight(.semibold))
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(AppColors.accentSuccess)
+
+                        Button(role: .destructive) {
+                            Task {
+                                await viewModel.resolveApproval(
+                                    ticketId: ticket.id,
+                                    approvalId: approval.id,
+                                    approved: false,
+                                    reason: "Rejected from Pod ticket evidence review."
+                                )
+                            }
+                        } label: {
+                            Label("Reject", systemImage: "xmark.shield")
+                                .font(.caption.weight(.semibold))
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    .padding(.top, 2)
+
+                    Text("ORCA supplied this exact Captain decision endpoint and still rechecks authority on resolution.")
+                        .font(.caption2)
+                        .foregroundColor(AppColors.textTertiary)
+                } else {
+                    Label("Route to \(approval.authority). No Captain action is available for this decision.", systemImage: "paperplane")
+                        .font(.caption2)
+                        .foregroundColor(AppColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
