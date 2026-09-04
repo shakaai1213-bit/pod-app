@@ -589,8 +589,12 @@ func credentialRedirectsAreNeverFollowed(status: Int) throws {
 
 @Test func workControlProjectionPreservesCanonicalCountsAndIdentifiers() {
     let approval = canonicalWorkApproval()
+    let attention = canonicalWorkApproval(
+        id: "80000000-0000-4000-8000-000000000002",
+        viewerAuthorized: false
+    )
     let bundle = canonicalWorkControlBundle(
-        approvalInventory: [approval],
+        approvalInventory: [approval, attention],
         approvalQueue: [approval]
     )
     let projection = OrcaWorkControlProjection(bundle)
@@ -600,6 +604,9 @@ func credentialRedirectsAreNeverFollowed(status: Int) throws {
     #expect(projection.counts.readyNow == bundle.resources.counts.readyNow)
     #expect(projection.readyNow.map(\.id) == (bundle.readyNow ?? []).map(\.workId))
     #expect(projection.approvals.map(\.id) == [approval.approvalId])
+    #expect(projection.approvalInventory.map(\.id) == [approval.approvalId, attention.approvalId])
+    #expect(projection.approvalAttention.map(\.id) == [attention.approvalId])
+    #expect(Set(projection.approvals.map(\.id)).isDisjoint(with: projection.approvalAttention.map(\.id)))
     #expect(projection.sourceContract == "orca.agent-workbench.v1")
     #expect(projection.resourceEndpoints["workbench"] == "/api/v1/agent/workbench")
 }

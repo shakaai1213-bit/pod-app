@@ -5,7 +5,8 @@ public struct OrcaWorkControlProjection: Hashable, Sendable {
         case readyNow = "Ready Now"
         case assigned = "Assigned"
         case waitingOnOthers = "Waiting On Others"
-        case approvals = "Approvals"
+        case approvals = "Decision Queue"
+        case approvalAttention = "Approval Attention"
         case protected = "Protected"
         case historical = "Historical"
     }
@@ -77,6 +78,7 @@ public struct OrcaWorkControlProjection: Hashable, Sendable {
     public let waitingOnOthers: [Item]
     public let approvals: [Approval]
     public let approvalInventory: [Approval]
+    public let approvalAttention: [Approval]
     public let protected: [Item]
     public let historical: [Item]
     public let resourceEndpoints: [String: String]
@@ -96,6 +98,8 @@ public struct OrcaWorkControlProjection: Hashable, Sendable {
         waitingOnOthers = (bundle.waitingOnOthers ?? []).map(Item.init)
         approvals = (bundle.approvalQueue ?? []).map(Approval.init)
         approvalInventory = (bundle.approvalInventory ?? []).map(Approval.init)
+        let decisionIDs = Set(approvals.map(\.id))
+        approvalAttention = approvalInventory.filter { !decisionIDs.contains($0.id) }
         protected = (bundle.protectedWork ?? []).map(Item.init)
         historical = (bundle.historicalWork ?? []).map(Item.init)
         resourceEndpoints = bundle.resources.endpoints?.additionalProperties ?? [:]
@@ -106,7 +110,7 @@ public struct OrcaWorkControlProjection: Hashable, Sendable {
         case .readyNow: readyNow
         case .assigned: assigned
         case .waitingOnOthers: waitingOnOthers
-        case .approvals: []
+        case .approvals, .approvalAttention: []
         case .protected: protected
         case .historical: historical
         }

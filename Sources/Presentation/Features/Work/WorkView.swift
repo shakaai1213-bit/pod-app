@@ -341,7 +341,7 @@ struct WorkView: View {
             workControlMetric("Ready", counts.readyNow, color: AppColors.accentSuccess)
             workControlMetric("Assigned", counts.assigned, color: AppColors.accentElectric)
             workControlMetric("Waiting", counts.waitingOnOthers, color: AppColors.accentWarning)
-            workControlMetric("Approvals", counts.approvals, color: AppColors.accentCaptain)
+            workControlMetric("Decisions", counts.approvals, color: AppColors.accentCaptain)
         }
     }
 
@@ -367,7 +367,14 @@ struct WorkView: View {
         projection: OrcaWorkControlProjection
     ) -> some View {
         let items = projection.items(in: group)
-        let approvals = group == .approvals ? projection.approvals : []
+        let approvals: [OrcaWorkControlProjection.Approval] = switch group {
+        case .approvals:
+            projection.approvals
+        case .approvalAttention:
+            projection.approvalAttention
+        default:
+            []
+        }
         if !items.isEmpty || !approvals.isEmpty {
             VStack(alignment: .leading, spacing: 7) {
                 Text(group.rawValue.uppercased())
@@ -396,17 +403,33 @@ struct WorkView: View {
                 }
                 ForEach(approvals.prefix(4)) { approval in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Image(systemName: "checkmark.seal")
-                            .foregroundStyle(AppColors.accentCaptain)
+                        let canDecide = approval.viewerAuthorized
+                            && approval.resolutionEnabled
+                            && !approval.selfApprovalProhibited
+                            && approval.decisionEndpoint != nil
+                        Image(systemName: canDecide ? "checkmark.seal.fill" : "person.line.dotted.person.fill")
+                            .foregroundStyle(canDecide ? AppColors.accentCaptain : AppColors.accentWarning)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(approval.actionType.replacingOccurrences(of: "_", with: " ").capitalized)
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(AppColors.textPrimary)
-                            Text(approval.authority)
+                            Text(approval.reason)
+                                .font(.system(size: 10))
+                                .foregroundStyle(AppColors.textSecondary)
+                                .lineLimit(2)
+                            Text(approvalTargetLine(approval))
                                 .font(.system(size: 10))
                                 .foregroundStyle(AppColors.textTertiary)
                         }
                         Spacer()
+                        Text(canDecide ? "READY" : "ROUTE")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(canDecide ? AppColors.accentCaptain : AppColors.accentWarning)
+                        if approval.stale {
+                            Text("STALE")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(AppColors.accentDanger)
+                        }
                     }
                 }
                 let remaining = max(0, items.count + approvals.count - 4)
@@ -420,6 +443,14 @@ struct WorkView: View {
             .background(AppColors.backgroundTertiary.opacity(0.72))
             .clipShape(RoundedRectangle(cornerRadius: 6))
         }
+    }
+
+    private func approvalTargetLine(_ approval: OrcaWorkControlProjection.Approval) -> String {
+        let target = [approval.targetType, approval.targetReference]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        return target.isEmpty ? "Authority: \(approval.authority)" : "Authority: \(approval.authority) · \(target)"
     }
 
     private var parkingLotSection: some View {
@@ -464,7 +495,7 @@ struct WorkView: View {
     private var approvalLaneSection: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("APPROVALS · \(model.approvalAttentionCount)")
+                Text("APPROVAL SIGNALS · \(model.approvalAttentionCount)")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(AppColors.textTertiary)
                     .kerning(0.5)
@@ -501,7 +532,7 @@ struct WorkView: View {
                 } else if let err = model.approvalAttentionError {
                     errorBanner(message: err) { Task { await model.loadApprovalAttention() } }
                 } else if model.approvalAttentionItems.isEmpty {
-                    emptyState(icon: "checkmark.seal", text: "No approval attention waiting.")
+                    emptyState(icon: "checkmark.seal", text: "No approval signals waiting.")
                 } else {
                     ForEach(model.approvalAttentionItems.prefix(5)) { item in
                         PodReviewCard(
@@ -522,7 +553,7 @@ struct WorkView: View {
                     }
 
                     if model.approvalAttentionItems.count > 5 {
-                        Text("+\(model.approvalAttentionItems.count - 5) more in Tickets")
+                        Text("+\(model.approvalAttentionItems.count - 5) more signals in Tickets")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundColor(AppColors.textTertiary)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -611,7 +642,7 @@ struct WorkView: View {
         let detail = (reasons + [latestRun].compactMap { $0 }).joined(separator: " · ")
         return PodReviewItem(
             id: item.id,
-            eyebrow: "Ticket \(String(item.id.replacingOccurrences(of: "-", with: "").prefix(8)))",
+            eyebrow: "Approval signal · Ticket \(String(item.id.replacingOccurrences(of: "-", with: "").prefix(8)))",
             title: item.title,
             detail: detail.isEmpty ? "Approval attention requested." : detail,
             status: item.approvalGate ?? item.approvalState.replacingOccurrences(of: "_", with: " "),
