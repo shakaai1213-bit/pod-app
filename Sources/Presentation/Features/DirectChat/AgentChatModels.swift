@@ -1,4 +1,5 @@
 import Foundation
+import OrcaDomain
 import SwiftData
 
 // MARK: - Agent Directory
@@ -74,89 +75,25 @@ extension AgentInfo {
     // MARK: - Gateway URL constants (non-sensitive)
     private static let computeGateway = AppConfig.computeURL
 
-    /// Pod chat routing v1: live-capable named agents default to ORCA/NATS
-    /// inbox handoff. Helper draft remains available as an explicit route.
-    /// Dormant/archive agents are preserved outside the app surface until ORCA
-    /// exposes them as explicit read-only records.
-    static let team: [AgentInfo] = [
-        AgentInfo(
-            id: "aloha",
-            name: "Aloha",
-            role: "Tony-facing coordinator, intake, standards, ORCA operations, memory enforcement",
-            icon: "doc.text",
-            color: "EC4899",
+    /// Presentation fallback only. ORCA Agent Packs and Locker policy remain
+    /// authoritative for live identity, capability, and reachability.
+    static let team: [AgentInfo] = OrcaAgentProfile.fallbackRoster.map { profile in
+        let lane: Lane = switch profile.lane {
+        case .primary, .protected: .main
+        case .support: .supportRuntime
+        }
+        return AgentInfo(
+            id: profile.id,
+            name: profile.name,
+            role: profile.role,
+            icon: profile.symbol,
+            color: profile.colorHex,
             endpoint: .init(baseURL: computeGateway, authToken: ""),
             isReachable: true,
-            lane: .main,
-            guardrail: "Aloha is Tony's central coordinator. Keep memory, triage, standards, ORCA routing, and archive decisions grounded in Team-Wiki and ORCA. Do not claim final authority over Chief/Fund changes."
-        ),
-        AgentInfo(
-            id: "maui",
-            name: "Maui",
-            role: "Engineering lead for Pod, ORCA backend, compute integration, and shipping",
-            icon: "wrench.and.screwdriver",
-            color: "F97316",
-            endpoint: .init(baseURL: computeGateway, authToken: ""),
-            isReachable: true,
-            lane: .main,
-            guardrail: "Maui should be decisive on engineering implementation, but must keep work tied to ORCA tickets, document meaningful changes in the chronogram, and avoid destructive operations."
-        ),
-        AgentInfo(
-            id: "shaka",
-            name: "Shaka",
-            role: "CEO coordination lane for the operating picture, priorities, and cross-agent alignment",
-            icon: "scope",
-            color: "8B5CF6",
-            endpoint: .init(baseURL: computeGateway, authToken: ""),
-            isReachable: true,
-            lane: .main,
-            guardrail: "Shaka is an agent lane, not Tony himself. Keep the operating picture grounded in ORCA, Schoolhouse, Locker, and Team-Wiki evidence. Never imply Tony approval or protected Chief/Fund authority without the recorded gate."
-        ),
-        AgentInfo(
-            id: "chief",
-            name: "Chief",
-            role: "Protected Fund and trading research lead",
-            icon: "chart.line.uptrend.xyaxis",
-            color: "22C55E",
-            endpoint: .init(baseURL: computeGateway, authToken: ""),
-            isReachable: true,
-            lane: .main,
-            guardrail: "Chief is protected. This Pod chat is not the live Chief runtime and has no access to P&L, positions, orders, wallets, exchange accounts, Chief memory, Chief Chroma, or trading systems. Never invent financial values, portfolio state, ticket ids, completed checks, or trading actions. Keep answers read-only and process-focused. For any Fund, trading, account, credential, strategy execution, or Chief Mac inspection request, tell Tony to create or attach an ORCA ticket for Chief plus Tony/Rooster review before any mutation."
-        ),
-        AgentInfo(
-            id: "rooster",
-            name: "Rooster",
-            role: "Security, credentials, guardrails, Chief Mac protection",
-            icon: "checkmark.shield",
-            color: "EF4444",
-            endpoint: .init(baseURL: computeGateway, authToken: ""),
-            isReachable: true,
-            lane: .main,
-            guardrail: "Rooster handles security review and guardrails. Never expose secrets. Recommend rotations or access changes only as explicit review items for Tony."
-        ),
-        AgentInfo(
-            id: "coral",
-            name: "Coral",
-            role: "Operations manager for Pod runtime, surfaces, watchdogs, and compute observability",
-            icon: "circle.hexagongrid",
-            color: "06B6D4",
-            endpoint: .init(baseURL: computeGateway, authToken: ""),
-            isReachable: true,
-            lane: .supportRuntime,
-            guardrail: "This is Coral's live central Pod lane. Conversation uses Coral's continuity context; bounded repository work may dispatch through an attached ORCA ticket and returns as Agent Run evidence. Never claim an isolated worktree was merged or deployed, and never cross credentials, Chief/Fund, or other protected boundaries without the recorded gate."
-        ),
-        AgentInfo(
-            id: "reef",
-            name: "Reef",
-            role: "Support-runtime for Chief Mac watchdogs, mirrors, surfaces",
-            icon: "waveform.path.ecg",
-            color: "14B8A6",
-            endpoint: .init(baseURL: computeGateway, authToken: ""),
-            isReachable: true,
-            lane: .supportRuntime,
-            guardrail: "Reef is support-runtime for Chief Mac mirrors, daemons, surfaces, watchdogs, and Chief-Mac support triage. This Pod chat is not the live Reef runtime and has no authority to inspect or change Chief/Fund systems. Any Chief/Fund, trading, credential, or Chief Mac mutation requires ORCA ticket plus Chief/Tony/Rooster review."
-        ),
-    ]
+            lane: lane,
+            guardrail: profile.fallbackGuardrail
+        )
+    }
 
     var laneLabel: String {
         switch lane {

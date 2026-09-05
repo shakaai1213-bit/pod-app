@@ -4,7 +4,7 @@ import OpenAPIURLSession
 
 public enum OrcaRuntimeContract: Sendable {
     public static let version = "orca.chat-runtime.v1"
-    public static let schemaSHA256 = "7e867ff94398b39827dd2bc210505266f0dd08ea0892e28fa19128e392cfe74f"
+    public static let schemaSHA256 = "40a298668534e87d47abc42279d4777334e1e2c9ae92dc6e291818a8a76cfbeb"
 
     public static func makeClient(
         serverURL: URL,
@@ -13,9 +13,43 @@ public enum OrcaRuntimeContract: Sendable {
     ) -> Client {
         Client(
             serverURL: serverURL,
+            configuration: .init(dateTranscoder: OrcaAPIDateTranscoder()),
             transport: URLSessionTransport(configuration: .init(session: session)),
             middlewares: middlewares
         )
+    }
+}
+
+struct OrcaAPIDateTranscoder: DateTranscoder {
+    private let standard = ISO8601DateTranscoder()
+    private let fractional = ISO8601DateTranscoder(
+        options: [.withInternetDateTime, .withFractionalSeconds]
+    )
+
+    func encode(_ date: Date) throws -> String {
+        try fractional.encode(date)
+    }
+
+    func decode(_ value: String) throws -> Date {
+        do {
+            return try fractional.decode(value)
+        } catch {
+            do {
+                return try standard.decode(value)
+            } catch {
+                guard value.range(
+                    of: #"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$"#,
+                    options: .regularExpression
+                ) != nil else {
+                    throw error
+                }
+                let assumedUTC = "\(value)Z"
+                if value.contains(".") {
+                    return try fractional.decode(assumedUTC)
+                }
+                return try standard.decode(assumedUTC)
+            }
+        }
     }
 }
 

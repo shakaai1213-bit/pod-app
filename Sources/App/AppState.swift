@@ -1,12 +1,13 @@
 import Foundation
+import OrcaAPI
 import OrcaRuntimeContracts
 import SwiftUI
 
 enum AppConfig {
-    static let canonicalBackendURL = "http://100.104.72.62:8000"
+    static let canonicalBackendURL = OrcaEndpointPolicy.productionOrigin
 
     #if targetEnvironment(simulator)
-    static let backendURL = "http://127.0.0.1:19002"
+    static let backendURL = OrcaEndpointPolicy.simulatorOrigin
     static let computeURL = "http://127.0.0.1:8890"
     #else
     static let backendURL = canonicalBackendURL

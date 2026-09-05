@@ -1,3 +1,4 @@
+import OrcaRuntimeContracts
 import SwiftData
 import SwiftUI
 
@@ -62,6 +63,10 @@ struct WorkView: View {
                     AnyView(productPortfolioSection)
                         .padding(.horizontal, 16)
                         .padding(.bottom, 20)
+
+                    AnyView(namedAgentWorkControlSection)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
 
                     AnyView(
                         WorkbenchAgentCockpitSection(
@@ -266,6 +271,188 @@ struct WorkView: View {
         }
     }
 
+    private var namedAgentWorkControlSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("AGENT WORK CONTROL")
+                        .font(.system(size: 11, weight: .bold))
+                        .kerning(0.5)
+                        .foregroundStyle(AppColors.textTertiary)
+                    Text("ORCA queue")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(AppColors.textPrimary)
+                }
+                Spacer()
+                Picker("Agent", selection: workControlAgentSelection) {
+                    ForEach(AgentRosterPolicy.activeDisplayOrder, id: \.self) { agent in
+                        Text(agent.capitalized).tag(agent)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                Button {
+                    Task { await model.loadRuntimeWorkControl() }
+                } label: {
+                    Image(systemName: model.isLoadingRuntimeWorkControl ? "hourglass" : "arrow.clockwise")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+                .disabled(model.isLoadingRuntimeWorkControl)
+                .accessibilityLabel("Refresh agent Work Control")
+            }
+
+            if let projection = model.runtimeWorkControl {
+                workControlMetrics(projection)
+                ForEach(OrcaWorkControlProjection.Group.allCases, id: \.self) { group in
+                    workControlGroup(group, projection: projection)
+                }
+                Text("ORCA · \(projection.sourceContract) · \(projection.bundleSHA256.prefix(8))")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(AppColors.textTertiary)
+            } else if model.isLoadingRuntimeWorkControl {
+                ProgressView()
+                    .frame(maxWidth: .infinity, minHeight: 90)
+            } else if let error = model.runtimeWorkControlError {
+                errorBanner(message: error) { Task { await model.loadRuntimeWorkControl() } }
+            } else {
+                emptyState(icon: "tray", text: "No Work Control bundle loaded.")
+            }
+        }
+        .padding(14)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusMedium)
+                .strokeBorder(AppColors.border, lineWidth: 0.5)
+        )
+    }
+
+    private var workControlAgentSelection: Binding<String> {
+        Binding(
+            get: { model.selectedWorkControlAgent },
+            set: { model.selectWorkControlAgent($0) }
+        )
+    }
+
+    private func workControlMetrics(_ projection: OrcaWorkControlProjection) -> some View {
+        let counts = projection.counts
+        return HStack(spacing: 8) {
+            workControlMetric("Ready", counts.readyNow, color: AppColors.accentSuccess)
+            workControlMetric("Assigned", counts.assigned, color: AppColors.accentElectric)
+            workControlMetric("Waiting", counts.waitingOnOthers, color: AppColors.accentWarning)
+            workControlMetric("Decisions", counts.approvals, color: AppColors.accentCaptain)
+        }
+    }
+
+    private func workControlMetric(_ label: String, _ value: Int, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("\(value)")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(color)
+            Text(label)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(AppColors.textTertiary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+        .padding(.horizontal, 9)
+        .background(AppColors.backgroundTertiary)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+
+    @ViewBuilder
+    private func workControlGroup(
+        _ group: OrcaWorkControlProjection.Group,
+        projection: OrcaWorkControlProjection
+    ) -> some View {
+        let items = projection.items(in: group)
+        let approvals: [OrcaWorkControlProjection.Approval] = switch group {
+        case .approvals:
+            projection.approvals
+        case .approvalAttention:
+            projection.approvalAttention
+        default:
+            []
+        }
+        if !items.isEmpty || !approvals.isEmpty {
+            VStack(alignment: .leading, spacing: 7) {
+                Text(group.rawValue.uppercased())
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(AppColors.textTertiary)
+                ForEach(items.prefix(4)) { item in
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Image(systemName: item.executionEligible ? "play.circle.fill" : "pause.circle.fill")
+                            .foregroundStyle(item.executionEligible ? AppColors.accentSuccess : AppColors.accentWarning)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.title)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(AppColors.textPrimary)
+                                .lineLimit(2)
+                            Text("\(item.kind) · \(item.priority) · \(item.status)")
+                                .font(.system(size: 10))
+                                .foregroundStyle(AppColors.textTertiary)
+                        }
+                        Spacer()
+                        if item.stale {
+                            Text("STALE")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(AppColors.accentDanger)
+                        }
+                    }
+                }
+                ForEach(approvals.prefix(4)) { approval in
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        let canDecide = approval.viewerAuthorized
+                            && approval.resolutionEnabled
+                            && !approval.selfApprovalProhibited
+                            && approval.decisionEndpoint != nil
+                        Image(systemName: canDecide ? "checkmark.seal.fill" : "person.line.dotted.person.fill")
+                            .foregroundStyle(canDecide ? AppColors.accentCaptain : AppColors.accentWarning)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(approval.actionType.replacingOccurrences(of: "_", with: " ").capitalized)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(AppColors.textPrimary)
+                            Text(approval.reason)
+                                .font(.system(size: 10))
+                                .foregroundStyle(AppColors.textSecondary)
+                                .lineLimit(2)
+                            Text(approvalTargetLine(approval))
+                                .font(.system(size: 10))
+                                .foregroundStyle(AppColors.textTertiary)
+                        }
+                        Spacer()
+                        Text(canDecide ? "READY" : "ROUTE")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(canDecide ? AppColors.accentCaptain : AppColors.accentWarning)
+                        if approval.stale {
+                            Text("STALE")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(AppColors.accentDanger)
+                        }
+                    }
+                }
+                let remaining = max(0, items.count + approvals.count - 4)
+                if remaining > 0 {
+                    Text("+\(remaining) more")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(AppColors.textTertiary)
+                }
+            }
+            .padding(10)
+            .background(AppColors.backgroundTertiary.opacity(0.72))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+    }
+
+    private func approvalTargetLine(_ approval: OrcaWorkControlProjection.Approval) -> String {
+        let target = [approval.targetType, approval.targetReference]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        return target.isEmpty ? "Authority: \(approval.authority)" : "Authority: \(approval.authority) · \(target)"
+    }
+
     private var parkingLotSection: some View {
         NavigationLink {
             ParkingLotView()
@@ -308,7 +495,7 @@ struct WorkView: View {
     private var approvalLaneSection: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("APPROVALS · \(model.approvalAttentionCount)")
+                Text("APPROVAL SIGNALS · \(model.approvalAttentionCount)")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(AppColors.textTertiary)
                     .kerning(0.5)
@@ -345,7 +532,7 @@ struct WorkView: View {
                 } else if let err = model.approvalAttentionError {
                     errorBanner(message: err) { Task { await model.loadApprovalAttention() } }
                 } else if model.approvalAttentionItems.isEmpty {
-                    emptyState(icon: "checkmark.seal", text: "No approval attention waiting.")
+                    emptyState(icon: "checkmark.seal", text: "No approval signals waiting.")
                 } else {
                     ForEach(model.approvalAttentionItems.prefix(5)) { item in
                         PodReviewCard(
@@ -366,7 +553,7 @@ struct WorkView: View {
                     }
 
                     if model.approvalAttentionItems.count > 5 {
-                        Text("+\(model.approvalAttentionItems.count - 5) more in Tickets")
+                        Text("+\(model.approvalAttentionItems.count - 5) more signals in Tickets")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundColor(AppColors.textTertiary)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -455,7 +642,7 @@ struct WorkView: View {
         let detail = (reasons + [latestRun].compactMap { $0 }).joined(separator: " · ")
         return PodReviewItem(
             id: item.id,
-            eyebrow: "Ticket \(String(item.id.replacingOccurrences(of: "-", with: "").prefix(8)))",
+            eyebrow: "Approval signal · Ticket \(String(item.id.replacingOccurrences(of: "-", with: "").prefix(8)))",
             title: item.title,
             detail: detail.isEmpty ? "Approval attention requested." : detail,
             status: item.approvalGate ?? item.approvalState.replacingOccurrences(of: "_", with: " "),
@@ -3918,6 +4105,10 @@ final class WorkViewModel {
     var filterProtectedOnly = false
     var priorityToast: PriorityToast?
     var selectedTaskLane: WorkbenchTaskLane = .mine
+    var selectedWorkControlAgent = "coral"
+    var runtimeWorkControl: OrcaWorkControlProjection?
+    var isLoadingRuntimeWorkControl = false
+    var runtimeWorkControlError: String?
 
     // MARK: Suggestions
     var schoolhouseDigest: SchoolhouseDigest?
@@ -3928,7 +4119,9 @@ final class WorkViewModel {
     var reviewerIdentity = "pod"
 
     var workbenchReadyCount: Int {
-        workbench?.buckets.workQueue?.counts["ready_now"] ?? visibleWorkbenchRows.count
+        runtimeWorkControl?.counts.readyNow
+            ?? workbench?.buckets.workQueue?.counts["ready_now"]
+            ?? visibleWorkbenchRows.count
     }
 
     var canUseCalendarCockpit: Bool {
@@ -4286,6 +4479,7 @@ final class WorkViewModel {
 
     func load() async {
         await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.loadRuntimeWorkControl() }
             group.addTask { await self.loadSuggestions() }
             group.addTask { await self.loadWorkbench() }
             group.addTask { await self.loadToolRuns() }
@@ -4294,6 +4488,36 @@ final class WorkViewModel {
             group.addTask { await self.loadProjects() }
             group.addTask { await self.loadTickets() }
             group.addTask { await self.loadTicketFlowReview() }
+        }
+    }
+
+    @MainActor
+    func selectWorkControlAgent(_ agent: String) {
+        let normalized = AgentRosterPolicy.normalizedName(agent)
+        guard AgentRosterPolicy.activeDisplayOrder.contains(normalized) else { return }
+        selectedWorkControlAgent = normalized
+        Task { await loadRuntimeWorkControl() }
+    }
+
+    @MainActor
+    func loadRuntimeWorkControl() async {
+        isLoadingRuntimeWorkControl = true
+        runtimeWorkControlError = nil
+        defer { isLoadingRuntimeWorkControl = false }
+        do {
+            let projection = try await WorkbenchRepository().loadWorkControl(
+                agentKey: selectedWorkControlAgent
+            )
+            guard projection.agentKey == selectedWorkControlAgent else {
+                throw APIError.message("ORCA returned another agent's Work Control bundle", code: 0)
+            }
+            runtimeWorkControl = projection
+        } catch let error as APIError {
+            runtimeWorkControl = nil
+            runtimeWorkControlError = error.message
+        } catch {
+            runtimeWorkControl = nil
+            runtimeWorkControlError = error.localizedDescription
         }
     }
 

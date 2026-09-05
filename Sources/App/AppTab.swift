@@ -1,4 +1,5 @@
 import Foundation
+import OrcaDomain
 
 // MARK: - App Tab
 
@@ -27,16 +28,16 @@ enum AppTab: String, CaseIterable, Hashable {
 
     var title: String {
         switch self {
-        case .dashboard:   return "Dashboard"
+        case .dashboard:   return OrcaSurfaceSection.overview.title
         case .chat:        return "Pod Chat"
-        case .work:        return "Workbench"
-        case .fund:        return "Fund"
-        case .crew:        return "Crew"
-        case .knowledge:   return "Library"
-        case .lab:         return "Lab"
-        case .runtime:     return "Runtime"
-        case .maker:       return "Maker"
-        case .system:      return "System"
+        case .work:        return OrcaSurfaceSection.work.title
+        case .fund:        return OrcaSurfaceSection.fund.title
+        case .crew:        return OrcaSurfaceSection.crew.title
+        case .knowledge:   return OrcaSurfaceSection.knowledge.title
+        case .lab:         return OrcaSurfaceSection.lab.title
+        case .runtime:     return OrcaSurfaceSection.runtime.title
+        case .maker:       return OrcaSurfaceSection.maker.title
+        case .system:      return OrcaSurfaceSection.runtime.title
         // Legacy
         case .captainsLog: return "Captain's Log"
         case .arms:        return "Arms + Team"
@@ -55,16 +56,16 @@ enum AppTab: String, CaseIterable, Hashable {
 
     var icon: String {
         switch self {
-        case .dashboard:   return "house.fill"
+        case .dashboard:   return OrcaSurfaceSection.overview.symbol
         case .chat:        return "bubble.left.and.bubble.right.fill"
-        case .work:        return "square.stack.3d.up.fill"
-        case .fund:        return "chart.line.uptrend.xyaxis"
-        case .crew:        return "person.3.sequence.fill"
-        case .knowledge:   return "books.vertical.fill"
-        case .lab:         return "flask.fill"
-        case .runtime:     return "waveform.path.ecg"
-        case .maker:       return "wand.and.sparkles"
-        case .system:      return "server.rack"
+        case .work:        return OrcaSurfaceSection.work.symbol
+        case .fund:        return OrcaSurfaceSection.fund.symbol
+        case .crew:        return OrcaSurfaceSection.crew.symbol
+        case .knowledge:   return OrcaSurfaceSection.knowledge.symbol
+        case .lab:         return OrcaSurfaceSection.lab.symbol
+        case .runtime:     return OrcaSurfaceSection.runtime.symbol
+        case .maker:       return OrcaSurfaceSection.maker.symbol
+        case .system:      return OrcaSurfaceSection.runtime.symbol
         // Legacy (not shown in tab bar)
         case .captainsLog: return "square.and.pencil"
         case .arms:        return "person.3.sequence.fill"

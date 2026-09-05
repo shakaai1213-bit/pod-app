@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import HTTPTypes
 import OpenAPIRuntime
@@ -121,6 +122,7 @@ public struct OrcaRuntimeDirectTurnRequest: Equatable, Sendable {
     public let agentSlug: String
     public let content: String
     public let history: [OrcaRuntimeHistoryMessage]
+    public let sourceSurface: String
     public let deliveryMode: String
     public let asyncResponse: Bool
     public let idempotencyKey: String
@@ -134,6 +136,7 @@ public struct OrcaRuntimeDirectTurnRequest: Equatable, Sendable {
         agentSlug: String,
         content: String,
         history: [OrcaRuntimeHistoryMessage] = [],
+        sourceSurface: String = "pod",
         deliveryMode: String,
         asyncResponse: Bool,
         traceID: String,
@@ -146,6 +149,7 @@ public struct OrcaRuntimeDirectTurnRequest: Equatable, Sendable {
         self.agentSlug = agentSlug
         self.content = content
         self.history = history
+        self.sourceSurface = sourceSurface
         self.deliveryMode = deliveryMode
         self.asyncResponse = asyncResponse
         self.idempotencyKey = idempotencyKey ?? "orca-runtime-turn:\(traceID)"
@@ -193,6 +197,10 @@ public struct OrcaRuntimeConversationMessage: Equatable, Sendable {
 }
 
 public actor OrcaRuntimeClient {
+    private static let namedAgentKeys: Set<String> = [
+        "aloha", "chief", "coral", "maui", "reef", "rooster", "shaka",
+    ]
+
     private let client: Client
     private var verifiedCompatibility: OrcaRuntimeCompatibility?
 
@@ -251,26 +259,797 @@ public actor OrcaRuntimeClient {
         return compatibility
     }
 
+    public func agentPacks() async throws -> Components.Schemas.ChatRuntimeAgentPackBundleRead {
+        _ = try await verifyCompatibility()
+        let output = try await client.getRuntimeAgentPacks()
+        let bundle: Components.Schemas.ChatRuntimeAgentPackBundleRead
+        switch output {
+        case let .ok(response):
+            bundle = try response.body.json
+        case let .undocumented(statusCode, _):
+            throw OrcaRuntimeClientError.httpStatus(statusCode)
+        }
+        try Self.validateAgentPacks(bundle)
+        return bundle
+    }
+
+    public func capabilities(
+        agentKey: String
+    ) async throws -> Components.Schemas.ChatRuntimeCapabilityBundleRead {
+        _ = try await verifyCompatibility()
+        let normalizedAgentKey = agentKey.lowercased()
+        guard Self.namedAgentKeys.contains(normalizedAgentKey) else {
+            throw OrcaRuntimeClientError.invalidResponse("capability agent is not in roster")
+        }
+        let packs = try await agentPacks()
+        guard let pack = packs.packs.first(where: { $0.agentKey == normalizedAgentKey }) else {
+            throw OrcaRuntimeClientError.invalidResponse("capability agent pack is missing")
+        }
+        let output = try await client.getRuntimeAgentCapabilities(
+            .init(path: .init(agentKey: normalizedAgentKey))
+        )
+        let bundle: Components.Schemas.ChatRuntimeCapabilityBundleRead
+        switch output {
+        case let .ok(response):
+            bundle = try response.body.json
+        case .unprocessableContent:
+            throw OrcaRuntimeClientError.httpStatus(422)
+        case let .undocumented(statusCode, _):
+            throw OrcaRuntimeClientError.httpStatus(statusCode)
+        }
+        try Self.validateCapabilities(
+            bundle,
+            expectedAgentKey: normalizedAgentKey,
+            expectedConfigurationSHA256: pack.payloadSha256
+        )
+        return bundle
+    }
+
+    public func workControl(
+        agentKey: String
+    ) async throws -> Components.Schemas.ChatRuntimeWorkControlBundleRead {
+        _ = try await verifyCompatibility()
+        let normalizedAgentKey = agentKey.lowercased()
+        guard Self.namedAgentKeys.contains(normalizedAgentKey) else {
+            throw OrcaRuntimeClientError.invalidResponse("work-control agent is not in roster")
+        }
+        let packs = try await agentPacks()
+        guard let pack = packs.packs.first(where: { $0.agentKey == normalizedAgentKey }) else {
+            throw OrcaRuntimeClientError.invalidResponse("work-control agent pack is missing")
+        }
+        let output = try await client.getRuntimeAgentWorkControl(
+            .init(path: .init(agentKey: normalizedAgentKey))
+        )
+        let bundle: Components.Schemas.ChatRuntimeWorkControlBundleRead
+        switch output {
+        case let .ok(response):
+            bundle = try response.body.json
+        case .unprocessableContent:
+            throw OrcaRuntimeClientError.httpStatus(422)
+        case let .undocumented(statusCode, _):
+            throw OrcaRuntimeClientError.httpStatus(statusCode)
+        }
+        try Self.validateWorkControl(
+            bundle,
+            expectedAgentKey: normalizedAgentKey,
+            expectedConfigurationSHA256: pack.payloadSha256
+        )
+        return bundle
+    }
+
+    public func providerControl() async throws
+        -> Components.Schemas.ChatRuntimeProviderControlBundleRead
+    {
+        _ = try await verifyCompatibility()
+        let output = try await client.getRuntimeProviderControl()
+        let bundle: Components.Schemas.ChatRuntimeProviderControlBundleRead
+        switch output {
+        case let .ok(response):
+            bundle = try response.body.json
+        case let .undocumented(statusCode, _):
+            throw OrcaRuntimeClientError.httpStatus(statusCode)
+        }
+        try Self.validateProviderControl(bundle)
+        return bundle
+    }
+
+    public func runtimeTurn(
+        turnID: String
+    ) async throws -> Components.Schemas.ChatRuntimeTurnRead {
+        _ = try await verifyCompatibility()
+        let output = try await client.getRuntimeTurn(
+            .init(path: .init(turnId: turnID))
+        )
+        let turn: Components.Schemas.ChatRuntimeTurnRead
+        switch output {
+        case let .ok(response):
+            turn = try response.body.json
+        case .unprocessableContent:
+            throw OrcaRuntimeClientError.httpStatus(422)
+        case let .undocumented(statusCode, _):
+            throw OrcaRuntimeClientError.httpStatus(statusCode)
+        }
+        try Self.validateRuntimeTurn(turn, expectedTurnID: turnID)
+        return turn
+    }
+
+    public func conversationMemory(
+        conversationID: String
+    ) async throws -> Components.Schemas.ConversationMemoryRead {
+        _ = try await verifyCompatibility()
+        let output = try await client.getConversationMemory(
+            .init(path: .init(conversationId: conversationID))
+        )
+        let memory: Components.Schemas.ConversationMemoryRead
+        switch output {
+        case let .ok(response):
+            memory = try response.body.json
+        case .unprocessableContent:
+            throw OrcaRuntimeClientError.httpStatus(422)
+        case let .undocumented(statusCode, _):
+            throw OrcaRuntimeClientError.httpStatus(statusCode)
+        }
+        try Self.validateConversationMemory(
+            memory,
+            expectedConversationID: conversationID
+        )
+        return memory
+    }
+
+    public func proposeConversationMemory(
+        conversationID: String,
+        proposal: Components.Schemas.ConversationMemoryProposalCreate
+    ) async throws -> Components.Schemas.ConversationMemoryProposalRead {
+        _ = try await verifyCompatibility()
+        let output = try await client.proposeConversationMemory(
+            .init(
+                path: .init(conversationId: conversationID),
+                body: .json(proposal)
+            )
+        )
+        let result: Components.Schemas.ConversationMemoryProposalRead
+        switch output {
+        case let .created(response):
+            result = try response.body.json
+        case .unprocessableContent:
+            throw OrcaRuntimeClientError.httpStatus(422)
+        case let .undocumented(statusCode, _):
+            throw OrcaRuntimeClientError.httpStatus(statusCode)
+        }
+        guard result.conversationId == conversationID,
+              result.proposalId.isEmpty == false,
+              result.expectedRevision >= 0,
+              ["proposed", "deferred", "accepted"].contains(result.status) else {
+            throw OrcaRuntimeClientError.invalidResponse(
+                "conversation memory proposal failed closed"
+            )
+        }
+        return result
+    }
+
+    public func applyConversationMemoryProposal(
+        conversationID: String,
+        proposalID: String,
+        reason: String? = nil
+    ) async throws -> Components.Schemas.ConversationMemoryRead {
+        _ = try await verifyCompatibility()
+        let output = try await client.applyConversationMemoryProposal(
+            .init(
+                path: .init(
+                    conversationId: conversationID,
+                    proposalId: proposalID
+                ),
+                body: .json(.init(reason: reason))
+            )
+        )
+        let memory: Components.Schemas.ConversationMemoryRead
+        switch output {
+        case let .ok(response):
+            memory = try response.body.json
+        case .unprocessableContent:
+            throw OrcaRuntimeClientError.httpStatus(422)
+        case let .undocumented(statusCode, _):
+            throw OrcaRuntimeClientError.httpStatus(statusCode)
+        }
+        try Self.validateConversationMemory(
+            memory,
+            expectedConversationID: conversationID
+        )
+        guard memory.latestProposalId == proposalID else {
+            throw OrcaRuntimeClientError.invalidResponse(
+                "applied conversation memory proposal is not active"
+            )
+        }
+        return memory
+    }
+
+    static func validateRuntimeTurn(
+        _ turn: Components.Schemas.ChatRuntimeTurnRead,
+        expectedTurnID: String
+    ) throws {
+        let events = turn.events ?? []
+        let terminalTypes: Set<Components.Schemas.ChatRuntimeEventType> = [
+            .turn_completed,
+            .turn_failed,
+            .turn_cancelled,
+        ]
+        let terminalEvents = events.filter { terminalTypes.contains($0.eventType) }
+        guard turn.turnId == expectedTurnID,
+              turn.messageId.isEmpty == false,
+              turn.conversationId.isEmpty == false,
+              turn.agentId.isEmpty == false,
+              events.isEmpty == false,
+              events.first?.eventType == .message_accepted,
+              events.map(\.sequence) == Array(events.indices),
+              Set(events.map(\.eventId)).count == events.count,
+              Set(events.map(\.cursor)).count == events.count,
+              events.allSatisfy({
+                  $0.turnId == expectedTurnID
+                      && ($0.messageId?.isEmpty != true)
+                      && $0.conversationId == turn.conversationId
+                      && $0.agentId == turn.agentId
+              }),
+              turn.latestCursor == events.last?.cursor,
+              terminalEvents.count <= 1,
+              (turn.terminalOutcome == nil) == terminalEvents.isEmpty else {
+            throw OrcaRuntimeClientError.invalidResponse(
+                "runtime turn failed closed"
+            )
+        }
+        var reducer = OrcaRuntimeTimelineReducer()
+        _ = try reducer.apply(turn)
+    }
+
+    static func validateConversationMemory(
+        _ read: Components.Schemas.ConversationMemoryRead,
+        expectedConversationID: String
+    ) throws {
+        let snapshot = read.memory
+        let factGroups = [
+            snapshot.decisions ?? [],
+            snapshot.commitments ?? [],
+            snapshot.blockers ?? [],
+            snapshot.recentOutcomes ?? [],
+        ]
+        let facts = factGroups.flatMap { $0 }
+        let pending = read.pendingProposals ?? []
+        let evidenceRefs = snapshot.evidenceRefs ?? []
+        let nasRefs = snapshot.nasRefs ?? []
+        let computedContentSHA256: String
+        do {
+            computedContentSHA256 = try conversationMemoryContentSHA256(snapshot)
+        } catch {
+            throw OrcaRuntimeClientError.invalidResponse(
+                "conversation memory failed closed"
+            )
+        }
+        guard read.contractVersion == .orca_conversationMemory_v2,
+              read.conversationId == expectedConversationID,
+              read.organizationId.isEmpty == false,
+              read.revision >= 0,
+              isSHA256(read.contentSha256),
+              read.contentSha256 == computedContentSHA256,
+              (snapshot.activeSummary ?? "").count <= 4_000,
+              Set(facts.map(\.factId)).count == facts.count,
+              facts.allSatisfy({
+                  $0.factId.isEmpty == false
+                      && $0.text.isEmpty == false
+                      && Set($0.evidenceRefs ?? []).count == ($0.evidenceRefs ?? []).count
+                      && Set($0.sourceRefs ?? []).count == ($0.sourceRefs ?? []).count
+              }),
+              Set(evidenceRefs).count == evidenceRefs.count,
+              Set(nasRefs).count == nasRefs.count,
+              Set(pending.map(\.proposalId)).count == pending.count,
+              pending.allSatisfy({
+                  $0.conversationId == expectedConversationID
+                      && $0.proposalId.isEmpty == false
+                      && $0.expectedRevision >= 0
+                      && ["proposed", "deferred"].contains($0.status)
+              }) else {
+            throw OrcaRuntimeClientError.invalidResponse(
+                "conversation memory failed closed"
+            )
+        }
+    }
+
+    static func conversationMemoryContentSHA256(
+        _ snapshot: Components.Schemas.ConversationMemorySnapshot
+    ) throws -> String {
+        let sourceRefs: Any
+        if let payload = snapshot.sourceRefs {
+            let encoded = try JSONEncoder().encode(payload)
+            sourceRefs = try JSONSerialization.jsonObject(with: encoded)
+        } else {
+            sourceRefs = [String: Any]()
+        }
+        let object: [String: Any] = [
+            "active_summary": snapshot.activeSummary ?? "",
+            "blockers": (snapshot.blockers ?? []).map(conversationMemoryFactObject),
+            "commitments": (snapshot.commitments ?? []).map(conversationMemoryFactObject),
+            "decisions": (snapshot.decisions ?? []).map(conversationMemoryFactObject),
+            "evidence_refs": snapshot.evidenceRefs ?? [],
+            "nas_refs": snapshot.nasRefs ?? [],
+            "recent_outcomes": (snapshot.recentOutcomes ?? []).map(
+                conversationMemoryFactObject
+            ),
+            "sensitivity": snapshot.sensitivity?.rawValue ?? "normal",
+            "source_refs": sourceRefs,
+            "visibility": snapshot.visibility?.rawValue ?? "conversation",
+        ]
+        guard JSONSerialization.isValidJSONObject(object) else {
+            throw OrcaRuntimeClientError.invalidResponse(
+                "conversation memory digest payload is invalid"
+            )
+        }
+        let encoded = try JSONSerialization.data(
+            withJSONObject: object,
+            options: [.sortedKeys, .withoutEscapingSlashes]
+        )
+        return SHA256.hash(data: encoded).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func conversationMemoryFactObject(
+        _ fact: Components.Schemas.ConversationMemoryFact
+    ) -> [String: Any] {
+        [
+            "authority": fact.authority ?? NSNull(),
+            "evidence_refs": fact.evidenceRefs ?? [],
+            "fact_id": fact.factId,
+            "occurred_at_ms": fact.occurredAt.map {
+                Int($0.timeIntervalSince1970 * 1_000)
+            } ?? NSNull(),
+            "source_refs": fact.sourceRefs ?? [],
+            "status": fact.status?.rawValue ?? "active",
+            "supersedes_fact_id": fact.supersedesFactId ?? NSNull(),
+            "text": fact.text,
+        ]
+    }
+
+    private static func isSHA256(_ value: String) -> Bool {
+        value.count == 64 && value.allSatisfy("0123456789abcdef".contains)
+    }
+
+    static func validateAgentPacks(
+        _ bundle: Components.Schemas.ChatRuntimeAgentPackBundleRead
+    ) throws {
+        guard bundle.contractVersion?.rawValue == "orca.agent-pack-bundle.v1",
+              bundle.configurationOnly == true,
+              bundle.runtimeAttestationRequired == true,
+              bundle.bundleSha256.count == 64,
+              bundle.packs.count == namedAgentKeys.count,
+              Set(bundle.packs.map(\.agentKey)) == namedAgentKeys else {
+            throw OrcaRuntimeClientError.invalidResponse("agent pack bundle failed closed")
+        }
+        for pack in bundle.packs {
+            guard pack.contractVersion?.rawValue == "orca.agent-pack.v1",
+                  pack.authorityOwner?.rawValue == "orca",
+                  pack.controllerHost?.rawValue == "orca-mini",
+                  pack.allowedRuntimeHosts.first?.rawValue == "orca-mini",
+                  pack.allowedRuntimeHosts.count >= 2,
+                  pack.allowedRuntimeHosts.contains(where: {
+                      $0.rawValue == pack.homeCapabilityHost.rawValue
+                  }),
+                  pack.primaryAdapterId?.rawValue == "openclaw_harness",
+                  pack.supportedAdapterIds.contains("openclaw_harness"),
+                  pack.ingressSubject == "agents.\(pack.agentKey).inbox",
+                  pack.lifecycleOwner?.rawValue == "schoolhouse",
+                  pack.routerOwner?.rawValue == "cascade",
+                  pack.terminalReplyOwner?.rawValue == "schoolhouse_wake",
+                  pack.voiceContract?.rawValue == "orca.named-agent-voice.v1",
+                  pack.memoryContract?.rawValue == "orca_managed",
+                  pack.capabilityRef
+                    == "/api/v1/chat-runtime/v1/agents/\(pack.agentKey)/capabilities",
+                  pack.capabilityAttestationRequired == true,
+                  pack.releaseSignatureRequired == true,
+                  pack.payloadSha256.count == 64 else {
+                throw OrcaRuntimeClientError.invalidResponse(
+                    "agent pack failed closed for \(pack.agentKey)"
+                )
+            }
+        }
+    }
+
+    static func validateCapabilities(
+        _ bundle: Components.Schemas.ChatRuntimeCapabilityBundleRead,
+        expectedAgentKey: String,
+        expectedConfigurationSHA256: String
+    ) throws {
+        guard namedAgentKeys.contains(expectedAgentKey),
+              bundle.contractVersion?.rawValue == "orca.capability-bundle.v1",
+              bundle.sourceContract?.rawValue == "orca.agent-tools.v1",
+              bundle.authority?.rawValue == "orca",
+              bundle.agentKey == expectedAgentKey,
+              bundle.runtimeManifestRevision.isEmpty == false,
+              bundle.configurationSha256 == expectedConfigurationSHA256,
+              bundle.configurationSha256.count == 64,
+              bundle.bundleSha256.count == 64,
+              bundle.capabilityTruthReply.isEmpty == false,
+              let capabilities = bundle.capabilities,
+              capabilities.isEmpty == false,
+              Set(capabilities.map(\.capabilityId)).count == capabilities.count else {
+            throw OrcaRuntimeClientError.invalidResponse("capability bundle failed closed")
+        }
+
+        for capability in capabilities {
+            let declaredAvailable = capability.declaredStatus == "available"
+            let attested = capability.attestation.state == "attested"
+            let expectedProductionReady = declaredAvailable && attested
+            let endpointValues = capability.endpoints.map {
+                Array($0.additionalProperties.values)
+            } ?? []
+            let attestationFreshAtGeneration = capability.attestation.expiresAt.map {
+                $0 > bundle.generatedAt
+            } ?? true
+            guard capability.capabilityId.isEmpty == false,
+                  capability.label.isEmpty == false,
+                  capability.executionAllowedByCurrentPolicy == declaredAvailable,
+                  capability.productionReady == expectedProductionReady,
+                  capability.attestation.schema.rawValue
+                    == "orca.runtime-capability-attestation.v1",
+                  capability.attestation.enforced == bundle.attestationEnforced,
+                  capability.attestation.configuredStatus == capability.declaredStatus,
+                  capability.attestation.effectiveStatus == capability.declaredStatus,
+                  capability.attestation.executionHost == capability.executionHost,
+                  capability.attestation.mode.isEmpty == false,
+                  capability.attestation.reason.isEmpty == false,
+                  capability.attestation.sourceTag.isEmpty == false,
+                  capability.attestation.recordContractValid,
+                  capability.attestation.evidenceValid,
+                  capability.attestation.rejectedEvidenceCount == 0,
+                  endpointValues.allSatisfy({ $0.hasPrefix("/api/v1/") }),
+                  !(capability.productionReady
+                    && capability.attestation.wouldBlockIfEnforced),
+                  !(capability.productionReady
+                    && !(capability.attestation.missingChecks ?? []).isEmpty),
+                  !(capability.productionReady
+                    && !(capability.attestation.recordContractErrors ?? []).isEmpty),
+                  !(capability.productionReady
+                    && capability.attestation.expectedRoute != nil
+                    && capability.attestation.expectedRoute
+                        != capability.attestation.actualRoute),
+                  !capability.productionReady || attestationFreshAtGeneration,
+                  !(bundle.attestationEnforced
+                    && capability.executionAllowedByCurrentPolicy
+                    && !capability.productionReady) else {
+                throw OrcaRuntimeClientError.invalidResponse(
+                    "capability failed closed for \(capability.capabilityId)"
+                )
+            }
+        }
+    }
+
+    static func validateWorkControl(
+        _ bundle: Components.Schemas.ChatRuntimeWorkControlBundleRead,
+        expectedAgentKey: String,
+        expectedConfigurationSHA256: String
+    ) throws {
+        guard namedAgentKeys.contains(expectedAgentKey),
+              bundle.contractVersion?.rawValue == "orca.work-control-bundle.v1",
+              bundle.sourceContract?.rawValue == "orca.agent-workbench.v1",
+              bundle.authority?.rawValue == "orca",
+              bundle.mode?.rawValue == "read_only",
+              bundle.agentKey == expectedAgentKey,
+              bundle.agentId.isEmpty == false,
+              bundle.runtimeManifestRevision.isEmpty == false,
+              bundle.configurationSha256 == expectedConfigurationSHA256,
+              bundle.configurationSha256.count == 64,
+              bundle.bundleSha256.count == 64,
+              let assignedWork = bundle.assignedWork,
+              let readyNow = bundle.readyNow,
+              let waitingOnOthers = bundle.waitingOnOthers,
+              let protectedWork = bundle.protectedWork,
+              let historicalWork = bundle.historicalWork,
+              let approvalQueue = bundle.approvalQueue,
+              let approvalInventory = bundle.approvalInventory else {
+            throw OrcaRuntimeClientError.invalidResponse("work-control bundle failed closed")
+        }
+
+        func identity(_ item: Components.Schemas.ChatRuntimeWorkItemRead) -> String {
+            "\(item.workKind.rawValue):\(item.workId)"
+        }
+
+        let assignedIdentities = assignedWork.map(identity)
+        let assignedSet = Set(assignedIdentities)
+        guard assignedSet.count == assignedIdentities.count else {
+            throw OrcaRuntimeClientError.invalidResponse(
+                "work-control assigned work contains duplicates"
+            )
+        }
+
+        for item in assignedWork {
+            let pendingApprovalIDs = item.pendingApprovalIds ?? []
+            let eligibleTruth = item.workBucket == .current
+                && pendingApprovalIDs.isEmpty
+                && item.blockedOn == nil
+            guard item.workId.isEmpty == false,
+                  item.safeTitle.isEmpty == false,
+                  item.status.isEmpty == false,
+                  item.priority.isEmpty == false,
+                  item.bucketReason.isEmpty == false,
+                  Set(pendingApprovalIDs).count == pendingApprovalIDs.count,
+                  !item.executionEligible || eligibleTruth else {
+                throw OrcaRuntimeClientError.invalidResponse(
+                    "work-control item failed closed for \(item.workId)"
+                )
+            }
+        }
+
+        let projections: [(String, [Components.Schemas.ChatRuntimeWorkItemRead])] = [
+            ("ready_now", readyNow),
+            ("waiting_on_others", waitingOnOthers),
+            ("protected_work", protectedWork),
+            ("historical_work", historicalWork),
+        ]
+        for (label, items) in projections {
+            let identities = items.map(identity)
+            guard Set(identities).count == identities.count,
+                  Set(identities).isSubset(of: assignedSet) else {
+                throw OrcaRuntimeClientError.invalidResponse(
+                    "work-control projection failed closed for \(label)"
+                )
+            }
+        }
+        guard readyNow.allSatisfy({
+            $0.workBucket == .current
+                && $0.executionEligible
+                && ($0.pendingApprovalIds ?? []).isEmpty
+                && $0.blockedOn == nil
+                && !$0.stale
+        }), protectedWork.allSatisfy({ $0.workBucket == .protected }),
+        historicalWork.allSatisfy({ $0.workBucket == .historical }),
+        waitingOnOthers.allSatisfy({
+            $0.workBucket != .historical
+                && (!($0.pendingApprovalIds ?? []).isEmpty
+                    || $0.blockedOn != nil
+                    || $0.workBucket == .protected)
+        }) else {
+            throw OrcaRuntimeClientError.invalidResponse(
+                "work-control projection contains contradictory work truth"
+            )
+        }
+
+        func decisionAllowed(
+            _ approval: Components.Schemas.ChatRuntimeWorkApprovalRead
+        ) -> Bool {
+            approval.viewerAuthorized
+                && approval.resolutionEnabled
+                && !approval.selfApprovalProhibited
+        }
+
+        for approval in approvalInventory {
+            let hasDecisionEndpoint = approval.decisionEndpoint?.isEmpty == false
+            guard approval.approvalId.isEmpty == false,
+                  approval.actionType.isEmpty == false,
+                  approval.authority.isEmpty == false,
+                  approval.authorizationReason.isEmpty == false,
+                  approval.status == .pending,
+                  approval.staleAfterHours > 0,
+                  approval.linkedTicketIds != nil,
+                  approval.linkedTaskIds != nil,
+                  decisionAllowed(approval) == hasDecisionEndpoint,
+                  approval.decisionEndpoint.map({
+                      $0.hasPrefix("/api/v1/approvals/")
+                  }) ?? true else {
+                throw OrcaRuntimeClientError.invalidResponse(
+                    "work-control approval failed closed for \(approval.approvalId)"
+                )
+            }
+        }
+        let inventoryIDs = approvalInventory.map(\.approvalId)
+        let inventorySet = Set(inventoryIDs)
+        let queueIDs = approvalQueue.map(\.approvalId)
+        guard inventorySet.count == inventoryIDs.count,
+              Set(queueIDs).count == queueIDs.count,
+              Set(queueIDs).isSubset(of: inventorySet),
+              approvalQueue.allSatisfy({
+                  decisionAllowed($0)
+                      && $0.decisionEndpoint?.hasPrefix("/api/v1/approvals/") == true
+              }) else {
+            throw OrcaRuntimeClientError.invalidResponse(
+                "work-control approval queue failed closed"
+            )
+        }
+
+        let counts = bundle.resources.counts
+        let countValues = [
+            counts.activeWorkerRuns,
+            counts.approvalInventory,
+            counts.approvalQueue,
+            counts.assignedWork,
+            counts.blockingOthers,
+            counts.fishBlocked,
+            counts.fishProducing,
+            counts.historicalWork,
+            counts.plannerItems,
+            counts.projectTasks,
+            counts.protectedWork,
+            counts.readyNow,
+            counts.researchActiveRequests,
+            counts.researchAwaitingReview,
+            counts.staleWork,
+            counts.toolsDeclared,
+            counts.waitingOnMe,
+            counts.waitingOnOthers,
+            counts.workerReviewRuns,
+        ]
+        guard countValues.allSatisfy({ $0 >= 0 }),
+              counts.assignedWork == assignedWork.count,
+              counts.readyNow == readyNow.count,
+              counts.waitingOnOthers == waitingOnOthers.count,
+              counts.protectedWork == protectedWork.count,
+              counts.historicalWork == historicalWork.count,
+              counts.approvalQueue == approvalQueue.count,
+              counts.approvalInventory == approvalInventory.count else {
+            throw OrcaRuntimeClientError.invalidResponse(
+                "work-control counts failed closed"
+            )
+        }
+
+        guard let endpoints = bundle.resources.endpoints?.additionalProperties,
+              endpoints["workbench"] == "/api/v1/agent/workbench",
+              endpoints["approvals"] == "/api/v1/approvals",
+              endpoints["tool_runs"] == "/api/v1/agent/tool-runs",
+              endpoints.values.allSatisfy({ $0.hasPrefix("/api/v1/") }) else {
+            throw OrcaRuntimeClientError.invalidResponse(
+                "work-control endpoints failed closed"
+            )
+        }
+    }
+
+    static func validateProviderControl(
+        _ bundle: Components.Schemas.ChatRuntimeProviderControlBundleRead,
+        now: Date = Date()
+    ) throws {
+        let hostPublishers = [
+            "shaka-mac": "coral",
+            "chief-mac": "reef",
+            "orca-mini": "coral",
+        ]
+        let adapterPolicies: [String: (provider: String, hosts: Set<String>)] = [
+            "claude-cli": ("anthropic", ["shaka-mac", "chief-mac"]),
+            "codex-cli": ("openai", ["shaka-mac", "chief-mac"]),
+            "kimi-code-api": ("moonshot-kimi-code", ["orca-mini"]),
+        ]
+        let records = bundle.records ?? []
+        let identities = records.map { "\($0.executionHost.rawValue):\($0.adapterId)" }
+        guard bundle.contractVersion?.rawValue == "orca.provider-control-bundle.v1",
+              bundle.authority?.rawValue == "orca",
+              bundle.router?.rawValue == "cascade",
+              isSHA256(bundle.bundleSha256),
+              bundle.invalidRecordCount >= 0,
+              bundle.generatedAt <= now.addingTimeInterval(30),
+              Set(identities).count == identities.count else {
+            throw OrcaRuntimeClientError.invalidResponse(
+                "provider-control bundle failed closed"
+            )
+        }
+
+        for record in records {
+            let host = record.executionHost.rawValue
+            let identity = "\(host):\(record.adapterId)"
+            guard let publisher = hostPublishers[host],
+                  let policy = adapterPolicies[record.adapterId],
+                  policy.provider == record.providerId,
+                  policy.hosts.contains(host),
+                  record.publisher == publisher,
+                  record.sourceRef
+                    == "/api/v1/state-registry/provider_control.\(host).\(record.adapterId)",
+                  record.schema?.rawValue == "orca.provider-control-record.v1",
+                  record.publisherVersion?.rawValue == "provider-control/1.0",
+                  isSafeProviderSecretRef(record.credentialRef),
+                  isSHA256(record.credentialGeneration),
+                  isSHA256(record.evidenceHash),
+                  record.publisherGeneration >= 1,
+                  record.failureCount >= 0,
+                  record.failureCount <= 1_000_000,
+                  (1 ... 300).contains(record.ttlSeconds),
+                  record.reasonCode.isEmpty == false,
+                  record.statusReason.isEmpty == false,
+                  record.statusReason.count <= 500 else {
+                throw OrcaRuntimeClientError.invalidResponse(
+                    "provider-control record failed closed for \(identity)"
+                )
+            }
+
+            let evidenceRefs = record.evidenceRefs ?? []
+            guard evidenceRefs.count <= 16,
+                  Set(evidenceRefs).count == evidenceRefs.count,
+                  evidenceRefs.allSatisfy(isSafeProviderEvidenceRef) else {
+                throw OrcaRuntimeClientError.invalidResponse(
+                    "provider-control evidence failed closed for \(identity)"
+                )
+            }
+
+            let expiresAt = record.observedAt.addingTimeInterval(
+                TimeInterval(record.ttlSeconds)
+            )
+            let staleAtGeneration = bundle.generatedAt > expiresAt
+            let staleNow = now > expiresAt
+            let expectedTrust = staleAtGeneration ? "stale" : "attested"
+            let executionAllowed = !staleNow
+                && expectedTrust == "attested"
+                && record.circuitState == .closed
+                && record.authState != .invalid
+                && record.authState != .unavailable
+                && record.capacityState != .exhausted
+            guard record.observedAt <= bundle.generatedAt.addingTimeInterval(30),
+                  record.trustState.rawValue == expectedTrust,
+                  record.executionAllowed == executionAllowed,
+                  (record.capacityState != .exhausted || record.capacityResetAt != nil),
+                  (record.circuitState == .closed || record.nextProbeAt != nil),
+                  !(record.circuitState == .closed
+                    && (record.authState == .invalid
+                        || record.authState == .unavailable
+                        || record.capacityState == .exhausted)) else {
+                throw OrcaRuntimeClientError.invalidResponse(
+                    "provider-control state failed closed for \(identity)"
+                )
+            }
+        }
+    }
+
+    private static func isSafeProviderEvidenceRef(_ value: String) -> Bool {
+        guard value.isEmpty == false,
+              value.count <= 512,
+              !value.contains("?"),
+              !value.contains("#"),
+              value.allSatisfy({
+                  $0.isLowercase || $0.isNumber || "._:/-".contains($0)
+              }) else {
+            return false
+        }
+        return value.hasPrefix("orca://")
+            || value.hasPrefix("provider-evidence://")
+            || value.hasPrefix("/api/v1/")
+    }
+
+    private static func isSafeProviderSecretRef(_ value: String) -> Bool {
+        value.hasPrefix("secret-ref://")
+            && value.count <= 269
+            && value.allSatisfy({
+                $0.isLowercase || $0.isNumber || "._:/-".contains($0)
+            })
+    }
+
     public func send(_ request: OrcaRuntimeDirectTurnRequest) async throws -> OrcaRuntimeDirectTurnResponse {
-        let body = Components.Schemas.DirectAgentChatRequest(
+        guard let sourceSurface = Components.Schemas.ChatRuntimeTurnCreate.SourceSurfacePayload(
+            rawValue: request.sourceSurface
+        ) else {
+            throw OrcaRuntimeClientError.invalidResponse("unsupported source surface")
+        }
+        guard let deliveryMode = Components.Schemas.ChatRuntimeTurnCreate.DeliveryModePayload(
+            rawValue: request.deliveryMode
+        ) else {
+            throw OrcaRuntimeClientError.invalidResponse("unsupported delivery mode")
+        }
+        let history = try request.history.suffix(20).map { item in
+            guard let role = Components.Schemas.ChatRuntimeHistoryMessage.RolePayload(
+                rawValue: item.role
+            ) else {
+                throw OrcaRuntimeClientError.invalidResponse("unsupported history role")
+            }
+            return Components.Schemas.ChatRuntimeHistoryMessage(
+                content: item.content,
+                role: role
+            )
+        }
+        let body = Components.Schemas.ChatRuntimeTurnCreate(
             activeTicketId: request.activeTicketID,
             asyncResponse: request.asyncResponse,
-            channelOfOrigin: "pod-chat",
-            chatThreadId: request.conversationID,
             content: request.content,
-            deliveryMode: request.deliveryMode,
-            history: request.history.suffix(20).map {
-                Components.Schemas.DirectAgentChatMessage(content: $0.content, role: $0.role)
-            },
+            conversationId: request.conversationID,
+            deliveryMode: deliveryMode,
+            history: history,
             idempotencyKey: request.idempotencyKey,
+            sourceSurface: sourceSurface,
             traceId: request.traceID,
             triageId: request.triageID,
             triageTraceId: request.triageTraceID
         )
-        let output = try await client.sendDirectAgentTurn(
-            .init(path: .init(agentSlug: request.agentSlug), body: .json(body))
+        let output = try await client.createRuntimeTurn(
+            .init(path: .init(agentKey: request.agentSlug), body: .json(body))
         )
-        let response: Components.Schemas.DirectAgentChatResponse
+        let response: Components.Schemas.ChatRuntimeTurnSubmissionRead
         switch output {
         case let .ok(value):
             response = try value.body.json
@@ -279,25 +1058,34 @@ public actor OrcaRuntimeClient {
         case let .undocumented(statusCode, _):
             throw OrcaRuntimeClientError.httpStatus(statusCode)
         }
-        let metadata = response.metadata
+        try Self.validateRuntimeTurn(response.turn, expectedTurnID: response.turn.turnId)
+        guard response.contractVersion == .orca_chatRuntime_turnSubmission_v1,
+              response.agentKey == request.agentSlug.lowercased(),
+              response.turn.idempotencyKey == request.idempotencyKey,
+              response.turn.conversationId.isEmpty == false,
+              response.turn.messageId.isEmpty == false,
+              response.replyMessageId.isEmpty == false,
+              response.traceId == request.traceID else {
+            throw OrcaRuntimeClientError.invalidResponse("runtime turn submission failed closed")
+        }
         return OrcaRuntimeDirectTurnResponse(
-            conversationID: response.channelId,
-            userMessageID: response.userMessageId,
-            assistantMessageID: response.assistantMessageId,
-            content: response.content,
-            agentSlug: response.agentSlug,
-            traceID: metadata.traceId,
-            source: metadata.source,
-            lane: metadata.lane,
-            deliveryMode: metadata.deliveryMode,
-            provenance: metadata.provenance,
-            responseState: metadata.responseState,
-            provider: metadata.backend,
-            model: metadata.model,
-            tier: metadata.tier,
-            tokenCount: metadata.tokenCount,
-            triageID: metadata.triageId,
-            computeRunID: metadata.computeRunId
+            conversationID: response.turn.conversationId,
+            userMessageID: response.turn.messageId,
+            assistantMessageID: response.replyMessageId,
+            content: response.replyContent,
+            agentSlug: response.agentKey,
+            traceID: response.traceId,
+            source: response.replySource,
+            lane: response.replyLane,
+            deliveryMode: response.deliveryMode?.rawValue,
+            provenance: response.provenance,
+            responseState: response.replyState,
+            provider: response.turn.adapter?.providerId,
+            model: response.turn.adapter?.modelId,
+            tier: response.tier,
+            tokenCount: response.tokenCount,
+            triageID: response.triageId,
+            computeRunID: response.computeRunId
         )
     }
 

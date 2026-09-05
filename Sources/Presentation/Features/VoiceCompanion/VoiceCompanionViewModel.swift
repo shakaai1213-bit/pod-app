@@ -25,21 +25,19 @@ final class VoiceCompanionViewModel: ObservableObject {
     @Published var realtimeRemoteParticipantCount: Int = 0
     @Published var realtimeProviderStatus: RealtimeProviderStatus = .checking
 
-    // Routing toggles
-    @Published var routeToClaude: Bool = true
-    @Published var routeToOpenClaw: Bool = true
     @Published var routeToRealtimePackage: Bool = true
 
     // MARK: - Dependencies
     private let speechRecorder: SpeechRecorder
-    private let claudeClient: ClaudeClient?
-    private let openClawClient: OpenClawClient
+    private let agentChatService: AgentChatService?
+    private let orcaVoiceClient: OrcaVoiceClient
     private let liveKitConnection: LiveKitVoiceConnection
     private var realtimeParticipantPollTask: Task<Void, Never>?
     private var realtimeStateCancellable: AnyCancellable?
     private var micStateCancellable: AnyCancellable?
     private var partialTranscriptTask: Task<Void, Never>?
     private var realtimeTranscriptMessageIDs: [String: UUID] = [:]
+    private var orcaConversationID: String?
 
     // MARK: - Agent Identity
     let agentSlug: String
@@ -50,20 +48,8 @@ final class VoiceCompanionViewModel: ObservableObject {
         self.agentSlug = agentSlug
         self.agentDisplayName = Self.displayName(for: agentSlug)
         self.speechRecorder = SpeechRecorder()
-
-        // Initialize clients (API key from Secrets.plist or environment)
-        let apiKey = Bundle.main.object(forInfoDictionaryKey: "ANTHROPIC_API_KEY") as? String
-            ?? ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"]
-            ?? ""
-
-        if apiKey.isEmpty {
-            self.claudeClient = nil
-            print("[VoiceCompanion] Warning: No Anthropic API key configured")
-        } else {
-            self.claudeClient = ClaudeClient(apiKey: apiKey)
-        }
-
-        self.openClawClient = OpenClawClient()
+        self.agentChatService = AgentInfo.find(agentSlug).map(AgentChatService.init)
+        self.orcaVoiceClient = OrcaVoiceClient()
         self.liveKitConnection = LiveKitVoiceConnection()
         self.liveKitConnection.onTranscript = { [weak self] segment in
             Task { @MainActor [weak self] in
@@ -84,16 +70,6 @@ final class VoiceCompanionViewModel: ObservableObject {
             }
 
         Task { await refreshRealtimeProviderStatus() }
-    }
-
-    // MARK: - System Prompt
-    private var systemPrompt: String {
-        """
-        You are \(agentDisplayName), Tony-facing voice companion for the ORCA team. \
-        Represent the \(agentSlug) lane identity for this voice session. \
-        Keep responses concise and practical. \
-        The user is Tony, the Captain.
-        """
     }
 
     deinit {
@@ -162,7 +138,7 @@ final class VoiceCompanionViewModel: ObservableObject {
     func refreshRealtimeProviderStatus() async {
         realtimeProviderStatus = .checking
         do {
-            let providers = try await openClawClient.fetchVoiceProviders()
+            let providers = try await orcaVoiceClient.fetchVoiceProviders()
             if let liveKit = providers.first(where: { $0.provider == "livekit" }) {
                 if liveKit.configured {
                     realtimeProviderStatus = .configured
@@ -186,7 +162,7 @@ final class VoiceCompanionViewModel: ObservableObject {
         isPreparingRealtimeSession = true
         defer { isPreparingRealtimeSession = false }
         do {
-            let session = try await openClawClient.createLiveKitSession(agentSlug: agentSlug, participantName: "Tony")
+            let session = try await orcaVoiceClient.createLiveKitSession(agentSlug: agentSlug, participantName: "Tony")
             realtimeSessionText = "LiveKit room ready: \(session.roomName)"
             statusText = "Realtime room prepared. Ready to join."
         } catch {
@@ -217,7 +193,7 @@ final class VoiceCompanionViewModel: ObservableObject {
             }
 
             try configureRealtimeAudioSession()
-            let session = try await openClawClient.createLiveKitSession(agentSlug: agentSlug, participantName: "Tony")
+            let session = try await orcaVoiceClient.createLiveKitSession(agentSlug: agentSlug, participantName: "Tony")
             realtimeSessionText = "LiveKit room ready: \(session.roomName)"
             realtimeTranscriptText = Self.realtimeTranscriptionWaitingText
             try await liveKitConnection.connect(session: session)
@@ -374,58 +350,65 @@ final class VoiceCompanionViewModel: ObservableObject {
     // MARK: - Message Processing
     private func processMessage(_ userMessage: VoiceMessage) async {
         isProcessing = true
-        statusText = "Processing…"
+        statusText = "Starting \(agentDisplayName) through ORCA…"
+        defer { isProcessing = false }
 
-        // Route to OpenClaw if enabled
-        if routeToOpenClaw {
-            Task {
-                await openClawClient.postVoiceExchange(
-                    userMessage: userMessage.content,
-                    aiResponse: "[processing]"
-                )
-            }
+        guard let agentChatService else {
+            errorMessage = "\(agentDisplayName) is not registered in the ORCA agent roster."
+            statusText = "ORCA agent unavailable"
+            return
         }
 
-        // Get AI response from Claude
-        if routeToClaude, let client = claudeClient {
-            do {
-                let responseText = try await client.send(
-                    prompt: userMessage.content,
-                    systemPrompt: systemPrompt
-                )
+        let history = messages.dropLast().map { message in
+            (
+                role: message.role == .user ? "user" : "assistant",
+                content: message.content
+            )
+        }
+        let traceID = "pod-voice-\(UUID().uuidString.lowercased())"
 
-                // Add AI response to conversation
-                let aiMessage = VoiceMessage(
+        do {
+            let stream = await agentChatService.send(
+                message: userMessage.content,
+                history: history,
+                deliveryMode: .auto,
+                chatThreadId: orcaConversationID,
+                traceId: traceID
+            )
+            var responseText = ""
+            var responseMetadata: AgentChatService.ResponseMetadata?
+            for try await chunk in stream {
+                responseText += chunk.content
+                responseMetadata = chunk.metadata ?? responseMetadata
+            }
+
+            let normalizedResponse = responseText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalizedResponse.isEmpty else {
+                throw AgentChatService.AgentChatError.noResponse
+            }
+
+            if let channelID = responseMetadata?.channelId, !channelID.isEmpty {
+                orcaConversationID = channelID
+            }
+            messages.append(
+                VoiceMessage(
                     id: UUID(),
                     role: .assistant,
-                    content: responseText,
+                    content: normalizedResponse,
                     timestamp: Date()
                 )
-                messages.append(aiMessage)
-
-                // Update OpenClaw with actual response
-                if routeToOpenClaw {
-                    await openClawClient.postVoiceExchange(
-                        userMessage: userMessage.content,
-                        aiResponse: responseText
-                    )
-                }
-
-                statusText = Self.realtimePrompt
-            } catch {
-                errorMessage = "AI response failed: \(error.localizedDescription)"
-                statusText = "Error getting response"
-            }
-        } else {
-            statusText = "Claude API not configured"
+            )
+            statusText = Self.realtimePrompt
+        } catch {
+            errorMessage = "ORCA voice response failed: \(error.localizedDescription)"
+            statusText = "ORCA voice response failed"
         }
-
-        isProcessing = false
     }
 
     // MARK: - Utilities
     func clearConversation() {
         messages.removeAll()
+        orcaConversationID = nil
         statusText = Self.realtimePrompt
     }
 

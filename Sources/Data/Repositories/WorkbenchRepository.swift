@@ -1,4 +1,5 @@
 import Foundation
+import OrcaRuntimeContracts
 
 enum WorkbenchReadView: String {
     case mine
@@ -9,6 +10,27 @@ enum WorkbenchReadView: String {
 
 actor WorkbenchRepository {
     private let api = APIClient.shared
+    private static let runtimeClient = OrcaRuntimeClient(
+        serverURL: URL(string: AppConfig.backendURL)!,
+        tokenProvider: { await APIClient.shared.currentToken() },
+        deviceIDProvider: { OrcaDeviceIdentity.current() },
+        requestProofProvider: { method, target, body, token in
+            try OrcaDeviceIdentity.requestProofHeaders(
+                method: method,
+                target: target,
+                body: body,
+                token: token
+            )
+        }
+    )
+
+    func loadWorkControl(agentKey: String) async throws -> OrcaWorkControlProjection {
+        let key = normalizedAgentName(agentKey)
+        guard !key.isEmpty else { throw APIError.message("Agent is required", code: 0) }
+        return OrcaWorkControlProjection(
+            try await Self.runtimeClient.workControl(agentKey: key)
+        )
+    }
 
     func load(view: WorkbenchReadView = .mine, id: String? = nil, limit: Int = 50) async throws -> WorkbenchEnvelope {
         var items = [

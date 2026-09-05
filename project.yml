@@ -49,6 +49,14 @@ targets:
     dependencies:
       - package: LiveKit
       - package: OrcaRuntimeContracts
+      - package: OrcaRuntimeContracts
+        product: OrcaDomain
+      - package: OrcaRuntimeContracts
+        product: OrcaAPI
+      - package: OrcaRuntimeContracts
+        product: OrcaRuntime
+      - package: OrcaRuntimeContracts
+        product: OrcaDesign
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.orcamc.pod

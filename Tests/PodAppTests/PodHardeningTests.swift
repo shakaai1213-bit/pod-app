@@ -1,4 +1,5 @@
 import Foundation
+import OrcaDomain
 import XCTest
 @testable import pod
 
@@ -26,6 +27,62 @@ final class PodHardeningTests: XCTestCase {
     func testPhysicalPodUsesCanonicalORCAMiniBackend() {
         XCTAssertEqual(AppConfig.canonicalBackendURL, "http://100.104.72.62:8000")
         XCTAssertNotEqual(AppConfig.canonicalBackendURL, "http://100.76.196.40:8000")
+    }
+
+    func testPodUsesSharedSevenAgentAndOperatingAreaInventory() {
+        XCTAssertEqual(
+            AgentInfo.team.map(\.id),
+            OrcaAgentProfile.fallbackRoster.map(\.id)
+        )
+        XCTAssertEqual(AppTab.dashboard.title, OrcaSurfaceSection.overview.title)
+        XCTAssertEqual(AppTab.work.title, OrcaSurfaceSection.work.title)
+        XCTAssertEqual(AppTab.fund.title, OrcaSurfaceSection.fund.title)
+        XCTAssertEqual(AppTab.crew.title, OrcaSurfaceSection.crew.title)
+        XCTAssertEqual(AppTab.knowledge.title, OrcaSurfaceSection.knowledge.title)
+        XCTAssertEqual(AppTab.lab.title, OrcaSurfaceSection.lab.title)
+        XCTAssertEqual(AppTab.runtime.title, OrcaSurfaceSection.runtime.title)
+        XCTAssertEqual(AppTab.maker.title, OrcaSurfaceSection.maker.title)
+    }
+
+    func testKnowledgePacketUsesCanonicalAccessLaneAndRedactionState() throws {
+        let privilegedPayload = #"""
+        {
+          "id":"knowledge-protected",
+          "title":"Protected research",
+          "access_lane":"protected",
+          "source_type":"research_packet",
+          "body":"Authorized body",
+          "protected":false
+        }
+        """#
+        let privileged = try JSONDecoder().decode(
+            KnowledgePacketSearchResult.self,
+            from: Data(privilegedPayload.utf8)
+        )
+
+        XCTAssertEqual(privileged.lane, "protected")
+        XCTAssertTrue(privileged.isProtectedLane)
+        XCTAssertFalse(privileged.bodyRedacted)
+        XCTAssertEqual(privileged.body, "Authorized body")
+
+        let redactedPayload = #"""
+        {
+          "id":"knowledge-redacted",
+          "title":"Protected research",
+          "access_lane":"protected",
+          "source_type":"research_packet",
+          "body":null,
+          "protected":true
+        }
+        """#
+        let redacted = try JSONDecoder().decode(
+            KnowledgePacketSearchResult.self,
+            from: Data(redactedPayload.utf8)
+        )
+
+        XCTAssertTrue(redacted.isProtectedLane)
+        XCTAssertTrue(redacted.bodyRedacted)
+        XCTAssertTrue(redacted.body.isEmpty)
     }
 
     func testPodChatHasOneUserFacingEntryInsideWork() throws {
@@ -76,6 +133,12 @@ final class PodHardeningTests: XCTestCase {
                 atPath: sourceRoot.appendingPathComponent(relativePath).path
             ))
         }
+    }
+
+    @MainActor
+    func testPodExposesReviewedConversationMemory() {
+        _ = DirectChatViewModel.applyLatestMemoryProposal(for:)
+        XCTAssertEqual(DirectChatViewModel.memoryReviewActionTitle, "Review and Apply")
     }
 
     func testUserFacingBackendClientsUseAppConfigInsteadOfLegacyShakaProxy() throws {
@@ -192,7 +255,25 @@ final class PodHardeningTests: XCTestCase {
                 "freshness_at":"2026-07-13T23:09:56.183641","cause":"Open canonical intake",
                 "drill_refs":["/api/v1/tickets"]
               }],
-              "captain_queue":[],
+              "captain_queue":[
+                {
+                  "id":"71a5f76b-87f4-4020-baa5-065e3107ad7e",
+                  "object_type":"approval","title":"Release approval",
+                  "reason":"Tony-only action is waiting.","owner_name":"tony",
+                  "waiting_since":"2026-07-13T23:09:56Z",
+                  "canonical_ref":"/api/v1/approvals"
+                },
+                {
+                  "id":"5c0d591c-9946-4a88-909d-ea9a2410223a",
+                  "object_type":"ticket_group","title":"12 current work items need scope review",
+                  "reason":"Scope fields need review.","owner_name":null,
+                  "waiting_since":"2026-07-13T23:09:56Z",
+                  "canonical_ref":"/api/v1/tickets/work-control/integrity",
+                  "queue_kind":"work_control_attention","attention_type":"scope_gap",
+                  "requires_captain_decision":false,"item_count":12,"protected":false,
+                  "drill_refs":["/api/v1/tickets/work-control/integrity"]
+                }
+              ],
               "source_refs":["/api/v1/lab/velocity","/api/v1/tickets"]
             }
             """#
@@ -204,7 +285,12 @@ final class PodHardeningTests: XCTestCase {
 
         XCTAssertEqual(atlas.gauge.map(\.key), ["sense"])
         XCTAssertEqual(atlas.lanes.map(\.key), ["intake"])
-        XCTAssertTrue(atlas.captainQueue.isEmpty)
+        XCTAssertEqual(atlas.captainQueue.count, 2)
+        XCTAssertTrue(atlas.captainQueue[0].isCaptainDecision)
+        XCTAssertEqual(atlas.captainQueue[0].effectiveItemCount, 1)
+        XCTAssertFalse(atlas.captainQueue[1].isCaptainDecision)
+        XCTAssertEqual(atlas.captainQueue[1].effectiveItemCount, 12)
+        XCTAssertEqual(atlas.captainQueue[1].attentionType, "scope_gap")
     }
 
     func testCaptainsDeskProtectedPointerDecodesWithoutFullTicketFields() throws {
@@ -352,6 +438,43 @@ final class PodHardeningTests: XCTestCase {
         XCTAssertTrue(viewModel.contains("sendMessage(reusingTraceID: message.traceId)"))
         XCTAssertTrue(viewModel.contains("afterEventID: lastLiveEventIDByChannel[channelId]"))
         XCTAssertTrue(sse.contains("forHTTPHeaderField: \"Last-Event-ID\""))
+    }
+
+    func testVoiceCompanionUsesORCARuntimeWithoutProviderCredentials() throws {
+        let sourceRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources")
+        let voiceRoot = sourceRoot.appendingPathComponent(
+            "Presentation/Features/VoiceCompanion"
+        )
+        let viewModel = try String(
+            contentsOf: voiceRoot.appendingPathComponent("VoiceCompanionViewModel.swift"),
+            encoding: .utf8
+        )
+        let voiceSources = try FileManager.default.contentsOfDirectory(
+            at: voiceRoot,
+            includingPropertiesForKeys: nil
+        )
+        .filter { $0.pathExtension == "swift" }
+        .map { try String(contentsOf: $0, encoding: .utf8) }
+        .joined(separator: "\n")
+
+        XCTAssertTrue(viewModel.contains("AgentChatService"))
+        XCTAssertTrue(viewModel.contains("deliveryMode: .auto"))
+        XCTAssertTrue(viewModel.contains("chatThreadId: orcaConversationID"))
+        XCTAssertTrue(viewModel.contains("orcaConversationID = channelID"))
+        XCTAssertFalse(viewModel.contains("postVoiceExchange"))
+        for forbidden in [
+            "ANTHROPIC_API_KEY",
+            "api.anthropic.com",
+            "api.moonshot.cn",
+            "x-api-key",
+            "ClaudeClient",
+        ] {
+            XCTAssertFalse(voiceSources.contains(forbidden), "Voice source contains \(forbidden)")
+        }
     }
 
     func testChatPresentationKeepsLifecyclePrimaryAndExceptionsVisible() {

@@ -46,6 +46,104 @@ actor AgentChatService {
         let metadata: ResponseMetadata?
     }
 
+    struct RuntimeTimelineEntry: Sendable, Hashable, Identifiable {
+        let id: String
+        let sequence: Int
+        let type: String
+        let state: String?
+        let actor: String
+        let occurredAt: Date
+
+        var isTerminal: Bool {
+            ["turn.completed", "turn.failed", "turn.cancelled"].contains(type)
+        }
+    }
+
+    struct RuntimeTurnSummary: Sendable, Hashable {
+        let turnId: String
+        let state: String
+        let provider: String?
+        let model: String?
+        let host: String?
+        let runtimeSessionId: String?
+        let terminalSummary: String?
+        let events: [RuntimeTimelineEntry]
+
+        init(runtime turn: Components.Schemas.ChatRuntimeTurnRead) {
+            turnId = turn.turnId
+            state = turn.state.rawValue
+            provider = turn.adapter?.providerId
+            model = turn.adapter?.modelId
+            host = turn.adapter?.hostId
+            runtimeSessionId = turn.runtimeSessionId
+            terminalSummary = turn.terminalOutcome?.summary
+            events = (turn.events ?? []).map {
+                RuntimeTimelineEntry(
+                    id: $0.eventId,
+                    sequence: $0.sequence,
+                    type: $0.eventType.rawValue,
+                    state: $0.state?.rawValue,
+                    actor: $0.actorId,
+                    occurredAt: $0.occurredAt
+                )
+            }
+        }
+    }
+
+    struct MemoryFactSummary: Sendable, Hashable, Identifiable {
+        let id: String
+        let text: String
+        let status: String
+        let evidenceCount: Int
+
+        init(runtime fact: Components.Schemas.ConversationMemoryFact) {
+            id = fact.factId
+            text = fact.text
+            status = fact.status?.rawValue ?? "active"
+            evidenceCount = fact.evidenceRefs?.count ?? 0
+        }
+    }
+
+    struct ConversationMemorySummary: Sendable, Hashable {
+        let conversationId: String
+        let revision: Int
+        let activeSummary: String
+        let sensitivity: String
+        let visibility: String
+        let decisions: [MemoryFactSummary]
+        let commitments: [MemoryFactSummary]
+        let blockers: [MemoryFactSummary]
+        let recentOutcomes: [MemoryFactSummary]
+        let pendingProposalIds: [String]
+        let nasReferenceCount: Int
+        let evidenceReferenceCount: Int
+        let updatedAt: Date?
+
+        init(runtime memory: Components.Schemas.ConversationMemoryRead) {
+            conversationId = memory.conversationId
+            revision = memory.revision
+            activeSummary = memory.memory.activeSummary ?? ""
+            sensitivity = memory.memory.sensitivity?.rawValue ?? "normal"
+            visibility = memory.memory.visibility?.rawValue ?? "conversation"
+            decisions = (memory.memory.decisions ?? []).map(MemoryFactSummary.init)
+            commitments = (memory.memory.commitments ?? []).map(MemoryFactSummary.init)
+            blockers = (memory.memory.blockers ?? []).map(MemoryFactSummary.init)
+            recentOutcomes = (memory.memory.recentOutcomes ?? []).map(MemoryFactSummary.init)
+            pendingProposalIds = (memory.pendingProposals ?? []).map(\.proposalId)
+            nasReferenceCount = memory.memory.nasRefs?.count ?? 0
+            evidenceReferenceCount = memory.memory.evidenceRefs?.count ?? 0
+            updatedAt = memory.updatedAt
+        }
+
+        var activeCommitmentCount: Int {
+            commitments.filter { $0.status == "active" }.count
+        }
+
+        var activeBlockerCount: Int {
+            blockers.filter { $0.status == "active" }.count
+        }
+    }
+
     struct LockerWorkSpineProject: Sendable, Hashable, Identifiable {
         let id: String
         let name: String
@@ -575,6 +673,38 @@ actor AgentChatService {
                 }
             }
         }
+    }
+
+    func runtimeTurn(turnId: String) async throws -> RuntimeTurnSummary {
+        RuntimeTurnSummary(runtime: try await Self.runtimeClient.runtimeTurn(turnID: turnId))
+    }
+
+    func conversationMemory(conversationId: String) async throws -> ConversationMemorySummary {
+        ConversationMemorySummary(
+            runtime: try await Self.runtimeClient.conversationMemory(
+                conversationID: conversationId
+            )
+        )
+    }
+
+    func providerControl() async throws
+        -> Components.Schemas.ChatRuntimeProviderControlBundleRead
+    {
+        try await Self.runtimeClient.providerControl()
+    }
+
+    func applyConversationMemoryProposal(
+        conversationId: String,
+        proposalId: String,
+        reason: String
+    ) async throws -> ConversationMemorySummary {
+        ConversationMemorySummary(
+            runtime: try await Self.runtimeClient.applyConversationMemoryProposal(
+                conversationID: conversationId,
+                proposalID: proposalId,
+                reason: reason
+            )
+        )
     }
 
     private func sendDirectAgentTurn(

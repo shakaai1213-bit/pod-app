@@ -23,7 +23,7 @@ final class LiveKitVoiceConnection: NSObject, ObservableObject, RoomDelegate, @u
         return false
     }
 
-    func connect(session: OpenClawClient.LiveKitSession) async throws {
+    func connect(session: OrcaVoiceClient.LiveKitSession) async throws {
         if let room {
             room.remove(delegate: self)
             await room.disconnect()

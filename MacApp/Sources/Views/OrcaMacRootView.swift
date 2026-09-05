@@ -13,15 +13,19 @@ struct OrcaMacRootView: View {
             Group {
                 if model.selectedSection == .conversations {
                     ConversationView()
+                } else if model.selectedSection == .workbench {
+                    EngineeringWorkbenchView()
                 } else {
                     ConsoleSectionView(section: model.selectedSection)
                 }
             }
-            .navigationSplitViewColumnWidth(min: 520, ideal: 720)
+            .navigationSplitViewColumnWidth(min: WorkbenchPane.minimumBarWidth, ideal: 720)
         } detail: {
             Group {
                 if model.selectedSection == .conversations {
                     RuntimeInspectorView()
+                } else if model.selectedSection == .workbench {
+                    EngineeringWorkbenchInspectorView()
                 } else {
                     ConsoleInspectorView()
                 }
@@ -44,11 +48,7 @@ struct OrcaMacRootView: View {
             guard next == .active else { return }
             Task {
                 if model.connectionState.isReady {
-                    if model.selectedSection == .conversations {
-                        await model.refreshSelectedConversation(silent: true)
-                    } else {
-                        await model.refreshSelectedSection(silent: true)
-                    }
+                    await model.refreshCurrentSurface(silent: true)
                 } else {
                     await model.connect()
                 }

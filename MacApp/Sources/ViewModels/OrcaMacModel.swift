@@ -2,12 +2,14 @@ import AuthenticationServices
 import CryptoKit
 import Foundation
 import Observation
+import OrcaAPI
+import OrcaRuntime
 import OrcaRuntimeContracts
 
 @Observable
 @MainActor
 final class OrcaMacModel {
-    static let defaultServerAddress = "http://100.104.72.62:8000"
+    static let defaultServerAddress = OrcaEndpointPolicy.productionOrigin
 
     var selectedAgentID: String
     var selectedSection: ConsoleSection
@@ -19,6 +21,8 @@ final class OrcaMacModel {
     var contractVersion: String?
     var schemaSHA256: String?
     var conversations: [String: ConversationState] = [:]
+    var runtimeTurns: [String: Components.Schemas.ChatRuntimeTurnRead] = [:]
+    var conversationMemories: [String: Components.Schemas.ConversationMemoryRead] = [:]
     var sectionSnapshots: [ConsoleSection: ConsoleSectionSnapshot] = [:]
     var lastUpdatedAt: Date?
     var presentedError: String?
@@ -26,6 +30,34 @@ final class OrcaMacModel {
     var serverAddress: String
     var hasStoredCredential = false
     var agents: [AgentProfile] = AgentProfile.fallbackRoster
+    var isLoadingRuntimeEvidence = false
+    var isApplyingMemoryProposal = false
+    var runtimeEvidenceError: String?
+    var providerControl: Components.Schemas.ChatRuntimeProviderControlBundleRead?
+    var workControl: OrcaWorkControlProjection?
+    var workMode: ConsoleWorkMode = .portfolio
+    var boards: [OrcaBoardDirectoryItem] = []
+    var boardPlansByID: [UUID: OrcaBoardPlan] = [:]
+    var selectedBoardID: UUID?
+    var boardPlan: OrcaBoardPlan?
+    var isLoadingBoardPlan = false
+    var boardPlanError: String?
+    var providerControlError: String?
+    var isLoadingProviderControl = false
+    var selectedWorkbenchPane: WorkbenchPane = .workspace
+    var workbenchTickets: [WorkbenchTicketSummary] = []
+    var selectedWorkbenchTicketID: String?
+    var selectedWorkbenchOperationID: String?
+    var workbenchContract: OrcaEngineeringWorkbenchContract?
+    var workbenchSession: OrcaEngineeringWorkbenchSession?
+    var workbenchRootID = "pod-client"
+    var workbenchRelativePath = "."
+    var workbenchSearchQuery = ""
+    var workbenchPatchDraft = ""
+    var isLoadingWorkbench = false
+    var isSubmittingWorkbench = false
+    var workbenchError: String?
+    var workbenchNotice: String?
 
     @ObservationIgnored private let tokenStore: any RuntimeTokenStoring
     @ObservationIgnored private let defaults: UserDefaults
@@ -33,6 +65,8 @@ final class OrcaMacModel {
     @ObservationIgnored private var consoleService: OrcaConsoleService?
     @ObservationIgnored private var authService: OrcaNativeAuthService?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
+    @ObservationIgnored private var providerRefreshTask: Task<Void, Never>?
+    @ObservationIgnored private var connectInFlight: (id: UUID, task: Task<Void, Never>)?
     @ObservationIgnored private var conversationScope: (origin: String, organizationID: String)?
 
     init(
@@ -64,6 +98,14 @@ final class OrcaMacModel {
 
     var selectedMessages: [TranscriptMessage] { selectedConversation.messages }
 
+    var selectedRuntimeTurn: Components.Schemas.ChatRuntimeTurnRead? {
+        runtimeTurns[selectedAgentID]
+    }
+
+    var selectedConversationMemory: Components.Schemas.ConversationMemoryRead? {
+        conversationMemories[selectedAgentID]
+    }
+
     var selectedSnapshot: ConsoleSectionSnapshot {
         sectionSnapshots[selectedSection] ?? .empty(selectedSection)
     }
@@ -71,6 +113,20 @@ final class OrcaMacModel {
     var selectedRecord: ConsoleRecord? {
         guard let selectedRecordID else { return nil }
         return selectedSnapshot.records.first(where: { $0.id == selectedRecordID })
+    }
+
+    var selectedWorkbenchTicket: WorkbenchTicketSummary? {
+        guard let selectedWorkbenchTicketID else { return nil }
+        return workbenchTickets.first(where: { $0.id == selectedWorkbenchTicketID })
+    }
+
+    var selectedWorkbenchOperation: OrcaEngineeringOperation? {
+        guard let selectedWorkbenchOperationID else { return nil }
+        return workbenchSession?.operations.first(where: { $0.id == selectedWorkbenchOperationID })
+    }
+
+    var selectedWorkbenchRoot: OrcaEngineeringRoot? {
+        workbenchContract?.roots.first(where: { $0.id == workbenchRootID })
     }
 
     var canSend: Bool {
@@ -99,7 +155,26 @@ final class OrcaMacModel {
     }
 
     func connect() async {
+        if let connectInFlight {
+            await connectInFlight.task.value
+            return
+        }
+
+        let id = UUID()
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.performConnect()
+        }
+        connectInFlight = (id, task)
+        await task.value
+        if connectInFlight?.id == id {
+            connectInFlight = nil
+        }
+    }
+
+    private func performConnect() async {
         refreshTask?.cancel()
+        providerRefreshTask?.cancel()
         guard let endpoint = Self.normalizedEndpoint(serverAddress) else {
             connectionState = .unavailable("Invalid ORCA server address.")
             return
@@ -153,21 +228,25 @@ final class OrcaMacModel {
                 deviceID: await nextAuthService.boundDeviceID()
             )
             consoleService = nextConsoleService
-            let runtimeAgents = try await nextConsoleService.agentProfiles()
+            let runtimeAgents = try OrcaRuntimeProjection.profiles(
+                from: await nextService.agentPacks()
+            )
             guard !runtimeAgents.isEmpty else { throw OrcaConsoleServiceError.invalidResponse }
             agents = runtimeAgents
             if !agents.contains(where: { $0.id == selectedAgentID }) {
                 selectedAgentID = agents[0].id
             }
+            let channelIDs = try await nextConsoleService.directAgentChannelIDs(
+                allowedAgentIDs: Set(agents.map(\.id))
+            )
+            hydrateCanonicalConversationIDs(channelIDs)
             contractVersion = compatibility.contractVersion
             schemaSHA256 = compatibility.schemaSHA256
             connectionState = .ready
-            if selectedSection == .conversations {
-                await refreshSelectedConversation(silent: true)
-            } else {
-                await refreshSelectedSection(silent: true)
-            }
+            await refreshProviderControl(silent: true)
+            await refreshCurrentSurface(silent: true)
             beginRefreshLoop()
+            beginProviderRefreshLoop()
         } catch let error as OrcaRuntimeClientError {
             service = nil
             consoleService = nil
@@ -230,6 +309,7 @@ final class OrcaMacModel {
             authService = nil
             deactivateConversationScope()
             refreshTask?.cancel()
+            providerRefreshTask?.cancel()
             await connect()
         } catch {
             presentedError = error.localizedDescription
@@ -252,13 +332,30 @@ final class OrcaMacModel {
         selectedRecordID = nil
         defaults.set(section.rawValue, forKey: "orca.mac.selected-section")
         guard refresh else { return }
-        Task {
-            if section == .conversations {
-                await refreshSelectedConversation(silent: true)
-            } else {
-                await refreshSelectedSection(silent: true)
-            }
+        Task { await refreshCurrentSurface(silent: true) }
+    }
+
+    func selectWorkControlAgent(_ id: String) {
+        guard agents.contains(where: { $0.id == id }) else { return }
+        selectedAgentID = id
+        selectedRecordID = nil
+        defaults.set(id, forKey: "orca.mac.selected-agent")
+        Task { await refreshSelectedSection(silent: true) }
+    }
+
+    func selectWorkMode(_ mode: ConsoleWorkMode) {
+        workMode = mode
+        selectedRecordID = nil
+        if mode == .portfolio, boardPlan == nil {
+            Task { await refreshBoardPortfolio(silent: true) }
         }
+    }
+
+    func selectBoard(_ id: UUID) {
+        guard boards.contains(where: { $0.id == id }) else { return }
+        selectedBoardID = id
+        boardPlan = nil
+        Task { await refreshSelectedBoardPlan(silent: true) }
     }
 
     func selectRecord(_ id: String?) {
@@ -266,11 +363,21 @@ final class OrcaMacModel {
     }
 
     func refreshSelectedSection(silent: Bool = false) async {
-        guard selectedSection != .conversations, let consoleService else { return }
+        guard selectedSection != .conversations,
+              selectedSection != .workbench,
+              let consoleService else { return }
         let section = selectedSection
         isLoadingSection = true
         do {
-            let snapshot = try await consoleService.snapshot(for: section)
+            let bundle: Components.Schemas.ChatRuntimeWorkControlBundleRead?
+            if section == .work {
+                guard let service else { throw OrcaConsoleServiceError.invalidResponse }
+                bundle = try await service.workControl(agentKey: selectedAgentID)
+                workControl = bundle.map(OrcaWorkControlProjection.init)
+            } else {
+                bundle = nil
+            }
+            let snapshot = try await consoleService.snapshot(for: section, workControl: bundle)
             sectionSnapshots[section] = snapshot
             sectionError = nil
             lastUpdatedAt = snapshot.updatedAt
@@ -278,11 +385,245 @@ final class OrcaMacModel {
                !snapshot.records.contains(where: { $0.id == selectedRecordID }) {
                 self.selectedRecordID = nil
             }
+            if section == .work {
+                await refreshBoardPortfolio(silent: true)
+            }
         } catch {
             sectionError = error.localizedDescription
             if !silent { presentedError = error.localizedDescription }
         }
         isLoadingSection = false
+    }
+
+    func refreshBoardPortfolio(silent: Bool = false) async {
+        guard let consoleService, !isLoadingBoardPlan else { return }
+        isLoadingBoardPlan = true
+        defer { isLoadingBoardPlan = false }
+        do {
+            let directory = try await consoleService.boardDirectory()
+            boards = directory.items
+                .filter { !$0.isProtected }
+                .sorted { left, right in
+                    if left.slug == "pod" { return true }
+                    if right.slug == "pod" { return false }
+                    return left.displayName.localizedCaseInsensitiveCompare(right.displayName) == .orderedAscending
+                }
+            if selectedBoardID == nil || !boards.contains(where: { $0.id == selectedBoardID }) {
+                selectedBoardID = boards.first(where: { $0.slug == "pod" })?.id ?? boards.first?.id
+            }
+            boardPlansByID = await loadProductBoardPlans(
+                service: consoleService,
+                boards: Array(boards.filter(\.isProduct).prefix(6))
+            )
+            try await loadSelectedBoardPlan()
+            boardPlanError = nil
+        } catch {
+            boardPlanError = error.localizedDescription
+            if !silent { presentedError = error.localizedDescription }
+        }
+    }
+
+    func refreshSelectedBoardPlan(silent: Bool = false) async {
+        guard !isLoadingBoardPlan else { return }
+        isLoadingBoardPlan = true
+        defer { isLoadingBoardPlan = false }
+        do {
+            try await loadSelectedBoardPlan()
+            boardPlanError = nil
+        } catch {
+            boardPlanError = error.localizedDescription
+            if !silent { presentedError = error.localizedDescription }
+        }
+    }
+
+    private func loadSelectedBoardPlan() async throws {
+        guard let consoleService, let selectedBoardID else {
+            boardPlan = nil
+            return
+        }
+        if let cached = boardPlansByID[selectedBoardID] {
+            boardPlan = cached
+        } else {
+            boardPlan = try await consoleService.boardPlan(boardID: selectedBoardID)
+        }
+    }
+
+    private func loadProductBoardPlans(
+        service: OrcaConsoleService,
+        boards: [OrcaBoardDirectoryItem]
+    ) async -> [UUID: OrcaBoardPlan] {
+        await withTaskGroup(of: (UUID, OrcaBoardPlan?).self) { group in
+            for board in boards {
+                group.addTask {
+                    (board.id, try? await service.boardPlan(boardID: board.id))
+                }
+            }
+            var plans: [UUID: OrcaBoardPlan] = [:]
+            for await (id, plan) in group {
+                if let plan { plans[id] = plan }
+            }
+            return plans
+        }
+    }
+
+    func refreshCurrentSurface(silent: Bool = false) async {
+        switch selectedSection {
+        case .conversations:
+            await refreshSelectedConversation(silent: silent)
+        case .workbench:
+            await refreshWorkbench(silent: silent)
+        default:
+            await refreshSelectedSection(silent: silent)
+        }
+    }
+
+    func selectWorkbenchAgent(_ id: String) {
+        guard agents.contains(where: { $0.id == id }) else { return }
+        selectedAgentID = id
+        defaults.set(id, forKey: "orca.mac.selected-agent")
+        selectedWorkbenchOperationID = nil
+        Task { await refreshWorkbench(silent: true) }
+    }
+
+    func selectWorkbenchTicket(_ id: String?) {
+        selectedWorkbenchTicketID = id
+        selectedWorkbenchOperationID = nil
+        workbenchSession = nil
+        Task { await refreshWorkbenchSession(silent: true) }
+    }
+
+    func selectWorkbenchOperation(_ id: String?) {
+        selectedWorkbenchOperationID = id
+    }
+
+    func refreshWorkbench(silent: Bool = false) async {
+        guard let consoleService else { return }
+        isLoadingWorkbench = true
+        defer { isLoadingWorkbench = false }
+        do {
+            async let contract = consoleService.workbenchContract(agentSlug: selectedAgentID)
+            async let tickets = consoleService.workbenchTickets(agentSlug: selectedAgentID)
+            let (nextContract, nextTickets) = try await (contract, tickets)
+            workbenchContract = nextContract
+            workbenchTickets = nextTickets
+            if selectedWorkbenchTicketID == nil
+                || !nextTickets.contains(where: { $0.id == selectedWorkbenchTicketID }) {
+                selectedWorkbenchTicketID = nextTickets.first(where: {
+                    !["closed", "cancelled"].contains($0.status.lowercased())
+                })?.id ?? nextTickets.first?.id
+            }
+            if !nextContract.roots.contains(where: { $0.id == workbenchRootID }) {
+                workbenchRootID = nextContract.roots.first?.id ?? ""
+            }
+            workbenchError = nil
+            await refreshWorkbenchSession(silent: true)
+            lastUpdatedAt = Date()
+        } catch {
+            workbenchError = error.localizedDescription
+            if !silent { presentedError = error.localizedDescription }
+        }
+    }
+
+    func refreshWorkbenchSession(silent: Bool = false) async {
+        guard let consoleService, let ticketID = selectedWorkbenchTicketID else {
+            workbenchSession = nil
+            return
+        }
+        do {
+            let next = try await consoleService.workbenchSession(
+                ticketID: ticketID,
+                agentSlug: selectedAgentID
+            )
+            workbenchSession = next
+            workbenchContract = next.contract
+            workbenchError = nil
+            if let selectedWorkbenchOperationID,
+               !next.operations.contains(where: { $0.id == selectedWorkbenchOperationID }) {
+                self.selectedWorkbenchOperationID = nil
+            }
+            lastUpdatedAt = Date()
+        } catch {
+            workbenchError = error.localizedDescription
+            if !silent { presentedError = error.localizedDescription }
+        }
+    }
+
+    func submitWorkbenchAction(_ actionID: String) async {
+        guard let consoleService,
+              let ticketID = selectedWorkbenchTicketID,
+              let contract = workbenchContract,
+              let action = contract.actions.first(where: { $0.id == actionID }),
+              action.available,
+              action.allowedRootIDs.contains(workbenchRootID),
+              !isSubmittingWorkbench else { return }
+        let query = actionID == "search.rg"
+            ? workbenchSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+            : nil
+        let patch = actionID == "patch.draft"
+            ? workbenchPatchDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+            : nil
+        if actionID == "search.rg" && (query?.isEmpty ?? true) {
+            workbenchError = "Enter a search query before starting Search Workspace."
+            return
+        }
+        if actionID == "patch.draft" && (patch?.isEmpty ?? true) {
+            workbenchError = "Enter a unified diff before staging a patch draft."
+            return
+        }
+        if actionID != "patch.draft", !contract.host.ready {
+            workbenchError = contract.host.reason
+            return
+        }
+        let enteredPath = workbenchRelativePath.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        isSubmittingWorkbench = true
+        defer { isSubmittingWorkbench = false }
+        do {
+            let result = try await consoleService.createWorkbenchOperation(
+                ticketID: ticketID,
+                payload: OrcaEngineeringOperationCreate(
+                    agentSlug: selectedAgentID,
+                    actionID: actionID,
+                    rootID: workbenchRootID,
+                    relativePath: enteredPath.isEmpty ? "." : enteredPath,
+                    searchQuery: query,
+                    patch: patch,
+                    idempotencyKey: "orca-console-workbench:\(UUID().uuidString.lowercased())"
+                )
+            )
+            workbenchNotice = result.message
+            workbenchError = nil
+            selectedWorkbenchOperationID = result.operation.id
+            await refreshWorkbenchSession(silent: true)
+        } catch {
+            workbenchError = error.localizedDescription
+            presentedError = error.localizedDescription
+        }
+    }
+
+    func decideWorkbenchApproval(
+        operation: OrcaEngineeringOperation,
+        decision: String
+    ) async {
+        guard let consoleService, !isSubmittingWorkbench else { return }
+        isSubmittingWorkbench = true
+        defer { isSubmittingWorkbench = false }
+        do {
+            let updated = try await consoleService.decideWorkbenchApproval(
+                runID: operation.id,
+                decision: OrcaEngineeringApprovalDecision(
+                    decision: decision,
+                    note: "\(decision.capitalized) from ORCA Console for this exact AgentRun."
+                )
+            )
+            selectedWorkbenchOperationID = updated.id
+            workbenchNotice = "Operation \(updated.id.prefix(8)) is \(decision)."
+            workbenchError = nil
+            await refreshWorkbenchSession(silent: true)
+        } catch {
+            workbenchError = error.localizedDescription
+            presentedError = error.localizedDescription
+        }
     }
 
     func refreshSelectedConversation(silent: Bool = false) async {
@@ -297,6 +638,12 @@ final class OrcaMacModel {
             state.mergeCanonical(remote.map(Self.transcriptMessage))
             conversations[agentID] = state
             lastUpdatedAt = Date()
+            await refreshRuntimeEvidence(
+                agentID: agentID,
+                conversationID: conversationID,
+                turnID: state.messages.last(where: { $0.role == .user })?.id,
+                silent: silent
+            )
         } catch {
             if !silent { presentedError = error.localizedDescription }
         }
@@ -337,6 +684,7 @@ final class OrcaMacModel {
                     agentSlug: agentID,
                     content: content,
                     history: Array(history.suffix(20)),
+                    sourceSurface: "console",
                     deliveryMode: "agent_inbox",
                     asyncResponse: true,
                     traceID: traceID,
@@ -371,6 +719,7 @@ final class OrcaMacModel {
             }
             resolved.resolvePending(id: pendingID, with: canonical)
             resolved.latestReceipt = RuntimeReceipt(
+                turnID: response.userMessageID,
                 traceID: response.traceID,
                 source: response.source,
                 lane: response.lane,
@@ -383,7 +732,11 @@ final class OrcaMacModel {
             )
             conversations[agentID] = resolved
             lastUpdatedAt = Date()
-            await refreshConversation(agentID: agentID, conversationID: response.conversationID)
+            await refreshConversation(
+                agentID: agentID,
+                conversationID: response.conversationID,
+                turnID: response.userMessageID
+            )
         } catch {
             var failed = conversations[agentID] ?? state
             failed.failPending(id: pendingID, reason: error.localizedDescription)
@@ -403,16 +756,7 @@ final class OrcaMacModel {
     }
 
     static func normalizedEndpoint(_ raw: String) -> URL? {
-        var normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return nil }
-        if !normalized.contains("://") { normalized = "http://\(normalized)" }
-        while normalized.hasSuffix("/") { normalized.removeLast() }
-        guard let url = URL(string: normalized),
-              let scheme = url.scheme?.lowercased(),
-              ["http", "https"].contains(scheme),
-              url.host != nil,
-              OrcaServerOrigin.isApproved(url) else { return nil }
-        return url
+        OrcaEndpointPolicy.normalizedEndpoint(raw)
     }
 
     private func beginRefreshLoop() {
@@ -421,16 +765,61 @@ final class OrcaMacModel {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(4))
                 guard !Task.isCancelled, let self else { return }
-                if self.selectedSection == .conversations {
-                    await self.refreshSelectedConversation(silent: true)
-                } else {
-                    await self.refreshSelectedSection(silent: true)
-                }
+                await self.refreshCurrentSurface(silent: true)
             }
         }
     }
 
-    private func refreshConversation(agentID: String, conversationID: String) async {
+    func refreshProviderControl(silent: Bool = false) async {
+        guard let service else { return }
+        isLoadingProviderControl = providerControl == nil
+        defer { isLoadingProviderControl = false }
+        do {
+            providerControl = try await service.providerControl()
+            providerControlError = nil
+        } catch {
+            providerControlError = error.localizedDescription
+            if !silent { presentedError = error.localizedDescription }
+        }
+    }
+
+    private func beginProviderRefreshLoop() {
+        providerRefreshTask?.cancel()
+        providerRefreshTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                guard !Task.isCancelled, let self else { return }
+                await self.refreshProviderControl(silent: true)
+            }
+        }
+    }
+
+    func applyLatestMemoryProposal() async {
+        guard let service,
+              let memory = selectedConversationMemory,
+              let proposal = memory.pendingProposals?.first else { return }
+        isApplyingMemoryProposal = true
+        defer { isApplyingMemoryProposal = false }
+        do {
+            let applied = try await service.applyConversationMemoryProposal(
+                conversationID: memory.conversationId,
+                proposalID: proposal.proposalId,
+                reason: "Applied from ORCA Console after owner review."
+            )
+            conversationMemories[selectedAgentID] = applied
+            runtimeEvidenceError = nil
+            lastUpdatedAt = Date()
+        } catch {
+            runtimeEvidenceError = error.localizedDescription
+            presentedError = error.localizedDescription
+        }
+    }
+
+    private func refreshConversation(
+        agentID: String,
+        conversationID: String,
+        turnID: String? = nil
+    ) async {
         guard let service else { return }
         do {
             let remote = try await loadAllMessages(service: service, conversationID: conversationID)
@@ -439,8 +828,56 @@ final class OrcaMacModel {
             state.mergeCanonical(remote.map(Self.transcriptMessage))
             conversations[agentID] = state
             lastUpdatedAt = Date()
+            await refreshRuntimeEvidence(
+                agentID: agentID,
+                conversationID: conversationID,
+                turnID: turnID ?? state.messages.last(where: { $0.role == .user })?.id,
+                silent: true
+            )
         } catch {
             // The immediate persisted response remains visible; polling retries.
+        }
+    }
+
+    private func refreshRuntimeEvidence(
+        agentID: String,
+        conversationID: String,
+        turnID: String?,
+        silent: Bool
+    ) async {
+        guard let service else { return }
+        isLoadingRuntimeEvidence = true
+        defer { isLoadingRuntimeEvidence = false }
+        var errors: [String] = []
+
+        do {
+            conversationMemories[agentID] = try await service.conversationMemory(
+                conversationID: conversationID
+            )
+        } catch {
+            errors.append("Memory: \(error.localizedDescription)")
+        }
+
+        if let turnID, !turnID.isEmpty {
+            do {
+                runtimeTurns[agentID] = try await service.runtimeTurn(turnID: turnID)
+            } catch OrcaRuntimeClientError.httpStatus(404) {
+                runtimeTurns.removeValue(forKey: agentID)
+            } catch {
+                if runtimeTurns[agentID]?.turnId != turnID {
+                    runtimeTurns.removeValue(forKey: agentID)
+                }
+                errors.append("Turn: \(error.localizedDescription)")
+            }
+        } else {
+            runtimeTurns.removeValue(forKey: agentID)
+        }
+
+        if agentID == selectedAgentID {
+            runtimeEvidenceError = errors.isEmpty ? nil : errors.joined(separator: " ")
+            if !silent, let runtimeEvidenceError {
+                presentedError = runtimeEvidenceError
+            }
         }
     }
 
@@ -461,6 +898,8 @@ final class OrcaMacModel {
         if conversationScope?.origin != next.origin
             || conversationScope?.organizationID != next.organizationID {
             conversations.removeAll()
+            runtimeTurns.removeAll()
+            conversationMemories.removeAll()
         }
         conversationScope = next
         for key in defaults.dictionaryRepresentation().keys
@@ -470,9 +909,31 @@ final class OrcaMacModel {
         }
     }
 
+    func hydrateCanonicalConversationIDs(_ channelIDs: [String: String]) {
+        guard conversationScope != nil else { return }
+        for agent in agents {
+            guard let canonicalID = channelIDs[agent.id], !canonicalID.isEmpty else { continue }
+            let current = conversations[agent.id]
+            if current?.conversationID == canonicalID {
+                storeConversationID(canonicalID, for: agent.id)
+                continue
+            }
+            conversations[agent.id] = ConversationState(conversationID: canonicalID)
+            runtimeTurns.removeValue(forKey: agent.id)
+            conversationMemories.removeValue(forKey: agent.id)
+            storeConversationID(canonicalID, for: agent.id)
+        }
+    }
+
     private func deactivateConversationScope() {
         conversationScope = nil
         conversations.removeAll()
+        runtimeTurns.removeAll()
+        conversationMemories.removeAll()
+        runtimeEvidenceError = nil
+        providerControl = nil
+        providerControlError = nil
+        isLoadingProviderControl = false
     }
 
     private func storedConversationID(for agentID: String) -> String? {

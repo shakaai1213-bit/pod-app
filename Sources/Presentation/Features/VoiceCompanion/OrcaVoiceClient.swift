@@ -1,7 +1,7 @@
 import Foundation
 import OrcaRuntimeContracts
 
-actor OpenClawClient {
+actor OrcaVoiceClient {
     private let baseURL: String
     private let tokenProvider: @Sendable () async -> String?
     private let session: URLSession
@@ -13,11 +13,6 @@ actor OpenClawClient {
         self.baseURL = baseURL
         self.tokenProvider = tokenProvider
         self.session = OrcaSecureURLSession.make()
-    }
-
-    struct MessagePayload: Encodable {
-        let content: String
-        let message_type: String = "text"
     }
 
     struct VoiceProvider: Decodable, Sendable {
@@ -78,30 +73,6 @@ actor OpenClawClient {
         }
     }
 
-    /// Post a message to the ORCA MC general channel
-    func postMessage(content: String, channelId: String = "4a37b0e8-bd9f-419f-ad82-f133877facf9") async throws {
-        let authToken = try await bearerToken()
-        let url = URL(string: "\(baseURL)/api/v1/chat/channels/\(channelId)/messages")!
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let payload = MessagePayload(content: content)
-        request.httpBody = try JSONEncoder().encode(payload)
-        try OrcaDeviceIdentity.authorize(&request, token: authToken)
-
-        let (_, response) = try await session.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse,
-              OrcaSecureURLSession.responseStayedOnOrigin(response, requestURL: url),
-              (200...299).contains(httpResponse.statusCode) else {
-            throw NSError(domain: "OpenClawClient", code: -1, userInfo: [
-                NSLocalizedDescriptionKey: "Failed to post message to ORCA MC"
-            ])
-        }
-    }
-
     func fetchVoiceProviders() async throws -> [VoiceProvider] {
         let authToken = try await bearerToken()
         let url = URL(string: "\(baseURL)/api/v1/voice/providers")!
@@ -138,13 +109,13 @@ actor OpenClawClient {
 
     private func validate(response: URLResponse, data: Data) throws {
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw NSError(domain: "OpenClawClient", code: -1, userInfo: [
+            throw NSError(domain: "OrcaVoiceClient", code: -1, userInfo: [
                 NSLocalizedDescriptionKey: "Invalid ORCA response"
             ])
         }
         guard (200...299).contains(httpResponse.statusCode) else {
             let body = String(data: data.prefix(500), encoding: .utf8) ?? "ORCA request failed"
-            throw NSError(domain: "OpenClawClient", code: httpResponse.statusCode, userInfo: [
+            throw NSError(domain: "OrcaVoiceClient", code: httpResponse.statusCode, userInfo: [
                 NSLocalizedDescriptionKey: body
             ])
         }
@@ -152,22 +123,11 @@ actor OpenClawClient {
 
     private func bearerToken() async throws -> String {
         guard let token = await tokenProvider(), !token.isEmpty else {
-            throw NSError(domain: "OpenClawClient", code: 401, userInfo: [
+            throw NSError(domain: "OrcaVoiceClient", code: 401, userInfo: [
                 NSLocalizedDescriptionKey: "Sign in to ORCA before using voice."
             ])
         }
         return token
     }
 
-    /// Post a voice transcript and AI response to ORCA MC
-    func postVoiceExchange(userMessage: String, aiResponse: String, channelId: String = "4a37b0e8-bd9f-419f-ad82-f133877facf9") async {
-        // Post user message
-        try? await postMessage(content: "🎤 \(userMessage)", channelId: channelId)
-
-        // Brief pause
-        try? await Task.sleep(nanoseconds: 500_000_000)
-
-        // Post AI response
-        try? await postMessage(content: "🤖 \(aiResponse)", channelId: channelId)
-    }
 }

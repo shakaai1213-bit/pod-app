@@ -12,8 +12,6 @@ cd "$root"
 : "${ORCA_BACKEND_ROOT:?Set ORCA_BACKEND_ROOT to the runtime Git checkout}"
 : "${ORCA_BACKEND_IMAGE:?Set ORCA_BACKEND_IMAGE to the exact runtime image artifact}"
 : "${HOST_BUNDLE:?Set HOST_BUNDLE to the exact host bundle artifact}"
-: "${ROLLBACK_EVIDENCE_DIR:?Set ROLLBACK_EVIDENCE_DIR to the signed prior evidence directory}"
-: "${ROLLBACK_ARTIFACT:?Set ROLLBACK_ARTIFACT to the exact prior app artifact}"
 : "${ROLLBACK_BACKEND_ROOT:?Set ROLLBACK_BACKEND_ROOT to the prior runtime Git checkout}"
 : "${ROLLBACK_BACKEND_IMAGE:?Set ROLLBACK_BACKEND_IMAGE to the exact prior runtime image}"
 : "${ROLLBACK_HOST_BUNDLE:?Set ROLLBACK_HOST_BUNDLE to the exact prior host bundle}"
@@ -21,7 +19,28 @@ cd "$root"
 : "${ROLLBACK_AUTH_STATE_SIGNATURE:?Set ROLLBACK_AUTH_STATE_SIGNATURE to the prior auth-state signature}"
 : "${RELEASE_ALLOWED_SIGNERS:?Set RELEASE_ALLOWED_SIGNERS to the approved signer registry}"
 : "${TRUSTED_ALLOWED_SIGNERS_SHA256:?Set TRUSTED_ALLOWED_SIGNERS_SHA256 from the external trust registry}"
-: "${RELEASE_SIGNER_IDENTITY:?Set RELEASE_SIGNER_IDENTITY to the prior release signer identity}"
+: "${RELEASE_SIGNER_IDENTITY:?Set RELEASE_SIGNER_IDENTITY to the manifest signer identity}"
+
+INSTALL_MODE="${INSTALL_MODE:-upgrade}"
+case "$INSTALL_MODE" in
+  upgrade)
+    : "${ROLLBACK_EVIDENCE_DIR:?Set ROLLBACK_EVIDENCE_DIR to the signed prior evidence directory}"
+    : "${ROLLBACK_ARTIFACT:?Set ROLLBACK_ARTIFACT to the exact prior app artifact}"
+    ;;
+  initial-install)
+    : "${ROLLBACK_BACKEND_SOURCE:?Set ROLLBACK_BACKEND_SOURCE to the exact prior runtime source artifact}"
+    : "${ROLLBACK_RUNTIME_HOST_ID:?Set ROLLBACK_RUNTIME_HOST_ID to the runtime host identifier}"
+    : "${ROLLBACK_COMMIT_TRUST:?Set ROLLBACK_COMMIT_TRUST to git-ssh-signed or preinstall-attested-legacy}"
+    if [[ -e "/Applications/ORCA Console.app" || -L "/Applications/ORCA Console.app" ]]; then
+      echo "release refused: initial-install target already exists" >&2
+      exit 2
+    fi
+    ;;
+  *)
+    echo "release refused: INSTALL_MODE must be upgrade or initial-install" >&2
+    exit 2
+    ;;
+esac
 
 [[ "$ORCA_BACKEND_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
   echo "release refused: ORCA_BACKEND_COMMIT must be a full git SHA" >&2
@@ -31,11 +50,19 @@ cd "$root"
   echo "release refused: TRUSTED_ALLOWED_SIGNERS_SHA256 must be 64 lowercase hex characters" >&2
   exit 2
 }
-[[ -f "$ROLLBACK_EVIDENCE_DIR/manifest.json" && -f "$ROLLBACK_EVIDENCE_DIR/manifest.json.sig" ]] || {
-  echo "release refused: signed rollback evidence is incomplete" >&2
+if [[ "$INSTALL_MODE" == "initial-install" ]] && [[ "$ROLLBACK_COMMIT_TRUST" != "git-ssh-signed" && "$ROLLBACK_COMMIT_TRUST" != "preinstall-attested-legacy" ]]; then
+  echo "release refused: invalid ROLLBACK_COMMIT_TRUST" >&2
   exit 2
-}
-[[ -f "$ORCA_BACKEND_IMAGE" && -f "$HOST_BUNDLE" && -f "$ROLLBACK_ARTIFACT" && -f "$ROLLBACK_BACKEND_IMAGE" && -f "$ROLLBACK_HOST_BUNDLE" && -f "$ROLLBACK_AUTH_STATE_CONTRACT" && -f "$ROLLBACK_AUTH_STATE_SIGNATURE" ]] || {
+fi
+if [[ "$INSTALL_MODE" == "initial-install" ]] && [[ ! -f "$ROLLBACK_BACKEND_SOURCE" ]]; then
+  echo "release refused: rollback runtime source artifact is missing" >&2
+  exit 2
+fi
+if [[ "$INSTALL_MODE" == "upgrade" ]] && [[ ! -f "$ROLLBACK_EVIDENCE_DIR/manifest.json" || ! -f "$ROLLBACK_EVIDENCE_DIR/manifest.json.sig" || ! -f "$ROLLBACK_ARTIFACT" ]]; then
+  echo "release refused: signed prior app evidence is incomplete" >&2
+  exit 2
+fi
+[[ -f "$ORCA_BACKEND_IMAGE" && -f "$HOST_BUNDLE" && -f "$ROLLBACK_BACKEND_IMAGE" && -f "$ROLLBACK_HOST_BUNDLE" && -f "$ROLLBACK_AUTH_STATE_CONTRACT" && -f "$ROLLBACK_AUTH_STATE_SIGNATURE" ]] || {
   echo "release refused: rollback artifact or auth-state evidence is missing" >&2
   exit 2
 }
@@ -61,11 +88,17 @@ artifact_path="$release_root/ORCA-Console-$source_commit.zip"
 submission_path="$release_root/ORCA-Console-$source_commit-notary-submission.zip"
 evidence_dir="$release_root/evidence"
 derived_data="${DERIVED_DATA_DIR:-$release_root/DerivedData}"
+installation_inventory="$release_root/console-installation-inventory.json"
 if [[ -e "$evidence_dir/manifest.json" ]]; then
   echo "release refused: immutable release evidence already exists for $source_commit" >&2
   exit 2
 fi
 mkdir -p "$release_root" "$evidence_dir" "$derived_data"
+
+python3 scripts/audit_orca_console_installations.py \
+  --mode "$INSTALL_MODE" \
+  --output "$installation_inventory" \
+  --strict
 
 xcodebuild archive \
   -project MacApp/OrcaMac.xcodeproj \
@@ -91,6 +124,42 @@ spctl --assess --type execute --verbose=4 "$app_path"
 ditto -c -k --sequesterRsrc --keepParent "$app_path" "$artifact_path"
 rm -f "$submission_path"
 
+rollback_mode_args=()
+if [[ "$INSTALL_MODE" == "upgrade" ]]; then
+  rollback_mode_args=(
+    --rollback-evidence-dir "$ROLLBACK_EVIDENCE_DIR"
+    --rollback-artifact "$ROLLBACK_ARTIFACT"
+  )
+else
+  preinstall_state="$release_root/preinstall-state.json"
+  rollback_runtime_commit="$(python3 - "$ROLLBACK_AUTH_STATE_CONTRACT" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+print(json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["runtime_commit"])
+PY
+)"
+  python3 scripts/capture_preinstall_state.py \
+    --runtime-commit "$rollback_runtime_commit" \
+    --runtime-commit-trust "$ROLLBACK_COMMIT_TRUST" \
+    --runtime-host-id "$ROLLBACK_RUNTIME_HOST_ID" \
+    --runtime-source "$ROLLBACK_BACKEND_SOURCE" \
+    --backend-image "$ROLLBACK_BACKEND_IMAGE" \
+    --host-bundle "$ROLLBACK_HOST_BUNDLE" \
+    --auth-state-contract "$ROLLBACK_AUTH_STATE_CONTRACT" \
+    --output "$preinstall_state"
+  ssh-keygen -Y sign \
+    -n orca-auth-state \
+    -f "$RELEASE_SIGNING_KEY" \
+    "$preinstall_state"
+  rollback_mode_args=(
+    --preinstall-state-contract "$preinstall_state"
+    --preinstall-state-signature "$preinstall_state.sig"
+    --rollback-backend-source "$ROLLBACK_BACKEND_SOURCE"
+  )
+fi
+
 python3 scripts/generate_release_evidence.py \
   --root "$root" \
   --artifact "$artifact_path" \
@@ -100,8 +169,9 @@ python3 scripts/generate_release_evidence.py \
   --backend-image "$ORCA_BACKEND_IMAGE" \
   --host-bundle "$HOST_BUNDLE" \
   --auth-transition-contract "$root/release/native-auth-transition-v1.json" \
-  --rollback-evidence-dir "$ROLLBACK_EVIDENCE_DIR" \
-  --rollback-artifact "$ROLLBACK_ARTIFACT" \
+  --installation-inventory "$installation_inventory" \
+  --install-mode "$INSTALL_MODE" \
+  "${rollback_mode_args[@]}" \
   --rollback-backend-root "$ROLLBACK_BACKEND_ROOT" \
   --rollback-backend-image "$ROLLBACK_BACKEND_IMAGE" \
   --rollback-host-bundle "$ROLLBACK_HOST_BUNDLE" \

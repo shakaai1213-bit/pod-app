@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import subprocess
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 GENERATOR = Path(__file__).with_name("generate_release_evidence.py")
 VERIFIER = Path(__file__).with_name("verify_release_evidence.py")
 SHELL_VERIFIER = Path(__file__).with_name("verify_orca_console_release.sh")
+PREINSTALL_CAPTURE = Path(__file__).with_name("capture_preinstall_state.py")
+AUTH_STATE_CAPTURE = Path(__file__).with_name("capture_runtime_auth_state.py")
 
 
 def load_module(name: str, path: Path):
@@ -58,6 +61,19 @@ def signed_commit(repository: Path, key: Path, identity: str, content: str) -> s
     ).strip()
 
 
+def unsigned_commit(repository: Path, content: str) -> str:
+    payload = repository / "payload.txt"
+    payload.write_text(content, encoding="utf-8")
+    subprocess.run(["git", "-C", str(repository), "add", payload.name], check=True)
+    subprocess.run(
+        ["git", "-C", str(repository), "commit", "-q", "-m", content.strip()],
+        check=True,
+    )
+    return subprocess.check_output(
+        ["git", "-C", str(repository), "rev-parse", "HEAD"], text=True
+    ).strip()
+
+
 def signed_history(
     tmp_path: Path, name: str, key: Path, identity: str
 ) -> tuple[Path, str, str]:
@@ -77,6 +93,25 @@ def signed_history(
     return repository, prior, current
 
 
+def legacy_runtime_history(
+    tmp_path: Path, key: Path, identity: str
+) -> tuple[Path, str, str]:
+    repository = tmp_path / "runtime"
+    repository.mkdir()
+    subprocess.run(["git", "init", "-q", str(repository)], check=True)
+    subprocess.run(
+        ["git", "-C", str(repository), "config", "user.name", "Release Test"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repository), "config", "user.email", identity],
+        check=True,
+    )
+    prior = unsigned_commit(repository, "runtime legacy prior\n")
+    current = signed_commit(repository, key, identity, "runtime current\n")
+    return repository, prior, current
+
+
 def sign(path: Path, key: Path, namespace: str) -> Path:
     subprocess.run(
         ["ssh-keygen", "-Y", "sign", "-n", namespace, "-f", str(key), str(path)],
@@ -86,7 +121,18 @@ def sign(path: Path, key: Path, namespace: str) -> Path:
     return path.with_name(path.name + ".sig")
 
 
-def build_bundle(tmp_path: Path) -> dict[str, object]:
+def build_bundle(
+    tmp_path: Path,
+    *,
+    install_mode: str = "upgrade",
+    rollback_commit_trust: str = "git-ssh-signed",
+    preinstall_overrides: dict[str, object] | None = None,
+    auth_state_overrides: dict[str, object] | None = None,
+    installation_overrides: dict[str, object] | None = None,
+    runtime_contract_mismatch: bool = False,
+    runtime_pin_mismatch: bool = False,
+    extra_generator_args: list[str] | None = None,
+) -> dict[str, object]:
     key = tmp_path / "release-key"
     subprocess.run(
         ["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(key)],
@@ -101,9 +147,69 @@ def build_bundle(tmp_path: Path) -> dict[str, object]:
     source, prior_source, current_source = signed_history(
         tmp_path, "source", key, identity
     )
-    runtime, prior_runtime, current_runtime = signed_history(
-        tmp_path, "runtime", key, identity
+    if rollback_commit_trust == "preinstall-attested-legacy":
+        runtime, prior_runtime, current_runtime = legacy_runtime_history(
+            tmp_path, key, identity
+        )
+    else:
+        runtime, prior_runtime, current_runtime = signed_history(
+            tmp_path, "runtime", key, identity
+        )
+
+    runtime_contract = {
+        "openapi": "3.1.0",
+        "info": {"title": "ORCA Chat Runtime API", "version": "1.0.0"},
+        "paths": {},
+        "x-orca-contract-version": "orca.chat-runtime.v1",
+        "x-orca-schema-sha256": "d" * 64,
+    }
+    client_contract = source / release_evidence.CLIENT_RUNTIME_CONTRACT_PATH
+    client_contract.parent.mkdir(parents=True)
+    client_contract.write_text(
+        json.dumps(runtime_contract, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
     )
+    client_pin = source / release_evidence.CLIENT_RUNTIME_CONTRACT_PIN_PATH
+    pin_digest = "e" * 64 if runtime_pin_mismatch else "d" * 64
+    client_pin.write_text(
+        "public enum OrcaRuntimeContract {\n"
+        f'    public static let schemaSHA256 = "{pin_digest}"\n'
+        "}\n",
+        encoding="utf-8",
+    )
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(source),
+            "add",
+            str(release_evidence.CLIENT_RUNTIME_CONTRACT_PATH),
+            str(release_evidence.CLIENT_RUNTIME_CONTRACT_PIN_PATH),
+        ],
+        check=True,
+    )
+    current_source = signed_commit(source, key, identity, "source runtime contract\n")
+    runtime_backend = runtime / "workspace-mission-control" / "backend"
+    backend_contract = runtime_backend / release_evidence.BACKEND_RUNTIME_CONTRACT_PATH
+    backend_contract.parent.mkdir(parents=True)
+    backend_payload = dict(runtime_contract)
+    if runtime_contract_mismatch:
+        backend_payload["paths"] = {"/drift": {}}
+    backend_contract.write_text(
+        json.dumps(backend_payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(runtime_backend),
+            "add",
+            str(release_evidence.BACKEND_RUNTIME_CONTRACT_PATH),
+        ],
+        check=True,
+    )
+    current_runtime = signed_commit(runtime, key, identity, "backend runtime contract\n")
 
     prior_artifact = tmp_path / "ORCA-Console-prior.zip"
     prior_artifact.write_bytes(b"verified prior app")
@@ -111,6 +217,8 @@ def build_bundle(tmp_path: Path) -> dict[str, object]:
     prior_image.write_bytes(b"verified prior runtime image")
     prior_host = tmp_path / "prior-host-bundle.tar"
     prior_host.write_bytes(b"verified prior host bundle")
+    prior_source_archive = tmp_path / "prior-runtime-source.tar"
+    prior_source_archive.write_bytes(b"verified prior runtime source")
     prior_evidence = tmp_path / "prior-evidence"
     prior_evidence.mkdir()
     prior_sbom = prior_evidence / "sbom.spdx.json"
@@ -148,26 +256,82 @@ def build_bundle(tmp_path: Path) -> dict[str, object]:
 
     family_hashes = ["a" * 64, "b" * 64]
     auth_state = tmp_path / "rollback-auth-state.json"
-    auth_state.write_text(
-        json.dumps(
-            {
-                "schema": "orca.native-auth.state.v1",
-                "runtime_commit": prior_runtime,
-                "native_refresh_policy": "legacy",
-                "active_refresh_families": len(family_hashes),
-                "active_refresh_family_hashes": family_hashes,
-                "active_refresh_family_digest": release_evidence.token_family_digest(
-                    family_hashes
-                ),
-            },
-            sort_keys=True,
+    auth_payload = {
+        "schema": "orca.native-auth.state.v1",
+        "runtime_commit": prior_runtime,
+        "runtime_host_id": "release-test-runtime-host",
+        "captured_at": datetime.now(timezone.utc)
+        .isoformat(timespec="seconds")
+        .replace("+00:00", "Z"),
+        "native_refresh_policy": "legacy",
+        "active_refresh_families": len(family_hashes),
+        "active_refresh_family_hashes": family_hashes,
+        "active_refresh_family_digest": release_evidence.token_family_digest(
+            family_hashes
         ),
+    }
+    auth_payload.update(auth_state_overrides or {})
+    auth_state.write_text(
+        json.dumps(auth_payload, sort_keys=True),
         encoding="utf-8",
     )
     auth_signature = sign(auth_state, key, "orca-auth-state")
     transition = tmp_path / "transition.json"
     transition.write_text(
         (ROOT / "release/native-auth-transition-v1.json").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    installation_inventory = tmp_path / "installation-inventory.json"
+    canonical_count = 0 if install_mode == "initial-install" else 1
+    canonical_entries = []
+    if canonical_count:
+        canonical_entries.append(
+            {
+                "path": "/Applications/ORCA Console.app",
+                "classification": "canonical_install",
+                "is_symlink": False,
+                "canonical_identity": True,
+                "bundle_id": "com.orcamc.mac",
+                "bundle_name": "ORCA Console",
+                "bundle_version": "1",
+                "executable_name": "OrcaMac",
+                "executable_sha256": "f" * 64,
+                "identity_valid": True,
+            }
+        )
+    installation_payload = {
+                "schema": "orca.console.installation-inventory.v1",
+                "mode": install_mode,
+                "observed_at": datetime.now(timezone.utc)
+                .isoformat(timespec="seconds")
+                .replace("+00:00", "Z"),
+                "app_host_id": "release-test-app-host",
+                "canonical_install_path": "/Applications/ORCA Console.app",
+                "canonical_bundle_id": "com.orcamc.mac",
+                "canonical_product_name": "ORCA Console",
+                "scan_roots": [
+                    {"kind": "install", "path": "/Applications"},
+                    {
+                        "kind": "install",
+                        "path": "/Users/release-test/Applications",
+                    },
+                    {"kind": "loose", "path": "/Users/release-test/Desktop"},
+                    {"kind": "loose", "path": "/Users/release-test/Downloads"},
+                ],
+                "counts": {
+                    "canonical_install": canonical_count,
+                    "installed_duplicate": 0,
+                    "loose_copy": 0,
+                    "build_evidence": 0,
+                },
+                "entries": canonical_entries,
+                "quarantine_plan": [],
+                "violations": [],
+        "ready": True,
+    }
+    installation_payload.update(installation_overrides or {})
+    installation_inventory.write_text(
+        json.dumps(installation_payload, sort_keys=True),
         encoding="utf-8",
     )
     artifact = tmp_path / "ORCA-Console-current.zip"
@@ -179,49 +343,96 @@ def build_bundle(tmp_path: Path) -> dict[str, object]:
     output = tmp_path / "current-evidence"
     trusted_hash = digest(allowed)
 
-    subprocess.run(
-        [
-            "python3",
-            str(GENERATOR),
-            "--root",
-            str(source),
-            "--artifact",
-            str(artifact),
-            "--source-commit",
-            current_source,
-            "--backend-commit",
-            current_runtime,
-            "--backend-root",
-            str(runtime),
-            "--backend-image",
-            str(current_image),
-            "--host-bundle",
-            str(current_host),
-            "--auth-transition-contract",
-            str(transition),
+    preinstall_state = tmp_path / "preinstall-state.json"
+    preinstall_payload = {
+        "app_bundle_id": "com.orcamc.mac",
+        "app_host_id": "release-test-app-host",
+        "app_present": False,
+        "auth_state_sha256": digest(auth_state),
+        "backend_image_sha256": digest(prior_image),
+        "host_bundle_sha256": digest(prior_host),
+        "install_path": "/Applications/ORCA Console.app",
+        "observed_at": datetime.now(timezone.utc)
+        .isoformat(timespec="seconds")
+        .replace("+00:00", "Z"),
+        "runtime_commit": prior_runtime,
+        "runtime_commit_trust": rollback_commit_trust,
+        "runtime_host_id": "release-test-runtime-host",
+        "runtime_source_sha256": digest(prior_source_archive),
+        "schema": "orca.console.preinstall-state.v1",
+    }
+    preinstall_payload.update(preinstall_overrides or {})
+    preinstall_state.write_text(
+        json.dumps(preinstall_payload, sort_keys=True), encoding="utf-8"
+    )
+    preinstall_signature = sign(preinstall_state, key, "orca-auth-state")
+
+    command = [
+        "python3",
+        str(GENERATOR),
+        "--root",
+        str(source),
+        "--artifact",
+        str(artifact),
+        "--source-commit",
+        current_source,
+        "--backend-commit",
+        current_runtime,
+        "--backend-root",
+        str(runtime_backend),
+        "--backend-image",
+        str(current_image),
+        "--host-bundle",
+        str(current_host),
+        "--auth-transition-contract",
+        str(transition),
+        "--installation-inventory",
+        str(installation_inventory),
+        "--install-mode",
+        install_mode,
+        "--rollback-backend-root",
+        str(runtime_backend),
+        "--rollback-backend-image",
+        str(prior_image),
+        "--rollback-host-bundle",
+        str(prior_host),
+        "--rollback-auth-state-contract",
+        str(auth_state),
+        "--rollback-auth-state-signature",
+        str(auth_signature),
+        "--release-allowed-signers",
+        str(allowed),
+        "--trusted-allowed-signers-sha256",
+        trusted_hash,
+        "--release-signer-identity",
+        identity,
+        "--output-dir",
+        str(output),
+    ]
+    if install_mode == "upgrade":
+        command.extend(
+            [
             "--rollback-evidence-dir",
             str(prior_evidence),
             "--rollback-artifact",
             str(prior_artifact),
-            "--rollback-backend-root",
-            str(runtime),
-            "--rollback-backend-image",
-            str(prior_image),
-            "--rollback-host-bundle",
-            str(prior_host),
-            "--rollback-auth-state-contract",
-            str(auth_state),
-            "--rollback-auth-state-signature",
-            str(auth_signature),
-            "--release-allowed-signers",
-            str(allowed),
-            "--trusted-allowed-signers-sha256",
-            trusted_hash,
-            "--release-signer-identity",
-            identity,
-            "--output-dir",
-            str(output),
-        ],
+            ]
+        )
+    else:
+        command.extend(
+            [
+                "--preinstall-state-contract",
+                str(preinstall_state),
+                "--preinstall-state-signature",
+                str(preinstall_signature),
+                "--rollback-backend-source",
+                str(prior_source_archive),
+            ]
+        )
+    command.extend(extra_generator_args or [])
+
+    subprocess.run(
+        command,
         check=True,
         capture_output=True,
     )
@@ -230,8 +441,10 @@ def build_bundle(tmp_path: Path) -> dict[str, object]:
         "artifact": artifact,
         "allowed": allowed,
         "identity": identity,
+        "installation_inventory": installation_inventory,
         "key": key,
         "output": output,
+        "preinstall_state": preinstall_state,
         "trusted_hash": trusted_hash,
     }
 
@@ -277,6 +490,9 @@ def test_release_bundle_is_self_contained_and_independently_verifiable(
     output = Path(bundle["output"])
     assert (output / "source-commit.object").is_file()
     assert (output / "runtime/current-runtime-image.tar").is_file()
+    assert (output / "contracts/client-orca-chat-runtime-v1.openapi.json").is_file()
+    assert (output / "contracts/backend-orca-chat-runtime-v1.openapi.json").is_file()
+    assert (output / "contracts/OrcaRuntimeContract.swift").is_file()
     assert (output / "rollback/runtime-commit.object").is_file()
     assert (output / "rollback/rollback-auth-state.json.sig").is_file()
 
@@ -288,6 +504,428 @@ def test_public_shell_verifier_executes_complete_bundle_contract(tmp_path: Path)
 
     assert result.returncode == 0, result.stderr
     assert "release evidence verified" in result.stdout
+
+
+def test_initial_install_bundle_is_self_contained_and_verifiable(
+    tmp_path: Path,
+) -> None:
+    bundle = build_bundle(tmp_path, install_mode="initial-install")
+
+    verify(bundle)
+    output = Path(bundle["output"])
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["rollback"]["mode"] == "initial-install"
+    assert manifest["rollback"]["app"]["prior_present"] is False
+    assert (output / "rollback/preinstall-state.json").is_file()
+    assert (output / "rollback/preinstall-state.json.sig").is_file()
+    assert not (output / "rollback/manifest.json").exists()
+    assert verify_with_public_shell(bundle).returncode == 0
+
+
+def test_release_manifest_binds_canonical_installation_inventory(
+    tmp_path: Path,
+) -> None:
+    bundle = build_bundle(tmp_path)
+    output = Path(bundle["output"])
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    installation = manifest["installation"]
+    assert manifest["schema"] == "orca.console.release-manifest.v7"
+    assert manifest["runtime_contract"]["compatible"] is True
+    assert manifest["runtime_contract"]["contract_version"] == "orca.chat-runtime.v1"
+    assert installation["schema"] == "orca.console.installation-inventory.v1"
+    assert installation["mode"] == "upgrade"
+    assert installation["canonical_install_count"] == 1
+    assert installation["canonical_bundle_id"] == "com.orcamc.mac"
+    assert installation["canonical_install_path"] == "/Applications/ORCA Console.app"
+    assert installation["ready"] is True
+    verify(bundle)
+
+
+def test_generator_rejects_client_backend_runtime_contract_drift(tmp_path: Path) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(tmp_path, runtime_contract_mismatch=True)
+
+
+def test_generator_rejects_native_runtime_schema_pin_drift(tmp_path: Path) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(tmp_path, runtime_pin_mismatch=True)
+
+
+def test_release_verifier_rejects_tampered_runtime_contract(tmp_path: Path) -> None:
+    bundle = build_bundle(tmp_path)
+    contract = (
+        Path(bundle["output"])
+        / "contracts/client-orca-chat-runtime-v1.openapi.json"
+    )
+    contract.write_bytes(contract.read_bytes() + b" ")
+    with pytest.raises((ValueError, subprocess.CalledProcessError)):
+        verify(bundle)
+
+
+def test_release_verifier_rejects_tampered_installation_inventory(
+    tmp_path: Path,
+) -> None:
+    bundle = build_bundle(tmp_path)
+    inventory = Path(bundle["output"]) / "installation-inventory.json"
+    inventory.write_bytes(inventory.read_bytes() + b"tamper")
+    with pytest.raises((ValueError, subprocess.CalledProcessError)):
+        verify(bundle)
+
+
+def test_generator_rejects_nonready_or_wrong_mode_installation_inventory(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(
+            tmp_path / "nonready",
+            installation_overrides={
+                "ready": False,
+                "violations": [
+                    {
+                        "path": "/Users/test/Downloads/ORCA Console.app",
+                        "reason": "loose_copy",
+                    }
+                ],
+            },
+        )
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(
+            tmp_path / "wrong-mode",
+            installation_overrides={"mode": "initial-install"},
+        )
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(
+            tmp_path / "incomplete-roots",
+            installation_overrides={
+                "scan_roots": [{"kind": "install", "path": "/Applications"}]
+            },
+        )
+
+
+def test_initial_install_accepts_release_attested_legacy_runtime(
+    tmp_path: Path,
+) -> None:
+    bundle = build_bundle(
+        tmp_path,
+        install_mode="initial-install",
+        rollback_commit_trust="preinstall-attested-legacy",
+    )
+
+    verify(bundle)
+
+    manifest = json.loads(
+        (Path(bundle["output"]) / "manifest.json").read_text(encoding="utf-8")
+    )
+    rollback = manifest["rollback"]
+    assert rollback["backend_commit_signed"] is False
+    assert rollback["backend_commit_trust"] == "preinstall-attested-legacy"
+    assert verify_with_public_shell(bundle).returncode == 0
+
+
+def test_initial_install_rejects_signed_runtime_as_legacy(tmp_path: Path) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(
+            tmp_path,
+            install_mode="initial-install",
+            rollback_commit_trust="git-ssh-signed",
+            preinstall_overrides={
+                "runtime_commit_trust": "preinstall-attested-legacy"
+            },
+        )
+
+
+def test_initial_install_rejects_unsigned_runtime_as_git_signed(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(
+            tmp_path,
+            install_mode="initial-install",
+            rollback_commit_trust="preinstall-attested-legacy",
+            preinstall_overrides={"runtime_commit_trust": "git-ssh-signed"},
+        )
+
+
+def test_initial_install_rejects_runtime_source_mismatch(tmp_path: Path) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(
+            tmp_path,
+            install_mode="initial-install",
+            preinstall_overrides={"runtime_source_sha256": "f" * 64},
+        )
+
+
+def test_initial_install_rejects_auth_state_mismatch(tmp_path: Path) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(
+            tmp_path,
+            install_mode="initial-install",
+            preinstall_overrides={"auth_state_sha256": "f" * 64},
+        )
+
+
+def test_initial_install_rejects_auth_state_host_mismatch(tmp_path: Path) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(
+            tmp_path,
+            install_mode="initial-install",
+            preinstall_overrides={"runtime_host_id": "foreign-runtime-host"},
+        )
+
+
+def test_initial_install_rejects_stale_auth_state(tmp_path: Path) -> None:
+    stale = (datetime.now(timezone.utc) - timedelta(minutes=16)).isoformat(
+        timespec="seconds"
+    ).replace("+00:00", "Z")
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(
+            tmp_path,
+            install_mode="initial-install",
+            auth_state_overrides={"captured_at": stale},
+        )
+
+
+def test_initial_install_rejects_unknown_auth_state_field(tmp_path: Path) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(
+            tmp_path,
+            install_mode="initial-install",
+            auth_state_overrides={"raw_refresh_token": "must-never-be-preserved"},
+        )
+
+
+def test_initial_install_rejects_present_app_claim(tmp_path: Path) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(
+            tmp_path,
+            install_mode="initial-install",
+            preinstall_overrides={"app_present": True},
+        )
+
+
+def test_initial_install_rejects_stale_preinstall_state(tmp_path: Path) -> None:
+    stale = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(
+        timespec="seconds"
+    ).replace("+00:00", "Z")
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(
+            tmp_path,
+            install_mode="initial-install",
+            preinstall_overrides={"observed_at": stale},
+        )
+
+
+def test_initial_install_rejects_mixed_prior_release_inputs(tmp_path: Path) -> None:
+    extra_artifact = tmp_path / "false-prior.zip"
+    extra_artifact.write_bytes(b"not a prior release")
+    with pytest.raises(subprocess.CalledProcessError):
+        build_bundle(
+            tmp_path,
+            install_mode="initial-install",
+            extra_generator_args=[
+                "--rollback-evidence-dir",
+                str(tmp_path),
+                "--rollback-artifact",
+                str(extra_artifact),
+            ],
+        )
+
+
+def test_initial_install_verifier_rejects_tampered_preinstall_state(
+    tmp_path: Path,
+) -> None:
+    bundle = build_bundle(tmp_path, install_mode="initial-install")
+    preinstall = Path(bundle["output"]) / "rollback/preinstall-state.json"
+    preinstall.write_bytes(preinstall.read_bytes() + b"tamper")
+
+    with pytest.raises((ValueError, subprocess.CalledProcessError)):
+        verify(bundle)
+
+
+def test_initial_install_verifier_rejects_tampered_runtime_source(
+    tmp_path: Path,
+) -> None:
+    bundle = build_bundle(tmp_path, install_mode="initial-install")
+    source = Path(bundle["output"]) / "rollback/prior-runtime-source.tar"
+    source.write_bytes(source.read_bytes() + b"tamper")
+
+    with pytest.raises((ValueError, subprocess.CalledProcessError)):
+        verify(bundle)
+
+
+def test_preinstall_capture_records_absent_target(tmp_path: Path) -> None:
+    source = tmp_path / "runtime-source.tar"
+    source.write_bytes(b"source")
+    auth_state = tmp_path / "auth-state.json"
+    auth_state.write_text(
+        json.dumps(
+            {
+                "captured_at": datetime.now(timezone.utc)
+                .isoformat(timespec="seconds")
+                .replace("+00:00", "Z"),
+                "runtime_commit": "a" * 40,
+                "runtime_host_id": "runtime-host",
+            }
+        ),
+        encoding="utf-8",
+    )
+    image = tmp_path / "runtime.tar"
+    image.write_bytes(b"runtime")
+    host = tmp_path / "host.tar"
+    host.write_bytes(b"host")
+    target = tmp_path / "ORCA Console.app"
+    output = tmp_path / "preinstall.json"
+
+    subprocess.run(
+        [
+            "python3",
+            str(PREINSTALL_CAPTURE),
+            "--runtime-commit",
+            "a" * 40,
+            "--runtime-commit-trust",
+            "git-ssh-signed",
+            "--runtime-host-id",
+            "runtime-host",
+            "--runtime-source",
+            str(source),
+            "--backend-image",
+            str(image),
+            "--host-bundle",
+            str(host),
+            "--auth-state-contract",
+            str(auth_state),
+            "--install-path",
+            str(target),
+            "--output",
+            str(output),
+        ],
+        check=True,
+        capture_output=True,
+    )
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["app_present"] is False
+    assert payload["backend_image_sha256"] == digest(image)
+    assert payload["host_bundle_sha256"] == digest(host)
+    assert payload["runtime_source_sha256"] == digest(source)
+    assert payload["auth_state_sha256"] == digest(auth_state)
+
+
+def test_preinstall_capture_refuses_existing_target(tmp_path: Path) -> None:
+    source = tmp_path / "runtime-source.tar"
+    source.write_bytes(b"source")
+    auth_state = tmp_path / "auth-state.json"
+    auth_state.write_text(
+        json.dumps(
+            {
+                "captured_at": datetime.now(timezone.utc)
+                .isoformat(timespec="seconds")
+                .replace("+00:00", "Z"),
+                "runtime_commit": "a" * 40,
+                "runtime_host_id": "runtime-host",
+            }
+        ),
+        encoding="utf-8",
+    )
+    image = tmp_path / "runtime.tar"
+    image.write_bytes(b"runtime")
+    host = tmp_path / "host.tar"
+    host.write_bytes(b"host")
+    target = tmp_path / "ORCA Console.app"
+    target.mkdir()
+
+    result = subprocess.run(
+        [
+            "python3",
+            str(PREINSTALL_CAPTURE),
+            "--runtime-commit",
+            "a" * 40,
+            "--runtime-commit-trust",
+            "git-ssh-signed",
+            "--runtime-host-id",
+            "runtime-host",
+            "--runtime-source",
+            str(source),
+            "--backend-image",
+            str(image),
+            "--host-bundle",
+            str(host),
+            "--auth-state-contract",
+            str(auth_state),
+            "--install-path",
+            str(target),
+            "--output",
+            str(tmp_path / "preinstall.json"),
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "target already exists" in result.stderr
+
+
+def test_auth_state_capture_hashes_identifiers_without_retaining_them(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "auth-state.json"
+    subprocess.run(
+        [
+            "python3",
+            str(AUTH_STATE_CAPTURE),
+            "--runtime-commit",
+            "a" * 40,
+            "--runtime-host-id",
+            "runtime-host",
+            "--native-refresh-policy",
+            "legacy",
+            "--output",
+            str(output),
+        ],
+        input="family-b\nfamily-a\nfamily-a\n",
+        text=True,
+        check=True,
+        capture_output=True,
+    )
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    expected = sorted(
+        {
+            hashlib.sha256(value.encode()).hexdigest()
+            for value in ("family-a", "family-b")
+        }
+    )
+    assert payload["active_refresh_family_hashes"] == expected
+    assert payload["active_refresh_families"] == 2
+    assert "family-a" not in output.read_text(encoding="utf-8")
+    assert output.stat().st_mode & 0o777 == 0o600
+
+
+def test_auth_state_capture_supports_empty_active_set(tmp_path: Path) -> None:
+    output = tmp_path / "auth-state.json"
+    subprocess.run(
+        [
+            "python3",
+            str(AUTH_STATE_CAPTURE),
+            "--runtime-commit",
+            "a" * 40,
+            "--runtime-host-id",
+            "runtime-host",
+            "--native-refresh-policy",
+            "legacy",
+            "--output",
+            str(output),
+        ],
+        input="",
+        text=True,
+        check=True,
+        capture_output=True,
+    )
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["active_refresh_families"] == 0
+    assert payload["active_refresh_family_hashes"] == []
+    assert payload["active_refresh_family_digest"] == hashlib.sha256(b"\n").hexdigest()
 
 
 def test_public_shell_verifier_rejects_tampered_signed_manifest(tmp_path: Path) -> None:
@@ -380,6 +1018,68 @@ def test_public_shell_verifier_rejects_resigned_boolean_family_count(
     assert "invalid active refresh family count" in result.stderr
 
 
+def test_public_shell_verifier_rejects_resigned_unknown_auth_state_field(
+    tmp_path: Path,
+) -> None:
+    bundle = build_bundle(tmp_path)
+    output = Path(bundle["output"])
+    key = Path(bundle["key"])
+    auth_path = output / "rollback/rollback-auth-state.json"
+    auth_state = json.loads(auth_path.read_text(encoding="utf-8"))
+    auth_state["raw_refresh_token"] = "must-never-be-preserved"
+    auth_path.write_text(json.dumps(auth_state, sort_keys=True), encoding="utf-8")
+    auth_signature = auth_path.with_name(auth_path.name + ".sig")
+    auth_signature.unlink()
+    sign(auth_path, key, "orca-auth-state")
+
+    manifest_path = output / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    auth_row = manifest["rollback"]["auth_state"]
+    auth_row["sha256"] = digest(auth_path)
+    auth_row["size_bytes"] = auth_path.stat().st_size
+    auth_row["signature"]["sha256"] = digest(auth_signature)
+    auth_row["signature"]["size_bytes"] = auth_signature.stat().st_size
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    manifest_signature = manifest_path.with_name(manifest_path.name + ".sig")
+    manifest_signature.unlink()
+    sign(manifest_path, key, "orca-release")
+
+    result = verify_with_public_shell(bundle)
+
+    assert result.returncode != 0
+    assert "invalid rollback auth-state fields" in result.stderr
+    assert "must-never-be-preserved" not in result.stderr
+
+
+def test_public_shell_verifier_rejects_resigned_unknown_auth_state_row_field(
+    tmp_path: Path,
+) -> None:
+    bundle = build_bundle(tmp_path)
+    output = Path(bundle["output"])
+    key = Path(bundle["key"])
+    manifest_path = output / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["rollback"]["auth_state"]["raw_refresh_token"] = (
+        "must-never-be-preserved"
+    )
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    manifest_signature = manifest_path.with_name(manifest_path.name + ".sig")
+    manifest_signature.unlink()
+    sign(manifest_path, key, "orca-release")
+
+    result = verify_with_public_shell(bundle)
+
+    assert result.returncode != 0
+    assert "invalid rollback auth-state row fields" in result.stderr
+    assert "must-never-be-preserved" not in result.stderr
+
+
 @pytest.mark.parametrize(
     "relative_path",
     [
@@ -420,6 +1120,10 @@ def test_auth_state_rejects_count_only_contract(tmp_path: Path) -> None:
             {
                 "schema": "orca.native-auth.state.v1",
                 "runtime_commit": "1" * 40,
+                "runtime_host_id": "runtime-host",
+                "captured_at": datetime.now(timezone.utc)
+                .isoformat(timespec="seconds")
+                .replace("+00:00", "Z"),
                 "native_refresh_policy": "legacy",
                 "active_refresh_families": 2,
             }
@@ -439,6 +1143,10 @@ def test_auth_state_rejects_boolean_family_count(tmp_path: Path) -> None:
             {
                 "schema": "orca.native-auth.state.v1",
                 "runtime_commit": "1" * 40,
+                "runtime_host_id": "runtime-host",
+                "captured_at": datetime.now(timezone.utc)
+                .isoformat(timespec="seconds")
+                .replace("+00:00", "Z"),
                 "native_refresh_policy": "legacy",
                 "active_refresh_families": True,
                 "active_refresh_family_hashes": family_hashes,

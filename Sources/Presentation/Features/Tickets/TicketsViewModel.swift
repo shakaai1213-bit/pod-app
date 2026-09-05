@@ -149,6 +149,16 @@ struct TicketNoteRecord: Identifiable, Sendable, Hashable {
     }
 }
 
+struct TicketApprovalTaskRecord: Identifiable, Sendable, Hashable {
+    let id: String
+    let title: String
+    let status: String
+
+    var statusLabel: String {
+        status.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+}
+
 struct TicketApprovalRecord: Identifiable, Sendable, Hashable {
     let id: String
     let ticketId: String
@@ -163,9 +173,43 @@ struct TicketApprovalRecord: Identifiable, Sendable, Hashable {
     let createdAt: Date
     let resolvedAt: Date?
     let linkedAt: Date
+    let targetType: String?
+    let targetReference: String?
+    let linkedTicketIDs: [String]
+    let linkedTaskIDs: [String]
+    let linkedTasks: [TicketApprovalTaskRecord]
+    let authority: String
+    let secondaryAuthority: String?
+    let noCascade: Bool
+    let viewerAuthorized: Bool
+    let authorizationReason: String
+    let resolutionEnabled: Bool
+    let selfApprovalProhibited: Bool
+    let decisionEndpoint: String?
 
     var statusLabel: String {
         status.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+
+    var authorityLabel: String {
+        var parts = ["authority \(authority)"]
+        if let secondaryAuthority, !secondaryAuthority.isEmpty, !noCascade {
+            parts.append("fallback \(secondaryAuthority)")
+        }
+        if noCascade {
+            parts.append("no cascade")
+        }
+        return parts.joined(separator: " / ")
+    }
+
+    func canResolveFromTicket(_ expectedTicketID: String) -> Bool {
+        let expectedEndpoint = "/api/v1/tickets/\(expectedTicketID)/approvals/\(id)"
+        return status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "pending"
+            && authority == "tony"
+            && viewerAuthorized
+            && resolutionEnabled
+            && !selfApprovalProhibited
+            && decisionEndpoint == expectedEndpoint
     }
 }
 
@@ -5212,6 +5256,19 @@ private struct TicketApprovalDTO: Decodable {
     let resolvedAt: Date?
     let linkId: String
     let linkedAt: Date
+    let targetType: String?
+    let targetReference: String?
+    let linkedTicketIDs: [String]?
+    let linkedTaskIDs: [String]?
+    let linkedTasks: [TicketApprovalTaskDTO]?
+    let authority: String?
+    let secondaryAuthority: String?
+    let noCascade: Bool?
+    let viewerAuthorized: Bool?
+    let authorizationReason: String?
+    let resolutionEnabled: Bool?
+    let selfApprovalProhibited: Bool?
+    let decisionEndpoint: String?
 
     enum CodingKeys: String, CodingKey {
         case status, confidence
@@ -5224,6 +5281,19 @@ private struct TicketApprovalDTO: Decodable {
         case resolvedAt = "resolved_at"
         case linkId = "link_id"
         case linkedAt = "linked_at"
+        case targetType = "target_type"
+        case targetReference = "target_ref"
+        case linkedTicketIDs = "linked_ticket_ids"
+        case linkedTaskIDs = "linked_task_ids"
+        case linkedTasks = "linked_tasks"
+        case authority
+        case secondaryAuthority = "secondary_authority"
+        case noCascade = "no_cascade"
+        case viewerAuthorized = "viewer_authorized"
+        case authorizationReason = "authorization_reason"
+        case resolutionEnabled = "resolution_enabled"
+        case selfApprovalProhibited = "self_approval_prohibited"
+        case decisionEndpoint = "decision_endpoint"
     }
 
     var toDomain: TicketApprovalRecord {
@@ -5240,8 +5310,36 @@ private struct TicketApprovalDTO: Decodable {
             traceId: payload?["trace_id"]?.displayValue,
             createdAt: createdAt,
             resolvedAt: resolvedAt,
-            linkedAt: linkedAt
+            linkedAt: linkedAt,
+            targetType: targetType,
+            targetReference: targetReference,
+            linkedTicketIDs: linkedTicketIDs ?? [ticketId],
+            linkedTaskIDs: linkedTaskIDs ?? [],
+            linkedTasks: (linkedTasks ?? []).map(\.toDomain),
+            authority: authority ?? "unregistered",
+            secondaryAuthority: secondaryAuthority,
+            noCascade: noCascade ?? false,
+            viewerAuthorized: viewerAuthorized ?? false,
+            authorizationReason: authorizationReason ?? "ORCA did not provide a viewer authority verdict.",
+            resolutionEnabled: resolutionEnabled ?? false,
+            selfApprovalProhibited: selfApprovalProhibited ?? false,
+            decisionEndpoint: decisionEndpoint
         )
+    }
+}
+
+private struct TicketApprovalTaskDTO: Decodable {
+    let taskId: String
+    let title: String
+    let status: String
+
+    enum CodingKeys: String, CodingKey {
+        case title, status
+        case taskId = "task_id"
+    }
+
+    var toDomain: TicketApprovalTaskRecord {
+        TicketApprovalTaskRecord(id: taskId, title: title, status: status)
     }
 }
 

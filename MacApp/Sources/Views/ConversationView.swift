@@ -40,6 +40,20 @@ struct ConversationView: View {
                     .controlSize(.small)
             }
 
+            if let memory = model.selectedConversationMemory {
+                Label("M\(memory.revision)", systemImage: "brain.head.profile")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .help("Conversation Memory revision \(memory.revision)")
+            }
+
+            if let turn = model.selectedRuntimeTurn {
+                Label(turn.state.rawValue.capitalized, systemImage: "point.topleft.down.curvedto.point.bottomright.up")
+                    .font(.caption)
+                    .foregroundStyle(turn.terminalOutcome == nil ? Color.accentColor : Color.secondary)
+                    .help("Latest Flight Recorder turn")
+            }
+
             Button {
                 Task { await model.refreshSelectedConversation() }
             } label: {

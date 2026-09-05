@@ -9,8 +9,29 @@ import json
 import re
 import subprocess
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+
+ROLLBACK_PROCEDURE = (
+    "revoke all native refresh families; remove only a current-release-matching "
+    "installed app for initial install or restore the hash-bound prior app for "
+    "upgrade; restore the exact rollback runtime and host bundle; then rerun "
+    "compatibility and G1-G10 canaries"
+)
+
+FILE_ROW_KEYS = frozenset({"name", "sha256", "size_bytes"})
+AUTH_STATE_ROW_KEYS = frozenset(
+    {
+        "name",
+        "sha256",
+        "size_bytes",
+        "signature",
+        "schema",
+        "active_refresh_family_digest",
+    }
+)
 
 
 def sha256(path: Path) -> str:
@@ -19,6 +40,16 @@ def sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def canonical_json_sha256(payload: Any) -> str:
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def require_digest(value: Any, label: str) -> str:
@@ -54,6 +85,91 @@ def resolve_row(root: Path, row: dict[str, Any], label: str) -> Path:
     return path
 
 
+def verify_runtime_contract_compatibility(
+    evidence_dir: Path,
+    contract: dict[str, Any],
+) -> None:
+    if set(contract) != {
+        "backend",
+        "client",
+        "compatible",
+        "contract_version",
+        "declared_schema_sha256",
+        "native_schema_pin",
+        "schema",
+        "semantic_sha256",
+    }:
+        raise ValueError("invalid Runtime API compatibility fields")
+    if contract.get("schema") != "orca.runtime-contract-compatibility.v1":
+        raise ValueError("unsupported Runtime API compatibility schema")
+    if contract.get("compatible") is not True:
+        raise ValueError("Runtime API compatibility is not proven")
+    if contract.get("contract_version") != "orca.chat-runtime.v1":
+        raise ValueError("unsupported Runtime API contract version")
+    declared = require_digest(
+        contract.get("declared_schema_sha256"), "Runtime API declared schema digest"
+    )
+    semantic = require_digest(
+        contract.get("semantic_sha256"), "Runtime API semantic digest"
+    )
+    payloads: list[dict[str, Any]] = []
+    expected_paths = {
+        "client": "Packages/OrcaRuntimeContracts/Sources/OrcaRuntimeContracts/openapi.json",
+        "backend": "contracts/orca-chat-runtime-v1.openapi.json",
+    }
+    for side in ("client", "backend"):
+        side_contract = contract.get(side) or {}
+        if set(side_contract) != {"artifact", "source_path"}:
+            raise ValueError(f"invalid {side} Runtime API contract fields")
+        if side_contract.get("source_path") != expected_paths[side]:
+            raise ValueError(f"invalid {side} Runtime API source path")
+        artifact = side_contract.get("artifact") or {}
+        if not isinstance(artifact, dict) or set(artifact) != FILE_ROW_KEYS:
+            raise ValueError(f"invalid {side} Runtime API artifact fields")
+        path = resolve_row(
+            evidence_dir,
+            artifact,
+            f"{side} Runtime API contract",
+        )
+        try:
+            payload = json.loads(path.read_bytes())
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError(f"invalid {side} Runtime API JSON") from exc
+        if not isinstance(payload, dict):
+            raise ValueError(f"invalid {side} Runtime API document")
+        if payload.get("x-orca-contract-version") != contract["contract_version"]:
+            raise ValueError(f"{side} Runtime API contract version mismatch")
+        if payload.get("x-orca-schema-sha256") != declared:
+            raise ValueError(f"{side} Runtime API declared schema digest mismatch")
+        if canonical_json_sha256(payload) != semantic:
+            raise ValueError(f"{side} Runtime API semantic digest mismatch")
+        payloads.append(payload)
+    if payloads[0] != payloads[1]:
+        raise ValueError("client and backend Runtime API contracts differ")
+    pin = contract.get("native_schema_pin") or {}
+    if set(pin) != {"artifact", "source_path"}:
+        raise ValueError("invalid native Runtime API schema pin fields")
+    if pin.get("source_path") != (
+        "Packages/OrcaRuntimeContracts/Sources/OrcaRuntimeContracts/"
+        "OrcaRuntimeContract.swift"
+    ):
+        raise ValueError("invalid native Runtime API schema pin path")
+    pin_artifact = pin.get("artifact") or {}
+    if not isinstance(pin_artifact, dict) or set(pin_artifact) != FILE_ROW_KEYS:
+        raise ValueError("invalid native Runtime API schema pin artifact")
+    pin_path = resolve_row(
+        evidence_dir,
+        pin_artifact,
+        "native Runtime API schema pin",
+    )
+    pin_matches = re.findall(
+        rb'public static let schemaSHA256 = "([0-9a-f]{64})"',
+        pin_path.read_bytes(),
+    )
+    if pin_matches != [declared.encode("ascii")]:
+        raise ValueError("native Runtime API schema pin mismatch")
+
+
 def verify_signature(
     path: Path,
     signature: Path,
@@ -87,6 +203,7 @@ def verify_commit_object(
     commit: str,
     *,
     allowed_signers: Path,
+    require_signature: bool = True,
 ) -> None:
     expected = require_commit(commit, "commit")
     with tempfile.TemporaryDirectory(prefix="orca-release-git-") as temp_dir:
@@ -111,29 +228,55 @@ def verify_commit_object(
         )
         if actual != expected:
             raise ValueError("commit object identity mismatch")
-        subprocess.run(
-            [
-                "git",
-                "-C",
-                str(repository),
-                "-c",
-                "gpg.format=ssh",
-                "-c",
-                f"gpg.ssh.allowedSignersFile={allowed_signers}",
-                "verify-commit",
-                expected,
-            ],
-            check=True,
-            capture_output=True,
-        )
+        if require_signature:
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(repository),
+                    "-c",
+                    "gpg.format=ssh",
+                    "-c",
+                    f"gpg.ssh.allowedSignersFile={allowed_signers}",
+                    "verify-commit",
+                    expected,
+                ],
+                check=True,
+                capture_output=True,
+            )
 
 
 def token_family_digest(family_hashes: list[str]) -> str:
     return hashlib.sha256(("\n".join(family_hashes) + "\n").encode()).hexdigest()
 
 
+AUTH_STATE_KEYS = frozenset(
+    {
+        "active_refresh_families",
+        "active_refresh_family_digest",
+        "active_refresh_family_hashes",
+        "captured_at",
+        "native_refresh_policy",
+        "runtime_commit",
+        "runtime_host_id",
+        "schema",
+    }
+)
+
+
+def require_utc_timestamp(value: Any, label: str) -> datetime:
+    if not isinstance(value, str) or not value.endswith("Z"):
+        raise ValueError(f"invalid {label}")
+    try:
+        return datetime.fromisoformat(value.removesuffix("Z") + "+00:00")
+    except ValueError as exc:
+        raise ValueError(f"invalid {label}") from exc
+
+
 def verify_auth_state(path: Path, *, runtime_commit: str) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or set(payload) - AUTH_STATE_KEYS:
+        raise ValueError("invalid rollback auth-state fields")
     if payload.get("schema") != "orca.native-auth.state.v1":
         raise ValueError("invalid rollback auth-state schema")
     if payload.get("runtime_commit") != runtime_commit:
@@ -143,6 +286,12 @@ def verify_auth_state(path: Path, *, runtime_commit: str) -> dict[str, Any]:
         "device-key-bound",
     }:
         raise ValueError("invalid native refresh policy")
+    runtime_host_id = payload.get("runtime_host_id")
+    if not isinstance(runtime_host_id, str) or re.fullmatch(
+        r"[A-Za-z0-9._-]{1,255}", runtime_host_id
+    ) is None:
+        raise ValueError("invalid auth-state runtime host identifier")
+    require_utc_timestamp(payload.get("captured_at"), "auth-state capture time")
     if (
         type(payload.get("active_refresh_families")) is not int
         or payload["active_refresh_families"] < 0
@@ -170,6 +319,395 @@ def verify_transition(path: Path) -> None:
     }
     if json.loads(path.read_text(encoding="utf-8")) != expected:
         raise ValueError("invalid native auth transition contract")
+
+
+def verify_preinstall_state(path: Path) -> dict[str, Any]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    expected_keys = {
+        "app_bundle_id",
+        "app_host_id",
+        "app_present",
+        "auth_state_sha256",
+        "backend_image_sha256",
+        "host_bundle_sha256",
+        "install_path",
+        "observed_at",
+        "runtime_commit",
+        "runtime_commit_trust",
+        "runtime_host_id",
+        "runtime_source_sha256",
+        "schema",
+    }
+    if set(payload) != expected_keys:
+        raise ValueError("invalid preinstall-state fields")
+    if payload.get("schema") != "orca.console.preinstall-state.v1":
+        raise ValueError("invalid preinstall-state schema")
+    if payload.get("app_bundle_id") != "com.orcamc.mac":
+        raise ValueError("invalid preinstall app bundle identifier")
+    if payload.get("install_path") != "/Applications/ORCA Console.app":
+        raise ValueError("invalid preinstall app target")
+    if payload.get("app_present") is not False:
+        raise ValueError("first-install target was not absent")
+    for key in ("app_host_id", "runtime_host_id"):
+        host_id = payload.get(key)
+        if not isinstance(host_id, str) or re.fullmatch(
+            r"[A-Za-z0-9._-]{1,255}", host_id
+        ) is None:
+            raise ValueError(f"invalid preinstall {key.replace('_', ' ')}")
+    require_utc_timestamp(payload.get("observed_at"), "preinstall observation time")
+    require_commit(payload.get("runtime_commit"), "preinstall runtime commit")
+    if payload.get("runtime_commit_trust") not in {
+        "git-ssh-signed",
+        "preinstall-attested-legacy",
+    }:
+        raise ValueError("invalid preinstall runtime commit trust")
+    require_digest(payload.get("runtime_source_sha256"), "preinstall runtime source")
+    require_digest(payload.get("auth_state_sha256"), "preinstall auth state")
+    require_digest(payload.get("backend_image_sha256"), "preinstall backend image")
+    require_digest(payload.get("host_bundle_sha256"), "preinstall host bundle")
+    return payload
+
+
+def verify_installation_inventory(
+    path: Path,
+    *,
+    install_mode: str,
+    release_created_at: datetime,
+) -> dict[str, Any]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    expected_keys = {
+        "app_host_id",
+        "canonical_bundle_id",
+        "canonical_install_path",
+        "canonical_product_name",
+        "counts",
+        "entries",
+        "mode",
+        "observed_at",
+        "quarantine_plan",
+        "ready",
+        "scan_roots",
+        "schema",
+        "violations",
+    }
+    if not isinstance(payload, dict) or set(payload) != expected_keys:
+        raise ValueError("invalid Console installation inventory fields")
+    if payload.get("schema") != "orca.console.installation-inventory.v1":
+        raise ValueError("invalid Console installation inventory schema")
+    if payload.get("mode") != install_mode:
+        raise ValueError("Console installation inventory mode mismatch")
+    if payload.get("canonical_bundle_id") != "com.orcamc.mac":
+        raise ValueError("invalid Console installation bundle identifier")
+    if payload.get("canonical_product_name") != "ORCA Console":
+        raise ValueError("invalid Console installation product name")
+    if payload.get("canonical_install_path") != "/Applications/ORCA Console.app":
+        raise ValueError("invalid Console installation target")
+    if payload.get("ready") is not True or payload.get("violations") != []:
+        raise ValueError("Console installation inventory is not release-ready")
+    if payload.get("quarantine_plan") != []:
+        raise ValueError("Console quarantine plan was not drained")
+    observed_at = require_utc_timestamp(
+        payload.get("observed_at"), "Console inventory observation time"
+    )
+    age = release_created_at.astimezone(timezone.utc) - observed_at
+    if age.total_seconds() < -60 or age.total_seconds() > 900:
+        raise ValueError("Console installation inventory is stale or future-dated")
+    host_id = payload.get("app_host_id")
+    if not isinstance(host_id, str) or re.fullmatch(
+        r"[A-Za-z0-9._-]{1,255}", host_id
+    ) is None:
+        raise ValueError("invalid Console inventory host identifier")
+    counts = payload.get("counts")
+    if not isinstance(counts, dict) or set(counts) != {
+        "build_evidence",
+        "canonical_install",
+        "installed_duplicate",
+        "loose_copy",
+    }:
+        raise ValueError("invalid Console installation counts")
+    if any(type(value) is not int or value < 0 for value in counts.values()):
+        raise ValueError("invalid Console installation count value")
+    expected_canonical = 0 if install_mode == "initial-install" else 1
+    if counts["canonical_install"] != expected_canonical:
+        raise ValueError("Console canonical installation count mismatch")
+    if counts["installed_duplicate"] != 0 or counts["loose_copy"] != 0:
+        raise ValueError("Console user-facing duplicate remains")
+    entries = payload.get("entries")
+    if not isinstance(entries, list):
+        raise ValueError("invalid Console installation entries")
+    classifications = {
+        "build_evidence",
+        "canonical_install",
+        "installed_duplicate",
+        "loose_copy",
+    }
+    if any(
+        not isinstance(row, dict) or row.get("classification") not in classifications
+        for row in entries
+    ):
+        raise ValueError("invalid Console installation entry")
+    derived_counts = {
+        classification: sum(
+            1 for row in entries if row.get("classification") == classification
+        )
+        for classification in classifications
+    }
+    if counts != derived_counts:
+        raise ValueError("Console installation counts disagree with entries")
+    canonical_entries = [
+        row
+        for row in entries
+        if isinstance(row, dict) and row.get("classification") == "canonical_install"
+    ]
+    if len(canonical_entries) != expected_canonical:
+        raise ValueError("Console canonical entry count mismatch")
+    if canonical_entries and canonical_entries[0].get("canonical_identity") is not True:
+        raise ValueError("Console canonical identity is not verified")
+    scan_roots = payload.get("scan_roots")
+    if not isinstance(scan_roots, list) or any(
+        not isinstance(row, dict)
+        or set(row) != {"kind", "path"}
+        or row.get("kind") not in {"install", "loose", "evidence"}
+        or not Path(str(row.get("path") or "")).is_absolute()
+        for row in scan_roots
+    ):
+        raise ValueError("invalid Console installation scan roots")
+    install_paths = {
+        str(row["path"]) for row in scan_roots if row["kind"] == "install"
+    }
+    loose_paths = {
+        str(row["path"]) for row in scan_roots if row["kind"] == "loose"
+    }
+    if "/Applications" not in install_paths or not any(
+        path != "/Applications" and Path(path).name == "Applications"
+        for path in install_paths
+    ):
+        raise ValueError("Console installation roots are incomplete")
+    loose_names = {Path(path).name for path in loose_paths}
+    if not {"Desktop", "Downloads"}.issubset(loose_names):
+        raise ValueError("Console loose-copy roots are incomplete")
+    return payload
+
+
+def verify_upgrade_rollback(
+    evidence_dir: Path,
+    rollback: dict[str, Any],
+    *,
+    allowed_signers: Path,
+    signer_identity: str,
+) -> tuple[str, bool, dict[str, Any] | None]:
+    allowed_keys = {
+        "artifact",
+        "auth_state",
+        "backend_commit",
+        "backend_commit_object",
+        "backend_commit_signed",
+        "backend_image",
+        "host_bundle",
+        "manifest",
+        "manifest_signature",
+        "mode",
+        "procedure",
+        "release_ref",
+        "sbom",
+        "source_commit",
+        "source_commit_object",
+        "source_commit_signed",
+    }
+    if set(rollback) != allowed_keys:
+        raise ValueError("invalid upgrade rollback fields")
+    if rollback.get("backend_commit_signed") is not True:
+        raise ValueError("rollback runtime signature flag is invalid")
+    if rollback.get("source_commit_signed") is not True:
+        raise ValueError("rollback source signature flag is invalid")
+    if rollback.get("procedure") != ROLLBACK_PROCEDURE:
+        raise ValueError("invalid rollback procedure")
+    prior_manifest_path = resolve_row(
+        evidence_dir, rollback.get("manifest") or {}, "rollback manifest"
+    )
+    prior_signature = resolve_row(
+        evidence_dir,
+        rollback.get("manifest_signature") or {},
+        "rollback manifest signature",
+    )
+    verify_signature(
+        prior_manifest_path,
+        prior_signature,
+        allowed_signers=allowed_signers,
+        signer_identity=signer_identity,
+        namespace="orca-release",
+    )
+    prior = json.loads(prior_manifest_path.read_text(encoding="utf-8"))
+    if prior.get("schema") not in {
+        "orca.console.release-manifest.v2",
+        "orca.console.release-manifest.v3",
+        "orca.console.release-manifest.v4",
+        "orca.console.release-manifest.v5",
+        "orca.console.release-manifest.v6",
+        "orca.console.release-manifest.v7",
+    }:
+        raise ValueError("unsupported rollback manifest schema")
+    prior_source = prior.get("source") or {}
+    prior_source_commit = require_commit(
+        prior_source.get("commit"), "rollback source commit"
+    )
+    if rollback.get("source_commit") != prior_source_commit:
+        raise ValueError("rollback source commit mismatch")
+    if rollback.get("release_ref") != f"orca-console:{prior_source_commit}":
+        raise ValueError("rollback release reference mismatch")
+    rollback_source_object = resolve_row(
+        evidence_dir,
+        rollback.get("source_commit_object") or {},
+        "rollback source commit object",
+    )
+    verify_commit_object(
+        rollback_source_object,
+        prior_source_commit,
+        allowed_signers=allowed_signers,
+    )
+    prior_artifact = resolve_row(
+        evidence_dir, rollback.get("artifact") or {}, "rollback artifact"
+    )
+    prior_artifact_row = prior.get("artifact") or {}
+    if (
+        prior_artifact.name != prior_artifact_row.get("name")
+        or sha256(prior_artifact) != prior_artifact_row.get("sha256")
+        or prior_artifact.stat().st_size != prior_artifact_row.get("size_bytes")
+    ):
+        raise ValueError("rollback artifact disagrees with signed prior manifest")
+    prior_sbom = resolve_row(evidence_dir, rollback.get("sbom") or {}, "rollback SBOM")
+    prior_dependencies = prior.get("dependencies") or {}
+    if prior_sbom.name != prior_dependencies.get("sbom") or sha256(
+        prior_sbom
+    ) != prior_dependencies.get("sbom_sha256"):
+        raise ValueError("rollback SBOM disagrees with signed prior manifest")
+    prior_runtime = prior.get("runtime") or {}
+    prior_runtime_commit = require_commit(
+        prior_runtime.get("backend_commit"), "rollback runtime commit"
+    )
+    if rollback.get("backend_commit") != prior_runtime_commit:
+        raise ValueError("rollback runtime commit mismatch")
+    prior_image_contract = prior_runtime.get("backend_image") or {}
+    expected_prior_image = (
+        prior_image_contract.get("sha256")
+        if prior_image_contract
+        else str(prior_runtime.get("backend_image_digest") or "").removeprefix(
+            "sha256:"
+        )
+    )
+    if require_digest(expected_prior_image, "prior backend image") != require_digest(
+        (rollback.get("backend_image") or {}).get("sha256"),
+        "rollback backend image",
+    ):
+        raise ValueError("rollback runtime image disagrees with signed prior manifest")
+    prior_host_contract = prior_runtime.get("host_bundle") or {}
+    expected_prior_host = (
+        prior_host_contract.get("sha256")
+        if prior_host_contract
+        else prior_runtime.get("host_bundle_sha256")
+    )
+    if require_digest(expected_prior_host, "prior host bundle") != require_digest(
+        (rollback.get("host_bundle") or {}).get("sha256"),
+        "rollback host bundle",
+    ):
+        raise ValueError("rollback host bundle disagrees with signed prior manifest")
+    return prior_runtime_commit, True, None
+
+
+def verify_initial_install_rollback(
+    evidence_dir: Path,
+    rollback: dict[str, Any],
+    *,
+    allowed_signers: Path,
+    release_created_at: datetime,
+    signer_identity: str,
+) -> tuple[str, bool, dict[str, Any] | None]:
+    allowed_keys = {
+        "app",
+        "auth_state",
+        "backend_commit",
+        "backend_commit_trust",
+        "backend_commit_object",
+        "backend_commit_signed",
+        "backend_image",
+        "backend_source",
+        "host_bundle",
+        "mode",
+        "preinstall_state",
+        "procedure",
+        "release_ref",
+    }
+    if set(rollback) != allowed_keys:
+        raise ValueError("invalid initial-install rollback fields")
+    if rollback.get("release_ref") != "orca-console:first-install":
+        raise ValueError("invalid first-install release reference")
+    if rollback.get("procedure") != ROLLBACK_PROCEDURE:
+        raise ValueError("invalid rollback procedure")
+    app = rollback.get("app") or {}
+    if app != {
+        "bundle_id": "com.orcamc.mac",
+        "install_path": "/Applications/ORCA Console.app",
+        "prior_present": False,
+        "rollback_action": "remove_only_if_installed_app_matches_current_release_identity",
+    }:
+        raise ValueError("invalid first-install app rollback contract")
+    preinstall_row = rollback.get("preinstall_state") or {}
+    if preinstall_row.get("schema") != "orca.console.preinstall-state.v1":
+        raise ValueError("invalid preinstall-state row schema")
+    preinstall_path = resolve_row(
+        evidence_dir, preinstall_row, "preinstall-state contract"
+    )
+    preinstall_signature = resolve_row(
+        evidence_dir,
+        preinstall_row.get("signature") or {},
+        "preinstall-state signature",
+    )
+    verify_signature(
+        preinstall_path,
+        preinstall_signature,
+        allowed_signers=allowed_signers,
+        signer_identity=signer_identity,
+        namespace="orca-auth-state",
+    )
+    preinstall = verify_preinstall_state(preinstall_path)
+    observed_at = datetime.fromisoformat(
+        preinstall["observed_at"].removesuffix("Z") + "+00:00"
+    )
+    observation_age = release_created_at - observed_at
+    if observation_age.total_seconds() < -60 or observation_age.total_seconds() > 900:
+        raise ValueError("preinstall observation is stale or future-dated")
+    runtime_commit = require_commit(
+        rollback.get("backend_commit"), "rollback runtime commit"
+    )
+    if preinstall["runtime_commit"] != runtime_commit:
+        raise ValueError("preinstall state does not match rollback runtime")
+    commit_trust = preinstall["runtime_commit_trust"]
+    if rollback.get("backend_commit_trust") != commit_trust:
+        raise ValueError("preinstall commit trust does not match rollback contract")
+    commit_is_signed = commit_trust == "git-ssh-signed"
+    if rollback.get("backend_commit_signed") is not commit_is_signed:
+        raise ValueError("rollback runtime signature flag is invalid")
+    runtime_source = resolve_row(
+        evidence_dir, rollback.get("backend_source") or {}, "rollback runtime source"
+    )
+    if preinstall["runtime_source_sha256"] != sha256(runtime_source):
+        raise ValueError("preinstall state does not match rollback source")
+    if preinstall["backend_image_sha256"] != require_digest(
+        (rollback.get("backend_image") or {}).get("sha256"),
+        "rollback backend image",
+    ):
+        raise ValueError("preinstall state does not match rollback image")
+    if preinstall["host_bundle_sha256"] != require_digest(
+        (rollback.get("host_bundle") or {}).get("sha256"),
+        "rollback host bundle",
+    ):
+        raise ValueError("preinstall state does not match rollback host bundle")
+    if preinstall["auth_state_sha256"] != require_digest(
+        (rollback.get("auth_state") or {}).get("sha256"),
+        "rollback auth state",
+    ):
+        raise ValueError("preinstall state does not match rollback auth state")
+    return runtime_commit, commit_is_signed, preinstall
 
 
 def verify_bundle(
@@ -203,13 +741,26 @@ def verify_bundle(
         namespace="orca-release",
     )
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if manifest.get("schema") != "orca.console.release-manifest.v4":
+    if manifest.get("schema") != "orca.console.release-manifest.v7":
         raise ValueError("unsupported release manifest schema")
     trust = manifest.get("trust") or {}
     if trust.get("allowed_signers_sha256") != trusted_hash:
         raise ValueError("manifest signer registry does not match external trust hash")
     if trust.get("release_signer_identity") != signer_identity:
         raise ValueError("manifest signer identity mismatch")
+    created_at_raw = manifest.get("created_at")
+    if not isinstance(created_at_raw, str):
+        raise ValueError("invalid release creation time")
+    try:
+        release_created_at = datetime.fromisoformat(created_at_raw)
+    except ValueError as exc:
+        raise ValueError("invalid release creation time") from exc
+    if release_created_at.tzinfo is None:
+        raise ValueError("release creation time must include a timezone")
+    if release_created_at > datetime.now(timezone.utc).astimezone(
+        release_created_at.tzinfo
+    ):
+        raise ValueError("release creation time is future-dated")
 
     artifact_row = manifest.get("artifact") or {}
     if artifact_row.get("name") != artifact.name:
@@ -263,6 +814,10 @@ def verify_bundle(
         evidence_dir, runtime.get("backend_image") or {}, "current runtime image"
     )
     resolve_row(evidence_dir, runtime.get("host_bundle") or {}, "current host bundle")
+    runtime_contract = manifest.get("runtime_contract") or {}
+    if not isinstance(runtime_contract, dict):
+        raise ValueError("invalid Runtime API compatibility contract")
+    verify_runtime_contract_compatibility(evidence_dir, runtime_contract)
     transition = manifest.get("auth_transition") or {}
     transition_path = resolve_row(
         evidence_dir,
@@ -279,67 +834,70 @@ def verify_bundle(
     )
     verify_transition(transition_path)
 
-    rollback = manifest.get("rollback") or {}
-    prior_manifest_path = resolve_row(
-        evidence_dir, rollback.get("manifest") or {}, "rollback manifest"
-    )
-    prior_signature = resolve_row(
-        evidence_dir,
-        rollback.get("manifest_signature") or {},
-        "rollback manifest signature",
-    )
-    verify_signature(
-        prior_manifest_path,
-        prior_signature,
-        allowed_signers=allowed_signers,
-        signer_identity=signer_identity,
-        namespace="orca-release",
-    )
-    prior = json.loads(prior_manifest_path.read_text(encoding="utf-8"))
-    if prior.get("schema") not in {
-        "orca.console.release-manifest.v2",
-        "orca.console.release-manifest.v3",
-        "orca.console.release-manifest.v4",
+    installation = manifest.get("installation") or {}
+    if set(installation) != {
+        "canonical_bundle_id",
+        "canonical_install_count",
+        "canonical_install_path",
+        "mode",
+        "name",
+        "ready",
+        "schema",
+        "sha256",
+        "size_bytes",
     }:
-        raise ValueError("unsupported rollback manifest schema")
-    prior_source = prior.get("source") or {}
-    prior_source_commit = require_commit(
-        prior_source.get("commit"), "rollback source commit"
+        raise ValueError("invalid Console installation manifest fields")
+    installation_path = resolve_row(
+        evidence_dir, installation, "Console installation inventory"
     )
-    if rollback.get("source_commit") != prior_source_commit:
-        raise ValueError("rollback source commit mismatch")
-    rollback_source_object = resolve_row(
-        evidence_dir,
-        rollback.get("source_commit_object") or {},
-        "rollback source commit object",
+    installation_payload = verify_installation_inventory(
+        installation_path,
+        install_mode=str(installation.get("mode") or ""),
+        release_created_at=release_created_at,
     )
-    verify_commit_object(
-        rollback_source_object,
-        prior_source_commit,
-        allowed_signers=allowed_signers,
-    )
-    prior_artifact = resolve_row(
-        evidence_dir, rollback.get("artifact") or {}, "rollback artifact"
-    )
-    prior_artifact_row = prior.get("artifact") or {}
+    if installation.get("schema") != installation_payload["schema"]:
+        raise ValueError("Console installation schema mismatch")
+    if installation.get("ready") is not True:
+        raise ValueError("Console installation readiness is false")
     if (
-        prior_artifact.name != prior_artifact_row.get("name")
-        or sha256(prior_artifact) != prior_artifact_row.get("sha256")
-        or prior_artifact.stat().st_size != prior_artifact_row.get("size_bytes")
+        installation.get("canonical_install_path")
+        != installation_payload["canonical_install_path"]
+        or installation.get("canonical_bundle_id")
+        != installation_payload["canonical_bundle_id"]
+        or installation.get("canonical_install_count")
+        != installation_payload["counts"]["canonical_install"]
     ):
-        raise ValueError("rollback artifact disagrees with signed prior manifest")
-    prior_sbom = resolve_row(evidence_dir, rollback.get("sbom") or {}, "rollback SBOM")
-    prior_dependencies = prior.get("dependencies") or {}
-    if prior_sbom.name != prior_dependencies.get("sbom") or sha256(
-        prior_sbom
-    ) != prior_dependencies.get("sbom_sha256"):
-        raise ValueError("rollback SBOM disagrees with signed prior manifest")
-    prior_runtime = prior.get("runtime") or {}
-    prior_runtime_commit = require_commit(
-        prior_runtime.get("backend_commit"), "rollback runtime commit"
-    )
-    if rollback.get("backend_commit") != prior_runtime_commit:
-        raise ValueError("rollback runtime commit mismatch")
+        raise ValueError("Console installation manifest summary mismatch")
+
+    rollback = manifest.get("rollback") or {}
+    mode = rollback.get("mode")
+    if installation_payload["mode"] != mode:
+        raise ValueError("Console installation and rollback modes disagree")
+    if mode == "upgrade":
+        (
+            prior_runtime_commit,
+            rollback_commit_is_signed,
+            preinstall_state,
+        ) = verify_upgrade_rollback(
+            evidence_dir,
+            rollback,
+            allowed_signers=allowed_signers,
+            signer_identity=signer_identity,
+        )
+    elif mode == "initial-install":
+        (
+            prior_runtime_commit,
+            rollback_commit_is_signed,
+            preinstall_state,
+        ) = verify_initial_install_rollback(
+            evidence_dir,
+            rollback,
+            allowed_signers=allowed_signers,
+            release_created_at=release_created_at,
+            signer_identity=signer_identity,
+        )
+    else:
+        raise ValueError("invalid rollback mode")
     rollback_runtime_object = resolve_row(
         evidence_dir,
         rollback.get("backend_commit_object") or {},
@@ -349,35 +907,26 @@ def verify_bundle(
         rollback_runtime_object,
         prior_runtime_commit,
         allowed_signers=allowed_signers,
+        require_signature=rollback_commit_is_signed,
     )
-    prior_image = resolve_row(
+    resolve_row(
         evidence_dir, rollback.get("backend_image") or {}, "rollback runtime image"
     )
-    prior_image_contract = prior_runtime.get("backend_image") or {}
-    expected_prior_image = (
-        prior_image_contract.get("sha256")
-        if prior_image_contract
-        else str(prior_runtime.get("backend_image_digest") or "").removeprefix(
-            "sha256:"
-        )
-    )
-    if sha256(prior_image) != expected_prior_image:
-        raise ValueError("rollback runtime image disagrees with signed prior manifest")
-    prior_host = resolve_row(
+    resolve_row(
         evidence_dir, rollback.get("host_bundle") or {}, "rollback host bundle"
     )
-    prior_host_contract = prior_runtime.get("host_bundle") or {}
-    expected_prior_host = (
-        prior_host_contract.get("sha256")
-        if prior_host_contract
-        else prior_runtime.get("host_bundle_sha256")
-    )
-    if sha256(prior_host) != expected_prior_host:
-        raise ValueError("rollback host bundle disagrees with signed prior manifest")
     auth_row = rollback.get("auth_state") or {}
+    if not isinstance(auth_row, dict) or set(auth_row) != AUTH_STATE_ROW_KEYS:
+        raise ValueError("invalid rollback auth-state row fields")
+    auth_signature_row = auth_row.get("signature") or {}
+    if (
+        not isinstance(auth_signature_row, dict)
+        or set(auth_signature_row) != FILE_ROW_KEYS
+    ):
+        raise ValueError("invalid rollback auth-state signature row fields")
     auth_path = resolve_row(evidence_dir, auth_row, "rollback auth state")
     auth_signature = resolve_row(
-        evidence_dir, auth_row.get("signature") or {}, "rollback auth-state signature"
+        evidence_dir, auth_signature_row, "rollback auth-state signature"
     )
     verify_signature(
         auth_path,
@@ -387,6 +936,27 @@ def verify_bundle(
         namespace="orca-auth-state",
     )
     auth_state = verify_auth_state(auth_path, runtime_commit=prior_runtime_commit)
+    auth_captured_at = require_utc_timestamp(
+        auth_state["captured_at"], "auth-state capture time"
+    )
+    auth_state_age = release_created_at - auth_captured_at
+    if auth_state_age.total_seconds() < -60 or auth_state_age.total_seconds() > 900:
+        raise ValueError("rollback auth state is stale or future-dated")
+    if (
+        preinstall_state is not None
+        and auth_state["runtime_host_id"] != preinstall_state["runtime_host_id"]
+    ):
+        raise ValueError("preinstall state does not match auth-state host")
+    if preinstall_state is not None:
+        preinstall_observed_at = require_utc_timestamp(
+            preinstall_state["observed_at"], "preinstall observation time"
+        )
+        auth_observation_age = preinstall_observed_at - auth_captured_at
+        if (
+            auth_observation_age.total_seconds() < -60
+            or auth_observation_age.total_seconds() > 900
+        ):
+            raise ValueError("auth state is outside the preinstall observation window")
     if auth_row.get("active_refresh_family_digest") != auth_state.get(
         "active_refresh_family_digest"
     ):

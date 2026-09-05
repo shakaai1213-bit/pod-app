@@ -1,4 +1,5 @@
 import AuthenticationServices
+import OrcaRuntimeContracts
 import SwiftUI
 
 struct RuntimeSettingsView: View {
@@ -60,9 +61,74 @@ struct RuntimeSettingsView: View {
                     }
                 }
             }
+
+            Section("Provider control") {
+                if let records = model.providerControl?.records, !records.isEmpty {
+                    ForEach(records, id: \.providerIdentity) { record in
+                        ProviderControlRow(record: record)
+                    }
+                } else if model.isLoadingProviderControl {
+                    ProgressView("Loading provider truth")
+                } else {
+                    Text(model.providerControlError ?? "No provider attestations are available.")
+                        .font(.caption)
+                        .foregroundStyle(model.providerControlError == nil ? Color.secondary : Color.red)
+                }
+
+                HStack {
+                    if let generatedAt = model.providerControl?.generatedAt {
+                        Text("ORCA · Cascade · \(generatedAt.formatted(date: .abbreviated, time: .standard))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button {
+                        Task { await model.refreshProviderControl() }
+                    } label: {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
+                    .disabled(!model.connectionState.isReady || model.isLoadingProviderControl)
+                }
+            }
         }
         .formStyle(.grouped)
         .padding(12)
         .onAppear { serverAddress = model.serverAddress }
     }
+}
+
+private struct ProviderControlRow: View {
+    let record: Components.Schemas.ChatRuntimeProviderControlRecordRead
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: record.executionAllowed ? "checkmark.circle.fill" : "pause.circle.fill")
+                .foregroundStyle(record.executionAllowed ? Color.orcaGreen : Color.orcaAmber)
+                .accessibilityLabel(record.executionAllowed ? "Available" : "Paused")
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(record.providerId)
+                    .font(.body.weight(.medium))
+                Text("\(record.executionHost.rawValue) · \(record.adapterId)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(record.executionAllowed ? "Ready" : "Paused")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(record.executionAllowed ? Color.orcaGreen : Color.orcaAmber)
+                Text(record.lastDeliveryStatus == .failed ? "Delivery issue" : record.circuitState.rawValue)
+                    .font(.caption2)
+                    .foregroundStyle(record.lastDeliveryStatus == .failed ? Color.orcaAmber : .secondary)
+            }
+        }
+        .help(record.statusReason)
+    }
+}
+
+private extension Components.Schemas.ChatRuntimeProviderControlRecordRead {
+    var providerIdentity: String { "\(executionHost.rawValue):\(adapterId)" }
 }

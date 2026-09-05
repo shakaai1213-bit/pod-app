@@ -1,4 +1,5 @@
 import Foundation
+import OrcaRuntimeContracts
 import SwiftData
 import SwiftUI
 
@@ -9,6 +10,8 @@ extension Notification.Name {
 @Observable
 @MainActor
 final class DirectChatViewModel {
+    static let memoryReviewActionTitle = "Review and Apply"
+
     // MARK: - State
 
     var navigationPath = NavigationPath()
@@ -102,6 +105,14 @@ final class DirectChatViewModel {
     var centralAgentHealth: CentralAgentHealth?
     var centralAgentHealthError: String?
     var isLoadingCentralAgentHealth: Bool = false
+    var runtimeTurnByAgent: [String: AgentChatService.RuntimeTurnSummary] = [:]
+    var conversationMemoryByAgent: [String: AgentChatService.ConversationMemorySummary] = [:]
+    var runtimeEvidenceErrorByAgent: [String: String] = [:]
+    var loadingRuntimeEvidenceAgents: Set<String> = []
+    var applyingMemoryProposalAgents: Set<String> = []
+    var providerControl: Components.Schemas.ChatRuntimeProviderControlBundleRead?
+    var providerControlError: String?
+    var isLoadingProviderControl = false
 
     // Conversation data from SwiftData
     var conversations: [DMConversation] = []
@@ -122,6 +133,7 @@ final class DirectChatViewModel {
     private var roomAutoRefreshTask: Task<Void, Never>?
     private var presenceRefreshTask: Task<Void, Never>?
     private var centralAgentHealthTask: Task<Void, Never>?
+    private var providerControlTask: Task<Void, Never>?
     private var pendingTicketContinuation: (ticketId: String, ticketTitle: String, agentId: String, channelId: String?)?
 
     // MARK: - Setup
@@ -313,6 +325,32 @@ final class DirectChatViewModel {
     func shortChannelId(for agent: AgentInfo) -> String? {
         guard let channelId = currentChannelId(for: agent), !channelId.isEmpty else { return nil }
         return String(channelId.prefix(8))
+    }
+
+    func runtimeTurn(for agent: AgentInfo) -> AgentChatService.RuntimeTurnSummary? {
+        runtimeTurnByAgent[agent.id]
+    }
+
+    func conversationMemory(for agent: AgentInfo) -> AgentChatService.ConversationMemorySummary? {
+        conversationMemoryByAgent[agent.id]
+    }
+
+    func applyLatestMemoryProposal(for agent: AgentInfo) async {
+        guard let memory = conversationMemoryByAgent[agent.id],
+              let proposalId = memory.pendingProposalIds.first else { return }
+        applyingMemoryProposalAgents.insert(agent.id)
+        defer { applyingMemoryProposalAgents.remove(agent.id) }
+        do {
+            let service = AgentChatService(agent: agent)
+            conversationMemoryByAgent[agent.id] = try await service.applyConversationMemoryProposal(
+                conversationId: memory.conversationId,
+                proposalId: proposalId,
+                reason: "Applied from Pod after owner review."
+            )
+            runtimeEvidenceErrorByAgent.removeValue(forKey: agent.id)
+        } catch {
+            runtimeEvidenceErrorByAgent[agent.id] = "Memory review: \(error.localizedDescription)"
+        }
     }
 
     func agent(forChannelId channelId: String) -> AgentInfo? {
@@ -790,6 +828,7 @@ final class DirectChatViewModel {
 
     func selectAgent(_ agent: AgentInfo) {
         stopCentralAgentHealthMonitoring()
+        stopProviderControlMonitoring()
         selectedAgent = agent
         selectedRoom = nil
         stopRoomAutoRefresh()
@@ -815,6 +854,7 @@ final class DirectChatViewModel {
         Task { await loadAgentToolsForActiveTicket(agent: agent) }
         Task { await loadAgentToolRuns(for: agent) }
         startCentralAgentHealthMonitoring(for: agent)
+        startProviderControlMonitoring(for: agent)
         applyPendingTicketContinuationIfNeeded(for: agent)
         guard modelContext != nil else {
             currentMessages = []
@@ -828,6 +868,13 @@ final class DirectChatViewModel {
         if let channelId = conversation.orcaChannelId {
             Task { await importORCAChannelHistory(agent: agent, channelId: channelId) }
             Task { await refreshChannelSummary(agent: agent, channelId: channelId) }
+            Task {
+                await refreshRuntimeEvidence(
+                    for: agent,
+                    turnId: currentMessages.last(where: { $0.role == "user" })?.remoteMessageId,
+                    conversationId: channelId
+                )
+            }
             startLiveResponseRefresh(agent: agent, channelId: channelId, excluding: nil)
         }
         if let ticketId = activeTicketId {
@@ -842,6 +889,7 @@ final class DirectChatViewModel {
 
     func clearSelection() {
         stopCentralAgentHealthMonitoring()
+        stopProviderControlMonitoring()
         selectedAgent = nil
         currentService = nil
         liveRefreshTask?.cancel()
@@ -929,6 +977,38 @@ final class DirectChatViewModel {
         isLoadingAgentToolRuns = false
     }
 
+    func loadProviderControl(for agent: AgentInfo) async {
+        isLoadingProviderControl = providerControl == nil
+        defer { isLoadingProviderControl = false }
+        do {
+            let bundle = try await AgentChatService(agent: agent).providerControl()
+            guard selectedAgent?.id == agent.id else { return }
+            providerControl = bundle
+            providerControlError = nil
+        } catch {
+            guard selectedAgent?.id == agent.id else { return }
+            providerControlError = error.localizedDescription
+        }
+    }
+
+    private func startProviderControlMonitoring(for agent: AgentInfo) {
+        providerControlTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled, self.selectedAgent?.id == agent.id {
+                await self.loadProviderControl(for: agent)
+                await TaskSafeSleep.sleep(seconds: 60)
+            }
+        }
+    }
+
+    private func stopProviderControlMonitoring() {
+        providerControlTask?.cancel()
+        providerControlTask = nil
+        providerControl = nil
+        providerControlError = nil
+        isLoadingProviderControl = false
+    }
+
     func loadAgentLocker(for agent: AgentInfo) async {
         isLoadingAgentLocker = true
         agentLockerError = nil
@@ -990,6 +1070,11 @@ final class DirectChatViewModel {
         Task {
             await importORCAChannelHistory(agent: agent, channelId: channelId)
             await refreshChannelSummary(agent: agent, channelId: channelId)
+            await refreshRuntimeEvidence(
+                for: agent,
+                turnId: currentMessages.last(where: { $0.role == "user" })?.remoteMessageId,
+                conversationId: channelId
+            )
             if selectedAgent?.id == agent.id {
                 startLiveResponseRefresh(agent: agent, channelId: channelId, excluding: nil)
                 if liveChatStatus?.hasPrefix("Refreshing ORCA channel") == true {
@@ -1346,6 +1431,11 @@ final class DirectChatViewModel {
 
                 isStreaming = false
                 loadConversations()
+                await refreshRuntimeEvidence(
+                    for: agent,
+                    turnId: userMsg.remoteMessageId,
+                    conversationId: conversation.orcaChannelId
+                )
                 if assistantMsg.deliveryState == DMDeliveryState.waitingForLiveAgent.rawValue,
                    let channelId = conversation.orcaChannelId {
                     liveChatStatus = "Sent to \(agent.name)'s inbox. Waiting for a reply."
@@ -1407,6 +1497,47 @@ final class DirectChatViewModel {
                 isStreaming = false
                 loadConversations()
             }
+        }
+    }
+
+    private func refreshRuntimeEvidence(
+        for agent: AgentInfo,
+        turnId: String?,
+        conversationId: String?
+    ) async {
+        guard let conversationId, !conversationId.isEmpty else { return }
+        loadingRuntimeEvidenceAgents.insert(agent.id)
+        defer { loadingRuntimeEvidenceAgents.remove(agent.id) }
+        let service = AgentChatService(agent: agent)
+        var errors: [String] = []
+
+        do {
+            conversationMemoryByAgent[agent.id] = try await service.conversationMemory(
+                conversationId: conversationId
+            )
+        } catch {
+            errors.append("Memory: \(error.localizedDescription)")
+        }
+
+        if let turnId, !turnId.isEmpty {
+            do {
+                runtimeTurnByAgent[agent.id] = try await service.runtimeTurn(turnId: turnId)
+            } catch OrcaRuntimeClientError.httpStatus(404) {
+                runtimeTurnByAgent.removeValue(forKey: agent.id)
+            } catch {
+                if runtimeTurnByAgent[agent.id]?.turnId != turnId {
+                    runtimeTurnByAgent.removeValue(forKey: agent.id)
+                }
+                errors.append("Turn: \(error.localizedDescription)")
+            }
+        } else {
+            runtimeTurnByAgent.removeValue(forKey: agent.id)
+        }
+
+        if errors.isEmpty {
+            runtimeEvidenceErrorByAgent.removeValue(forKey: agent.id)
+        } else {
+            runtimeEvidenceErrorByAgent[agent.id] = errors.joined(separator: " ")
         }
     }
 
@@ -1887,6 +2018,13 @@ final class DirectChatViewModel {
         }
         try? ctx.save()
         loadConversations()
+        Task {
+            await refreshRuntimeEvidence(
+                for: agent,
+                turnId: currentMessages.last(where: { $0.role == "user" })?.remoteMessageId,
+                conversationId: channelId
+            )
+        }
     }
 
     private func importLiveAgentResponses(agent: AgentInfo, channelId: String, excluding acknowledgedMessageId: String?, since minimumCreatedAt: Date?) async {
@@ -1977,6 +2115,11 @@ final class DirectChatViewModel {
             }
             try? ctx.save()
             loadConversations()
+            await refreshRuntimeEvidence(
+                for: agent,
+                turnId: currentMessages.last(where: { $0.role == "user" })?.remoteMessageId,
+                conversationId: channelId
+            )
         } catch {
             if selectedAgent?.id == agent.id {
                 liveChatStatus = "Live response refresh is unavailable."
