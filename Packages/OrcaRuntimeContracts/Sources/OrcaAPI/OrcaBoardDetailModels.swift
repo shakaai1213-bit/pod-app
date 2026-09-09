@@ -1,5 +1,19 @@
 import Foundation
 
+public enum OrcaBoardProtectionPolicy {
+    public static func isSafeTicket(
+        isProtected: Bool,
+        computeTag: String?,
+        autonomyLevel: String?
+    ) -> Bool {
+        let tag = computeTag?.lowercased()
+        return !isProtected
+            && tag != "financial"
+            && tag != "security"
+            && autonomyLevel?.lowercased() != "protected_approval_required"
+    }
+}
+
 public struct OrcaBoardCollectionPage<Item>: Decodable, Sendable where Item: Decodable & Sendable {
     public let items: [Item]
 
@@ -97,11 +111,11 @@ public struct OrcaBoardTicketSummary: Decodable, Identifiable, Hashable, Sendabl
     public let autonomyLevel: String?
 
     public var isSafeForGenericSurface: Bool {
-        let tag = computeTag?.lowercased()
-        return !isProtected
-            && tag != "financial"
-            && tag != "security"
-            && autonomyLevel?.lowercased() != "protected_approval_required"
+        OrcaBoardProtectionPolicy.isSafeTicket(
+            isProtected: isProtected,
+            computeTag: computeTag,
+            autonomyLevel: autonomyLevel
+        )
     }
 
     private enum CodingKeys: String, CodingKey {
