@@ -895,6 +895,60 @@
         "title": "ChatRuntimeCapabilityRead",
         "type": "object"
       },
+      "ChatRuntimeClientProvenanceRead": {
+        "description": "Non-secret identity of the client that first admitted the turn.",
+        "properties": {
+          "client_build": {
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+            "title": "Client Build",
+            "type": "string"
+          },
+          "client_instance_id": {
+            "maxLength": 160,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$",
+            "title": "Client Instance Id",
+            "type": "string"
+          },
+          "client_version": {
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+            "title": "Client Version",
+            "type": "string"
+          },
+          "device_registration_ref": {
+            "maxLength": 512,
+            "pattern": "^orca://devices/[A-Za-z0-9][A-Za-z0-9._:-]{0,479}$",
+            "title": "Device Registration Ref",
+            "type": "string"
+          },
+          "ingress_event_id": {
+            "format": "uuid",
+            "title": "Ingress Event Id",
+            "type": "string"
+          },
+          "received_at": {
+            "format": "date-time",
+            "title": "Received At",
+            "type": "string"
+          },
+          "source_surface": {
+            "enum": [
+              "pod",
+              "console",
+              "imessage",
+              "system_adapter"
+            ],
+            "title": "Source Surface",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_surface"
+        ],
+        "title": "ChatRuntimeClientProvenanceRead",
+        "type": "object"
+      },
       "ChatRuntimeCompatibilityRouteRead": {
         "properties": {
           "current_route": {
@@ -1012,6 +1066,17 @@
         "title": "ChatRuntimeContractRead",
         "type": "object"
       },
+      "ChatRuntimeCursorState": {
+        "description": "How ORCA reconciled a client cursor against current turn truth.",
+        "enum": [
+          "initial",
+          "current",
+          "advanced",
+          "reset_required"
+        ],
+        "title": "ChatRuntimeCursorState",
+        "type": "string"
+      },
       "ChatRuntimeEventType": {
         "description": "Cross-provider events that form one resumable turn timeline.",
         "enum": [
@@ -1078,6 +1143,36 @@
           "description"
         ],
         "title": "ChatRuntimeInvariantRead",
+        "type": "object"
+      },
+      "ChatRuntimeOrderingRead": {
+        "description": "Server ordering contract used across retries, reconnects, and clock skew.",
+        "properties": {
+          "authority": {
+            "const": "orca",
+            "default": "orca",
+            "title": "Authority",
+            "type": "string"
+          },
+          "clock_skew_tolerant": {
+            "default": true,
+            "title": "Clock Skew Tolerant",
+            "type": "boolean"
+          },
+          "fallback_order": {
+            "const": "occurred_at_event_id",
+            "default": "occurred_at_event_id",
+            "title": "Fallback Order",
+            "type": "string"
+          },
+          "sequence_source": {
+            "const": "work_events.seq",
+            "default": "work_events.seq",
+            "title": "Sequence Source",
+            "type": "string"
+          }
+        },
+        "title": "ChatRuntimeOrderingRead",
         "type": "object"
       },
       "ChatRuntimeProgressState": {
@@ -1373,6 +1468,63 @@
         "title": "ChatRuntimeProviderControlRecordRead",
         "type": "object"
       },
+      "ChatRuntimeRecoveryRead": {
+        "description": "Current stale-turn verdict; it recommends recovery but does not mutate.",
+        "properties": {
+          "is_stuck": {
+            "title": "Is Stuck",
+            "type": "boolean"
+          },
+          "last_progress_at": {
+            "format": "date-time",
+            "title": "Last Progress At",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 256,
+            "title": "Reason",
+            "type": "string"
+          },
+          "recommended_action": {
+            "maxLength": 128,
+            "title": "Recommended Action",
+            "type": "string"
+          },
+          "retry_owner": {
+            "maxLength": 128,
+            "title": "Retry Owner",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "healthy",
+              "waiting",
+              "stuck",
+              "terminal"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "threshold_seconds": {
+            "minimum": 1.0,
+            "title": "Threshold Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status",
+          "is_stuck",
+          "observed_at",
+          "last_progress_at"
+        ],
+        "title": "ChatRuntimeRecoveryRead",
+        "type": "object"
+      },
       "ChatRuntimeResourceEnvelope": {
         "description": "Governed execution limits passed to any selected provider adapter.",
         "properties": {
@@ -1647,6 +1799,24 @@
             "title": "Async Response",
             "type": "boolean"
           },
+          "client_build": {
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+            "title": "Client Build",
+            "type": "string"
+          },
+          "client_instance_id": {
+            "maxLength": 160,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$",
+            "title": "Client Instance Id",
+            "type": "string"
+          },
+          "client_version": {
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+            "title": "Client Version",
+            "type": "string"
+          },
           "content": {
             "maxLength": 12000,
             "minLength": 1,
@@ -1666,6 +1836,12 @@
               "agent_inbox"
             ],
             "title": "Delivery Mode",
+            "type": "string"
+          },
+          "device_registration_ref": {
+            "maxLength": 512,
+            "pattern": "^orca://devices/[A-Za-z0-9][A-Za-z0-9._:-]{0,479}$",
+            "title": "Device Registration Ref",
             "type": "string"
           },
           "history": {
@@ -1743,6 +1919,9 @@
             "title": "Agent Id",
             "type": "string"
           },
+          "client_provenance": {
+            "$ref": "#/components/schemas/ChatRuntimeClientProvenanceRead"
+          },
           "conversation_id": {
             "format": "uuid",
             "title": "Conversation Id",
@@ -1771,6 +1950,12 @@
             "title": "Message Id",
             "type": "string"
           },
+          "ordering": {
+            "$ref": "#/components/schemas/ChatRuntimeOrderingRead"
+          },
+          "recovery": {
+            "$ref": "#/components/schemas/ChatRuntimeRecoveryRead"
+          },
           "resources": {
             "$ref": "#/components/schemas/ChatRuntimeResourceEnvelope"
           },
@@ -1789,6 +1974,24 @@
             "format": "uuid",
             "title": "Turn Id",
             "type": "string"
+          },
+          "work_runs": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeWorkRunRead"
+            },
+            "title": "Work Runs",
+            "type": "array"
+          },
+          "work_runs_limit": {
+            "default": 100,
+            "minimum": 1.0,
+            "title": "Work Runs Limit",
+            "type": "integer"
+          },
+          "work_runs_truncated": {
+            "default": false,
+            "title": "Work Runs Truncated",
+            "type": "boolean"
           }
         },
         "required": [
@@ -1798,9 +2001,76 @@
           "agent_id",
           "state",
           "idempotency_key",
-          "resources"
+          "resources",
+          "client_provenance",
+          "ordering",
+          "recovery"
         ],
         "title": "ChatRuntimeTurnRead",
+        "type": "object"
+      },
+      "ChatRuntimeTurnReconciliationRead": {
+        "description": "Authoritative full snapshot plus the events newer than a client cursor.",
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "contract_version": {
+            "const": "orca.chat-runtime.turn-reconciliation.v1",
+            "default": "orca.chat-runtime.turn-reconciliation.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "cursor_state": {
+            "$ref": "#/components/schemas/ChatRuntimeCursorState"
+          },
+          "events_after_cursor": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeTimelineEventRead"
+            },
+            "title": "Events After Cursor",
+            "type": "array"
+          },
+          "poll_after_seconds": {
+            "maximum": 60.0,
+            "minimum": 1.0,
+            "title": "Poll After Seconds",
+            "type": "integer"
+          },
+          "reconciliation_cursor": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Reconciliation Cursor",
+            "type": "string"
+          },
+          "requested_cursor": {
+            "maxLength": 256,
+            "title": "Requested Cursor",
+            "type": "string"
+          },
+          "terminal": {
+            "title": "Terminal",
+            "type": "boolean"
+          },
+          "turn": {
+            "$ref": "#/components/schemas/ChatRuntimeTurnRead"
+          },
+          "turn_id": {
+            "format": "uuid",
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_id",
+          "reconciliation_cursor",
+          "cursor_state",
+          "changed",
+          "terminal",
+          "turn"
+        ],
+        "title": "ChatRuntimeTurnReconciliationRead",
         "type": "object"
       },
       "ChatRuntimeTurnSubmissionRead": {
@@ -1899,6 +2169,130 @@
           "trace_id"
         ],
         "title": "ChatRuntimeTurnSubmissionRead",
+        "type": "object"
+      },
+      "ChatRuntimeWatchdogItemRead": {
+        "description": "Pointer-safe stale turn or nested run surfaced for support review.",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "recovery": {
+            "$ref": "#/components/schemas/ChatRuntimeRecoveryRead"
+          },
+          "source_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Source Ref",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ChatRuntimeProgressState"
+          },
+          "stuck_run_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Stuck Run Ids",
+            "type": "array"
+          },
+          "turn_id": {
+            "format": "uuid",
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_id",
+          "conversation_id",
+          "agent_id",
+          "state",
+          "recovery",
+          "source_ref"
+        ],
+        "title": "ChatRuntimeWatchdogItemRead",
+        "type": "object"
+      },
+      "ChatRuntimeWatchdogRead": {
+        "description": "Bounded read-only scan of recent direct-chat liveness.",
+        "properties": {
+          "authority": {
+            "const": "orca",
+            "default": "orca",
+            "title": "Authority",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "orca.chat-runtime.watchdog.v1",
+            "default": "orca.chat-runtime.watchdog.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeWatchdogItemRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "lookback_hours": {
+            "maximum": 168.0,
+            "minimum": 1.0,
+            "title": "Lookback Hours",
+            "type": "integer"
+          },
+          "mutation_performed": {
+            "const": false,
+            "default": false,
+            "title": "Mutation Performed",
+            "type": "boolean"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "scanned_turns": {
+            "minimum": 0.0,
+            "title": "Scanned Turns",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "warning"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stuck_runs": {
+            "minimum": 0.0,
+            "title": "Stuck Runs",
+            "type": "integer"
+          },
+          "stuck_turns": {
+            "minimum": 0.0,
+            "title": "Stuck Turns",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "observed_at",
+          "lookback_hours",
+          "scanned_turns",
+          "stuck_turns",
+          "stuck_runs",
+          "status"
+        ],
+        "title": "ChatRuntimeWatchdogRead",
         "type": "object"
       },
       "ChatRuntimeWorkApprovalRead": {
@@ -2389,6 +2783,110 @@
         "title": "ChatRuntimeWorkItemRead",
         "type": "object"
       },
+      "ChatRuntimeWorkRunRead": {
+        "description": "Evidence-backed current state for a provider, tool, or bounded worker run.",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "child_run_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Child Run Ids",
+            "type": "array"
+          },
+          "completed_at": {
+            "format": "date-time",
+            "title": "Completed At",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "is_stuck": {
+            "title": "Is Stuck",
+            "type": "boolean"
+          },
+          "is_terminal": {
+            "title": "Is Terminal",
+            "type": "boolean"
+          },
+          "last_activity_at": {
+            "format": "date-time",
+            "title": "Last Activity At",
+            "type": "string"
+          },
+          "parent_run_id": {
+            "format": "uuid",
+            "title": "Parent Run Id",
+            "type": "string"
+          },
+          "recommended_action": {
+            "maxLength": 128,
+            "title": "Recommended Action",
+            "type": "string"
+          },
+          "retry_owner": {
+            "maxLength": 128,
+            "title": "Retry Owner",
+            "type": "string"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "run_type": {
+            "title": "Run Type",
+            "type": "string"
+          },
+          "source_ref": {
+            "title": "Source Ref",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "stuck_reason": {
+            "maxLength": 256,
+            "title": "Stuck Reason",
+            "type": "string"
+          },
+          "tool_policy": {
+            "title": "Tool Policy",
+            "type": "string"
+          },
+          "worker_lane": {
+            "title": "Worker Lane",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "run_type",
+          "status",
+          "source_ref",
+          "last_activity_at",
+          "is_terminal",
+          "is_stuck"
+        ],
+        "title": "ChatRuntimeWorkRunRead",
+        "type": "object"
+      },
       "ConversationMemoryApplyRequest": {
         "properties": {
           "reason": {
@@ -2877,6 +3375,24 @@
             "title": "Chat Thread Id",
             "type": "string"
           },
+          "client_build": {
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+            "title": "Client Build",
+            "type": "string"
+          },
+          "client_instance_id": {
+            "maxLength": 160,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$",
+            "title": "Client Instance Id",
+            "type": "string"
+          },
+          "client_version": {
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+            "title": "Client Version",
+            "type": "string"
+          },
           "content": {
             "maxLength": 12000,
             "minLength": 1,
@@ -2887,6 +3403,12 @@
             "default": "auto",
             "pattern": "^(auto|compute|agent_inbox)$",
             "title": "Delivery Mode",
+            "type": "string"
+          },
+          "device_registration_ref": {
+            "maxLength": 512,
+            "pattern": "^orca://devices/[A-Za-z0-9][A-Za-z0-9._:-]{0,479}$",
+            "title": "Device Registration Ref",
             "type": "string"
           },
           "fallback_after_seconds": {
@@ -3408,6 +3930,195 @@
         ]
       }
     },
+    "/api/v1/chat-runtime/v1/turns/{turn_id}/reconcile": {
+      "get": {
+        "description": "Returns the authoritative turn snapshot and events newer than the provided cursor. Unknown or cross-turn cursors return reset_required with a complete snapshot instead of silently dropping state.",
+        "operationId": "reconcileRuntimeTurn",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "turn_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Turn Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 256,
+              "title": "After Cursor",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatRuntimeTurnReconciliationRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Reconcile one ORCA Chat Runtime turn",
+        "tags": [
+          "chat-runtime"
+        ]
+      }
+    },
+    "/api/v1/chat-runtime/v1/turns/{turn_id}/stream": {
+      "get": {
+        "description": "Streams the same authoritative reconciliation envelope as REST polling. Clients may resume with after_cursor or Last-Event-ID and fall back to the reconcile route without changing cursor semantics.",
+        "operationId": "streamRuntimeTurn",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "turn_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Turn Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 256,
+              "title": "After Cursor",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Last-Event-ID",
+            "required": false,
+            "schema": {
+              "maxLength": 256,
+              "title": "Last-Event-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Stream one ORCA Chat Runtime turn",
+        "tags": [
+          "chat-runtime"
+        ]
+      }
+    },
+    "/api/v1/chat-runtime/v1/watchdog/stale-turns": {
+      "get": {
+        "description": "Performs a bounded, read-only scan for turns or nested AgentRuns that have exceeded the same server thresholds shown to Pod and Console.",
+        "operationId": "getRuntimeStaleTurns",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "lookback_hours",
+            "required": false,
+            "schema": {
+              "default": 24,
+              "maximum": 168,
+              "minimum": 1,
+              "title": "Lookback Hours",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 250,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatRuntimeWatchdogRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Scan recent ORCA Chat Runtime liveness",
+        "tags": [
+          "chat-runtime"
+        ]
+      }
+    },
     "/api/v1/chat/channels/{channel_id}/messages": {
       "get": {
         "description": "List messages in a channel.",
@@ -3711,5 +4422,5 @@
     }
   ],
   "x-orca-contract-version": "orca.chat-runtime.v1",
-  "x-orca-schema-sha256": "40a298668534e87d47abc42279d4777334e1e2c9ae92dc6e291818a8a76cfbeb"
+  "x-orca-schema-sha256": "2699a91c2bc3d52cbd598e96face4a75fd07953f06e5a8774762c3d8c3b0489e"
 }

@@ -131,6 +131,10 @@ public struct OrcaRuntimeDirectTurnRequest: Equatable, Sendable {
     public let triageTraceID: String?
     public let activeTicketID: String?
     public let conversationID: String?
+    public let clientVersion: String?
+    public let clientBuild: String?
+    public let clientInstanceID: String?
+    public let deviceRegistrationRef: String?
 
     public init(
         agentSlug: String,
@@ -144,7 +148,11 @@ public struct OrcaRuntimeDirectTurnRequest: Equatable, Sendable {
         triageID: String? = nil,
         triageTraceID: String? = nil,
         activeTicketID: String? = nil,
-        conversationID: String? = nil
+        conversationID: String? = nil,
+        clientVersion: String? = nil,
+        clientBuild: String? = nil,
+        clientInstanceID: String? = nil,
+        deviceRegistrationRef: String? = nil
     ) {
         self.agentSlug = agentSlug
         self.content = content
@@ -158,6 +166,10 @@ public struct OrcaRuntimeDirectTurnRequest: Equatable, Sendable {
         self.triageTraceID = triageTraceID
         self.activeTicketID = activeTicketID
         self.conversationID = conversationID
+        self.clientVersion = clientVersion
+        self.clientBuild = clientBuild
+        self.clientInstanceID = clientInstanceID
+        self.deviceRegistrationRef = deviceRegistrationRef
     }
 }
 
@@ -202,6 +214,11 @@ public actor OrcaRuntimeClient {
     ]
 
     private let client: Client
+    private let serverURL: URL
+    private let tokenProvider: @Sendable () async -> String?
+    private let deviceIDProvider: @Sendable () async -> String?
+    private let requestProofProvider: OrcaRuntimeRequestProofProvider?
+    private let session: URLSession
     private var verifiedCompatibility: OrcaRuntimeCompatibility?
 
     public init(
@@ -211,6 +228,11 @@ public actor OrcaRuntimeClient {
         requestProofProvider: OrcaRuntimeRequestProofProvider? = nil,
         session: URLSession = OrcaSecureURLSession.make()
     ) {
+        self.serverURL = serverURL
+        self.tokenProvider = tokenProvider
+        self.deviceIDProvider = deviceIDProvider
+        self.requestProofProvider = requestProofProvider
+        self.session = session
         client = OrcaRuntimeContract.makeClient(
             serverURL: serverURL,
             middlewares: [
@@ -373,6 +395,96 @@ public actor OrcaRuntimeClient {
         return turn
     }
 
+    public func reconcileRuntimeTurn(
+        turnID: String,
+        afterCursor: String? = nil
+    ) async throws -> Components.Schemas.ChatRuntimeTurnReconciliationRead {
+        _ = try await verifyCompatibility()
+        let output = try await client.reconcileRuntimeTurn(.init(
+            path: .init(turnId: turnID),
+            query: .init(afterCursor: afterCursor)
+        ))
+        switch output {
+        case let .ok(response):
+            return try response.body.json
+        case .unprocessableContent:
+            throw OrcaRuntimeClientError.httpStatus(422)
+        case let .undocumented(statusCode, _):
+            throw OrcaRuntimeClientError.httpStatus(statusCode)
+        }
+    }
+
+    public func staleRuntimeTurns(
+        lookbackHours: Int = 24,
+        limit: Int = 100
+    ) async throws -> Components.Schemas.ChatRuntimeWatchdogRead {
+        _ = try await verifyCompatibility()
+        guard (1...168).contains(lookbackHours), (1...250).contains(limit) else {
+            throw OrcaRuntimeClientError.invalidResponse("watchdog bounds are invalid")
+        }
+        let output = try await client.getRuntimeStaleTurns(.init(
+            query: .init(lookbackHours: lookbackHours, limit: limit)
+        ))
+        switch output {
+        case let .ok(response):
+            return try response.body.json
+        case .unprocessableContent:
+            throw OrcaRuntimeClientError.httpStatus(422)
+        case let .undocumented(statusCode, _):
+            throw OrcaRuntimeClientError.httpStatus(statusCode)
+        }
+    }
+
+    public func runtimeTurnStream(
+        turnID: String,
+        afterCursor: String? = nil
+    ) async throws -> AsyncThrowingStream<Components.Schemas.ChatRuntimeTurnReconciliationRead, Error> {
+        _ = try await verifyCompatibility()
+        let request = try await runtimeStreamRequest(turnID: turnID, afterCursor: afterCursor)
+        let session = session
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    let (bytes, response) = try await session.bytes(for: request)
+                    guard OrcaSecureURLSession.responseStayedOnOrigin(
+                        response,
+                        requestURL: request.url!
+                    ), let http = response as? HTTPURLResponse else {
+                        throw OrcaRuntimeClientError.invalidResponse(
+                            "runtime stream left the configured ORCA origin"
+                        )
+                    }
+                    guard http.statusCode == 200 else {
+                        throw OrcaRuntimeClientError.httpStatus(http.statusCode)
+                    }
+                    guard http.value(forHTTPHeaderField: "Content-Type")?
+                        .lowercased().hasPrefix("text/event-stream") == true else {
+                        throw OrcaRuntimeClientError.invalidResponse(
+                            "runtime stream did not return server-sent events"
+                        )
+                    }
+
+                    var parser = OrcaRuntimeSSEParser()
+                    for try await byte in bytes {
+                        try Task.checkCancellation()
+                        if let frame = try parser.consume(byte) {
+                            continuation.yield(try Self.decodeRuntimeFrame(frame))
+                        }
+                    }
+                    if let frame = try parser.finish() {
+                        continuation.yield(try Self.decodeRuntimeFrame(frame))
+                    }
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
     public func conversationMemory(
         conversationID: String
     ) async throws -> Components.Schemas.ConversationMemoryRead {
@@ -468,12 +580,20 @@ public actor OrcaRuntimeClient {
         expectedTurnID: String
     ) throws {
         let events = turn.events ?? []
+        let workRuns = turn.workRuns ?? []
+        let workRunsLimit = turn.workRunsLimit ?? 0
+        let workRunsTruncated = turn.workRunsTruncated ?? false
+        let provenance = turn.clientProvenance
         let terminalTypes: Set<Components.Schemas.ChatRuntimeEventType> = [
             .turn_completed,
             .turn_failed,
             .turn_cancelled,
         ]
         let terminalEvents = events.filter { terminalTypes.contains($0.eventType) }
+        let terminalStates: Set<Components.Schemas.ChatRuntimeProgressState> = [
+            .completed, .failed, .cancelled,
+        ]
+        let isTerminal = terminalStates.contains(turn.state)
         guard turn.turnId == expectedTurnID,
               turn.messageId.isEmpty == false,
               turn.conversationId.isEmpty == false,
@@ -483,6 +603,29 @@ public actor OrcaRuntimeClient {
               events.map(\.sequence) == Array(events.indices),
               Set(events.map(\.eventId)).count == events.count,
               Set(events.map(\.cursor)).count == events.count,
+              turn.ordering.authority == .orca,
+              turn.ordering.sequenceSource == .workEvents_seq,
+              turn.ordering.fallbackOrder == .occurredAtEventId,
+              turn.ordering.clockSkewTolerant == true,
+              isSafeClientVersion(provenance.clientVersion),
+              isSafeClientVersion(provenance.clientBuild),
+              isSafeClientInstance(provenance.clientInstanceId),
+              isSafeDeviceRegistrationRef(provenance.deviceRegistrationRef),
+              provenance.ingressEventId.map({ UUID(uuidString: $0) != nil }) ?? true,
+              workRunsLimit >= 1,
+              workRuns.count <= workRunsLimit,
+              !workRunsTruncated || workRuns.count == workRunsLimit,
+              Set(workRuns.map(\.runId)).count == workRuns.count,
+              workRuns.allSatisfy({ run in
+                  UUID(uuidString: run.runId) != nil
+                      && run.lastActivityAt <= turn.recovery.observedAt
+                      && (!run.isStuck || (!run.isTerminal
+                          && run.retryOwner?.isEmpty == false
+                          && run.recommendedAction?.isEmpty == false))
+              }),
+              turn.recovery.lastProgressAt <= turn.recovery.observedAt,
+              turn.recovery.isStuck == (turn.recovery.status == .stuck),
+              (turn.recovery.status == .terminal) == isTerminal,
               events.allSatisfy({
                   $0.turnId == expectedTurnID
                       && ($0.messageId?.isEmpty != true)
@@ -491,13 +634,48 @@ public actor OrcaRuntimeClient {
               }),
               turn.latestCursor == events.last?.cursor,
               terminalEvents.count <= 1,
-              (turn.terminalOutcome == nil) == terminalEvents.isEmpty else {
+              (turn.terminalOutcome == nil) == terminalEvents.isEmpty,
+              (turn.terminalOutcome != nil) == isTerminal,
+              !isTerminal || turn.terminalOutcome?.state == turn.state else {
             throw OrcaRuntimeClientError.invalidResponse(
                 "runtime turn failed closed"
             )
         }
         var reducer = OrcaRuntimeTimelineReducer()
         _ = try reducer.apply(turn)
+    }
+
+    private static func isSafeClientVersion(_ value: String?) -> Bool {
+        guard let value else { return true }
+        guard (1...64).contains(value.count),
+              value.first.map({ $0.isLetter || $0.isNumber }) == true,
+              value.allSatisfy({ $0.isLetter || $0.isNumber || "._+-".contains($0) }) else {
+            return false
+        }
+        return !looksSecret(value)
+    }
+
+    private static func isSafeClientInstance(_ value: String?) -> Bool {
+        guard let value else { return true }
+        guard (1...160).contains(value.count),
+              value.first.map({ $0.isLetter || $0.isNumber }) == true,
+              value.allSatisfy({ $0.isLetter || $0.isNumber || "._:-".contains($0) }) else {
+            return false
+        }
+        return !looksSecret(value)
+    }
+
+    private static func isSafeDeviceRegistrationRef(_ value: String?) -> Bool {
+        guard let value else { return true }
+        let prefix = "orca://devices/"
+        guard value.hasPrefix(prefix), value.count <= 512 else { return false }
+        return isSafeClientInstance(String(value.dropFirst(prefix.count)))
+    }
+
+    private static func looksSecret(_ value: String) -> Bool {
+        let normalized = value.lowercased()
+        return ["bearer", "token", "secret", "api_key", "apikey", "password"]
+            .contains(where: normalized.contains)
     }
 
     static func validateConversationMemory(
@@ -607,6 +785,82 @@ public actor OrcaRuntimeClient {
 
     private static func isSHA256(_ value: String) -> Bool {
         value.count == 64 && value.allSatisfy("0123456789abcdef".contains)
+    }
+
+    private func runtimeStreamRequest(
+        turnID: String,
+        afterCursor: String?
+    ) async throws -> URLRequest {
+        guard UUID(uuidString: turnID) != nil,
+              var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) else {
+            throw OrcaRuntimeClientError.invalidResponse("runtime stream turn id is invalid")
+        }
+        let basePath = components.percentEncodedPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let pathPrefix = basePath.isEmpty ? "" : "/\(basePath)"
+        components.percentEncodedPath = "\(pathPrefix)/api/v1/chat-runtime/v1/turns/\(turnID)/stream"
+        if let afterCursor, !afterCursor.isEmpty {
+            components.queryItems = [URLQueryItem(name: "after_cursor", value: afterCursor)]
+        }
+        guard let url = components.url else {
+            throw OrcaRuntimeClientError.invalidResponse("runtime stream URL is invalid")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        if let afterCursor, !afterCursor.isEmpty {
+            request.setValue(afterCursor, forHTTPHeaderField: "Last-Event-ID")
+        }
+        if let token = await tokenProvider(), !token.isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            if let requestProofProvider,
+               token.split(separator: ".", omittingEmptySubsequences: false).count == 3 {
+                let target = url.path + (url.query.map { "?\($0)" } ?? "")
+                let proof = try await requestProofProvider("GET", target, Data(), token)
+                for (name, value) in proof {
+                    request.setValue(value, forHTTPHeaderField: name)
+                }
+            }
+        }
+        if let deviceID = await deviceIDProvider(), !deviceID.isEmpty {
+            request.setValue(deviceID, forHTTPHeaderField: "X-ORCA-Device-ID")
+        }
+        return request
+    }
+
+    private static func decodeRuntimeFrame(
+        _ frame: OrcaRuntimeSSEFrame
+    ) throws -> Components.Schemas.ChatRuntimeTurnReconciliationRead {
+        guard frame.event == "turn" || frame.event == "terminal" else {
+            throw OrcaRuntimeSSEError.invalidEventType(frame.event)
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            return try OrcaAPIDateTranscoder().decode(container.decode(String.self))
+        }
+        let envelope: Components.Schemas.ChatRuntimeTurnReconciliationRead
+        do {
+            envelope = try decoder.decode(
+                Components.Schemas.ChatRuntimeTurnReconciliationRead.self,
+                from: frame.data
+            )
+        } catch {
+            throw OrcaRuntimeSSEError.invalidPayload(error.localizedDescription)
+        }
+        guard frame.eventID == envelope.reconciliationCursor else {
+            throw OrcaRuntimeSSEError.eventIDMismatch(
+                expected: envelope.reconciliationCursor,
+                actual: frame.eventID
+            )
+        }
+        guard (frame.event == "terminal") == envelope.terminal else {
+            throw OrcaRuntimeSSEError.invalidPayload(
+                "event name contradicts the terminal flag"
+            )
+        }
+        return envelope
     }
 
     static func validateAgentPacks(
@@ -1036,9 +1290,13 @@ public actor OrcaRuntimeClient {
         let body = Components.Schemas.ChatRuntimeTurnCreate(
             activeTicketId: request.activeTicketID,
             asyncResponse: request.asyncResponse,
+            clientBuild: request.clientBuild,
+            clientInstanceId: request.clientInstanceID,
+            clientVersion: request.clientVersion,
             content: request.content,
             conversationId: request.conversationID,
             deliveryMode: deliveryMode,
+            deviceRegistrationRef: request.deviceRegistrationRef,
             history: history,
             idempotencyKey: request.idempotencyKey,
             sourceSurface: sourceSurface,
@@ -1061,6 +1319,7 @@ public actor OrcaRuntimeClient {
         try Self.validateRuntimeTurn(response.turn, expectedTurnID: response.turn.turnId)
         guard response.contractVersion == .orca_chatRuntime_turnSubmission_v1,
               response.agentKey == request.agentSlug.lowercased(),
+              response.turn.clientProvenance.sourceSurface.rawValue == request.sourceSurface,
               response.turn.idempotencyKey == request.idempotencyKey,
               response.turn.conversationId.isEmpty == false,
               response.turn.messageId.isEmpty == false,

@@ -50,8 +50,25 @@ struct ConversationView: View {
             if let turn = model.selectedRuntimeTurn {
                 Label(turn.state.rawValue.capitalized, systemImage: "point.topleft.down.curvedto.point.bottomright.up")
                     .font(.caption)
-                    .foregroundStyle(turn.terminalOutcome == nil ? Color.accentColor : Color.secondary)
-                    .help("Latest Flight Recorder turn")
+                    .foregroundStyle(
+                        turn.recovery.isStuck
+                            ? Color.orange
+                            : (turn.terminalOutcome == nil ? Color.accentColor : Color.secondary)
+                    )
+                    .help(
+                        turn.recovery.isStuck
+                            ? "Latest turn needs recovery review"
+                            : "Latest Flight Recorder turn"
+                    )
+                if let update = model.selectedRuntimeReconciliation {
+                    Label(
+                        update.cursorState.rawValue.replacingOccurrences(of: "_", with: " ").capitalized,
+                        systemImage: "arrow.triangle.2.circlepath"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .help("ORCA reconciliation cursor state")
+                }
             }
 
             Button {

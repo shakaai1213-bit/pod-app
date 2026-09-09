@@ -13,6 +13,28 @@
     "host_id": "conformance-host",
     "execution_mode": "hybrid"
   },
+  "client_provenance": {
+    "source_surface": "pod",
+    "client_version": "1.0.0",
+    "client_build": "100",
+    "client_instance_id": "conformance-device",
+    "device_registration_ref": "orca://devices/conformance-device",
+    "ingress_event_id": "70000000-0000-4000-8000-000000000001",
+    "received_at": "2026-08-09T12:00:00Z"
+  },
+  "ordering": {
+    "authority": "orca",
+    "sequence_source": "work_events.seq",
+    "fallback_order": "occurred_at_event_id",
+    "clock_skew_tolerant": true
+  },
+  "recovery": {
+    "status": "terminal",
+    "is_stuck": false,
+    "observed_at": "2026-08-09T12:00:01Z",
+    "last_progress_at": "2026-08-09T12:00:00Z",
+    "reason": "turn is terminal"
+  },
   "resources": {
     "allowed_tool_ids": [
       "conformance.read"
@@ -33,6 +55,9 @@
     "network_access": "denied"
   },
   "latest_cursor": "conformance-turn:4",
+  "work_runs": [],
+  "work_runs_truncated": false,
+  "work_runs_limit": 100,
   "events": [
     {
       "event_id": "60000000-0000-4000-8000-000000000001",

@@ -74,6 +74,27 @@ public protocol APIProtocol: Sendable {
     /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/turns/{turn_id}`.
     /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/turns/{turn_id}/get(getRuntimeTurn)`.
     func getRuntimeTurn(_ input: Operations.GetRuntimeTurn.Input) async throws -> Operations.GetRuntimeTurn.Output
+    /// Reconcile one ORCA Chat Runtime turn
+    ///
+    /// Returns the authoritative turn snapshot and events newer than the provided cursor. Unknown or cross-turn cursors return reset_required with a complete snapshot instead of silently dropping state.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/turns/{turn_id}/reconcile`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/turns/{turn_id}/reconcile/get(reconcileRuntimeTurn)`.
+    func reconcileRuntimeTurn(_ input: Operations.ReconcileRuntimeTurn.Input) async throws -> Operations.ReconcileRuntimeTurn.Output
+    /// Stream one ORCA Chat Runtime turn
+    ///
+    /// Streams the same authoritative reconciliation envelope as REST polling. Clients may resume with after_cursor or Last-Event-ID and fall back to the reconcile route without changing cursor semantics.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/turns/{turn_id}/stream`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/turns/{turn_id}/stream/get(streamRuntimeTurn)`.
+    func streamRuntimeTurn(_ input: Operations.StreamRuntimeTurn.Input) async throws -> Operations.StreamRuntimeTurn.Output
+    /// Scan recent ORCA Chat Runtime liveness
+    ///
+    /// Performs a bounded, read-only scan for turns or nested AgentRuns that have exceeded the same server thresholds shown to Pod and Console.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/watchdog/stale-turns`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/watchdog/stale-turns/get(getRuntimeStaleTurns)`.
+    func getRuntimeStaleTurns(_ input: Operations.GetRuntimeStaleTurns.Input) async throws -> Operations.GetRuntimeStaleTurns.Output
     /// List Messages
     ///
     /// List messages in a channel.
@@ -217,6 +238,55 @@ extension APIProtocol {
     ) async throws -> Operations.GetRuntimeTurn.Output {
         try await getRuntimeTurn(Operations.GetRuntimeTurn.Input(
             path: path,
+            headers: headers
+        ))
+    }
+    /// Reconcile one ORCA Chat Runtime turn
+    ///
+    /// Returns the authoritative turn snapshot and events newer than the provided cursor. Unknown or cross-turn cursors return reset_required with a complete snapshot instead of silently dropping state.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/turns/{turn_id}/reconcile`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/turns/{turn_id}/reconcile/get(reconcileRuntimeTurn)`.
+    public func reconcileRuntimeTurn(
+        path: Operations.ReconcileRuntimeTurn.Input.Path,
+        query: Operations.ReconcileRuntimeTurn.Input.Query = .init(),
+        headers: Operations.ReconcileRuntimeTurn.Input.Headers = .init()
+    ) async throws -> Operations.ReconcileRuntimeTurn.Output {
+        try await reconcileRuntimeTurn(Operations.ReconcileRuntimeTurn.Input(
+            path: path,
+            query: query,
+            headers: headers
+        ))
+    }
+    /// Stream one ORCA Chat Runtime turn
+    ///
+    /// Streams the same authoritative reconciliation envelope as REST polling. Clients may resume with after_cursor or Last-Event-ID and fall back to the reconcile route without changing cursor semantics.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/turns/{turn_id}/stream`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/turns/{turn_id}/stream/get(streamRuntimeTurn)`.
+    public func streamRuntimeTurn(
+        path: Operations.StreamRuntimeTurn.Input.Path,
+        query: Operations.StreamRuntimeTurn.Input.Query = .init(),
+        headers: Operations.StreamRuntimeTurn.Input.Headers = .init()
+    ) async throws -> Operations.StreamRuntimeTurn.Output {
+        try await streamRuntimeTurn(Operations.StreamRuntimeTurn.Input(
+            path: path,
+            query: query,
+            headers: headers
+        ))
+    }
+    /// Scan recent ORCA Chat Runtime liveness
+    ///
+    /// Performs a bounded, read-only scan for turns or nested AgentRuns that have exceeded the same server thresholds shown to Pod and Console.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/watchdog/stale-turns`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/watchdog/stale-turns/get(getRuntimeStaleTurns)`.
+    public func getRuntimeStaleTurns(
+        query: Operations.GetRuntimeStaleTurns.Input.Query = .init(),
+        headers: Operations.GetRuntimeStaleTurns.Input.Headers = .init()
+    ) async throws -> Operations.GetRuntimeStaleTurns.Output {
+        try await getRuntimeStaleTurns(Operations.GetRuntimeStaleTurns.Input(
+            query: query,
             headers: headers
         ))
     }
@@ -1364,6 +1434,68 @@ public enum Components {
                 case version
             }
         }
+        /// Non-secret identity of the client that first admitted the turn.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ChatRuntimeClientProvenanceRead`.
+        public struct ChatRuntimeClientProvenanceRead: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeClientProvenanceRead/client_build`.
+            public var clientBuild: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeClientProvenanceRead/client_instance_id`.
+            public var clientInstanceId: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeClientProvenanceRead/client_version`.
+            public var clientVersion: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeClientProvenanceRead/device_registration_ref`.
+            public var deviceRegistrationRef: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeClientProvenanceRead/ingress_event_id`.
+            public var ingressEventId: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeClientProvenanceRead/received_at`.
+            public var receivedAt: Foundation.Date?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeClientProvenanceRead/source_surface`.
+            @frozen public enum SourceSurfacePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case pod = "pod"
+                case console = "console"
+                case imessage = "imessage"
+                case systemAdapter = "system_adapter"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeClientProvenanceRead/source_surface`.
+            public var sourceSurface: Components.Schemas.ChatRuntimeClientProvenanceRead.SourceSurfacePayload
+            /// Creates a new `ChatRuntimeClientProvenanceRead`.
+            ///
+            /// - Parameters:
+            ///   - clientBuild:
+            ///   - clientInstanceId:
+            ///   - clientVersion:
+            ///   - deviceRegistrationRef:
+            ///   - ingressEventId:
+            ///   - receivedAt:
+            ///   - sourceSurface:
+            public init(
+                clientBuild: Swift.String? = nil,
+                clientInstanceId: Swift.String? = nil,
+                clientVersion: Swift.String? = nil,
+                deviceRegistrationRef: Swift.String? = nil,
+                ingressEventId: Swift.String? = nil,
+                receivedAt: Foundation.Date? = nil,
+                sourceSurface: Components.Schemas.ChatRuntimeClientProvenanceRead.SourceSurfacePayload
+            ) {
+                self.clientBuild = clientBuild
+                self.clientInstanceId = clientInstanceId
+                self.clientVersion = clientVersion
+                self.deviceRegistrationRef = deviceRegistrationRef
+                self.ingressEventId = ingressEventId
+                self.receivedAt = receivedAt
+                self.sourceSurface = sourceSurface
+            }
+            public enum CodingKeys: String, CodingKey {
+                case clientBuild = "client_build"
+                case clientInstanceId = "client_instance_id"
+                case clientVersion = "client_version"
+                case deviceRegistrationRef = "device_registration_ref"
+                case ingressEventId = "ingress_event_id"
+                case receivedAt = "received_at"
+                case sourceSurface = "source_surface"
+            }
+        }
         /// - Remark: Generated from `#/components/schemas/ChatRuntimeCompatibilityRouteRead`.
         public struct ChatRuntimeCompatibilityRouteRead: Codable, Hashable, Sendable {
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeCompatibilityRouteRead/current_route`.
@@ -1515,6 +1647,15 @@ public enum Components {
                 case turn
             }
         }
+        /// How ORCA reconciled a client cursor against current turn truth.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ChatRuntimeCursorState`.
+        @frozen public enum ChatRuntimeCursorState: String, Codable, Hashable, Sendable, CaseIterable {
+            case initial = "initial"
+            case current = "current"
+            case advanced = "advanced"
+            case resetRequired = "reset_required"
+        }
         /// Cross-provider events that form one resumable turn timeline.
         ///
         /// - Remark: Generated from `#/components/schemas/ChatRuntimeEventType`.
@@ -1589,6 +1730,55 @@ public enum Components {
             public enum CodingKeys: String, CodingKey {
                 case code
                 case description
+            }
+        }
+        /// Server ordering contract used across retries, reconnects, and clock skew.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ChatRuntimeOrderingRead`.
+        public struct ChatRuntimeOrderingRead: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeOrderingRead/authority`.
+            @frozen public enum AuthorityPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case orca = "orca"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeOrderingRead/authority`.
+            public var authority: Components.Schemas.ChatRuntimeOrderingRead.AuthorityPayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeOrderingRead/clock_skew_tolerant`.
+            public var clockSkewTolerant: Swift.Bool?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeOrderingRead/fallback_order`.
+            @frozen public enum FallbackOrderPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case occurredAtEventId = "occurred_at_event_id"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeOrderingRead/fallback_order`.
+            public var fallbackOrder: Components.Schemas.ChatRuntimeOrderingRead.FallbackOrderPayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeOrderingRead/sequence_source`.
+            @frozen public enum SequenceSourcePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case workEvents_seq = "work_events.seq"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeOrderingRead/sequence_source`.
+            public var sequenceSource: Components.Schemas.ChatRuntimeOrderingRead.SequenceSourcePayload?
+            /// Creates a new `ChatRuntimeOrderingRead`.
+            ///
+            /// - Parameters:
+            ///   - authority:
+            ///   - clockSkewTolerant:
+            ///   - fallbackOrder:
+            ///   - sequenceSource:
+            public init(
+                authority: Components.Schemas.ChatRuntimeOrderingRead.AuthorityPayload? = nil,
+                clockSkewTolerant: Swift.Bool? = nil,
+                fallbackOrder: Components.Schemas.ChatRuntimeOrderingRead.FallbackOrderPayload? = nil,
+                sequenceSource: Components.Schemas.ChatRuntimeOrderingRead.SequenceSourcePayload? = nil
+            ) {
+                self.authority = authority
+                self.clockSkewTolerant = clockSkewTolerant
+                self.fallbackOrder = fallbackOrder
+                self.sequenceSource = sequenceSource
+            }
+            public enum CodingKeys: String, CodingKey {
+                case authority
+                case clockSkewTolerant = "clock_skew_tolerant"
+                case fallbackOrder = "fallback_order"
+                case sequenceSource = "sequence_source"
             }
         }
         /// Canonical client-visible progress states for one runtime turn.
@@ -2055,6 +2245,74 @@ public enum Components {
                 ])
             }
         }
+        /// Current stale-turn verdict; it recommends recovery but does not mutate.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ChatRuntimeRecoveryRead`.
+        public struct ChatRuntimeRecoveryRead: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeRecoveryRead/is_stuck`.
+            public var isStuck: Swift.Bool
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeRecoveryRead/last_progress_at`.
+            public var lastProgressAt: Foundation.Date
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeRecoveryRead/observed_at`.
+            public var observedAt: Foundation.Date
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeRecoveryRead/reason`.
+            public var reason: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeRecoveryRead/recommended_action`.
+            public var recommendedAction: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeRecoveryRead/retry_owner`.
+            public var retryOwner: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeRecoveryRead/status`.
+            @frozen public enum StatusPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case healthy = "healthy"
+                case waiting = "waiting"
+                case stuck = "stuck"
+                case terminal = "terminal"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeRecoveryRead/status`.
+            public var status: Components.Schemas.ChatRuntimeRecoveryRead.StatusPayload
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeRecoveryRead/threshold_seconds`.
+            public var thresholdSeconds: Swift.Int?
+            /// Creates a new `ChatRuntimeRecoveryRead`.
+            ///
+            /// - Parameters:
+            ///   - isStuck:
+            ///   - lastProgressAt:
+            ///   - observedAt:
+            ///   - reason:
+            ///   - recommendedAction:
+            ///   - retryOwner:
+            ///   - status:
+            ///   - thresholdSeconds:
+            public init(
+                isStuck: Swift.Bool,
+                lastProgressAt: Foundation.Date,
+                observedAt: Foundation.Date,
+                reason: Swift.String? = nil,
+                recommendedAction: Swift.String? = nil,
+                retryOwner: Swift.String? = nil,
+                status: Components.Schemas.ChatRuntimeRecoveryRead.StatusPayload,
+                thresholdSeconds: Swift.Int? = nil
+            ) {
+                self.isStuck = isStuck
+                self.lastProgressAt = lastProgressAt
+                self.observedAt = observedAt
+                self.reason = reason
+                self.recommendedAction = recommendedAction
+                self.retryOwner = retryOwner
+                self.status = status
+                self.thresholdSeconds = thresholdSeconds
+            }
+            public enum CodingKeys: String, CodingKey {
+                case isStuck = "is_stuck"
+                case lastProgressAt = "last_progress_at"
+                case observedAt = "observed_at"
+                case reason
+                case recommendedAction = "recommended_action"
+                case retryOwner = "retry_owner"
+                case status
+                case thresholdSeconds = "threshold_seconds"
+            }
+        }
         /// Governed execution limits passed to any selected provider adapter.
         ///
         /// - Remark: Generated from `#/components/schemas/ChatRuntimeResourceEnvelope`.
@@ -2408,6 +2666,12 @@ public enum Components {
             public var activeTicketId: Swift.String?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnCreate/async_response`.
             public var asyncResponse: Swift.Bool?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnCreate/client_build`.
+            public var clientBuild: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnCreate/client_instance_id`.
+            public var clientInstanceId: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnCreate/client_version`.
+            public var clientVersion: Swift.String?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnCreate/content`.
             public var content: Swift.String
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnCreate/conversation_id`.
@@ -2420,6 +2684,8 @@ public enum Components {
             }
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnCreate/delivery_mode`.
             public var deliveryMode: Components.Schemas.ChatRuntimeTurnCreate.DeliveryModePayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnCreate/device_registration_ref`.
+            public var deviceRegistrationRef: Swift.String?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnCreate/history`.
             public var history: [Components.Schemas.ChatRuntimeHistoryMessage]?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnCreate/idempotency_key`.
@@ -2449,9 +2715,13 @@ public enum Components {
             /// - Parameters:
             ///   - activeTicketId:
             ///   - asyncResponse:
+            ///   - clientBuild:
+            ///   - clientInstanceId:
+            ///   - clientVersion:
             ///   - content:
             ///   - conversationId:
             ///   - deliveryMode:
+            ///   - deviceRegistrationRef:
             ///   - history:
             ///   - idempotencyKey:
             ///   - originChatId:
@@ -2464,9 +2734,13 @@ public enum Components {
             public init(
                 activeTicketId: Swift.String? = nil,
                 asyncResponse: Swift.Bool? = nil,
+                clientBuild: Swift.String? = nil,
+                clientInstanceId: Swift.String? = nil,
+                clientVersion: Swift.String? = nil,
                 content: Swift.String,
                 conversationId: Swift.String? = nil,
                 deliveryMode: Components.Schemas.ChatRuntimeTurnCreate.DeliveryModePayload? = nil,
+                deviceRegistrationRef: Swift.String? = nil,
                 history: [Components.Schemas.ChatRuntimeHistoryMessage]? = nil,
                 idempotencyKey: Swift.String,
                 originChatId: Swift.Int? = nil,
@@ -2479,9 +2753,13 @@ public enum Components {
             ) {
                 self.activeTicketId = activeTicketId
                 self.asyncResponse = asyncResponse
+                self.clientBuild = clientBuild
+                self.clientInstanceId = clientInstanceId
+                self.clientVersion = clientVersion
                 self.content = content
                 self.conversationId = conversationId
                 self.deliveryMode = deliveryMode
+                self.deviceRegistrationRef = deviceRegistrationRef
                 self.history = history
                 self.idempotencyKey = idempotencyKey
                 self.originChatId = originChatId
@@ -2495,9 +2773,13 @@ public enum Components {
             public enum CodingKeys: String, CodingKey {
                 case activeTicketId = "active_ticket_id"
                 case asyncResponse = "async_response"
+                case clientBuild = "client_build"
+                case clientInstanceId = "client_instance_id"
+                case clientVersion = "client_version"
                 case content
                 case conversationId = "conversation_id"
                 case deliveryMode = "delivery_mode"
+                case deviceRegistrationRef = "device_registration_ref"
                 case history
                 case idempotencyKey = "idempotency_key"
                 case originChatId = "origin_chat_id"
@@ -2517,6 +2799,8 @@ public enum Components {
             public var adapter: Components.Schemas.ChatRuntimeAdapterRef?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnRead/agent_id`.
             public var agentId: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnRead/client_provenance`.
+            public var clientProvenance: Components.Schemas.ChatRuntimeClientProvenanceRead
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnRead/conversation_id`.
             public var conversationId: Swift.String
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnRead/events`.
@@ -2527,6 +2811,10 @@ public enum Components {
             public var latestCursor: Swift.String?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnRead/message_id`.
             public var messageId: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnRead/ordering`.
+            public var ordering: Components.Schemas.ChatRuntimeOrderingRead
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnRead/recovery`.
+            public var recovery: Components.Schemas.ChatRuntimeRecoveryRead
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnRead/resources`.
             public var resources: Components.Schemas.ChatRuntimeResourceEnvelope
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnRead/runtime_session_id`.
@@ -2537,60 +2825,167 @@ public enum Components {
             public var terminalOutcome: Components.Schemas.ChatRuntimeTerminalOutcomeRead?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnRead/turn_id`.
             public var turnId: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnRead/work_runs`.
+            public var workRuns: [Components.Schemas.ChatRuntimeWorkRunRead]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnRead/work_runs_limit`.
+            public var workRunsLimit: Swift.Int?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnRead/work_runs_truncated`.
+            public var workRunsTruncated: Swift.Bool?
             /// Creates a new `ChatRuntimeTurnRead`.
             ///
             /// - Parameters:
             ///   - adapter:
             ///   - agentId:
+            ///   - clientProvenance:
             ///   - conversationId:
             ///   - events:
             ///   - idempotencyKey:
             ///   - latestCursor:
             ///   - messageId:
+            ///   - ordering:
+            ///   - recovery:
             ///   - resources:
             ///   - runtimeSessionId:
             ///   - state:
             ///   - terminalOutcome:
             ///   - turnId:
+            ///   - workRuns:
+            ///   - workRunsLimit:
+            ///   - workRunsTruncated:
             public init(
                 adapter: Components.Schemas.ChatRuntimeAdapterRef? = nil,
                 agentId: Swift.String,
+                clientProvenance: Components.Schemas.ChatRuntimeClientProvenanceRead,
                 conversationId: Swift.String,
                 events: [Components.Schemas.ChatRuntimeTimelineEventRead]? = nil,
                 idempotencyKey: Swift.String,
                 latestCursor: Swift.String? = nil,
                 messageId: Swift.String,
+                ordering: Components.Schemas.ChatRuntimeOrderingRead,
+                recovery: Components.Schemas.ChatRuntimeRecoveryRead,
                 resources: Components.Schemas.ChatRuntimeResourceEnvelope,
                 runtimeSessionId: Swift.String? = nil,
                 state: Components.Schemas.ChatRuntimeProgressState,
                 terminalOutcome: Components.Schemas.ChatRuntimeTerminalOutcomeRead? = nil,
-                turnId: Swift.String
+                turnId: Swift.String,
+                workRuns: [Components.Schemas.ChatRuntimeWorkRunRead]? = nil,
+                workRunsLimit: Swift.Int? = nil,
+                workRunsTruncated: Swift.Bool? = nil
             ) {
                 self.adapter = adapter
                 self.agentId = agentId
+                self.clientProvenance = clientProvenance
                 self.conversationId = conversationId
                 self.events = events
                 self.idempotencyKey = idempotencyKey
                 self.latestCursor = latestCursor
                 self.messageId = messageId
+                self.ordering = ordering
+                self.recovery = recovery
                 self.resources = resources
                 self.runtimeSessionId = runtimeSessionId
                 self.state = state
                 self.terminalOutcome = terminalOutcome
                 self.turnId = turnId
+                self.workRuns = workRuns
+                self.workRunsLimit = workRunsLimit
+                self.workRunsTruncated = workRunsTruncated
             }
             public enum CodingKeys: String, CodingKey {
                 case adapter
                 case agentId = "agent_id"
+                case clientProvenance = "client_provenance"
                 case conversationId = "conversation_id"
                 case events
                 case idempotencyKey = "idempotency_key"
                 case latestCursor = "latest_cursor"
                 case messageId = "message_id"
+                case ordering
+                case recovery
                 case resources
                 case runtimeSessionId = "runtime_session_id"
                 case state
                 case terminalOutcome = "terminal_outcome"
+                case turnId = "turn_id"
+                case workRuns = "work_runs"
+                case workRunsLimit = "work_runs_limit"
+                case workRunsTruncated = "work_runs_truncated"
+            }
+        }
+        /// Authoritative full snapshot plus the events newer than a client cursor.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnReconciliationRead`.
+        public struct ChatRuntimeTurnReconciliationRead: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnReconciliationRead/changed`.
+            public var changed: Swift.Bool
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnReconciliationRead/contract_version`.
+            @frozen public enum ContractVersionPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case orca_chatRuntime_turnReconciliation_v1 = "orca.chat-runtime.turn-reconciliation.v1"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnReconciliationRead/contract_version`.
+            public var contractVersion: Components.Schemas.ChatRuntimeTurnReconciliationRead.ContractVersionPayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnReconciliationRead/cursor_state`.
+            public var cursorState: Components.Schemas.ChatRuntimeCursorState
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnReconciliationRead/events_after_cursor`.
+            public var eventsAfterCursor: [Components.Schemas.ChatRuntimeTimelineEventRead]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnReconciliationRead/poll_after_seconds`.
+            public var pollAfterSeconds: Swift.Int?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnReconciliationRead/reconciliation_cursor`.
+            public var reconciliationCursor: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnReconciliationRead/requested_cursor`.
+            public var requestedCursor: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnReconciliationRead/terminal`.
+            public var terminal: Swift.Bool
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnReconciliationRead/turn`.
+            public var turn: Components.Schemas.ChatRuntimeTurnRead
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnReconciliationRead/turn_id`.
+            public var turnId: Swift.String
+            /// Creates a new `ChatRuntimeTurnReconciliationRead`.
+            ///
+            /// - Parameters:
+            ///   - changed:
+            ///   - contractVersion:
+            ///   - cursorState:
+            ///   - eventsAfterCursor:
+            ///   - pollAfterSeconds:
+            ///   - reconciliationCursor:
+            ///   - requestedCursor:
+            ///   - terminal:
+            ///   - turn:
+            ///   - turnId:
+            public init(
+                changed: Swift.Bool,
+                contractVersion: Components.Schemas.ChatRuntimeTurnReconciliationRead.ContractVersionPayload? = nil,
+                cursorState: Components.Schemas.ChatRuntimeCursorState,
+                eventsAfterCursor: [Components.Schemas.ChatRuntimeTimelineEventRead]? = nil,
+                pollAfterSeconds: Swift.Int? = nil,
+                reconciliationCursor: Swift.String,
+                requestedCursor: Swift.String? = nil,
+                terminal: Swift.Bool,
+                turn: Components.Schemas.ChatRuntimeTurnRead,
+                turnId: Swift.String
+            ) {
+                self.changed = changed
+                self.contractVersion = contractVersion
+                self.cursorState = cursorState
+                self.eventsAfterCursor = eventsAfterCursor
+                self.pollAfterSeconds = pollAfterSeconds
+                self.reconciliationCursor = reconciliationCursor
+                self.requestedCursor = requestedCursor
+                self.terminal = terminal
+                self.turn = turn
+                self.turnId = turnId
+            }
+            public enum CodingKeys: String, CodingKey {
+                case changed
+                case contractVersion = "contract_version"
+                case cursorState = "cursor_state"
+                case eventsAfterCursor = "events_after_cursor"
+                case pollAfterSeconds = "poll_after_seconds"
+                case reconciliationCursor = "reconciliation_cursor"
+                case requestedCursor = "requested_cursor"
+                case terminal
+                case turn
                 case turnId = "turn_id"
             }
         }
@@ -2705,6 +3100,147 @@ public enum Components {
                 case traceId = "trace_id"
                 case triageId = "triage_id"
                 case turn
+            }
+        }
+        /// Pointer-safe stale turn or nested run surfaced for support review.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ChatRuntimeWatchdogItemRead`.
+        public struct ChatRuntimeWatchdogItemRead: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWatchdogItemRead/agent_id`.
+            public var agentId: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWatchdogItemRead/conversation_id`.
+            public var conversationId: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWatchdogItemRead/recovery`.
+            public var recovery: Components.Schemas.ChatRuntimeRecoveryRead
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWatchdogItemRead/source_ref`.
+            public var sourceRef: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWatchdogItemRead/state`.
+            public var state: Components.Schemas.ChatRuntimeProgressState
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWatchdogItemRead/stuck_run_ids`.
+            public var stuckRunIds: [Swift.String]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWatchdogItemRead/turn_id`.
+            public var turnId: Swift.String
+            /// Creates a new `ChatRuntimeWatchdogItemRead`.
+            ///
+            /// - Parameters:
+            ///   - agentId:
+            ///   - conversationId:
+            ///   - recovery:
+            ///   - sourceRef:
+            ///   - state:
+            ///   - stuckRunIds:
+            ///   - turnId:
+            public init(
+                agentId: Swift.String,
+                conversationId: Swift.String,
+                recovery: Components.Schemas.ChatRuntimeRecoveryRead,
+                sourceRef: Swift.String,
+                state: Components.Schemas.ChatRuntimeProgressState,
+                stuckRunIds: [Swift.String]? = nil,
+                turnId: Swift.String
+            ) {
+                self.agentId = agentId
+                self.conversationId = conversationId
+                self.recovery = recovery
+                self.sourceRef = sourceRef
+                self.state = state
+                self.stuckRunIds = stuckRunIds
+                self.turnId = turnId
+            }
+            public enum CodingKeys: String, CodingKey {
+                case agentId = "agent_id"
+                case conversationId = "conversation_id"
+                case recovery
+                case sourceRef = "source_ref"
+                case state
+                case stuckRunIds = "stuck_run_ids"
+                case turnId = "turn_id"
+            }
+        }
+        /// Bounded read-only scan of recent direct-chat liveness.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ChatRuntimeWatchdogRead`.
+        public struct ChatRuntimeWatchdogRead: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWatchdogRead/authority`.
+            @frozen public enum AuthorityPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case orca = "orca"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWatchdogRead/authority`.
+            public var authority: Components.Schemas.ChatRuntimeWatchdogRead.AuthorityPayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWatchdogRead/contract_version`.
+            @frozen public enum ContractVersionPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case orca_chatRuntime_watchdog_v1 = "orca.chat-runtime.watchdog.v1"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWatchdogRead/contract_version`.
+            public var contractVersion: Components.Schemas.ChatRuntimeWatchdogRead.ContractVersionPayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWatchdogRead/items`.
+            public var items: [Components.Schemas.ChatRuntimeWatchdogItemRead]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWatchdogRead/lookback_hours`.
+            public var lookbackHours: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWatchdogRead/mutation_performed`.
+            public var mutationPerformed: Swift.Bool?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWatchdogRead/observed_at`.
+            public var observedAt: Foundation.Date
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWatchdogRead/scanned_turns`.
+            public var scannedTurns: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWatchdogRead/status`.
+            @frozen public enum StatusPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case ok = "ok"
+                case warning = "warning"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWatchdogRead/status`.
+            public var status: Components.Schemas.ChatRuntimeWatchdogRead.StatusPayload
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWatchdogRead/stuck_runs`.
+            public var stuckRuns: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWatchdogRead/stuck_turns`.
+            public var stuckTurns: Swift.Int
+            /// Creates a new `ChatRuntimeWatchdogRead`.
+            ///
+            /// - Parameters:
+            ///   - authority:
+            ///   - contractVersion:
+            ///   - items:
+            ///   - lookbackHours:
+            ///   - mutationPerformed:
+            ///   - observedAt:
+            ///   - scannedTurns:
+            ///   - status:
+            ///   - stuckRuns:
+            ///   - stuckTurns:
+            public init(
+                authority: Components.Schemas.ChatRuntimeWatchdogRead.AuthorityPayload? = nil,
+                contractVersion: Components.Schemas.ChatRuntimeWatchdogRead.ContractVersionPayload? = nil,
+                items: [Components.Schemas.ChatRuntimeWatchdogItemRead]? = nil,
+                lookbackHours: Swift.Int,
+                mutationPerformed: Swift.Bool? = nil,
+                observedAt: Foundation.Date,
+                scannedTurns: Swift.Int,
+                status: Components.Schemas.ChatRuntimeWatchdogRead.StatusPayload,
+                stuckRuns: Swift.Int,
+                stuckTurns: Swift.Int
+            ) {
+                self.authority = authority
+                self.contractVersion = contractVersion
+                self.items = items
+                self.lookbackHours = lookbackHours
+                self.mutationPerformed = mutationPerformed
+                self.observedAt = observedAt
+                self.scannedTurns = scannedTurns
+                self.status = status
+                self.stuckRuns = stuckRuns
+                self.stuckTurns = stuckTurns
+            }
+            public enum CodingKeys: String, CodingKey {
+                case authority
+                case contractVersion = "contract_version"
+                case items
+                case lookbackHours = "lookback_hours"
+                case mutationPerformed = "mutation_performed"
+                case observedAt = "observed_at"
+                case scannedTurns = "scanned_turns"
+                case status
+                case stuckRuns = "stuck_runs"
+                case stuckTurns = "stuck_turns"
             }
         }
         /// One pending first-class approval with canonical registry authority.
@@ -3267,6 +3803,127 @@ public enum Components {
                 case workBucket = "work_bucket"
                 case workId = "work_id"
                 case workKind = "work_kind"
+            }
+        }
+        /// Evidence-backed current state for a provider, tool, or bounded worker run.
+        ///
+        /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkRunRead`.
+        public struct ChatRuntimeWorkRunRead: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkRunRead/agent_id`.
+            public var agentId: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkRunRead/child_run_ids`.
+            public var childRunIds: [Swift.String]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkRunRead/completed_at`.
+            public var completedAt: Foundation.Date?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkRunRead/evidence_refs`.
+            public var evidenceRefs: [Swift.String]?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkRunRead/is_stuck`.
+            public var isStuck: Swift.Bool
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkRunRead/is_terminal`.
+            public var isTerminal: Swift.Bool
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkRunRead/last_activity_at`.
+            public var lastActivityAt: Foundation.Date
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkRunRead/parent_run_id`.
+            public var parentRunId: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkRunRead/recommended_action`.
+            public var recommendedAction: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkRunRead/retry_owner`.
+            public var retryOwner: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkRunRead/run_id`.
+            public var runId: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkRunRead/run_type`.
+            public var runType: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkRunRead/source_ref`.
+            public var sourceRef: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkRunRead/started_at`.
+            public var startedAt: Foundation.Date?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkRunRead/status`.
+            public var status: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkRunRead/stuck_reason`.
+            public var stuckReason: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkRunRead/tool_policy`.
+            public var toolPolicy: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkRunRead/worker_lane`.
+            public var workerLane: Swift.String?
+            /// Creates a new `ChatRuntimeWorkRunRead`.
+            ///
+            /// - Parameters:
+            ///   - agentId:
+            ///   - childRunIds:
+            ///   - completedAt:
+            ///   - evidenceRefs:
+            ///   - isStuck:
+            ///   - isTerminal:
+            ///   - lastActivityAt:
+            ///   - parentRunId:
+            ///   - recommendedAction:
+            ///   - retryOwner:
+            ///   - runId:
+            ///   - runType:
+            ///   - sourceRef:
+            ///   - startedAt:
+            ///   - status:
+            ///   - stuckReason:
+            ///   - toolPolicy:
+            ///   - workerLane:
+            public init(
+                agentId: Swift.String? = nil,
+                childRunIds: [Swift.String]? = nil,
+                completedAt: Foundation.Date? = nil,
+                evidenceRefs: [Swift.String]? = nil,
+                isStuck: Swift.Bool,
+                isTerminal: Swift.Bool,
+                lastActivityAt: Foundation.Date,
+                parentRunId: Swift.String? = nil,
+                recommendedAction: Swift.String? = nil,
+                retryOwner: Swift.String? = nil,
+                runId: Swift.String,
+                runType: Swift.String,
+                sourceRef: Swift.String,
+                startedAt: Foundation.Date? = nil,
+                status: Swift.String,
+                stuckReason: Swift.String? = nil,
+                toolPolicy: Swift.String? = nil,
+                workerLane: Swift.String? = nil
+            ) {
+                self.agentId = agentId
+                self.childRunIds = childRunIds
+                self.completedAt = completedAt
+                self.evidenceRefs = evidenceRefs
+                self.isStuck = isStuck
+                self.isTerminal = isTerminal
+                self.lastActivityAt = lastActivityAt
+                self.parentRunId = parentRunId
+                self.recommendedAction = recommendedAction
+                self.retryOwner = retryOwner
+                self.runId = runId
+                self.runType = runType
+                self.sourceRef = sourceRef
+                self.startedAt = startedAt
+                self.status = status
+                self.stuckReason = stuckReason
+                self.toolPolicy = toolPolicy
+                self.workerLane = workerLane
+            }
+            public enum CodingKeys: String, CodingKey {
+                case agentId = "agent_id"
+                case childRunIds = "child_run_ids"
+                case completedAt = "completed_at"
+                case evidenceRefs = "evidence_refs"
+                case isStuck = "is_stuck"
+                case isTerminal = "is_terminal"
+                case lastActivityAt = "last_activity_at"
+                case parentRunId = "parent_run_id"
+                case recommendedAction = "recommended_action"
+                case retryOwner = "retry_owner"
+                case runId = "run_id"
+                case runType = "run_type"
+                case sourceRef = "source_ref"
+                case startedAt = "started_at"
+                case status
+                case stuckReason = "stuck_reason"
+                case toolPolicy = "tool_policy"
+                case workerLane = "worker_lane"
             }
         }
         /// - Remark: Generated from `#/components/schemas/ConversationMemoryApplyRequest`.
@@ -3870,10 +4527,18 @@ public enum Components {
             public var channelOfOrigin: Swift.String?
             /// - Remark: Generated from `#/components/schemas/DirectAgentChatRequest/chat_thread_id`.
             public var chatThreadId: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/DirectAgentChatRequest/client_build`.
+            public var clientBuild: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/DirectAgentChatRequest/client_instance_id`.
+            public var clientInstanceId: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/DirectAgentChatRequest/client_version`.
+            public var clientVersion: Swift.String?
             /// - Remark: Generated from `#/components/schemas/DirectAgentChatRequest/content`.
             public var content: Swift.String
             /// - Remark: Generated from `#/components/schemas/DirectAgentChatRequest/delivery_mode`.
             public var deliveryMode: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/DirectAgentChatRequest/device_registration_ref`.
+            public var deviceRegistrationRef: Swift.String?
             /// - Remark: Generated from `#/components/schemas/DirectAgentChatRequest/fallback_after_seconds`.
             public var fallbackAfterSeconds: Swift.Int?
             /// - Remark: Generated from `#/components/schemas/DirectAgentChatRequest/fallback_reason`.
@@ -3903,8 +4568,12 @@ public enum Components {
             ///   - asyncResponse:
             ///   - channelOfOrigin:
             ///   - chatThreadId:
+            ///   - clientBuild:
+            ///   - clientInstanceId:
+            ///   - clientVersion:
             ///   - content:
             ///   - deliveryMode:
+            ///   - deviceRegistrationRef:
             ///   - fallbackAfterSeconds:
             ///   - fallbackReason:
             ///   - history:
@@ -3921,8 +4590,12 @@ public enum Components {
                 asyncResponse: Swift.Bool? = nil,
                 channelOfOrigin: Swift.String? = nil,
                 chatThreadId: Swift.String? = nil,
+                clientBuild: Swift.String? = nil,
+                clientInstanceId: Swift.String? = nil,
+                clientVersion: Swift.String? = nil,
                 content: Swift.String,
                 deliveryMode: Swift.String? = nil,
+                deviceRegistrationRef: Swift.String? = nil,
                 fallbackAfterSeconds: Swift.Int? = nil,
                 fallbackReason: Swift.String? = nil,
                 history: [Components.Schemas.DirectAgentChatMessage]? = nil,
@@ -3939,8 +4612,12 @@ public enum Components {
                 self.asyncResponse = asyncResponse
                 self.channelOfOrigin = channelOfOrigin
                 self.chatThreadId = chatThreadId
+                self.clientBuild = clientBuild
+                self.clientInstanceId = clientInstanceId
+                self.clientVersion = clientVersion
                 self.content = content
                 self.deliveryMode = deliveryMode
+                self.deviceRegistrationRef = deviceRegistrationRef
                 self.fallbackAfterSeconds = fallbackAfterSeconds
                 self.fallbackReason = fallbackReason
                 self.history = history
@@ -3958,8 +4635,12 @@ public enum Components {
                 case asyncResponse = "async_response"
                 case channelOfOrigin = "channel_of_origin"
                 case chatThreadId = "chat_thread_id"
+                case clientBuild = "client_build"
+                case clientInstanceId = "client_instance_id"
+                case clientVersion = "client_version"
                 case content
                 case deliveryMode = "delivery_mode"
+                case deviceRegistrationRef = "device_registration_ref"
                 case fallbackAfterSeconds = "fallback_after_seconds"
                 case fallbackReason = "fallback_reason"
                 case history
@@ -5396,6 +6077,595 @@ public enum Operations {
             /// - Throws: An error if `self` is not `.unprocessableContent`.
             /// - SeeAlso: `.unprocessableContent`.
             public var unprocessableContent: Operations.GetRuntimeTurn.Output.UnprocessableContent {
+                get throws {
+                    switch self {
+                    case let .unprocessableContent(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unprocessableContent",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        @frozen public enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            public init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            public var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            public static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// Reconcile one ORCA Chat Runtime turn
+    ///
+    /// Returns the authoritative turn snapshot and events newer than the provided cursor. Unknown or cross-turn cursors return reset_required with a complete snapshot instead of silently dropping state.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/turns/{turn_id}/reconcile`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/turns/{turn_id}/reconcile/get(reconcileRuntimeTurn)`.
+    public enum ReconcileRuntimeTurn {
+        public static let id: Swift.String = "reconcileRuntimeTurn"
+        public struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/turns/{turn_id}/reconcile/GET/path`.
+            public struct Path: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/turns/{turn_id}/reconcile/GET/path/turn_id`.
+                public var turnId: Swift.String
+                /// Creates a new `Path`.
+                ///
+                /// - Parameters:
+                ///   - turnId:
+                public init(turnId: Swift.String) {
+                    self.turnId = turnId
+                }
+            }
+            public var path: Operations.ReconcileRuntimeTurn.Input.Path
+            /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/turns/{turn_id}/reconcile/GET/query`.
+            public struct Query: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/turns/{turn_id}/reconcile/GET/query/after_cursor`.
+                public var afterCursor: Swift.String?
+                /// Creates a new `Query`.
+                ///
+                /// - Parameters:
+                ///   - afterCursor:
+                public init(afterCursor: Swift.String? = nil) {
+                    self.afterCursor = afterCursor
+                }
+            }
+            public var query: Operations.ReconcileRuntimeTurn.Input.Query
+            /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/turns/{turn_id}/reconcile/GET/header`.
+            public struct Headers: Sendable, Hashable {
+                public var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ReconcileRuntimeTurn.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                public init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ReconcileRuntimeTurn.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            public var headers: Operations.ReconcileRuntimeTurn.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - path:
+            ///   - query:
+            ///   - headers:
+            public init(
+                path: Operations.ReconcileRuntimeTurn.Input.Path,
+                query: Operations.ReconcileRuntimeTurn.Input.Query = .init(),
+                headers: Operations.ReconcileRuntimeTurn.Input.Headers = .init()
+            ) {
+                self.path = path
+                self.query = query
+                self.headers = headers
+            }
+        }
+        @frozen public enum Output: Sendable, Hashable {
+            public struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/turns/{turn_id}/reconcile/GET/responses/200/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/turns/{turn_id}/reconcile/GET/responses/200/content/application\/json`.
+                    case json(Components.Schemas.ChatRuntimeTurnReconciliationRead)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.ChatRuntimeTurnReconciliationRead {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.ReconcileRuntimeTurn.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.ReconcileRuntimeTurn.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// Successful Response
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/turns/{turn_id}/reconcile/get(reconcileRuntimeTurn)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.ReconcileRuntimeTurn.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            public var ok: Operations.ReconcileRuntimeTurn.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct UnprocessableContent: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/turns/{turn_id}/reconcile/GET/responses/422/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/turns/{turn_id}/reconcile/GET/responses/422/content/application\/json`.
+                    case json(Components.Schemas.HTTPValidationError)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.HTTPValidationError {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.ReconcileRuntimeTurn.Output.UnprocessableContent.Body
+                /// Creates a new `UnprocessableContent`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.ReconcileRuntimeTurn.Output.UnprocessableContent.Body) {
+                    self.body = body
+                }
+            }
+            /// Validation Error
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/turns/{turn_id}/reconcile/get(reconcileRuntimeTurn)/responses/422`.
+            ///
+            /// HTTP response code: `422 unprocessableContent`.
+            case unprocessableContent(Operations.ReconcileRuntimeTurn.Output.UnprocessableContent)
+            /// The associated value of the enum case if `self` is `.unprocessableContent`.
+            ///
+            /// - Throws: An error if `self` is not `.unprocessableContent`.
+            /// - SeeAlso: `.unprocessableContent`.
+            public var unprocessableContent: Operations.ReconcileRuntimeTurn.Output.UnprocessableContent {
+                get throws {
+                    switch self {
+                    case let .unprocessableContent(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unprocessableContent",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        @frozen public enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            public init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            public var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            public static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// Stream one ORCA Chat Runtime turn
+    ///
+    /// Streams the same authoritative reconciliation envelope as REST polling. Clients may resume with after_cursor or Last-Event-ID and fall back to the reconcile route without changing cursor semantics.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/turns/{turn_id}/stream`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/turns/{turn_id}/stream/get(streamRuntimeTurn)`.
+    public enum StreamRuntimeTurn {
+        public static let id: Swift.String = "streamRuntimeTurn"
+        public struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/turns/{turn_id}/stream/GET/path`.
+            public struct Path: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/turns/{turn_id}/stream/GET/path/turn_id`.
+                public var turnId: Swift.String
+                /// Creates a new `Path`.
+                ///
+                /// - Parameters:
+                ///   - turnId:
+                public init(turnId: Swift.String) {
+                    self.turnId = turnId
+                }
+            }
+            public var path: Operations.StreamRuntimeTurn.Input.Path
+            /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/turns/{turn_id}/stream/GET/query`.
+            public struct Query: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/turns/{turn_id}/stream/GET/query/after_cursor`.
+                public var afterCursor: Swift.String?
+                /// Creates a new `Query`.
+                ///
+                /// - Parameters:
+                ///   - afterCursor:
+                public init(afterCursor: Swift.String? = nil) {
+                    self.afterCursor = afterCursor
+                }
+            }
+            public var query: Operations.StreamRuntimeTurn.Input.Query
+            /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/turns/{turn_id}/stream/GET/header`.
+            public struct Headers: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/turns/{turn_id}/stream/GET/header/Last-Event-ID`.
+                public var lastEventID: Swift.String?
+                public var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.StreamRuntimeTurn.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - lastEventID:
+                ///   - accept:
+                public init(
+                    lastEventID: Swift.String? = nil,
+                    accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.StreamRuntimeTurn.AcceptableContentType>] = .defaultValues()
+                ) {
+                    self.lastEventID = lastEventID
+                    self.accept = accept
+                }
+            }
+            public var headers: Operations.StreamRuntimeTurn.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - path:
+            ///   - query:
+            ///   - headers:
+            public init(
+                path: Operations.StreamRuntimeTurn.Input.Path,
+                query: Operations.StreamRuntimeTurn.Input.Query = .init(),
+                headers: Operations.StreamRuntimeTurn.Input.Headers = .init()
+            ) {
+                self.path = path
+                self.query = query
+                self.headers = headers
+            }
+        }
+        @frozen public enum Output: Sendable, Hashable {
+            public struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/turns/{turn_id}/stream/GET/responses/200/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/turns/{turn_id}/stream/GET/responses/200/content/application\/json`.
+                    case json(OpenAPIRuntime.OpenAPIValueContainer)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: OpenAPIRuntime.OpenAPIValueContainer {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.StreamRuntimeTurn.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.StreamRuntimeTurn.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// Successful Response
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/turns/{turn_id}/stream/get(streamRuntimeTurn)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.StreamRuntimeTurn.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            public var ok: Operations.StreamRuntimeTurn.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct UnprocessableContent: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/turns/{turn_id}/stream/GET/responses/422/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/turns/{turn_id}/stream/GET/responses/422/content/application\/json`.
+                    case json(Components.Schemas.HTTPValidationError)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.HTTPValidationError {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.StreamRuntimeTurn.Output.UnprocessableContent.Body
+                /// Creates a new `UnprocessableContent`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.StreamRuntimeTurn.Output.UnprocessableContent.Body) {
+                    self.body = body
+                }
+            }
+            /// Validation Error
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/turns/{turn_id}/stream/get(streamRuntimeTurn)/responses/422`.
+            ///
+            /// HTTP response code: `422 unprocessableContent`.
+            case unprocessableContent(Operations.StreamRuntimeTurn.Output.UnprocessableContent)
+            /// The associated value of the enum case if `self` is `.unprocessableContent`.
+            ///
+            /// - Throws: An error if `self` is not `.unprocessableContent`.
+            /// - SeeAlso: `.unprocessableContent`.
+            public var unprocessableContent: Operations.StreamRuntimeTurn.Output.UnprocessableContent {
+                get throws {
+                    switch self {
+                    case let .unprocessableContent(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unprocessableContent",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        @frozen public enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            public init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            public var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            public static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// Scan recent ORCA Chat Runtime liveness
+    ///
+    /// Performs a bounded, read-only scan for turns or nested AgentRuns that have exceeded the same server thresholds shown to Pod and Console.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/watchdog/stale-turns`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/watchdog/stale-turns/get(getRuntimeStaleTurns)`.
+    public enum GetRuntimeStaleTurns {
+        public static let id: Swift.String = "getRuntimeStaleTurns"
+        public struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/watchdog/stale-turns/GET/query`.
+            public struct Query: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/watchdog/stale-turns/GET/query/lookback_hours`.
+                public var lookbackHours: Swift.Int?
+                /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/watchdog/stale-turns/GET/query/limit`.
+                public var limit: Swift.Int?
+                /// Creates a new `Query`.
+                ///
+                /// - Parameters:
+                ///   - lookbackHours:
+                ///   - limit:
+                public init(
+                    lookbackHours: Swift.Int? = nil,
+                    limit: Swift.Int? = nil
+                ) {
+                    self.lookbackHours = lookbackHours
+                    self.limit = limit
+                }
+            }
+            public var query: Operations.GetRuntimeStaleTurns.Input.Query
+            /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/watchdog/stale-turns/GET/header`.
+            public struct Headers: Sendable, Hashable {
+                public var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.GetRuntimeStaleTurns.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                public init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.GetRuntimeStaleTurns.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            public var headers: Operations.GetRuntimeStaleTurns.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - query:
+            ///   - headers:
+            public init(
+                query: Operations.GetRuntimeStaleTurns.Input.Query = .init(),
+                headers: Operations.GetRuntimeStaleTurns.Input.Headers = .init()
+            ) {
+                self.query = query
+                self.headers = headers
+            }
+        }
+        @frozen public enum Output: Sendable, Hashable {
+            public struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/watchdog/stale-turns/GET/responses/200/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/watchdog/stale-turns/GET/responses/200/content/application\/json`.
+                    case json(Components.Schemas.ChatRuntimeWatchdogRead)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.ChatRuntimeWatchdogRead {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.GetRuntimeStaleTurns.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.GetRuntimeStaleTurns.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// Successful Response
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/watchdog/stale-turns/get(getRuntimeStaleTurns)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.GetRuntimeStaleTurns.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            public var ok: Operations.GetRuntimeStaleTurns.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct UnprocessableContent: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/watchdog/stale-turns/GET/responses/422/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/chat-runtime/v1/watchdog/stale-turns/GET/responses/422/content/application\/json`.
+                    case json(Components.Schemas.HTTPValidationError)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.HTTPValidationError {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.GetRuntimeStaleTurns.Output.UnprocessableContent.Body
+                /// Creates a new `UnprocessableContent`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.GetRuntimeStaleTurns.Output.UnprocessableContent.Body) {
+                    self.body = body
+                }
+            }
+            /// Validation Error
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/watchdog/stale-turns/get(getRuntimeStaleTurns)/responses/422`.
+            ///
+            /// HTTP response code: `422 unprocessableContent`.
+            case unprocessableContent(Operations.GetRuntimeStaleTurns.Output.UnprocessableContent)
+            /// The associated value of the enum case if `self` is `.unprocessableContent`.
+            ///
+            /// - Throws: An error if `self` is not `.unprocessableContent`.
+            /// - SeeAlso: `.unprocessableContent`.
+            public var unprocessableContent: Operations.GetRuntimeStaleTurns.Output.UnprocessableContent {
                 get throws {
                     switch self {
                     case let .unprocessableContent(response):
