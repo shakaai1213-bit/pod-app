@@ -4180,6 +4180,7 @@ struct DMBubble: View {
         case .waitingForLiveAgent: return "hourglass"
         case .claimedByAgent: return "hand.raised"
         case .working: return "gearshape.2.fill"
+        case .ticketRequired: return "text.badge.plus"
         case .responseReceived: return "checkmark.circle"
         case .deliveryNatsFailed: return "antenna.radiowaves.left.and.right.slash"
         case .agentUnresponsive: return "person.crop.circle.badge.exclamationmark"
@@ -4196,7 +4197,7 @@ struct DMBubble: View {
             return AppColors.accentElectric
         case .responseReceived:
             return AppColors.accentSuccess
-        case .deliveryNatsFailed, .agentUnresponsive, .failed, .fallbackPresented, .timedOut:
+        case .deliveryNatsFailed, .agentUnresponsive, .failed, .fallbackPresented, .ticketRequired, .timedOut:
             return AppColors.accentWarning
         case nil:
             return AppColors.textTertiary
@@ -4324,6 +4325,7 @@ private struct MessageDeliveryLedger: View {
             || deliveryState == .deliveryNatsFailed
             || deliveryState == .agentUnresponsive
             || deliveryState == .fallbackPresented
+            || deliveryState == .ticketRequired
         let timedOut = deliveryState == .timedOut
         let finalDone = deliveryState == .responseReceived
         let waiting = deliveryState == .computeRunning
@@ -4398,6 +4400,8 @@ private struct MessageDeliveryLedger: View {
             return "Agent Run queued"
         case .agentRunRunning:
             return "Agent Run running"
+        case .ticketRequired:
+            return "Attach one ORCA ticket to continue"
         case .responseReceived:
             return "Reply/evidence received"
         case .deliveryNatsFailed:
