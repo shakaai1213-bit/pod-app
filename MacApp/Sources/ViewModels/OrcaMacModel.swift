@@ -352,9 +352,11 @@ final class OrcaMacModel {
     }
 
     func selectBoard(_ id: UUID) {
-        guard boards.contains(where: { $0.id == id }) else { return }
+        guard let board = boards.first(where: { $0.id == id }) else { return }
         selectedBoardID = id
         boardPlan = nil
+        boardPlanError = nil
+        guard !board.isProtected else { return }
         Task { await refreshSelectedBoardPlan(silent: true) }
     }
 
@@ -402,7 +404,6 @@ final class OrcaMacModel {
         do {
             let directory = try await consoleService.boardDirectory()
             boards = directory.items
-                .filter { !$0.isProtected }
                 .sorted { left, right in
                     if left.slug == "pod" { return true }
                     if right.slug == "pod" { return false }
@@ -438,6 +439,10 @@ final class OrcaMacModel {
 
     private func loadSelectedBoardPlan() async throws {
         guard let consoleService, let selectedBoardID else {
+            boardPlan = nil
+            return
+        }
+        guard boards.first(where: { $0.id == selectedBoardID })?.isProtected != true else {
             boardPlan = nil
             return
         }

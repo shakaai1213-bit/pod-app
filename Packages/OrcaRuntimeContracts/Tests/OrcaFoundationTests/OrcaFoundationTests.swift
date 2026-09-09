@@ -41,6 +41,31 @@ final class OrcaFoundationTests: XCTestCase {
         XCTAssertEqual(plan.sourceRefs, ["/api/v1/tickets"])
     }
 
+    func testBoardDirectoryUsesOneTaxonomyAndSearchContract() throws {
+        let directory = try JSONDecoder().decode(
+            OrcaBoardDirectory.self,
+            from: Data(#"{"items":[{"id":"00000000-0000-4000-8000-000000000001","slug":"pod","name":"Pod","component":"Pod","description":"[product] Native clients"},{"id":"00000000-0000-4000-8000-000000000002","slug":"guardian","name":"Guardian","description":"Safety product"},{"id":"00000000-0000-4000-8000-000000000003","slug":"schoolhouse","name":"Schoolhouse","description":"Agent lifecycle"},{"id":"00000000-0000-4000-8000-000000000004","slug":"operations","name":"Operations","description":"Lab operations"},{"id":"00000000-0000-4000-8000-000000000005","slug":"fund","name":"Fund","description":"Protected domain"},{"id":"00000000-0000-4000-8000-000000000006","slug":"north-star","name":"North Star","description":"Strategy"}]}"#.utf8)
+        )
+
+        XCTAssertEqual(directory.items.map(\.architectureGroup), [
+            .surfaces, .products, .platform, .infrastructure, .fund, .strategy,
+        ])
+        XCTAssertEqual(
+            directory.filtered(searchQuery: "native").map(\.slug),
+            ["pod"]
+        )
+        XCTAssertEqual(
+            directory.grouped().map(\.group),
+            [.products, .surfaces, .platform, .infrastructure, .fund, .strategy]
+        )
+        XCTAssertEqual(
+            directory.filtered(group: .platform).map(\.slug),
+            ["schoolhouse"]
+        )
+        XCTAssertTrue(directory.filtered(searchQuery: "protected domain").isEmpty)
+        XCTAssertEqual(directory.filtered(searchQuery: "fund").map(\.slug), ["fund"])
+    }
+
     func testBoardPlanCardDecodesCanonicalLifecycleFacets() throws {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601

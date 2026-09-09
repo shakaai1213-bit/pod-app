@@ -191,39 +191,50 @@ struct ConsoleSectionView: View {
 
 private struct WorkPortfolioView: View {
     @Environment(OrcaMacModel.self) private var model
+    @State private var isShowingBoardDirectory = false
 
     private var featuredBoards: [OrcaBoardDirectoryItem] {
-        Array(model.boards.filter(\.isProduct).prefix(6))
+        Array(model.boards.filter { $0.isProduct && $0.slug != "products" }.prefix(6))
+    }
+
+    private var selectedBoard: OrcaBoardDirectoryItem? {
+        model.boards.first { $0.id == model.selectedBoardID }
     }
 
     var body: some View {
-        if model.boards.isEmpty, let error = model.boardPlanError {
-            ContentUnavailableView(
-                "ORCA Board Data Unavailable",
-                systemImage: "rectangle.3.group",
-                description: Text(error)
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if model.boards.isEmpty, model.isLoadingBoardPlan {
-            ProgressView()
+        Group {
+            if model.boards.isEmpty, let error = model.boardPlanError {
+                ContentUnavailableView(
+                    "ORCA Board Data Unavailable",
+                    systemImage: "rectangle.3.group",
+                    description: Text(error)
+                )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    if !featuredBoards.isEmpty {
-                        productSection
+            } else if model.boards.isEmpty, model.isLoadingBoardPlan {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        if !featuredBoards.isEmpty {
+                            productSection
+                        }
+                        boardPlanSection
+                        if let error = model.boardPlanError {
+                            Label(error, systemImage: "exclamationmark.triangle")
+                                .font(.caption)
+                                .foregroundStyle(Color.orcaCoral)
+                                .textSelection(.enabled)
+                        }
                     }
-                    boardPlanSection
-                    if let error = model.boardPlanError {
-                        Label(error, systemImage: "exclamationmark.triangle")
-                            .font(.caption)
-                            .foregroundStyle(Color.orcaCoral)
-                            .textSelection(.enabled)
-                    }
+                    .padding(16)
                 }
-                .padding(16)
+                .background(Color(nsColor: .textBackgroundColor))
             }
-            .background(Color(nsColor: .textBackgroundColor))
+        }
+        .sheet(isPresented: $isShowingBoardDirectory) {
+            ConsoleBoardDirectoryView()
+                .environment(model)
         }
     }
 
@@ -289,20 +300,13 @@ private struct WorkPortfolioView: View {
                         .font(.title3.weight(.semibold))
                 }
                 Spacer()
-                Menu {
-                    ForEach(model.boards) { board in
-                        Button { model.selectBoard(board.id) } label: {
-                            if board.id == model.selectedBoardID {
-                                Label(board.displayName, systemImage: "checkmark")
-                            } else {
-                                Text(board.displayName)
-                            }
-                        }
-                    }
+                Button {
+                    isShowingBoardDirectory = true
                 } label: {
                     Label("All Boards", systemImage: "rectangle.grid.2x2")
                 }
-                .menuStyle(.borderlessButton)
+                .buttonStyle(.borderless)
+                .help("Browse and search all ORCA boards")
                 Button { Task { await model.refreshBoardPortfolio() } } label: {
                     Image(systemName: "arrow.clockwise")
                 }
@@ -311,7 +315,23 @@ private struct WorkPortfolioView: View {
                 .help("Refresh board plan")
             }
 
-            if let plan = model.boardPlan {
+            if selectedBoard?.isProtected == true {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "lock.shield.fill")
+                        .foregroundStyle(Color.orcaCoral)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Protected board boundary")
+                            .font(.body.weight(.semibold))
+                        Text("Fund detail remains in the authenticated Fund surface and is not copied into generic Work.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+                .padding(14)
+                .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor)))
+            } else if let plan = model.boardPlan {
                 ScrollView(.horizontal) {
                     HStack(alignment: .top, spacing: 10) {
                         ForEach(plan.lanes) { lane in
@@ -418,6 +438,195 @@ private struct WorkPortfolioView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+private struct ConsoleBoardDirectoryView: View {
+    @Environment(OrcaMacModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @State private var searchQuery = ""
+    @State private var selectedGroup: OrcaBoardArchitectureGroup?
+
+    private var directory: OrcaBoardDirectory {
+        OrcaBoardDirectory(items: model.boards)
+    }
+
+    private var groups: [(group: OrcaBoardArchitectureGroup, boards: [OrcaBoardDirectoryItem])] {
+        directory.grouped(searchQuery: searchQuery, group: selectedGroup)
+    }
+
+    private var visibleBoards: [OrcaBoardDirectoryItem] {
+        directory.filtered(searchQuery: searchQuery, group: selectedGroup)
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                summary
+                Divider()
+                if visibleBoards.isEmpty {
+                    emptyDirectory
+                } else {
+                    List {
+                        ForEach(groups, id: \.group) { group in
+                            Section("\(group.group.rawValue) - \(group.boards.count)") {
+                                ForEach(group.boards) { board in
+                                    Button {
+                                        model.selectBoard(board.id)
+                                        dismiss()
+                                    } label: {
+                                        boardRow(board)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    }
+                    .listStyle(.inset)
+                }
+            }
+            .frame(minWidth: 720, minHeight: 560)
+            .navigationTitle("All Boards")
+            .searchable(text: $searchQuery, prompt: "Search boards")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { dismiss() }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        Button {
+                            selectedGroup = nil
+                        } label: {
+                            if selectedGroup == nil {
+                                Label("All Groups", systemImage: "checkmark")
+                            } else {
+                                Text("All Groups")
+                            }
+                        }
+                        Divider()
+                        ForEach(OrcaBoardArchitectureGroup.allCases) { group in
+                            Button {
+                                selectedGroup = group
+                            } label: {
+                                if selectedGroup == group {
+                                    Label(group.rawValue, systemImage: "checkmark")
+                                } else {
+                                    Text(group.rawValue)
+                                }
+                            }
+                        }
+                    } label: {
+                        Label(
+                            selectedGroup?.rawValue ?? "All Groups",
+                            systemImage: "line.3.horizontal.decrease.circle"
+                        )
+                    }
+                    .help("Filter board groups")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var emptyDirectory: some View {
+        if searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            ContentUnavailableView(
+                "No Boards in This Group",
+                systemImage: "rectangle.3.group",
+                description: Text("Choose another board group.")
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ContentUnavailableView.search(text: searchQuery)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var summary: some View {
+        HStack(spacing: 18) {
+            directoryMetric("Boards", visibleBoards.count)
+            directoryMetric("Projects", visibleBoards.reduce(0) { $0 + $1.projectCount })
+            directoryMetric("Active", visibleBoards.reduce(0) { $0 + $1.activeCount })
+            directoryMetric("Tickets", visibleBoards.reduce(0) { $0 + $1.ticketCount })
+            Spacer()
+            Label("ORCA", systemImage: "checkmark.shield")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.orcaGreen)
+        }
+        .padding(16)
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    private func directoryMetric(_ title: String, _ value: Int) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title.uppercased())
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.secondary)
+            Text("\(value)")
+                .font(.title3.weight(.semibold).monospacedDigit())
+        }
+        .frame(minWidth: 70, alignment: .leading)
+    }
+
+    private func boardRow(_ board: OrcaBoardDirectoryItem) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: board.isProtected ? "lock.shield.fill" : boardSymbol(board))
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(board.isProtected ? Color.orcaCoral : Color.orcaCyan)
+                .frame(width: 30, height: 30)
+                .background(
+                    (board.isProtected ? Color.orcaCoral : Color.orcaCyan).opacity(0.12),
+                    in: RoundedRectangle(cornerRadius: 6)
+                )
+            VStack(alignment: .leading, spacing: 3) {
+                Text(board.displayName)
+                    .font(.body.weight(.semibold))
+                Text(board.isProtected ? "Protected domain" : (board.boardDescription ?? board.slug))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 12)
+            if board.isProtected {
+                Text("Protected")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Color.orcaCoral)
+            } else {
+                HStack(spacing: 12) {
+                    portfolioMetric(board.projectCount, "projects")
+                    portfolioMetric(board.activeCount, "active")
+                    portfolioMetric(board.ticketCount, "tickets")
+                }
+            }
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 5)
+        .contentShape(Rectangle())
+    }
+
+    private func boardSymbol(_ board: OrcaBoardDirectoryItem) -> String {
+        switch board.architectureGroup {
+        case .products: return "shippingbox.fill"
+        case .surfaces: return "rectangle.on.rectangle.angled"
+        case .platform: return "server.rack"
+        case .infrastructure: return "wrench.and.screwdriver.fill"
+        case .fund: return "lock.shield.fill"
+        case .strategy: return "scope"
+        case .other: return "rectangle.3.group.fill"
+        }
+    }
+
+    private func portfolioMetric(_ value: Int, _ label: String) -> some View {
+        VStack(alignment: .trailing, spacing: 1) {
+            Text("\(value)")
+                .font(.caption.weight(.bold).monospacedDigit())
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(minWidth: 42, alignment: .trailing)
     }
 }
 
