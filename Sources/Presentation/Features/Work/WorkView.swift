@@ -6515,14 +6515,16 @@ private struct WorkBoardTicketSummary: Identifiable, Decodable {
     let status: String
     let priority: String?
     let boardId: String?
+    let isProtected: Bool
     let computeTag: String?
     let autonomyLevel: String?
 
     var isSafeForGenericWorkSurface: Bool {
-        let tag = computeTag?.lowercased()
-        return tag != "financial"
-            && tag != "security"
-            && autonomyLevel?.lowercased() != "protected_approval_required"
+        OrcaBoardProtectionPolicy.isSafeTicket(
+            isProtected: isProtected,
+            computeTag: computeTag,
+            autonomyLevel: autonomyLevel
+        )
     }
 
     init(from decoder: Decoder) throws {
@@ -6533,12 +6535,13 @@ private struct WorkBoardTicketSummary: Identifiable, Decodable {
         status = try container.decodeWorkFlexibleStringIfPresent(forKey: .status) ?? "open"
         priority = try container.decodeWorkFlexibleStringIfPresent(forKey: .priority)
         boardId = try container.decodeWorkFlexibleStringIfPresent(forKey: .boardId)
+        isProtected = try container.decodeIfPresent(Bool.self, forKey: .protected) ?? false
         computeTag = try container.decodeWorkFlexibleStringIfPresent(forKey: .computeTag)
         autonomyLevel = try container.decodeWorkFlexibleStringIfPresent(forKey: .autonomyLevel)
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, description, status, priority
+        case id, title, description, status, priority, protected
         case boardId = "board_id"
         case computeTag = "compute_tag"
         case autonomyLevel = "autonomy_level"
