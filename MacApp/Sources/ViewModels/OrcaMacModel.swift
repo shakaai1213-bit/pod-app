@@ -40,8 +40,12 @@ final class OrcaMacModel {
     var boardPlansByID: [UUID: OrcaBoardPlan] = [:]
     var selectedBoardID: UUID?
     var boardPlan: OrcaBoardPlan?
+    var boardProjects: [OrcaBoardProjectSummary] = []
+    var boardTasks: [OrcaBoardTaskSummary] = []
+    var boardTickets: [OrcaBoardTicketSummary] = []
     var isLoadingBoardPlan = false
     var boardPlanError: String?
+    var boardDetailError: String?
     var providerControlError: String?
     var isLoadingProviderControl = false
     var selectedWorkbenchPane: WorkbenchPane = .workspace
@@ -355,7 +359,11 @@ final class OrcaMacModel {
         guard let board = boards.first(where: { $0.id == id }) else { return }
         selectedBoardID = id
         boardPlan = nil
+        boardProjects = []
+        boardTasks = []
+        boardTickets = []
         boardPlanError = nil
+        boardDetailError = nil
         guard !board.isProtected else { return }
         Task { await refreshSelectedBoardPlan(silent: true) }
     }
@@ -416,8 +424,13 @@ final class OrcaMacModel {
                 service: consoleService,
                 boards: Array(boards.filter(\.isProduct).prefix(6))
             )
-            try await loadSelectedBoardPlan()
-            boardPlanError = nil
+            do {
+                try await loadSelectedBoardPlan()
+                boardPlanError = nil
+            } catch {
+                boardPlanError = error.localizedDescription
+            }
+            await loadSelectedBoardDetail()
         } catch {
             boardPlanError = error.localizedDescription
             if !silent { presentedError = error.localizedDescription }
@@ -435,6 +448,7 @@ final class OrcaMacModel {
             boardPlanError = error.localizedDescription
             if !silent { presentedError = error.localizedDescription }
         }
+        await loadSelectedBoardDetail()
     }
 
     private func loadSelectedBoardPlan() async throws {
@@ -450,6 +464,72 @@ final class OrcaMacModel {
             boardPlan = cached
         } else {
             boardPlan = try await consoleService.boardPlan(boardID: selectedBoardID)
+        }
+    }
+
+    private func loadSelectedBoardDetail() async {
+        boardProjects = []
+        boardTasks = []
+        boardTickets = []
+        boardDetailError = nil
+        guard let consoleService,
+              let selectedBoardID,
+              let board = boards.first(where: { $0.id == selectedBoardID }),
+              !board.isProtected else { return }
+        guard let protectedBoardID = boards.first(where: \.isProtected)?.id else {
+            boardDetailError = "Protected board boundary is unavailable; board detail failed closed."
+            return
+        }
+
+        var errors: [String] = []
+        do {
+            boardProjects = try await consoleService.boardProjects(
+                boardID: selectedBoardID,
+                protectedBoardID: protectedBoardID
+            )
+            .sorted {
+                if $0.priority != $1.priority { return $0.priority < $1.priority }
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+        } catch {
+            errors.append("Projects unavailable.")
+        }
+        do {
+            boardTasks = try await consoleService.boardTasks(boardID: selectedBoardID)
+                .sorted { workStateSort($0.status, $0.title, $1.status, $1.title) }
+        } catch {
+            errors.append("Tasks unavailable.")
+        }
+        do {
+            boardTickets = try await consoleService.boardTickets(boardID: selectedBoardID)
+                .sorted { workStateSort($0.status, $0.title, $1.status, $1.title) }
+        } catch {
+            errors.append("Tickets unavailable.")
+        }
+        boardDetailError = errors.isEmpty ? nil : errors.joined(separator: " ")
+    }
+
+    private func workStateSort(
+        _ leftState: String,
+        _ leftTitle: String,
+        _ rightState: String,
+        _ rightTitle: String
+    ) -> Bool {
+        let leftRank = workStateRank(leftState)
+        let rightRank = workStateRank(rightState)
+        if leftRank != rightRank { return leftRank < rightRank }
+        return leftTitle.localizedCaseInsensitiveCompare(rightTitle) == .orderedAscending
+    }
+
+    private func workStateRank(_ state: String) -> Int {
+        switch state.lowercased() {
+        case "in_progress", "in-progress", "working": return 0
+        case "review": return 1
+        case "blocked", "waiting_on", "failed": return 2
+        case "open", "inbox", "backlog", "planned": return 3
+        case "done", "completed", "closed", "resolved": return 8
+        case "archived", "cancelled": return 9
+        default: return 4
         }
     }
 

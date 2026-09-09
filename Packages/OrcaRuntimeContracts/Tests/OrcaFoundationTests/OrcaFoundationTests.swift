@@ -66,6 +66,24 @@ final class OrcaFoundationTests: XCTestCase {
         XCTAssertEqual(directory.filtered(searchQuery: "fund").map(\.slug), ["fund"])
     }
 
+    func testBoardDetailModelsDecodeCollectionsAndFailClosedForProtectedTickets() throws {
+        let projectPage = try JSONDecoder().decode(
+            OrcaBoardCollectionPage<OrcaBoardProjectSummary>.self,
+            from: Data(#"[{"id":"10000000-0000-4000-8000-000000000001","board_id":"00000000-0000-4000-8000-000000000001","board_ids":["00000000-0000-4000-8000-000000000002"],"name":"Runtime","status":"in_progress","stage":"build","priority":1}]"#.utf8)
+        )
+        let primaryBoardID = UUID(uuidString: "00000000-0000-4000-8000-000000000001")!
+        let linkedBoardID = UUID(uuidString: "00000000-0000-4000-8000-000000000002")!
+        XCTAssertTrue(projectPage.items[0].belongs(to: primaryBoardID))
+        XCTAssertTrue(projectPage.items[0].belongs(to: linkedBoardID))
+
+        let ticketPage = try JSONDecoder().decode(
+            OrcaBoardCollectionPage<OrcaBoardTicketSummary>.self,
+            from: Data(#"{"items":[{"id":"30000000-0000-4000-8000-000000000001","title":"Visible","status":"open","priority":"high","protected":false,"compute_tag":"code","autonomy_level":"draft_only"},{"id":"30000000-0000-4000-8000-000000000002","title":"Pointer only","status":"open","priority":"high","protected":true,"compute_tag":"code","autonomy_level":"draft_only"}]}"#.utf8)
+        )
+        XCTAssertTrue(ticketPage.items[0].isSafeForGenericSurface)
+        XCTAssertFalse(ticketPage.items[1].isSafeForGenericSurface)
+    }
+
     func testBoardPlanCardDecodesCanonicalLifecycleFacets() throws {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601

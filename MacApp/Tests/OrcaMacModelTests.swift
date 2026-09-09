@@ -541,6 +541,52 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertEqual(approved.id, "run-c9")
     }
 
+    func testBoardDetailServicePreservesProtectionBoundaries() async throws {
+        let boardID = UUID(uuidString: "00000000-0000-4000-8000-000000000001")!
+        let fundID = UUID(uuidString: "00000000-0000-4000-8000-000000000002")!
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        TestURLProtocol.response = { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer console-token")
+            switch request.url?.path {
+            case "/api/v1/projects":
+                XCTAssertEqual(
+                    request.url?.query,
+                    "board_id=00000000-0000-4000-8000-000000000001&limit=200"
+                )
+                return (200, Data(#"{"items":[{"id":"10000000-0000-4000-8000-000000000001","board_id":"00000000-0000-4000-8000-000000000001","board_ids":[],"name":"Safe project","status":"in_progress","stage":"build","priority":1},{"id":"10000000-0000-4000-8000-000000000002","board_id":"00000000-0000-4000-8000-000000000001","board_ids":["00000000-0000-4000-8000-000000000002"],"name":"Fund linked","status":"in_progress","stage":"build","priority":1}]}"#.utf8))
+            case "/api/v1/boards/00000000-0000-4000-8000-000000000001/tasks":
+                XCTAssertEqual(request.url?.query, "limit=50")
+                return (200, Data(#"{"items":[{"id":"20000000-0000-4000-8000-000000000001","title":"Safe task","status":"in_progress","priority":"high","protected":false},{"id":"20000000-0000-4000-8000-000000000002","title":"Protected task","status":"in_progress","priority":"high","protected":true,"pointer":"orca://protected/task"}]}"#.utf8))
+            case "/api/v1/boards/00000000-0000-4000-8000-000000000001/tickets":
+                XCTAssertEqual(request.url?.query, "limit=50")
+                return (200, Data(#"{"items":[{"id":"30000000-0000-4000-8000-000000000001","title":"Safe ticket","status":"open","priority":"high","protected":false,"compute_tag":"code","autonomy_level":"draft_only"},{"id":"30000000-0000-4000-8000-000000000002","title":"Protected ticket","status":"open","priority":"high","protected":true,"compute_tag":"code","autonomy_level":"draft_only"},{"id":"30000000-0000-4000-8000-000000000003","title":"Security ticket","status":"open","priority":"high","protected":false,"compute_tag":"security","autonomy_level":"protected_approval_required"}]}"#.utf8))
+            default:
+                return (404, Data(#"{"detail":"not found"}"#.utf8))
+            }
+        }
+        defer { TestURLProtocol.response = nil }
+
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+
+        let projects = try await service.boardProjects(
+            boardID: boardID,
+            protectedBoardID: fundID
+        )
+        let tasks = try await service.boardTasks(boardID: boardID)
+        let tickets = try await service.boardTickets(boardID: boardID)
+
+        XCTAssertEqual(projects.map(\.name), ["Safe project"])
+        XCTAssertEqual(tasks.map(\.title), ["Safe task"])
+        XCTAssertEqual(tickets.map(\.title), ["Safe ticket"])
+    }
+
     private static let workbenchHostJSON = #"{"host_id":"shaka-mac","capability_id":"engineering.workspace","state":"attested","ready":true,"reason":"fresh","observed_at":"2026-08-18T04:00:00Z","expires_at":null,"evidence_refs":["attestation-evidence://shaka-mac/canary"],"policy_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}"#
 
     private static let workbenchContractJSON = "{\"schema\":\"orca.engineering-workbench.v1\",\"enabled\":true,\"mode\":\"active\",\"host\":\(workbenchHostJSON),\"worker_lane\":\"engineering-host\",\"policy_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"roots\":[{\"id\":\"pod-client\",\"label\":\"Pod and Console\",\"description\":\"Native source\",\"access\":\"read_test\",\"source_mutation\":false}],\"actions\":[{\"id\":\"git.status\",\"label\":\"Git Status\",\"kind\":\"diff\",\"requires_approval\":false,\"mutates_source\":false,\"default_timeout_seconds\":30,\"allowed_root_ids\":[\"pod-client\"],\"available\":true,\"blocked_reasons\":[]}],\"lifecycle\":[\"request.persisted\"],\"guarantees\":[\"AgentRun first\"]}"

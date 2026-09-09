@@ -189,9 +189,19 @@ struct ConsoleSectionView: View {
     }
 }
 
+private enum ConsoleBoardPane: String, CaseIterable, Identifiable {
+    case plan = "Plan"
+    case projects = "Projects"
+    case tasks = "Tasks"
+    case tickets = "Tickets"
+
+    var id: String { rawValue }
+}
+
 private struct WorkPortfolioView: View {
     @Environment(OrcaMacModel.self) private var model
     @State private var isShowingBoardDirectory = false
+    @State private var selectedBoardPane = ConsoleBoardPane.plan
 
     private var featuredBoards: [OrcaBoardDirectoryItem] {
         Array(model.boards.filter { $0.isProduct && $0.slug != "products" }.prefix(6))
@@ -235,6 +245,9 @@ private struct WorkPortfolioView: View {
         .sheet(isPresented: $isShowingBoardDirectory) {
             ConsoleBoardDirectoryView()
                 .environment(model)
+        }
+        .onChange(of: model.selectedBoardID) { _, _ in
+            selectedBoardPane = .plan
         }
     }
 
@@ -296,7 +309,7 @@ private struct WorkPortfolioView: View {
                     Text("BOARD PLAN")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.secondary)
-                    Text(model.boardPlan?.boardName ?? "ORCA Work")
+                    Text(selectedBoard?.displayName ?? "ORCA Work")
                         .font(.title3.weight(.semibold))
                 }
                 Spacer()
@@ -331,7 +344,33 @@ private struct WorkPortfolioView: View {
                 .padding(14)
                 .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor)))
-            } else if let plan = model.boardPlan {
+            } else {
+                Picker("Board detail", selection: $selectedBoardPane) {
+                    ForEach(ConsoleBoardPane.allCases) { pane in
+                        Text(paneTitle(pane)).tag(pane)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 480)
+
+                boardDetailContent
+
+                if let error = model.boardDetailError, selectedBoardPane != .plan {
+                    Label(error, systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(Color.orcaCoral)
+                        .textSelection(.enabled)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var boardDetailContent: some View {
+        switch selectedBoardPane {
+        case .plan:
+            if let plan = model.boardPlan {
                 ScrollView(.horizontal) {
                     HStack(alignment: .top, spacing: 10) {
                         ForEach(plan.lanes) { lane in
@@ -342,7 +381,7 @@ private struct WorkPortfolioView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.shield")
                         .foregroundStyle(Color.orcaGreen)
-                    Text("\(plan.selectionMode.replacingOccurrences(of: "_", with: " ").capitalized) · ORCA")
+                    Text("\(plan.selectionMode.replacingOccurrences(of: "_", with: " ").capitalized) - ORCA")
                     Spacer()
                     Text(plan.computedAt, style: .relative)
                 }
@@ -351,8 +390,114 @@ private struct WorkPortfolioView: View {
             } else if model.isLoadingBoardPlan {
                 ProgressView()
                     .frame(maxWidth: .infinity, minHeight: 180)
+            } else {
+                boardEmptyState("No active plan", symbol: "rectangle.3.group")
+            }
+        case .projects:
+            boardCollection(model.boardProjects, empty: "No current projects") { project in
+                boardCollectionRow(
+                    id: project.id,
+                    title: project.name,
+                    subtitle: project.goal ?? project.projectDescription,
+                    state: project.stage,
+                    trailing: "P\(project.priority)"
+                )
+            }
+        case .tasks:
+            boardCollection(model.boardTasks, empty: "No current tasks") { task in
+                boardCollectionRow(
+                    id: task.id,
+                    title: task.title,
+                    subtitle: task.taskDescription,
+                    state: task.status,
+                    trailing: task.priority.capitalized
+                )
+            }
+        case .tickets:
+            boardCollection(model.boardTickets, empty: "No direct tickets") { ticket in
+                boardCollectionRow(
+                    id: ticket.id,
+                    title: ticket.title,
+                    subtitle: nil,
+                    state: ticket.status,
+                    trailing: ticket.priority.capitalized
+                )
             }
         }
+    }
+
+    private func paneTitle(_ pane: ConsoleBoardPane) -> String {
+        switch pane {
+        case .plan: return pane.rawValue
+        case .projects: return "Projects \(model.boardProjects.count)"
+        case .tasks: return "Tasks \(model.boardTasks.count)"
+        case .tickets: return "Tickets \(model.boardTickets.count)"
+        }
+    }
+
+    @ViewBuilder
+    private func boardCollection<Item: Identifiable, Row: View>(
+        _ items: [Item],
+        empty: String,
+        @ViewBuilder row: @escaping (Item) -> Row
+    ) -> some View {
+        if model.isLoadingBoardPlan && items.isEmpty {
+            ProgressView()
+                .frame(maxWidth: .infinity, minHeight: 180)
+        } else if items.isEmpty {
+            boardEmptyState(empty, symbol: "tray")
+        } else {
+            LazyVStack(spacing: 0) {
+                ForEach(items) { item in
+                    row(item)
+                    if item.id != items.last?.id {
+                        Divider()
+                    }
+                }
+            }
+            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor)))
+        }
+    }
+
+    private func boardCollectionRow(
+        id: UUID,
+        title: String,
+        subtitle: String?,
+        state: String,
+        trailing: String
+    ) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.body.weight(.medium))
+                    .lineLimit(2)
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                Text(String(id.uuidString.prefix(8)))
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer(minLength: 12)
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(state.replacingOccurrences(of: "_", with: " ").capitalized)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(statusColor(state))
+                Text(trailing)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+    }
+
+    private func boardEmptyState(_ title: String, symbol: String) -> some View {
+        ContentUnavailableView(title, systemImage: symbol)
+            .frame(maxWidth: .infinity, minHeight: 180)
     }
 
     private func laneView(_ lane: OrcaBoardPlanLane) -> some View {

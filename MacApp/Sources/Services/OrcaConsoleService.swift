@@ -278,6 +278,35 @@ actor OrcaConsoleService {
         )
     }
 
+    func boardProjects(
+        boardID: UUID,
+        protectedBoardID: UUID
+    ) async throws -> [OrcaBoardProjectSummary] {
+        let page: OrcaBoardCollectionPage<OrcaBoardProjectSummary> = try await requestJSON(
+            method: "GET",
+            path: "/api/v1/projects?board_id=\(boardID.uuidString)&limit=200"
+        )
+        return page.items.filter { project in
+            project.belongs(to: boardID) && !project.belongs(to: protectedBoardID)
+        }
+    }
+
+    func boardTasks(boardID: UUID) async throws -> [OrcaBoardTaskSummary] {
+        let page: OrcaBoardCollectionPage<OrcaBoardTaskSummary> = try await requestJSON(
+            method: "GET",
+            path: "/api/v1/boards/\(boardID.uuidString)/tasks?limit=50"
+        )
+        return page.items.filter { !$0.isProtected }
+    }
+
+    func boardTickets(boardID: UUID) async throws -> [OrcaBoardTicketSummary] {
+        let page: OrcaBoardCollectionPage<OrcaBoardTicketSummary> = try await requestJSON(
+            method: "GET",
+            path: "/api/v1/boards/\(boardID.uuidString)/tickets?limit=50"
+        )
+        return page.items.filter(\.isSafeForGenericSurface)
+    }
+
     func workbenchContract(agentSlug: String) async throws -> OrcaEngineeringWorkbenchContract {
         try await requestJSON(
             method: "GET",
