@@ -6531,17 +6531,27 @@ private final class WorkBoardDetailModel {
                 path: OrcaBoardArchitectureEndpoint.directory
             )
             let (response, boards) = try await (projectsResponse, boardsResponse)
-            let boardId = board.id.lowercased()
-            let protectedBoardID = boards.profiles
-                .first(where: { $0.header.isProtected })?
-                .header.boardID.uuidString.lowercased()
-            guard let protectedBoardID else {
+            guard let boardID = UUID(uuidString: board.id) else {
+                return ([], "Board identity is invalid; projects failed closed.")
+            }
+            let protectedBoardIDs = Set(
+                boards.profiles
+                    .filter { $0.header.isProtected }
+                    .map { $0.header.boardID }
+            )
+            guard !protectedBoardIDs.isEmpty else {
                 return ([], "Protected board boundary unavailable; projects failed closed.")
             }
             let projects = response.items.filter { project in
-                let ids = (project.boardIds ?? []).map { $0.uuidString.lowercased() }
-                    + [project.boardId?.uuidString.lowercased()].compactMap { $0 }
-                return ids.contains(boardId) && !ids.contains(protectedBoardID)
+                var projectBoardIDs = Set(project.boardIds ?? [])
+                if let primaryBoardID = project.boardId {
+                    projectBoardIDs.insert(primaryBoardID)
+                }
+                return OrcaBoardProtectionPolicy.isSafeProject(
+                    selectedBoardID: boardID,
+                    projectBoardIDs: projectBoardIDs,
+                    protectedBoardIDs: protectedBoardIDs
+                )
             }
             return (projects, nil)
         } catch {
