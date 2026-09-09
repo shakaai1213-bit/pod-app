@@ -1,6 +1,16 @@
 import Foundation
 
 public enum OrcaBoardProtectionPolicy {
+    public static func isSafeProject(
+        selectedBoardID: UUID,
+        projectBoardIDs: Set<UUID>,
+        protectedBoardIDs: Set<UUID>
+    ) -> Bool {
+        !protectedBoardIDs.isEmpty
+            && projectBoardIDs.contains(selectedBoardID)
+            && projectBoardIDs.isDisjoint(with: protectedBoardIDs)
+    }
+
     public static func isSafeTicket(
         isProtected: Bool,
         computeTag: String?,

@@ -191,6 +191,34 @@ final class OrcaFoundationTests: XCTestCase {
         XCTAssertFalse(ticketPage.items[1].isSafeForGenericSurface)
     }
 
+    func testProjectProtectionPolicyRejectsEveryProtectedBoardMembership() {
+        let selectedBoardID = UUID(uuidString: "00000000-0000-4000-8000-000000000001")!
+        let fundBoardID = UUID(uuidString: "00000000-0000-4000-8000-000000000002")!
+        let secondProtectedBoardID = UUID(uuidString: "00000000-0000-4000-8000-000000000003")!
+        let protectedBoardIDs: Set<UUID> = [fundBoardID, secondProtectedBoardID]
+
+        XCTAssertTrue(OrcaBoardProtectionPolicy.isSafeProject(
+            selectedBoardID: selectedBoardID,
+            projectBoardIDs: [selectedBoardID],
+            protectedBoardIDs: protectedBoardIDs
+        ))
+        XCTAssertFalse(OrcaBoardProtectionPolicy.isSafeProject(
+            selectedBoardID: selectedBoardID,
+            projectBoardIDs: [selectedBoardID, fundBoardID],
+            protectedBoardIDs: protectedBoardIDs
+        ))
+        XCTAssertFalse(OrcaBoardProtectionPolicy.isSafeProject(
+            selectedBoardID: selectedBoardID,
+            projectBoardIDs: [selectedBoardID, secondProtectedBoardID],
+            protectedBoardIDs: protectedBoardIDs
+        ))
+        XCTAssertFalse(OrcaBoardProtectionPolicy.isSafeProject(
+            selectedBoardID: selectedBoardID,
+            projectBoardIDs: [selectedBoardID],
+            protectedBoardIDs: []
+        ))
+    }
+
     func testBoardPlanCardDecodesCanonicalLifecycleFacets() throws {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601

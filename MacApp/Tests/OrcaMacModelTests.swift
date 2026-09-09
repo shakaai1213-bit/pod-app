@@ -544,6 +544,7 @@ final class OrcaMacModelTests: XCTestCase {
     func testBoardDetailServicePreservesProtectionBoundaries() async throws {
         let boardID = UUID(uuidString: "00000000-0000-4000-8000-000000000001")!
         let fundID = UUID(uuidString: "00000000-0000-4000-8000-000000000002")!
+        let secondProtectedID = UUID(uuidString: "00000000-0000-4000-8000-000000000003")!
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [TestURLProtocol.self]
         let session = URLSession(configuration: configuration)
@@ -555,7 +556,7 @@ final class OrcaMacModelTests: XCTestCase {
                     request.url?.query,
                     "board_id=00000000-0000-4000-8000-000000000001&limit=200"
                 )
-                return (200, Data(#"{"items":[{"id":"10000000-0000-4000-8000-000000000001","board_id":"00000000-0000-4000-8000-000000000001","board_ids":[],"name":"Safe project","status":"in_progress","stage":"build","priority":1},{"id":"10000000-0000-4000-8000-000000000002","board_id":"00000000-0000-4000-8000-000000000001","board_ids":["00000000-0000-4000-8000-000000000002"],"name":"Fund linked","status":"in_progress","stage":"build","priority":1}]}"#.utf8))
+                return (200, Data(#"{"items":[{"id":"10000000-0000-4000-8000-000000000001","board_id":"00000000-0000-4000-8000-000000000001","board_ids":[],"name":"Safe project","status":"in_progress","stage":"build","priority":1},{"id":"10000000-0000-4000-8000-000000000002","board_id":"00000000-0000-4000-8000-000000000001","board_ids":["00000000-0000-4000-8000-000000000002"],"name":"Fund linked","status":"in_progress","stage":"build","priority":1},{"id":"10000000-0000-4000-8000-000000000003","board_id":"00000000-0000-4000-8000-000000000001","board_ids":["00000000-0000-4000-8000-000000000003"],"name":"Second protected linked","status":"in_progress","stage":"build","priority":1}]}"#.utf8))
             case "/api/v1/boards/00000000-0000-4000-8000-000000000001/tasks":
                 XCTAssertEqual(request.url?.query, "limit=50")
                 return (200, Data(#"{"items":[{"id":"20000000-0000-4000-8000-000000000001","title":"Safe task","status":"in_progress","priority":"high","protected":false},{"id":"20000000-0000-4000-8000-000000000002","title":"Protected task","status":"in_progress","priority":"high","protected":true,"pointer":"orca://protected/task"}]}"#.utf8))
@@ -577,7 +578,7 @@ final class OrcaMacModelTests: XCTestCase {
 
         let projects = try await service.boardProjects(
             boardID: boardID,
-            protectedBoardID: fundID
+            protectedBoardIDs: [fundID, secondProtectedID]
         )
         let tasks = try await service.boardTasks(boardID: boardID)
         let tickets = try await service.boardTickets(boardID: boardID)

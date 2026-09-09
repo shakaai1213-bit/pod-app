@@ -490,7 +490,8 @@ final class OrcaMacModel {
         } catch {
             errors.append("Architecture profile refresh unavailable; showing the directory snapshot.")
         }
-        guard let protectedBoardID = boards.first(where: \.isProtected)?.id else {
+        let protectedBoardIDs = Set(boards.filter(\.isProtected).map(\.id))
+        guard !protectedBoardIDs.isEmpty else {
             boardDetailError = "Protected board boundary is unavailable; board detail failed closed."
             return
         }
@@ -498,7 +499,7 @@ final class OrcaMacModel {
         do {
             boardProjects = try await consoleService.boardProjects(
                 boardID: selectedBoardID,
-                protectedBoardID: protectedBoardID
+                protectedBoardIDs: protectedBoardIDs
             )
             .sorted {
                 if $0.priority != $1.priority { return $0.priority < $1.priority }

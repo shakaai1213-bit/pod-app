@@ -287,14 +287,22 @@ actor OrcaConsoleService {
 
     func boardProjects(
         boardID: UUID,
-        protectedBoardID: UUID
+        protectedBoardIDs: Set<UUID>
     ) async throws -> [OrcaBoardProjectSummary] {
         let page: OrcaBoardCollectionPage<OrcaBoardProjectSummary> = try await requestJSON(
             method: "GET",
             path: "/api/v1/projects?board_id=\(boardID.uuidString)&limit=200"
         )
         return page.items.filter { project in
-            project.belongs(to: boardID) && !project.belongs(to: protectedBoardID)
+            var projectBoardIDs = Set(project.boardIds)
+            if let primaryBoardID = project.boardId {
+                projectBoardIDs.insert(primaryBoardID)
+            }
+            return OrcaBoardProtectionPolicy.isSafeProject(
+                selectedBoardID: boardID,
+                projectBoardIDs: projectBoardIDs,
+                protectedBoardIDs: protectedBoardIDs
+            )
         }
     }
 
