@@ -361,6 +361,7 @@ enum DMDeliveryState: String, Codable, Sendable {
     case waitingForLiveAgent = "waiting_for_live_agent"
     case claimedByAgent = "claimed_by_agent"
     case working
+    case ticketRequired = "ticket_required"
     case responseReceived = "response_received"
     case deliveryNatsFailed = "delivery_nats_failed"
     case agentUnresponsive = "agent_unresponsive"
@@ -401,6 +402,7 @@ enum DMDeliveryState: String, Codable, Sendable {
         case .waitingForLiveAgent: return "Live inbox accepted; waiting"
         case .claimedByAgent: return "Live agent claimed"
         case .working: return "Live agent working"
+        case .ticketRequired: return "Ticket required"
         case .responseReceived: return "Final reply received"
         case .deliveryNatsFailed: return "Not delivered - NATS failed"
         case .agentUnresponsive: return "Not delivered - agent unreachable"
@@ -455,7 +457,7 @@ enum DirectChatPresentationPolicy {
         switch DMDeliveryState.parse(deliveryState) {
         case .sending, .routing, .computeRunning, .agentRunQueued, .agentRunRunning,
              .waitingForLiveAgent, .claimedByAgent, .working, .deliveryNatsFailed,
-             .agentUnresponsive, .failed, .fallbackPresented, .timedOut:
+             .agentUnresponsive, .failed, .fallbackPresented, .ticketRequired, .timedOut:
             return true
         case .responseReceived, nil:
             break

@@ -2426,6 +2426,7 @@ final class DirectChatViewModel {
             || parsedState == .waitingForLiveAgent
             || parsedState == .claimedByAgent
             || parsedState == .working
+            || parsedState == .ticketRequired
             || parsedState == .deliveryNatsFailed
             || parsedState == .agentUnresponsive {
             return true
@@ -2498,7 +2499,7 @@ final class DirectChatViewModel {
             return .agentUnresponsive
         case .failed, .fallbackPresented:
             return .failed
-        case .responseReceived:
+        case .ticketRequired, .responseReceived:
             return .sent
         case .computeRunning, .waitingForLiveAgent, .claimedByAgent, .working, .agentRunQueued, .agentRunRunning, .timedOut:
             return .accepted
@@ -2564,7 +2565,7 @@ final class DirectChatViewModel {
         }
     }
 
-    private static func shouldResolvePendingAsync(
+    static func shouldResolvePendingAsync(
         senderAgentId: String?,
         messageType: String?,
         source: String?,
@@ -2586,6 +2587,9 @@ final class DirectChatViewModel {
             || parsedState == .claimedByAgent
             || parsedState == .working {
             return false
+        }
+        if parsedState == .ticketRequired {
+            return normalizedType == "system"
         }
         if senderAgentId == nil {
             return false
