@@ -103,6 +103,23 @@ actor APIClient {
         return await keychainTokenProvider()
     }
 
+    func currentOrganizationID() async -> String? {
+        guard let token = await currentToken() else { return nil }
+        let parts = token.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 3 else { return nil }
+        var encoded = String(parts[1])
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        encoded += String(repeating: "=", count: (4 - encoded.count % 4) % 4)
+        guard let data = Data(base64Encoded: encoded),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let organizationID = object["organization_id"] as? String,
+              UUID(uuidString: organizationID) != nil else {
+            return nil
+        }
+        return organizationID.lowercased()
+    }
+
     func currentAgentToken() async -> String? {
         if let agentToken { return agentToken }
         return await keychainAgentTokenProvider()

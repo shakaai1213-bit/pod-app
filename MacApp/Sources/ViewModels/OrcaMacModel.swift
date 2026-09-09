@@ -31,6 +31,7 @@ final class OrcaMacModel {
     var schemaSHA256: String?
     var conversations: [String: ConversationState] = [:]
     var runtimeTurns: [String: Components.Schemas.ChatRuntimeTurnRead] = [:]
+    var runtimeReconciliations: [String: OrcaRuntimeReconciliationUpdate] = [:]
     var conversationMemories: [String: Components.Schemas.ConversationMemoryRead] = [:]
     var sectionSnapshots: [ConsoleSection: ConsoleSectionSnapshot] = [:]
     var lastUpdatedAt: Date?
@@ -88,6 +89,7 @@ final class OrcaMacModel {
 
     @ObservationIgnored private let tokenStore: any RuntimeTokenStoring
     @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let runtimeCursorStore: OrcaRuntimeCursorStore
     @ObservationIgnored private var service: (any OrcaRuntimeServing)?
     @ObservationIgnored private var consoleService: OrcaConsoleService?
     @ObservationIgnored private var authService: OrcaNativeAuthService?
@@ -96,6 +98,8 @@ final class OrcaMacModel {
     @ObservationIgnored private var connectInFlight: (id: UUID, task: Task<Void, Never>)?
     @ObservationIgnored private var conversationScope: (origin: String, organizationID: String)?
     @ObservationIgnored private var lastWaitingOnCaptainRefreshAt: Date?
+    @ObservationIgnored private var runtimeReconciliationTasks: [String: Task<Void, Never>] = [:]
+    @ObservationIgnored private var runtimeReconciliationTurnIDs: [String: String] = [:]
 
     init(
         tokenStore: any RuntimeTokenStoring = RuntimeTokenStore(),
@@ -103,6 +107,7 @@ final class OrcaMacModel {
     ) {
         self.tokenStore = tokenStore
         self.defaults = defaults
+        runtimeCursorStore = OrcaRuntimeCursorStore(defaults: defaults)
         serverAddress = defaults.string(forKey: "orca.mac.runtime.server")
             ?? Self.defaultServerAddress
         let storedAgent = defaults.string(forKey: "orca.mac.selected-agent") ?? "coral"
@@ -132,6 +137,10 @@ final class OrcaMacModel {
 
     var selectedRuntimeTurn: Components.Schemas.ChatRuntimeTurnRead? {
         runtimeTurns[activeTicketChat?.conversationKey ?? selectedAgentID]
+    }
+
+    var selectedRuntimeReconciliation: OrcaRuntimeReconciliationUpdate? {
+        runtimeReconciliations[selectedAgentID]
     }
 
     var selectedConversationMemory: Components.Schemas.ConversationMemoryRead? {
@@ -299,6 +308,7 @@ final class OrcaMacModel {
     private func performConnect() async {
         refreshTask?.cancel()
         providerRefreshTask?.cancel()
+        stopRuntimeReconciliation()
         guard let endpoint = Self.normalizedEndpoint(serverAddress) else {
             connectionState = .unavailable("Invalid ORCA server address.")
             return
@@ -919,6 +929,7 @@ final class OrcaMacModel {
         presentedError = nil
 
         do {
+            let deviceID = OrcaDeviceIdentity.current()
             let response = try await service.send(
                 OrcaRuntimeDirectTurnRequest(
                     agentSlug: agentID,
@@ -931,7 +942,17 @@ final class OrcaMacModel {
                     idempotencyKey: idempotencyKey,
                     activeTicketID: ticketChat?.ticketID,
                     conversationID: state.conversationID,
-                    threadScope: ticketChat == nil ? "direct" : "ticket"
+                    threadScope: ticketChat == nil ? "direct" : "ticket",
+                    clientVersion: Bundle.main.object(
+                        forInfoDictionaryKey: "CFBundleShortVersionString"
+                    ) as? String,
+                    clientBuild: Bundle.main.object(
+                        forInfoDictionaryKey: "CFBundleVersion"
+                    ) as? String,
+                    clientInstanceID: deviceID,
+                    deviceRegistrationRef: deviceID.hasPrefix("ed25519:")
+                        ? "orca://devices/\(deviceID)"
+                        : nil
                 )
             )
             if ticketChat == nil {
@@ -1135,18 +1156,15 @@ final class OrcaMacModel {
         }
 
         if let turnID, !turnID.isEmpty {
-            do {
-                runtimeTurns[agentID] = try await service.runtimeTurn(turnID: turnID)
-            } catch OrcaRuntimeClientError.httpStatus(404) {
-                runtimeTurns.removeValue(forKey: agentID)
-            } catch {
-                if runtimeTurns[agentID]?.turnId != turnID {
-                    runtimeTurns.removeValue(forKey: agentID)
-                }
-                errors.append("Turn: \(error.localizedDescription)")
-            }
+            await startRuntimeReconciliation(
+                agentID: agentID,
+                turnID: turnID,
+                service: service
+            )
         } else {
+            stopRuntimeReconciliation(for: agentID)
             runtimeTurns.removeValue(forKey: agentID)
+            runtimeReconciliations.removeValue(forKey: agentID)
         }
 
         if agentID == activeConversationKey {
@@ -1155,6 +1173,82 @@ final class OrcaMacModel {
                 presentedError = runtimeEvidenceError
             }
         }
+    }
+
+    private func startRuntimeReconciliation(
+        agentID: String,
+        turnID: String,
+        service: any OrcaRuntimeServing
+    ) async {
+        if runtimeReconciliationTurnIDs[agentID] == turnID,
+           runtimeReconciliationTasks[agentID] != nil {
+            return
+        }
+        stopRuntimeReconciliation(for: agentID)
+        runtimeReconciliationTurnIDs[agentID] = turnID
+
+        let scope = conversationScope.flatMap {
+            OrcaRuntimeCursorScope(
+                origin: $0.origin,
+                organizationID: $0.organizationID,
+                agentKey: agentID,
+                turnID: turnID
+            )
+        }
+        let cursorStore = runtimeCursorStore
+        let persistedCursor = scope.flatMap(cursorStore.cursor)
+        let updates = await service.runtimeUpdates(
+            turnID: turnID,
+            persistedCursor: persistedCursor,
+            persistCursor: { cursor in
+                guard let scope else { return }
+                cursorStore.store(cursor, for: scope)
+            }
+        )
+        runtimeReconciliationTasks[agentID] = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                for try await update in updates {
+                    guard !Task.isCancelled,
+                          self.runtimeReconciliationTurnIDs[agentID] == turnID else {
+                        return
+                    }
+                    self.runtimeTurns[agentID] = update.turn
+                    self.runtimeReconciliations[agentID] = update
+                    if agentID == self.selectedAgentID {
+                        self.runtimeEvidenceError = nil
+                    }
+                    self.lastUpdatedAt = Date()
+                }
+            } catch OrcaRuntimeClientError.httpStatus(404) {
+                self.runtimeTurns.removeValue(forKey: agentID)
+                self.runtimeReconciliations.removeValue(forKey: agentID)
+            } catch {
+                if self.runtimeTurns[agentID]?.turnId != turnID {
+                    self.runtimeTurns.removeValue(forKey: agentID)
+                    self.runtimeReconciliations.removeValue(forKey: agentID)
+                }
+                if agentID == self.selectedAgentID {
+                    self.runtimeEvidenceError = "Turn: \(error.localizedDescription)"
+                }
+            }
+            if self.runtimeReconciliationTurnIDs[agentID] == turnID {
+                self.runtimeReconciliationTasks.removeValue(forKey: agentID)
+                self.runtimeReconciliationTurnIDs.removeValue(forKey: agentID)
+            }
+        }
+    }
+
+    private func stopRuntimeReconciliation(for agentID: String) {
+        runtimeReconciliationTasks[agentID]?.cancel()
+        runtimeReconciliationTasks.removeValue(forKey: agentID)
+        runtimeReconciliationTurnIDs.removeValue(forKey: agentID)
+    }
+
+    private func stopRuntimeReconciliation() {
+        runtimeReconciliationTasks.values.forEach { $0.cancel() }
+        runtimeReconciliationTasks.removeAll()
+        runtimeReconciliationTurnIDs.removeAll()
     }
 
     static func conversationDefaultsKey(
@@ -1173,8 +1267,10 @@ final class OrcaMacModel {
         let next = (origin: origin, organizationID: organizationID)
         if conversationScope?.origin != next.origin
             || conversationScope?.organizationID != next.organizationID {
+            stopRuntimeReconciliation()
             conversations.removeAll()
             runtimeTurns.removeAll()
+            runtimeReconciliations.removeAll()
             conversationMemories.removeAll()
             activeTicketChat = nil
         }
@@ -1196,17 +1292,21 @@ final class OrcaMacModel {
                 continue
             }
             conversations[agent.id] = ConversationState(conversationID: canonicalID)
+            stopRuntimeReconciliation(for: agent.id)
             runtimeTurns.removeValue(forKey: agent.id)
+            runtimeReconciliations.removeValue(forKey: agent.id)
             conversationMemories.removeValue(forKey: agent.id)
             storeConversationID(canonicalID, for: agent.id)
         }
     }
 
     private func deactivateConversationScope() {
+        stopRuntimeReconciliation()
         conversationScope = nil
         activeTicketChat = nil
         conversations.removeAll()
         runtimeTurns.removeAll()
+        runtimeReconciliations.removeAll()
         conversationMemories.removeAll()
         runtimeEvidenceError = nil
         providerControl = nil

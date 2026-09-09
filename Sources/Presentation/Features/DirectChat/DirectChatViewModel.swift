@@ -134,6 +134,9 @@ final class DirectChatViewModel {
     private var presenceRefreshTask: Task<Void, Never>?
     private var centralAgentHealthTask: Task<Void, Never>?
     private var providerControlTask: Task<Void, Never>?
+    private var runtimeReconciliationTasks: [String: Task<Void, Never>] = [:]
+    private var runtimeReconciliationTurnIDs: [String: String] = [:]
+    private let runtimeCursorStore = OrcaRuntimeCursorStore()
     private var pendingTicketContinuation: (ticketId: String, ticketTitle: String, agentId: String, channelId: String?)?
 
     // MARK: - Setup
@@ -827,6 +830,7 @@ final class DirectChatViewModel {
     // MARK: - Select Agent
 
     func selectAgent(_ agent: AgentInfo) {
+        stopRuntimeReconciliation()
         stopCentralAgentHealthMonitoring()
         stopProviderControlMonitoring()
         selectedAgent = agent
@@ -888,6 +892,7 @@ final class DirectChatViewModel {
     }
 
     func clearSelection() {
+        stopRuntimeReconciliation()
         stopCentralAgentHealthMonitoring()
         stopProviderControlMonitoring()
         selectedAgent = nil
@@ -1520,17 +1525,15 @@ final class DirectChatViewModel {
         }
 
         if let turnId, !turnId.isEmpty {
-            do {
-                runtimeTurnByAgent[agent.id] = try await service.runtimeTurn(turnId: turnId)
-            } catch OrcaRuntimeClientError.httpStatus(404) {
-                runtimeTurnByAgent.removeValue(forKey: agent.id)
-            } catch {
-                if runtimeTurnByAgent[agent.id]?.turnId != turnId {
-                    runtimeTurnByAgent.removeValue(forKey: agent.id)
-                }
-                errors.append("Turn: \(error.localizedDescription)")
-            }
+            await startRuntimeReconciliation(
+                for: agent,
+                turnId: turnId,
+                service: service
+            )
         } else {
+            runtimeReconciliationTasks[agent.id]?.cancel()
+            runtimeReconciliationTasks.removeValue(forKey: agent.id)
+            runtimeReconciliationTurnIDs.removeValue(forKey: agent.id)
             runtimeTurnByAgent.removeValue(forKey: agent.id)
         }
 
@@ -1539,6 +1542,100 @@ final class DirectChatViewModel {
         } else {
             runtimeEvidenceErrorByAgent[agent.id] = errors.joined(separator: " ")
         }
+    }
+
+    private func startRuntimeReconciliation(
+        for agent: AgentInfo,
+        turnId: String,
+        service: AgentChatService
+    ) async {
+        if runtimeReconciliationTurnIDs[agent.id] == turnId,
+           runtimeReconciliationTasks[agent.id] != nil {
+            return
+        }
+        runtimeReconciliationTasks[agent.id]?.cancel()
+        runtimeReconciliationTurnIDs[agent.id] = turnId
+
+        let organizationID = await api.currentOrganizationID()
+        let scope = organizationID.flatMap {
+            OrcaRuntimeCursorScope(
+                origin: AppConfig.backendURL,
+                organizationID: $0,
+                agentKey: agent.id,
+                turnID: turnId
+            )
+        }
+        let persistedCursor = scope.flatMap(runtimeCursorStore.cursor)
+        let updates = await service.runtimeUpdates(
+            turnId: turnId,
+            persistedCursor: persistedCursor,
+            persistCursor: { cursor in
+                guard let scope else { return }
+                self.runtimeCursorStore.store(cursor, for: scope)
+            }
+        )
+        runtimeReconciliationTasks[agent.id] = Task { [weak self] in
+            guard let self else { return }
+            do {
+                for try await update in updates {
+                    guard !Task.isCancelled,
+                          self.runtimeReconciliationTurnIDs[agent.id] == turnId else {
+                        return
+                    }
+                    let summary = AgentChatService.RuntimeTurnSummary(
+                        runtime: update.turn,
+                        reconciliationCursor: update.cursor,
+                        cursorState: update.cursorState
+                    )
+                    self.runtimeTurnByAgent[agent.id] = summary
+                    self.runtimeEvidenceErrorByAgent.removeValue(forKey: agent.id)
+                    if self.selectedAgent?.id == agent.id {
+                        self.applyRuntimeProgress(summary, for: agent)
+                    }
+                }
+            } catch OrcaRuntimeClientError.httpStatus(404) {
+                self.runtimeTurnByAgent.removeValue(forKey: agent.id)
+            } catch {
+                if self.runtimeTurnByAgent[agent.id]?.turnId != turnId {
+                    self.runtimeTurnByAgent.removeValue(forKey: agent.id)
+                }
+                self.runtimeEvidenceErrorByAgent[agent.id] = "Turn: \(error.localizedDescription)"
+            }
+            if self.runtimeReconciliationTurnIDs[agent.id] == turnId {
+                self.runtimeReconciliationTasks.removeValue(forKey: agent.id)
+                self.runtimeReconciliationTurnIDs.removeValue(forKey: agent.id)
+            }
+        }
+    }
+
+    private func applyRuntimeProgress(
+        _ summary: AgentChatService.RuntimeTurnSummary,
+        for agent: AgentInfo
+    ) {
+        let mode = selectedDeliveryMode
+        switch summary.state {
+        case "accepted", "claimed":
+            routeProgressSteps = Self.routeProgressSteps(for: mode, stage: .routing)
+        case "working", "blocked", "approval_needed":
+            routeProgressSteps = Self.routeProgressSteps(for: mode, stage: .computeRunning)
+        case "completed":
+            routeProgressSteps = Self.routeProgressSteps(for: mode, stage: .responseReceived)
+        case "failed", "cancelled":
+            routeProgressSteps = Self.routeProgressSteps(for: mode, stage: .failed)
+        default:
+            break
+        }
+        if summary.isStuck {
+            liveChatStatus = "\(agent.name)'s turn needs recovery review."
+        } else if summary.state == "approval_needed" {
+            liveChatStatus = "\(agent.name)'s turn is waiting for approval."
+        }
+    }
+
+    private func stopRuntimeReconciliation() {
+        runtimeReconciliationTasks.values.forEach { $0.cancel() }
+        runtimeReconciliationTasks.removeAll()
+        runtimeReconciliationTurnIDs.removeAll()
     }
 
     private static func parkingLotIdea(from text: String) -> String? {

@@ -853,6 +853,30 @@ struct LockerChatView: View {
                         .foregroundStyle(turn.events.last?.isTerminal == true ? AppColors.accentSuccess : AppColors.accentElectric)
                 }
 
+                FlowLayout(horizontalSpacing: 8, verticalSpacing: 5) {
+                    Label(turn.sourceSurface.capitalized, systemImage: "rectangle.on.rectangle")
+                    Label(
+                        turn.recoveryStatus.capitalized,
+                        systemImage: turn.isStuck ? "exclamationmark.triangle.fill" : "heart.text.square"
+                    )
+                    Label(
+                        "\(turn.workRunCount) runs",
+                        systemImage: turn.workRunsTruncated ? "ellipsis.circle" : "hammer"
+                    )
+                    if let cursorState = turn.cursorState {
+                        Label(cursorState.replacingOccurrences(of: "_", with: " ").capitalized, systemImage: "arrow.triangle.2.circlepath")
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(turn.isStuck ? AppColors.accentWarning : AppColors.textTertiary)
+
+                if let recoveryReason = turn.recoveryReason, turn.isStuck {
+                    Text(recoveryReason)
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.accentWarning)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 ForEach(turn.events.suffix(8)) { event in
                     HStack(spacing: 8) {
                         Image(systemName: event.isTerminal ? "checkmark.circle.fill" : "circle.fill")

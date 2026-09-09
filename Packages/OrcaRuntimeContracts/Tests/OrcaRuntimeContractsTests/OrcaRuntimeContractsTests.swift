@@ -35,6 +35,105 @@ private func canonicalTurn() throws -> Components.Schemas.ChatRuntimeTurnRead {
     )
 }
 
+private func activeTurn(eventCount: Int = 3) throws -> Components.Schemas.ChatRuntimeTurnRead {
+    var turn = try canonicalTurn()
+    let events = Array((turn.events ?? []).prefix(eventCount))
+    turn.events = events
+    turn.latestCursor = events.last?.cursor
+    turn.state = .working
+    turn.terminalOutcome = nil
+    turn.recovery = .init(
+        isStuck: false,
+        lastProgressAt: Date(timeIntervalSince1970: 1_786_291_200),
+        observedAt: Date(timeIntervalSince1970: 1_786_291_201),
+        status: .healthy,
+        thresholdSeconds: 300
+    )
+    return turn
+}
+
+private func reconciliationCursor(
+    for turn: Components.Schemas.ChatRuntimeTurnRead,
+    digestCharacter: Character
+) -> String {
+    let sequence = turn.events?.last?.sequence ?? -1
+    return "runtime-turn:\(turn.turnId):\(sequence):\(String(repeating: digestCharacter, count: 24))"
+}
+
+private func reconciliationEnvelope(
+    turn: Components.Schemas.ChatRuntimeTurnRead,
+    cursor: String,
+    requestedCursor: String?,
+    state: Components.Schemas.ChatRuntimeCursorState,
+    eventsAfterCursor: [Components.Schemas.ChatRuntimeTimelineEventRead]
+) -> Components.Schemas.ChatRuntimeTurnReconciliationRead {
+    let terminal = [
+        Components.Schemas.ChatRuntimeProgressState.completed,
+        .failed,
+        .cancelled,
+    ].contains(turn.state)
+    return .init(
+        changed: state != .current,
+        contractVersion: .orca_chatRuntime_turnReconciliation_v1,
+        cursorState: state,
+        eventsAfterCursor: eventsAfterCursor,
+        pollAfterSeconds: terminal ? nil : 2,
+        reconciliationCursor: cursor,
+        requestedCursor: requestedCursor,
+        terminal: terminal,
+        turn: turn,
+        turnId: turn.turnId
+    )
+}
+
+private enum ReconciliationDriverTestError: Error {
+    case streamDisconnected
+}
+
+private actor ReconciliationDriverFixture {
+    private let initial: Components.Schemas.ChatRuntimeTurnReconciliationRead
+    private let terminal: Components.Schemas.ChatRuntimeTurnReconciliationRead
+    private var pollCount = 0
+    private(set) var requestedCursors: [String?] = []
+
+    init(
+        initial: Components.Schemas.ChatRuntimeTurnReconciliationRead,
+        terminal: Components.Schemas.ChatRuntimeTurnReconciliationRead
+    ) {
+        self.initial = initial
+        self.terminal = terminal
+    }
+
+    func poll(
+        turnID: String,
+        afterCursor: String?
+    ) -> Components.Schemas.ChatRuntimeTurnReconciliationRead {
+        requestedCursors.append(afterCursor)
+        defer { pollCount += 1 }
+        return pollCount == 0 ? initial : terminal
+    }
+
+    func disconnectedStream(
+        turnID: String,
+        afterCursor: String?
+    ) -> AsyncThrowingStream<Components.Schemas.ChatRuntimeTurnReconciliationRead, Error> {
+        AsyncThrowingStream { continuation in
+            continuation.finish(throwing: ReconciliationDriverTestError.streamDisconnected)
+        }
+    }
+
+    func corruptStream(
+        turnID: String,
+        afterCursor: String?
+    ) -> AsyncThrowingStream<Components.Schemas.ChatRuntimeTurnReconciliationRead, Error> {
+        AsyncThrowingStream { continuation in
+            continuation.finish(
+                throwing: OrcaRuntimeSSEError.invalidPayload("corrupt reconciliation event")
+            )
+        }
+    }
+}
+
 private func canonicalAgentPack(
     _ agentKey: String
 ) -> Components.Schemas.ChatRuntimeAgentPackRead {
@@ -424,7 +523,7 @@ func credentialRedirectsAreNeverFollowed(status: Int) throws {
     #expect(OrcaRuntimeContract.version == "orca.chat-runtime.v1")
     #expect(
         OrcaRuntimeContract.schemaSHA256
-            == "40a298668534e87d47abc42279d4777334e1e2c9ae92dc6e291818a8a76cfbeb"
+            == "2699a91c2bc3d52cbd598e96face4a75fd07953f06e5a8774762c3d8c3b0489e"
     )
 }
 
@@ -789,6 +888,79 @@ func credentialRedirectsAreNeverFollowed(status: Int) throws {
     #expect(request.idempotencyKey == "shared-native-turn-1")
 }
 
+@Test func directTurnPreservesExplicitClientProvenance() {
+    let request = OrcaRuntimeDirectTurnRequest(
+        agentSlug: "coral",
+        content: "Continue this turn",
+        sourceSurface: "console",
+        deliveryMode: "agent_inbox",
+        asyncResponse: true,
+        traceID: "shared-native-trace-2",
+        clientVersion: "2.4.0",
+        clientBuild: "241",
+        clientInstanceID: "ed25519:console-device",
+        deviceRegistrationRef: "orca://devices/ed25519:console-device"
+    )
+
+    #expect(request.clientVersion == "2.4.0")
+    #expect(request.clientBuild == "241")
+    #expect(request.clientInstanceID == "ed25519:console-device")
+    #expect(request.deviceRegistrationRef == "orca://devices/ed25519:console-device")
+}
+
+@Test func runtimeTurnRejectsSecretShapedClientProvenance() throws {
+    var turn = try canonicalTurn()
+    turn.clientProvenance.clientVersion = "bearer-secret-token"
+
+    do {
+        try OrcaRuntimeClient.validateRuntimeTurn(turn, expectedTurnID: turn.turnId)
+        Issue.record("Runtime accepted secret-shaped client provenance")
+    } catch let error as OrcaRuntimeClientError {
+        #expect(error == .invalidResponse("runtime turn failed closed"))
+    }
+}
+
+@Test func reconciliationCursorScopeIsolatesEveryAuthorityDimension() throws {
+    let origin = "http://100.104.72.62:8000/"
+    let organization = "b28e893d-55ff-430c-a2b6-f3dd1d4085ea"
+    let otherOrganization = "c28e893d-55ff-430c-a2b6-f3dd1d4085ea"
+    let turn = "10000000-0000-4000-8000-000000000001"
+    let otherTurn = "10000000-0000-4000-8000-000000000002"
+    let baseline = try #require(OrcaRuntimeCursorScope(
+        origin: origin,
+        organizationID: organization,
+        agentKey: "Coral",
+        turnID: turn
+    ))
+
+    #expect(baseline.origin == "http://100.104.72.62:8000")
+    #expect(baseline.agentKey == "coral")
+    #expect(baseline.storageKey != OrcaRuntimeCursorScope(
+        origin: "http://127.0.0.1:8000",
+        organizationID: organization,
+        agentKey: "coral",
+        turnID: turn
+    )?.storageKey)
+    #expect(baseline.storageKey != OrcaRuntimeCursorScope(
+        origin: origin,
+        organizationID: otherOrganization,
+        agentKey: "coral",
+        turnID: turn
+    )?.storageKey)
+    #expect(baseline.storageKey != OrcaRuntimeCursorScope(
+        origin: origin,
+        organizationID: organization,
+        agentKey: "maui",
+        turnID: turn
+    )?.storageKey)
+    #expect(baseline.storageKey != OrcaRuntimeCursorScope(
+        origin: origin,
+        organizationID: organization,
+        agentKey: "coral",
+        turnID: otherTurn
+    )?.storageKey)
+}
+
 @Test func generatedTypesDecodeCanonicalCompleteTurn() throws {
     let turn = try canonicalTurn()
 
@@ -916,6 +1088,258 @@ func credentialRedirectsAreNeverFollowed(status: Int) throws {
         try resumed.apply(OrcaRuntimeTimelineEvent(generated: generatedEvents.last!))
             == .duplicate
     )
+}
+
+@Test func reconciliationAdvancesAndDeliversOneTerminal() throws {
+    let active = try activeTurn()
+    let activeCursor = reconciliationCursor(for: active, digestCharacter: "a")
+    var reconciler = OrcaRuntimeTurnReconciler(turnID: active.turnId)
+
+    let initial = try reconciler.apply(reconciliationEnvelope(
+        turn: active,
+        cursor: activeCursor,
+        requestedCursor: nil,
+        state: .initial,
+        eventsAfterCursor: active.events ?? []
+    ))
+    #expect(initial.rebuilt)
+    #expect(initial.appliedEventIDs.count == 3)
+    #expect(!initial.terminalBecameVisible)
+
+    let complete = try canonicalTurn()
+    let completeCursor = reconciliationCursor(for: complete, digestCharacter: "b")
+    let advanced = try reconciler.apply(reconciliationEnvelope(
+        turn: complete,
+        cursor: completeCursor,
+        requestedCursor: activeCursor,
+        state: .advanced,
+        eventsAfterCursor: Array((complete.events ?? []).suffix(2))
+    ))
+    #expect(!advanced.rebuilt)
+    #expect(advanced.appliedEventIDs.count == 2)
+    #expect(advanced.terminalBecameVisible)
+    #expect(reconciler.timeline.events.count == 5)
+
+    let current = try reconciler.apply(reconciliationEnvelope(
+        turn: complete,
+        cursor: completeCursor,
+        requestedCursor: completeCursor,
+        state: .current,
+        eventsAfterCursor: []
+    ))
+    #expect(!current.rebuilt)
+    #expect(current.appliedEventIDs.isEmpty)
+    #expect(!current.terminalBecameVisible)
+}
+
+@Test func reconciliationRefreshesCurrentAndRecoveryOnlyState() throws {
+    let active = try activeTurn()
+    let activeCursor = reconciliationCursor(for: active, digestCharacter: "c")
+    var reconciler = OrcaRuntimeTurnReconciler(turnID: active.turnId)
+    _ = try reconciler.apply(reconciliationEnvelope(
+        turn: active,
+        cursor: activeCursor,
+        requestedCursor: nil,
+        state: .initial,
+        eventsAfterCursor: active.events ?? []
+    ))
+
+    var observed = active
+    observed.recovery.observedAt = active.recovery.observedAt.addingTimeInterval(5)
+    let current = try reconciler.apply(reconciliationEnvelope(
+        turn: observed,
+        cursor: activeCursor,
+        requestedCursor: activeCursor,
+        state: .current,
+        eventsAfterCursor: []
+    ))
+    #expect(current.turn.recovery.observedAt == observed.recovery.observedAt)
+
+    var stuck = observed
+    stuck.recovery = .init(
+        isStuck: true,
+        lastProgressAt: observed.recovery.lastProgressAt,
+        observedAt: observed.recovery.observedAt,
+        reason: "turn exceeded its progress threshold",
+        recommendedAction: "reconcile_turn",
+        retryOwner: "orca.runtime-reconciler",
+        status: .stuck,
+        thresholdSeconds: 300
+    )
+    let stuckCursor = reconciliationCursor(for: stuck, digestCharacter: "d")
+    let recoveryOnly = try reconciler.apply(reconciliationEnvelope(
+        turn: stuck,
+        cursor: stuckCursor,
+        requestedCursor: activeCursor,
+        state: .advanced,
+        eventsAfterCursor: []
+    ))
+    #expect(recoveryOnly.appliedEventIDs.isEmpty)
+    #expect(recoveryOnly.turn.recovery.isStuck)
+    #expect(reconciler.timeline.events.count == 3)
+}
+
+@Test func reconciliationRebuildsFromPersistedAndRejectedCursors() throws {
+    let complete = try canonicalTurn()
+    let completeCursor = reconciliationCursor(for: complete, digestCharacter: "e")
+    let foreignCursor = "runtime-turn:00000000-0000-4000-8000-000000000099:4:\(String(repeating: "f", count: 24))"
+    var reconciler = OrcaRuntimeTurnReconciler(
+        turnID: complete.turnId,
+        persistedCursor: foreignCursor
+    )
+
+    let reset = try reconciler.apply(reconciliationEnvelope(
+        turn: complete,
+        cursor: completeCursor,
+        requestedCursor: foreignCursor,
+        state: .resetRequired,
+        eventsAfterCursor: complete.events ?? []
+    ))
+    #expect(reset.rebuilt)
+    #expect(reset.appliedEventIDs.count == 5)
+    #expect(reset.terminalBecameVisible)
+    #expect(reconciler.reconciliationCursor == completeCursor)
+}
+
+@Test func reconciliationRejectsCrossTurnCursorAndHistoryRewrite() throws {
+    let active = try activeTurn()
+    let activeCursor = reconciliationCursor(for: active, digestCharacter: "1")
+    var reconciler = OrcaRuntimeTurnReconciler(turnID: active.turnId)
+    _ = try reconciler.apply(reconciliationEnvelope(
+        turn: active,
+        cursor: activeCursor,
+        requestedCursor: nil,
+        state: .initial,
+        eventsAfterCursor: active.events ?? []
+    ))
+
+    let crossTurnCursor = "runtime-turn:00000000-0000-4000-8000-000000000099:2:\(String(repeating: "2", count: 24))"
+    do {
+        _ = try reconciler.apply(reconciliationEnvelope(
+            turn: active,
+            cursor: crossTurnCursor,
+            requestedCursor: activeCursor,
+            state: .advanced,
+            eventsAfterCursor: []
+        ))
+        Issue.record("A cross-turn reconciliation cursor was accepted")
+    } catch let error as OrcaRuntimeTimelineError {
+        #expect(error == .reconciliationMismatch("server cursor is not bound to this turn and sequence"))
+    }
+
+    var rewritten = active
+    var rewrittenEvents = rewritten.events ?? []
+    rewrittenEvents[0].actorId = "rewritten-actor"
+    rewritten.events = rewrittenEvents
+    let rewrittenCursor = reconciliationCursor(for: rewritten, digestCharacter: "3")
+    do {
+        _ = try reconciler.apply(reconciliationEnvelope(
+            turn: rewritten,
+            cursor: rewrittenCursor,
+            requestedCursor: activeCursor,
+            state: .advanced,
+            eventsAfterCursor: []
+        ))
+        Issue.record("Acknowledged runtime history was rewritten")
+    } catch let error as OrcaRuntimeTimelineError {
+        #expect(error == .reconciliationMismatch("advanced snapshot rewrote acknowledged history"))
+    }
+}
+
+@Test func runtimeSSEParserHandlesCommentsChunksAndMultilineData() throws {
+    let payload = "{\"status\":\"working\",\n\"changed\":true}"
+    let wire = ": keepalive\r\nid: runtime-turn:1\r\nevent: turn\r\ndata: {\"status\":\"working\",\r\ndata: \"changed\":true}\r\n\r\n"
+    var parser = OrcaRuntimeSSEParser()
+    var frames: [OrcaRuntimeSSEFrame] = []
+    for byte in wire.utf8 {
+        if let frame = try parser.consume(byte) { frames.append(frame) }
+    }
+    if let frame = try parser.finish() { frames.append(frame) }
+
+    #expect(frames.count == 1)
+    #expect(frames[0].eventID == "runtime-turn:1")
+    #expect(frames[0].event == "turn")
+    #expect(String(data: frames[0].data, encoding: .utf8) == payload)
+}
+
+@Test func reconciliationDriverFallsBackToRESTWithoutChangingCursor() async throws {
+    let active = try activeTurn()
+    let activeCursor = reconciliationCursor(for: active, digestCharacter: "4")
+    let initial = reconciliationEnvelope(
+        turn: active,
+        cursor: activeCursor,
+        requestedCursor: nil,
+        state: .initial,
+        eventsAfterCursor: active.events ?? []
+    )
+    let complete = try canonicalTurn()
+    let completeCursor = reconciliationCursor(for: complete, digestCharacter: "5")
+    let terminal = reconciliationEnvelope(
+        turn: complete,
+        cursor: completeCursor,
+        requestedCursor: activeCursor,
+        state: .advanced,
+        eventsAfterCursor: Array((complete.events ?? []).suffix(2))
+    )
+    let fixture = ReconciliationDriverFixture(initial: initial, terminal: terminal)
+    let driver = OrcaRuntimeReconciliationDriver(
+        turnID: active.turnId,
+        poll: { turnID, cursor in
+            await fixture.poll(turnID: turnID, afterCursor: cursor)
+        },
+        stream: { turnID, cursor in
+            await fixture.disconnectedStream(turnID: turnID, afterCursor: cursor)
+        },
+        sleep: { _ in }
+    )
+
+    var updates: [OrcaRuntimeReconciliationUpdate] = []
+    for try await update in driver.updates() {
+        updates.append(update)
+    }
+
+    #expect(updates.count == 2)
+    #expect(updates[0].cursor == activeCursor)
+    #expect(updates[1].cursor == completeCursor)
+    #expect(updates[1].terminalBecameVisible)
+    #expect(await fixture.requestedCursors == [nil, activeCursor])
+}
+
+@Test func reconciliationDriverFailsClosedOnCorruptStream() async throws {
+    let active = try activeTurn()
+    let activeCursor = reconciliationCursor(for: active, digestCharacter: "6")
+    let initial = reconciliationEnvelope(
+        turn: active,
+        cursor: activeCursor,
+        requestedCursor: nil,
+        state: .initial,
+        eventsAfterCursor: active.events ?? []
+    )
+    let fixture = ReconciliationDriverFixture(initial: initial, terminal: initial)
+    let driver = OrcaRuntimeReconciliationDriver(
+        turnID: active.turnId,
+        poll: { turnID, cursor in
+            await fixture.poll(turnID: turnID, afterCursor: cursor)
+        },
+        stream: { turnID, cursor in
+            await fixture.corruptStream(turnID: turnID, afterCursor: cursor)
+        },
+        sleep: { _ in }
+    )
+
+    var updates: [OrcaRuntimeReconciliationUpdate] = []
+    do {
+        for try await update in driver.updates() {
+            updates.append(update)
+        }
+        Issue.record("A corrupt stream silently fell back to REST")
+    } catch let error as OrcaRuntimeSSEError {
+        #expect(error == .invalidPayload("corrupt reconciliation event"))
+    }
+
+    #expect(updates.count == 1)
+    #expect(updates[0].cursor == activeCursor)
+    #expect(await fixture.requestedCursors == [nil])
 }
 
 @Test func timelineRejectsGapAndConflictingDuplicate() throws {
