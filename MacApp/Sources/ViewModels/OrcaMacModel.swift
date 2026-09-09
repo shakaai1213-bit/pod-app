@@ -48,6 +48,7 @@ final class OrcaMacModel {
     var workMode: ConsoleWorkMode = .portfolio
     var workMetricFilter: ConsoleWorkMetricFilter?
     var boards: [OrcaBoardDirectoryItem] = []
+    var boardArchitectureProfilesByID: [UUID: OrcaBoardArchitectureProfile] = [:]
     var boardPlansByID: [UUID: OrcaBoardPlan] = [:]
     var selectedBoardID: UUID?
     var boardPlan: OrcaBoardPlan?
@@ -561,8 +562,11 @@ final class OrcaMacModel {
         isLoadingBoardPlan = true
         defer { isLoadingBoardPlan = false }
         do {
-            let directory = try await consoleService.boardDirectory()
-            boards = directory.items
+            let directory = try await consoleService.boardArchitectureDirectory()
+            boardArchitectureProfilesByID = Dictionary(
+                uniqueKeysWithValues: directory.profiles.map { ($0.id, $0) }
+            )
+            boards = directory.directoryItems
                 .sorted { left, right in
                     if left.slug == "pod" { return true }
                     if right.slug == "pod" { return false }
@@ -627,12 +631,21 @@ final class OrcaMacModel {
               let selectedBoardID,
               let board = boards.first(where: { $0.id == selectedBoardID }),
               !board.isProtected else { return }
+        var errors: [String] = []
+        do {
+            let profile = try await consoleService.boardArchitectureProfile(boardID: selectedBoardID)
+            guard profile.header.boardID == selectedBoardID else {
+                throw OrcaConsoleServiceError.invalidResponse
+            }
+            boardArchitectureProfilesByID[selectedBoardID] = profile
+        } catch {
+            errors.append("Architecture profile refresh unavailable; showing the directory snapshot.")
+        }
         guard let protectedBoardID = boards.first(where: \.isProtected)?.id else {
             boardDetailError = "Protected board boundary is unavailable; board detail failed closed."
             return
         }
 
-        var errors: [String] = []
         do {
             boardProjects = try await consoleService.boardProjects(
                 boardID: selectedBoardID,
