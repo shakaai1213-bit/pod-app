@@ -267,8 +267,15 @@ actor OrcaConsoleService {
         }
     }
 
-    func boardDirectory() async throws -> OrcaBoardDirectory {
-        try await requestJSON(method: "GET", path: "/api/v1/boards")
+    func boardArchitectureDirectory() async throws -> OrcaBoardArchitectureDirectory {
+        try await requestJSON(method: "GET", path: OrcaBoardArchitectureEndpoint.directory)
+    }
+
+    func boardArchitectureProfile(boardID: UUID) async throws -> OrcaBoardArchitectureProfile {
+        try await requestJSON(
+            method: "GET",
+            path: OrcaBoardArchitectureEndpoint.profile(boardID: boardID)
+        )
     }
 
     func boardPlan(boardID: UUID) async throws -> OrcaBoardPlan {

@@ -587,7 +587,48 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertEqual(tickets.map(\.title), ["Safe ticket"])
     }
 
+    func testBoardArchitectureServiceUsesCanonicalDirectoryAndDetailRoutes() async throws {
+        let boardID = UUID(uuidString: "00000000-0000-4000-8000-000000000010")!
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        TestURLProtocol.response = { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer console-token")
+            switch request.url?.path {
+            case "/api/v1/board-architecture":
+                return (200, Self.boardArchitectureDirectoryJSON)
+            case "/api/v1/board-architecture/00000000-0000-4000-8000-000000000010":
+                return (200, Data(Self.boardArchitectureProfileJSON.utf8))
+            default:
+                return (404, Data(#"{"detail":"not found"}"#.utf8))
+            }
+        }
+        defer { TestURLProtocol.response = nil }
+
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+
+        let directory = try await service.boardArchitectureDirectory()
+        let profile = try await service.boardArchitectureProfile(boardID: boardID)
+
+        XCTAssertEqual(directory.directoryItems.map { $0.id }, [boardID])
+        XCTAssertEqual(directory.directoryItems.map { $0.projectCount }, [3])
+        XCTAssertEqual(profile.header.boardID, boardID)
+        XCTAssertEqual(profile.fullProfile?.health.state, OrcaBoardHealthState.healthy)
+    }
+
     private static let workbenchHostJSON = #"{"host_id":"shaka-mac","capability_id":"engineering.workspace","state":"attested","ready":true,"reason":"fresh","observed_at":"2026-08-18T04:00:00Z","expires_at":null,"evidence_refs":["attestation-evidence://shaka-mac/canary"],"policy_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}"#
+
+    private static let boardArchitectureProfileJSON = #"{"schema_version":"orca.board-architecture-profile.v1","config_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generated_at":"2026-09-09T20:00:00.123456","board_id":"00000000-0000-4000-8000-000000000010","slug":"guardian","name":"Guardian","group_id":null,"group_slug":"products","classification":"product","lifecycle_state":"active","protected":false,"public_summary":"Safety product.","health_state":"healthy","counts":{"project_count":3,"active_project_count":2,"task_count":7,"active_task_count":4,"ticket_count":5,"in_progress_count":6,"blocked_count":0,"review_count":1},"detail_available":true,"visibility":"full","purpose":"Safety product.","primary_agent":"aloha","health":{"state":"healthy","reason":"All signed checks pass.","observed_at":"2026-09-09T19:59:00.123456","freshness":"fresh","source_checks":["guardian.api"]},"current_release":null,"current_project_id":null,"current_project_name":"Guardian hardening","next_gate":"Run product canary","highest_impact_blocker":null,"source_refs":[{"source_type":"signed_operational_snapshot","ref":"/api/v1/state-registry/board.guardian.operational","revision":"guardian-r4","observed_at":"2026-09-09T19:59:00.123456","freshness":"fresh"}]}"#
+
+    private static var boardArchitectureDirectoryJSON: Data {
+        let prefix = #"{"schema_version":"orca.board-architecture-directory.v1","config_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generated_at":"2026-09-09T20:00:00.123456","profiles":["#
+        return Data((prefix + boardArchitectureProfileJSON + "]}").utf8)
+    }
 
     private static let workbenchContractJSON = "{\"schema\":\"orca.engineering-workbench.v1\",\"enabled\":true,\"mode\":\"active\",\"host\":\(workbenchHostJSON),\"worker_lane\":\"engineering-host\",\"policy_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"roots\":[{\"id\":\"pod-client\",\"label\":\"Pod and Console\",\"description\":\"Native source\",\"access\":\"read_test\",\"source_mutation\":false}],\"actions\":[{\"id\":\"git.status\",\"label\":\"Git Status\",\"kind\":\"diff\",\"requires_approval\":false,\"mutates_source\":false,\"default_timeout_seconds\":30,\"allowed_root_ids\":[\"pod-client\"],\"available\":true,\"blocked_reasons\":[]}],\"lifecycle\":[\"request.persisted\"],\"guarantees\":[\"AgentRun first\"]}"
 
