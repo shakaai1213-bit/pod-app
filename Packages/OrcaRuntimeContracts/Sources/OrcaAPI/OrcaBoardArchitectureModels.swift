@@ -278,7 +278,11 @@ public struct OrcaBoardArchitectureFullProfile: Decodable, Hashable, Sendable {
 
     public init(from decoder: Decoder) throws {
         header = try OrcaBoardArchitectureHeader(from: decoder)
-        guard !header.isProtected, header.detailAvailable else {
+        let requiresProtectedPointer = header.classification == .protectedDomain
+            || header.classification == .unknown
+            || header.groupSlug.lowercased() == "fund"
+            || header.slug.lowercased() == "fund"
+        guard !header.isProtected, !requiresProtectedPointer, header.detailAvailable else {
             throw DecodingError.dataCorrupted(
                 .init(codingPath: decoder.codingPath, debugDescription: "Full board profile violates protection contract")
             )
