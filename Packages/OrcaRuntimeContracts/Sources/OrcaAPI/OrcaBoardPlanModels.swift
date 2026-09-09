@@ -1,5 +1,55 @@
 import Foundation
 
+public enum OrcaBoardArchitectureGroup: String, CaseIterable, Hashable, Identifiable, Sendable {
+    case products = "Products"
+    case surfaces = "Surfaces"
+    case platform = "Platform"
+    case infrastructure = "Infrastructure"
+    case fund = "Fund"
+    case strategy = "Strategy"
+    case other = "Other"
+
+    public var id: String { rawValue }
+
+    public static func classify(
+        slug: String,
+        layer: String?,
+        description: String?,
+        isProduct: Bool
+    ) -> Self {
+        let normalizedSlug = slug.lowercased()
+        switch normalizedSlug {
+        case "fund":
+            return .fund
+        case "campwatch", "guardian", "tiki":
+            return .products
+        case "pod", "products", "surfaces":
+            return .surfaces
+        case "operations", "tools", "governance":
+            return .infrastructure
+        case "north-star":
+            return .strategy
+        case "compute", "jarvis", "memory", "nerve", "platform", "schoolhouse", "orca":
+            return .platform
+        default:
+            break
+        }
+
+        if isProduct { return .products }
+        switch layer?.lowercased() {
+        case "product", "products": return .products
+        case "surface", "surfaces": return .surfaces
+        case "platform": return .platform
+        case "infrastructure", "operations": return .infrastructure
+        case "fund": return .fund
+        case "strategy": return .strategy
+        default:
+            let normalizedDescription = description?.lowercased() ?? ""
+            return normalizedDescription.contains("[product") ? .products : .other
+        }
+    }
+}
+
 public struct OrcaBoardDirectoryItem: Decodable, Identifiable, Hashable, Sendable {
     public let id: UUID
     public let slug: String
@@ -23,6 +73,24 @@ public struct OrcaBoardDirectoryItem: Decodable, Identifiable, Hashable, Sendabl
         return description.contains("[product")
             || description.contains("product vertical")
             || ["campwatch", "guardian", "tiki"].contains(slug.lowercased())
+    }
+
+    public var architectureGroup: OrcaBoardArchitectureGroup {
+        .classify(
+            slug: slug,
+            layer: layer,
+            description: boardDescription,
+            isProduct: isProduct
+        )
+    }
+
+    public func matches(searchQuery: String) -> Bool {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return true }
+        let publicDescription = isProtected ? nil : boardDescription
+        return [displayName, name, slug, layer, component, publicDescription]
+            .compactMap { $0 }
+            .contains { $0.localizedCaseInsensitiveContains(query) }
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -77,6 +145,10 @@ public struct OrcaBoardDirectoryItem: Decodable, Identifiable, Hashable, Sendabl
 public struct OrcaBoardDirectory: Decodable, Hashable, Sendable {
     public let items: [OrcaBoardDirectoryItem]
 
+    public init(items: [OrcaBoardDirectoryItem]) {
+        self.items = items
+    }
+
     public init(from decoder: Decoder) throws {
         if var container = try? decoder.unkeyedContainer() {
             var result: [OrcaBoardDirectoryItem] = []
@@ -91,6 +163,33 @@ public struct OrcaBoardDirectory: Decodable, Hashable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey { case items }
+
+    public func filtered(
+        searchQuery: String = "",
+        group: OrcaBoardArchitectureGroup? = nil
+    ) -> [OrcaBoardDirectoryItem] {
+        items.filter { item in
+            (group == nil || item.architectureGroup == group)
+                && item.matches(searchQuery: searchQuery)
+        }
+    }
+
+    public func grouped(
+        searchQuery: String = "",
+        group: OrcaBoardArchitectureGroup? = nil
+    ) -> [(group: OrcaBoardArchitectureGroup, boards: [OrcaBoardDirectoryItem])] {
+        let filteredItems = filtered(searchQuery: searchQuery, group: group)
+        let groupedItems = Dictionary(grouping: filteredItems, by: \.architectureGroup)
+        return OrcaBoardArchitectureGroup.allCases.compactMap { architectureGroup in
+            guard let boards = groupedItems[architectureGroup], !boards.isEmpty else { return nil }
+            return (
+                architectureGroup,
+                boards.sorted {
+                    $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+                }
+            )
+        }
+    }
 }
 
 public struct OrcaEvidenceReference: Decodable, Hashable, Sendable {
