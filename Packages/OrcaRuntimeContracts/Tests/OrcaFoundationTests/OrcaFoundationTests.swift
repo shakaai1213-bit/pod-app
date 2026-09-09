@@ -115,6 +115,22 @@ final class OrcaFoundationTests: XCTestCase {
             )
         )
 
+        for (field, value) in [
+            (#""classification":"product""#, #""classification":"protected_domain""#),
+            (#""classification":"product""#, #""classification":"unknown""#),
+            (#""group_slug":"products""#, #""group_slug":"fund""#),
+            (#""slug":"guardian""#, #""slug":"fund""#),
+        ] {
+            let protectedIdentityFull = Self.boardArchitectureFullJSON
+                .replacingOccurrences(of: field, with: value)
+            XCTAssertThrowsError(
+                try boardArchitectureDecoder().decode(
+                    OrcaBoardArchitectureProfile.self,
+                    from: Data(protectedIdentityFull.utf8)
+                )
+            )
+        }
+
         let conflictingHealth = Self.boardArchitectureFullJSON
             .replacingOccurrences(of: #""health_state":"healthy""#, with: #""health_state":"blocked""#)
         XCTAssertThrowsError(
