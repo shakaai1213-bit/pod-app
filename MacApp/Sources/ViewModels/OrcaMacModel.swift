@@ -37,6 +37,7 @@ final class OrcaMacModel {
     var workControl: OrcaWorkControlProjection?
     var workMode: ConsoleWorkMode = .portfolio
     var boards: [OrcaBoardDirectoryItem] = []
+    var boardArchitectureProfilesByID: [UUID: OrcaBoardArchitectureProfile] = [:]
     var boardPlansByID: [UUID: OrcaBoardPlan] = [:]
     var selectedBoardID: UUID?
     var boardPlan: OrcaBoardPlan?
@@ -410,8 +411,11 @@ final class OrcaMacModel {
         isLoadingBoardPlan = true
         defer { isLoadingBoardPlan = false }
         do {
-            let directory = try await consoleService.boardDirectory()
-            boards = directory.items
+            let directory = try await consoleService.boardArchitectureDirectory()
+            boardArchitectureProfilesByID = Dictionary(
+                uniqueKeysWithValues: directory.profiles.map { ($0.id, $0) }
+            )
+            boards = directory.directoryItems
                 .sorted { left, right in
                     if left.slug == "pod" { return true }
                     if right.slug == "pod" { return false }
@@ -476,16 +480,26 @@ final class OrcaMacModel {
               let selectedBoardID,
               let board = boards.first(where: { $0.id == selectedBoardID }),
               !board.isProtected else { return }
-        guard let protectedBoardID = boards.first(where: \.isProtected)?.id else {
+        var errors: [String] = []
+        do {
+            let profile = try await consoleService.boardArchitectureProfile(boardID: selectedBoardID)
+            guard profile.header.boardID == selectedBoardID else {
+                throw OrcaConsoleServiceError.invalidResponse
+            }
+            boardArchitectureProfilesByID[selectedBoardID] = profile
+        } catch {
+            errors.append("Architecture profile refresh unavailable; showing the directory snapshot.")
+        }
+        let protectedBoardIDs = Set(boards.filter(\.isProtected).map(\.id))
+        guard !protectedBoardIDs.isEmpty else {
             boardDetailError = "Protected board boundary is unavailable; board detail failed closed."
             return
         }
 
-        var errors: [String] = []
         do {
             boardProjects = try await consoleService.boardProjects(
                 boardID: selectedBoardID,
-                protectedBoardID: protectedBoardID
+                protectedBoardIDs: protectedBoardIDs
             )
             .sorted {
                 if $0.priority != $1.priority { return $0.priority < $1.priority }

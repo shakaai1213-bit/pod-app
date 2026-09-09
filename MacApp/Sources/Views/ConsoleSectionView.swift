@@ -211,6 +211,11 @@ private struct WorkPortfolioView: View {
         model.boards.first { $0.id == model.selectedBoardID }
     }
 
+    private var selectedProfile: OrcaBoardArchitectureProfile? {
+        guard let id = model.selectedBoardID else { return nil }
+        return model.boardArchitectureProfilesByID[id]
+    }
+
     var body: some View {
         Group {
             if model.boards.isEmpty, let error = model.boardPlanError {
@@ -268,7 +273,7 @@ private struct WorkPortfolioView: View {
                 spacing: 10
             ) {
                 ForEach(featuredBoards) { board in
-                    let plan = model.boardPlansByID[board.id]
+                    let profile = model.boardArchitectureProfilesByID[board.id]
                     Button { model.selectBoard(board.id) } label: {
                         VStack(alignment: .leading, spacing: 9) {
                             HStack(spacing: 8) {
@@ -278,14 +283,17 @@ private struct WorkPortfolioView: View {
                                     .font(.body.weight(.semibold))
                                     .lineLimit(1)
                                 Spacer(minLength: 4)
+                                Text(boardHealthLabel(profile))
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(boardHealthColor(profile))
                                 Image(systemName: "chevron.right")
                                     .font(.caption.weight(.bold))
                                     .foregroundStyle(.tertiary)
                             }
                             HStack(spacing: 12) {
-                                portfolioMetric(plan?.counts["in_progress"], "working")
-                                portfolioMetric(plan?.counts["up_next"], "up next")
-                                portfolioMetric(plan?.counts["waiting_on"], "waiting")
+                                portfolioMetric(profile?.header.counts.inProgressCount, "working")
+                                portfolioMetric(profile?.header.counts.reviewCount, "review")
+                                portfolioMetric(profile?.header.counts.blockedCount, "blocked")
                             }
                         }
                         .frame(maxWidth: .infinity, minHeight: 66, alignment: .leading)
@@ -345,6 +353,8 @@ private struct WorkPortfolioView: View {
                 .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor)))
             } else {
+                boardArchitectureStatus
+
                 Picker("Board detail", selection: $selectedBoardPane) {
                     ForEach(ConsoleBoardPane.allCases) { pane in
                         Text(paneTitle(pane)).tag(pane)
@@ -363,6 +373,65 @@ private struct WorkPortfolioView: View {
                         .textSelection(.enabled)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var boardArchitectureStatus: some View {
+        if let profile = selectedProfile?.fullProfile {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Label(
+                        profile.health.state.rawValue.capitalized,
+                        systemImage: profile.health.state == .healthy
+                            ? "checkmark.circle.fill"
+                            : "exclamationmark.triangle.fill"
+                    )
+                    .foregroundStyle(boardHealthColor(selectedProfile))
+                    Text(profile.header.lifecycleState.rawValue.capitalized)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if let release = profile.currentRelease {
+                        Text("Release \(release.revision)")
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Text(profile.purpose)
+                    .font(.body.weight(.semibold))
+                Text(profile.health.reason)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 12) {
+                    if let owner = profile.primaryAgent {
+                        Label(owner.capitalized, systemImage: "person.fill")
+                    }
+                    Label("\(profile.sourceRefs.count) sources", systemImage: "link")
+                    Text(profile.health.freshness.rawValue.capitalized)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            .padding(12)
+            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor)))
+        }
+    }
+
+    private func boardHealthLabel(_ profile: OrcaBoardArchitectureProfile?) -> String {
+        guard let profile else { return "Unavailable" }
+        if profile.header.isProtected { return "Protected" }
+        return profile.header.healthState.rawValue.capitalized
+    }
+
+    private func boardHealthColor(_ profile: OrcaBoardArchitectureProfile?) -> Color {
+        guard let profile else { return .secondary }
+        if profile.header.isProtected { return Color.orcaCoral }
+        switch profile.header.healthState {
+        case .healthy: return Color.orcaGreen
+        case .attention: return .orange
+        case .blocked: return Color.orcaCoral
+        case .unknown: return .secondary
         }
     }
 
@@ -714,7 +783,8 @@ private struct ConsoleBoardDirectoryView: View {
     }
 
     private func boardRow(_ board: OrcaBoardDirectoryItem) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+        let profile = model.boardArchitectureProfilesByID[board.id]
+        return HStack(alignment: .top, spacing: 12) {
             Image(systemName: board.isProtected ? "lock.shield.fill" : boardSymbol(board))
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(board.isProtected ? Color.orcaCoral : Color.orcaCyan)
@@ -737,10 +807,15 @@ private struct ConsoleBoardDirectoryView: View {
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(Color.orcaCoral)
             } else {
-                HStack(spacing: 12) {
-                    portfolioMetric(board.projectCount, "projects")
-                    portfolioMetric(board.activeCount, "active")
-                    portfolioMetric(board.ticketCount, "tickets")
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(profile?.header.healthState.rawValue.capitalized ?? "Unavailable")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(directoryHealthColor(profile))
+                    HStack(spacing: 12) {
+                        portfolioMetric(board.projectCount, "projects")
+                        portfolioMetric(board.activeCount, "active")
+                        portfolioMetric(board.ticketCount, "tickets")
+                    }
                 }
             }
             Image(systemName: "chevron.right")
@@ -749,6 +824,16 @@ private struct ConsoleBoardDirectoryView: View {
         }
         .padding(.vertical, 5)
         .contentShape(Rectangle())
+    }
+
+    private func directoryHealthColor(_ profile: OrcaBoardArchitectureProfile?) -> Color {
+        guard let state = profile?.header.healthState else { return .secondary }
+        switch state {
+        case .healthy: return Color.orcaGreen
+        case .attention: return .orange
+        case .blocked: return Color.orcaCoral
+        case .unknown: return .secondary
+        }
     }
 
     private func boardSymbol(_ board: OrcaBoardDirectoryItem) -> String {

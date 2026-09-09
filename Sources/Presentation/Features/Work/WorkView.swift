@@ -1545,6 +1545,7 @@ struct WorkView: View {
                 } else {
                     productMetric("\(board.activeCount)", "active")
                     productMetric("\(board.projectCount)", "projects")
+                    productMetric("\(board.taskCount)", "tasks")
                     productMetric("\(board.ticketCount)", "open")
                     if board.blockedCount > 0 {
                         productMetric("\(board.blockedCount)", "blocked", color: AppColors.accentDanger)
@@ -1559,9 +1560,9 @@ struct WorkView: View {
                 Text(board.isProtectedBoard ? "PROTECTED WORKSPACE" : (board.improvementKind == nil ? "CURRENT STATE" : "\(board.improvementKind!.uppercased()) IN FOCUS"))
                     .font(.system(size: 9, weight: .bold))
                     .foregroundColor(AppColors.textTertiary)
-                Text(board.improvementTitle ?? "No active improvement work recorded")
+                Text(board.improvementTitle ?? board.healthReason ?? "No verified operational snapshot")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(board.improvementTitle == nil ? AppColors.textTertiary : AppColors.textPrimary)
+                    .foregroundColor(board.improvementTitle == nil ? AppColors.textSecondary : AppColors.textPrimary)
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, minHeight: 30, alignment: .topLeading)
             }
@@ -1597,10 +1598,10 @@ struct WorkView: View {
 
     private func productStateColor(_ state: String) -> Color {
         switch state {
-        case "Improving": return AppColors.accentSuccess
+        case "Healthy": return AppColors.accentSuccess
         case "Blocked": return AppColors.accentDanger
         case "Protected": return AppColors.accentCaptain
-        case "At risk", "Planned": return AppColors.accentWarning
+        case "Attention": return AppColors.accentWarning
         default: return AppColors.textTertiary
         }
     }
@@ -6061,13 +6062,26 @@ private struct WorkBoardSummary: Identifiable, Hashable {
     let layer: String?
     let component: String?
     let boardDescription: String?
+    let classification: OrcaBoardClassification
+    let lifecycleState: OrcaBoardLifecycleState
+    let healthState: OrcaBoardHealthState
+    let healthReason: String?
+    let healthFreshness: OrcaBoardFreshnessState
     let projectCount: Int
     let activeCount: Int
+    let taskCount: Int
     let ticketCount: Int
     let inProgressCount: Int
     let blockedCount: Int
     let improvementTitle: String?
     let improvementKind: String?
+    let releaseRevision: String?
+    let releaseManifestSHA256: String?
+    let releaseFreshness: OrcaBoardFreshnessState?
+    let primaryAgent: String?
+    let sourceRefCount: Int
+    let detailAvailable: Bool
+    let protectedBoard: Bool
 
     var icon: String { Self.iconMap[slug] ?? "📋" }
 
@@ -6087,13 +6101,10 @@ private struct WorkBoardSummary: Identifiable, Hashable {
     }
 
     var isProductBoard: Bool {
-        let description = boardDescription?.lowercased() ?? ""
-        return description.contains("[product")
-            || description.contains("product vertical")
-            || ["campwatch", "guardian", "tiki"].contains(slug)
+        classification == .product
     }
 
-    var isProtectedBoard: Bool { slug == "fund" }
+    var isProtectedBoard: Bool { protectedBoard }
 
     var architectureGroup: OrcaBoardArchitectureGroup {
         .classify(
@@ -6115,16 +6126,56 @@ private struct WorkBoardSummary: Identifiable, Hashable {
 
     var deliveryState: String {
         if isProtectedBoard { return "Protected" }
-        if blockedCount > 0, inProgressCount > 0 { return "At risk" }
-        if blockedCount > 0 { return "Blocked" }
-        if inProgressCount > 0 { return "Improving" }
-        if activeCount > 0 || ticketCount > 0 { return "Planned" }
-        return "Quiet"
+        switch healthState {
+        case .healthy: return "Healthy"
+        case .attention: return "Attention"
+        case .blocked: return "Blocked"
+        case .unknown: return "Unknown"
+        }
     }
 
     var activityScore: Int {
         if isProtectedBoard { return 1_000_000 }
         return activeCount * 100 + blockedCount * 75 + inProgressCount * 20 + ticketCount
+    }
+
+    init(profile: OrcaBoardArchitectureProfile) {
+        let header = profile.header
+        let full = profile.fullProfile
+        id = header.boardID.uuidString
+        slug = header.slug
+        name = header.name
+        layer = header.groupSlug
+        component = nil
+        boardDescription = header.publicSummary
+        classification = header.classification
+        lifecycleState = header.lifecycleState
+        healthState = header.healthState
+        healthReason = full?.health.reason
+        healthFreshness = full?.health.freshness ?? .unknown
+        projectCount = header.counts.projectCount ?? 0
+        activeCount = header.counts.activeProjectCount ?? 0
+        taskCount = header.counts.taskCount ?? 0
+        ticketCount = header.counts.ticketCount ?? 0
+        inProgressCount = header.counts.inProgressCount ?? 0
+        blockedCount = header.counts.blockedCount ?? 0
+        if let blocker = full?.highestImpactBlocker {
+            improvementTitle = blocker
+            improvementKind = "Blocker"
+        } else if let gate = full?.nextGate {
+            improvementTitle = gate
+            improvementKind = "Next gate"
+        } else {
+            improvementTitle = full?.currentProjectName
+            improvementKind = full?.currentProjectName == nil ? nil : "Project"
+        }
+        releaseRevision = full?.currentRelease?.revision
+        releaseManifestSHA256 = full?.currentRelease?.releaseManifestSHA256
+        releaseFreshness = full?.currentRelease?.freshness
+        primaryAgent = full?.primaryAgent
+        sourceRefCount = full?.sourceRefs.count ?? 0
+        detailAvailable = header.detailAvailable
+        protectedBoard = header.isProtected
     }
 
     static let orderedSlugs = [
@@ -6181,54 +6232,19 @@ private final class WorkBoardsModel {
         defer { isLoading = false }
 
         do {
-            let response: WorkBoardListResponse = try await APIClient.shared.get(path: "/api/v1/boards")
-            async let projectsLoad = loadAllProjects()
-            async let ticketsLoad = loadAllTickets()
-            let (projectResult, ticketResult) = await (projectsLoad, ticketsLoad)
-            let protectedBoardID = response.items.first(where: { $0.slug == "fund" })?.id.lowercased()
-
-            boards = Self.ordered(response.items.map { board in
-                let summary = board.summary
-                let projects = summary.isProtectedBoard ? [] : projectResult.items.filter { project in
-                    let boardIDs = Self.boardIDs(for: project)
-                    let belongsToBoard = boardIDs.contains(summary.id.lowercased())
-                    let belongsToProtectedBoard = protectedBoardID.map(boardIDs.contains) ?? false
-                    return belongsToBoard && !belongsToProtectedBoard
-                }
-                let tickets = summary.isProtectedBoard ? [] : ticketResult.items.filter {
-                    $0.boardId?.lowercased() == summary.id.lowercased()
-                        && $0.isSafeForGenericWorkSurface
-                }
-                return Self.enrich(summary, projects: projects, tickets: tickets)
-            })
-            sourceLabel = "ORCA"
-            let loadErrors = [projectResult.error, ticketResult.error].compactMap { $0 }
-            error = loadErrors.isEmpty ? nil : loadErrors.joined(separator: " ")
+            let directory: OrcaBoardArchitectureDirectory = try await APIClient.shared.get(
+                path: OrcaBoardArchitectureEndpoint.directory
+            )
+            boards = Self.ordered(directory.profiles.map(WorkBoardSummary.init(profile:)))
+            sourceLabel = "ORCA signed profiles"
+            error = nil
         } catch {
-            sourceLabel = "ORCA"
+            sourceLabel = "ORCA architecture unavailable"
             self.error = boards.isEmpty
-                ? "ORCA boards unavailable."
-                : "ORCA boards refresh unavailable; showing last loaded boards."
+                ? "ORCA board architecture unavailable. Health and release state were not inferred."
+                : "ORCA board architecture refresh unavailable; showing the last verified profiles."
         }
         await loadDrift()
-    }
-
-    private func loadAllProjects() async -> (items: [ProjectDTO], error: String?) {
-        do {
-            let response: WorkBoardProjectListResponse = try await APIClient.shared.get(path: "/api/v1/projects?limit=200")
-            return (response.items, nil)
-        } catch {
-            return ([], "Project counts unavailable.")
-        }
-    }
-
-    private func loadAllTickets() async -> (items: [WorkBoardTicketSummary], error: String?) {
-        do {
-            let response: WorkBoardTicketListResponse = try await APIClient.shared.get(path: "/api/v1/tickets?limit=200")
-            return (response.items, nil)
-        } catch {
-            return ([], "Ticket counts unavailable.")
-        }
     }
 
     private func loadDrift() async {
@@ -6250,93 +6266,6 @@ private final class WorkBoardsModel {
         }
     }
 
-    private static func boardIDs(for project: ProjectDTO) -> Set<String> {
-        var ids = Set((project.boardIds ?? []).map { $0.uuidString.lowercased() })
-        if let boardId = project.boardId {
-            ids.insert(boardId.uuidString.lowercased())
-        }
-        return ids
-    }
-
-    private static func enrich(
-        _ board: WorkBoardSummary,
-        projects: [ProjectDTO],
-        tickets: [WorkBoardTicketSummary]
-    ) -> WorkBoardSummary {
-        if board.isProtectedBoard {
-            return WorkBoardSummary(
-                id: board.id,
-                slug: board.slug,
-                name: board.name,
-                layer: board.layer,
-                component: board.component,
-                boardDescription: board.boardDescription,
-                projectCount: 0,
-                activeCount: 0,
-                ticketCount: 0,
-                inProgressCount: 0,
-                blockedCount: 0,
-                improvementTitle: "Fund detail is isolated from generic Work",
-                improvementKind: "Protected"
-            )
-        }
-        let terminal = Set(["done", "archived", "completed", "cancelled", "closed", "resolved"])
-        let activeProjects = projects.filter { !terminal.contains($0.status.lowercased()) }
-        let workingProjectStates = Set(["active", "in_progress", "in-progress", "building", "build", "implementation"])
-        let workingTicketStates = Set(["in_progress", "in-progress", "review", "working"])
-        let blockedStates = Set(["blocked", "waiting_on", "failed"])
-        let workingProjects = activeProjects.filter { workingProjectStates.contains($0.status.lowercased()) }
-        let workingTickets = tickets.filter { workingTicketStates.contains($0.status.lowercased()) }
-        let blockedProjects = activeProjects.filter { blockedStates.contains($0.status.lowercased()) }
-        let blockedTickets = tickets.filter { blockedStates.contains($0.status.lowercased()) }
-
-        let projectCandidate = activeProjects.sorted {
-            if $0.priority != $1.priority { return $0.priority < $1.priority }
-            if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
-            return $0.name < $1.name
-        }.first
-        let ticketCandidate = tickets.sorted {
-            let lhsRank = ticketRank($0)
-            let rhsRank = ticketRank($1)
-            if lhsRank != rhsRank { return lhsRank < rhsRank }
-            return $0.title < $1.title
-        }.first
-
-        return WorkBoardSummary(
-            id: board.id,
-            slug: board.slug,
-            name: board.name,
-            layer: board.layer,
-            component: board.component,
-            boardDescription: board.boardDescription,
-            projectCount: projects.count,
-            activeCount: activeProjects.count,
-            ticketCount: tickets.count,
-            inProgressCount: workingProjects.count + workingTickets.count,
-            blockedCount: blockedProjects.count + blockedTickets.count,
-            improvementTitle: projectCandidate?.name ?? ticketCandidate?.title,
-            improvementKind: projectCandidate == nil && ticketCandidate != nil ? "Ticket" : (projectCandidate == nil ? nil : "Project")
-        )
-    }
-
-    private static func ticketRank(_ ticket: WorkBoardTicketSummary) -> Int {
-        let statusRank: Int
-        switch ticket.status.lowercased() {
-        case "in_progress", "in-progress", "working": statusRank = 0
-        case "review": statusRank = 1
-        case "blocked", "waiting_on": statusRank = 2
-        default: statusRank = 3
-        }
-        let priorityRank: Int
-        switch ticket.priority?.lowercased() {
-        case "critical", "urgent": priorityRank = 0
-        case "high": priorityRank = 1
-        case "medium": priorityRank = 2
-        case "low": priorityRank = 3
-        default: priorityRank = 4
-        }
-        return statusRank * 10 + priorityRank
-    }
 }
 
 private struct WorkBoardDriftResponse: Decodable, Hashable {
@@ -6398,94 +6327,6 @@ private struct WorkBoardDriftItem: Decodable, Hashable, Identifiable {
     private enum CodingKeys: String, CodingKey {
         case id, title, status, priority, source, reason
         case suggestedBoard = "suggested_board"
-    }
-}
-
-private struct WorkBoardListResponse: Decodable {
-    let items: [WorkBoardDTO]
-
-    init(from decoder: Decoder) throws {
-        if var unkeyed = try? decoder.unkeyedContainer() {
-            var values: [WorkBoardDTO] = []
-            while !unkeyed.isAtEnd {
-                values.append(try unkeyed.decode(WorkBoardDTO.self))
-            }
-            items = values
-            return
-        }
-
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        items = try container.decode([WorkBoardDTO].self, forKey: .items)
-    }
-
-    private enum CodingKeys: String, CodingKey { case items }
-}
-
-private struct WorkBoardDTO: Decodable {
-    let id: String
-    let slug: String
-    let name: String
-    let layer: String?
-    let component: String?
-    let description: String?
-    let projectCount: Int?
-    let projectsCount: Int?
-    let totalProjects: Int?
-    let activeCount: Int?
-    let activeProjects: Int?
-    let activeProjectCount: Int?
-    let ticketCount: Int?
-    let ticketsCount: Int?
-    let directTicketCount: Int?
-
-    var summary: WorkBoardSummary {
-        WorkBoardSummary(
-            id: id,
-            slug: slug,
-            name: name,
-            layer: layer,
-            component: component,
-            boardDescription: description,
-            projectCount: projectCount ?? projectsCount ?? totalProjects ?? 0,
-            activeCount: activeCount ?? activeProjects ?? activeProjectCount ?? 0,
-            ticketCount: ticketCount ?? ticketsCount ?? directTicketCount ?? 0,
-            inProgressCount: 0,
-            blockedCount: 0,
-            improvementTitle: nil,
-            improvementKind: nil
-        )
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decodeWorkFlexibleString(forKey: .id)
-        slug = try container.decodeWorkFlexibleStringIfPresent(forKey: .slug) ?? id
-        name = try container.decodeWorkFlexibleStringIfPresent(forKey: .name) ?? slug
-        layer = try container.decodeWorkFlexibleStringIfPresent(forKey: .layer)
-        component = try container.decodeWorkFlexibleStringIfPresent(forKey: .component)
-        description = try container.decodeWorkFlexibleStringIfPresent(keys: [.description, .objective])
-        projectCount = try container.decodeWorkFlexibleIntIfPresent(keys: [.projectCount, .projectsCount, .totalProjects])
-        projectsCount = nil
-        totalProjects = nil
-        activeCount = try container.decodeWorkFlexibleIntIfPresent(keys: [.activeCount, .activeProjects, .activeProjectCount])
-        activeProjects = nil
-        activeProjectCount = nil
-        ticketCount = try container.decodeWorkFlexibleIntIfPresent(keys: [.ticketCount, .ticketsCount, .directTicketCount])
-        ticketsCount = nil
-        directTicketCount = nil
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case id, slug, name, layer, component, description, objective
-        case projectCount = "project_count"
-        case projectsCount = "projects_count"
-        case totalProjects = "total_projects"
-        case activeCount = "active_count"
-        case activeProjects = "active_projects"
-        case activeProjectCount = "active_project_count"
-        case ticketCount = "ticket_count"
-        case ticketsCount = "tickets_count"
-        case directTicketCount = "direct_ticket_count"
     }
 }
 
@@ -6592,6 +6433,7 @@ private final class WorkBoardDetailModel {
     private(set) var projects: [ProjectDTO] = []
     private(set) var tasks: [TaskDTO] = []
     private(set) var directTickets: [WorkBoardTicketSummary] = []
+    private(set) var architectureProfile: OrcaBoardArchitectureProfile?
     private(set) var isLoading = false
     private(set) var error: String?
 
@@ -6639,10 +6481,13 @@ private final class WorkBoardDetailModel {
         error = nil
         defer { isLoading = false }
 
+        let profileResult = await loadArchitectureProfile(board: board)
+        architectureProfile = profileResult.profile
         if board.isProtectedBoard {
             projects = []
             tasks = []
             directTickets = []
+            error = profileResult.error
             return
         }
 
@@ -6654,22 +6499,59 @@ private final class WorkBoardDetailModel {
         projects = loadedProjects.projects.sorted(by: projectSort)
         tasks = loadedTasks.tasks.sorted(by: taskSort)
         directTickets = loadedTickets.tickets.sorted(by: ticketSort)
-        error = [loadedProjects.error, loadedTasks.error, loadedTickets.error].compactMap { $0 }.joined(separator: " ")
+        error = [profileResult.error, loadedProjects.error, loadedTasks.error, loadedTickets.error]
+            .compactMap { $0 }
+            .joined(separator: " ")
         if error?.isEmpty == true { error = nil }
+    }
+
+    private func loadArchitectureProfile(
+        board: WorkBoardSummary
+    ) async -> (profile: OrcaBoardArchitectureProfile?, error: String?) {
+        guard let boardID = UUID(uuidString: board.id) else {
+            return (nil, "Architecture profile identity is invalid.")
+        }
+        do {
+            let profile: OrcaBoardArchitectureProfile = try await APIClient.shared.get(
+                path: OrcaBoardArchitectureEndpoint.profile(boardID: boardID)
+            )
+            guard profile.header.boardID.uuidString.caseInsensitiveCompare(board.id) == .orderedSame else {
+                return (nil, "Architecture profile identity mismatch.")
+            }
+            return (profile, nil)
+        } catch {
+            return (nil, "Architecture profile refresh unavailable; showing the directory snapshot.")
+        }
     }
 
     private func loadProjects(board: WorkBoardSummary) async -> (projects: [ProjectDTO], error: String?) {
         do {
             async let projectsResponse: WorkBoardProjectListResponse = APIClient.shared.get(path: "/api/v1/projects?limit=200")
-            async let boardsResponse: WorkBoardListResponse = APIClient.shared.get(path: "/api/v1/boards")
+            async let boardsResponse: OrcaBoardArchitectureDirectory = APIClient.shared.get(
+                path: OrcaBoardArchitectureEndpoint.directory
+            )
             let (response, boards) = try await (projectsResponse, boardsResponse)
-            let boardId = board.id.lowercased()
-            let protectedBoardID = boards.items.first(where: { $0.slug == "fund" })?.id.lowercased()
+            guard let boardID = UUID(uuidString: board.id) else {
+                return ([], "Board identity is invalid; projects failed closed.")
+            }
+            let protectedBoardIDs = Set(
+                boards.profiles
+                    .filter { $0.header.isProtected }
+                    .map { $0.header.boardID }
+            )
+            guard !protectedBoardIDs.isEmpty else {
+                return ([], "Protected board boundary unavailable; projects failed closed.")
+            }
             let projects = response.items.filter { project in
-                let ids = (project.boardIds ?? []).map { $0.uuidString.lowercased() }
-                    + [project.boardId?.uuidString.lowercased()].compactMap { $0 }
-                let belongsToProtectedBoard = protectedBoardID.map(ids.contains) ?? false
-                return ids.contains(boardId) && !belongsToProtectedBoard
+                var projectBoardIDs = Set(project.boardIds ?? [])
+                if let primaryBoardID = project.boardId {
+                    projectBoardIDs.insert(primaryBoardID)
+                }
+                return OrcaBoardProtectionPolicy.isSafeProject(
+                    selectedBoardID: boardID,
+                    projectBoardIDs: projectBoardIDs,
+                    protectedBoardIDs: protectedBoardIDs
+                )
             }
             return (projects, nil)
         } catch {
@@ -7182,8 +7064,8 @@ private struct WorkBoardsArchitectureView: View {
         switch state {
         case "Blocked": return AppColors.accentDanger
         case "Protected": return AppColors.accentCaptain
-        case "At risk", "Planned": return AppColors.accentWarning
-        case "Improving": return AppColors.accentSuccess
+        case "Attention": return AppColors.accentWarning
+        case "Healthy": return AppColors.accentSuccess
         default: return AppColors.textTertiary
         }
     }
@@ -7253,6 +7135,14 @@ private struct WorkBoardDetailView: View {
     @State private var projectsViewModel = ORCAProjectsViewModel()
     @Environment(\.dismiss) private var dismiss
 
+    private var currentHeader: OrcaBoardArchitectureHeader? {
+        model.architectureProfile?.header
+    }
+
+    private var currentProfile: OrcaBoardArchitectureFullProfile? {
+        model.architectureProfile?.fullProfile
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -7285,7 +7175,7 @@ private struct WorkBoardDetailView: View {
                     Button {
                         Task {
                             await model.load(board: board)
-                            if board.slug != "fund", let boardId = UUID(uuidString: board.id) {
+                            if !board.isProtectedBoard, let boardId = UUID(uuidString: board.id) {
                                 await boardPlanModel.load(boardId: boardId, force: true)
                             }
                         }
@@ -7300,7 +7190,7 @@ private struct WorkBoardDetailView: View {
                     selectedSection = .overview
                 }
                 await model.load(board: board)
-                if board.slug != "fund", let boardId = UUID(uuidString: board.id) {
+                if !board.isProtectedBoard, let boardId = UUID(uuidString: board.id) {
                     await boardPlanModel.load(boardId: boardId)
                 }
             }
@@ -7318,6 +7208,7 @@ private struct WorkBoardDetailView: View {
                 protectedBoardOverview
             } else {
                 boardOverviewGrid
+                boardOperationalTruth
                 boardCurrentImprovement
                 boardBreakdowns
             }
@@ -7412,7 +7303,7 @@ private struct WorkBoardDetailView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Text(board.isProtectedBoard ? "Protected board boundary" : "Board command window")
+            Text(board.isProtectedBoard ? "Protected board boundary" : "\(board.deliveryState) · \(board.lifecycleState.rawValue.capitalized)")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundColor(accent)
                 .padding(.horizontal, 8)
@@ -7468,13 +7359,68 @@ private struct WorkBoardDetailView: View {
     }
 
     private var boardOverviewGrid: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 145), spacing: 8)], spacing: 8) {
-            boardMetricCard(title: "Projects", value: "\(model.projects.isEmpty ? board.projectCount : model.projects.count)", detail: "\(model.activeProjects.count) active")
-            boardMetricCard(title: "Tasks", value: "\(model.tasks.count)", detail: "\(model.activeTasks.count) active")
-            boardMetricCard(title: "Tickets", value: "\(model.directTickets.isEmpty ? board.ticketCount : model.directTickets.count)", detail: "open on board")
-            boardMetricCard(title: "Blocked", value: "\(model.blockedWorkCount)", detail: "across work")
+        let counts = currentHeader?.counts
+        return LazyVGrid(columns: [GridItem(.adaptive(minimum: 145), spacing: 8)], spacing: 8) {
+            boardMetricCard(title: "Projects", value: "\(counts?.projectCount ?? board.projectCount)", detail: "\(counts?.activeProjectCount ?? board.activeCount) active")
+            boardMetricCard(title: "Tasks", value: "\(counts?.taskCount ?? board.taskCount)", detail: "canonical count")
+            boardMetricCard(title: "Tickets", value: "\(counts?.ticketCount ?? board.ticketCount)", detail: "safe board count")
+            boardMetricCard(title: "Blocked", value: "\(counts?.blockedCount ?? board.blockedCount)", detail: "across work")
             boardMetricCard(title: "Stages", value: "\(model.projectStageBreakdown.count)", detail: "project lanes")
-            boardMetricCard(title: "Source", value: model.isLoading ? "..." : "ORCA", detail: "live breakdown")
+            boardMetricCard(title: "Sources", value: "\(currentProfile?.sourceRefs.count ?? board.sourceRefCount)", detail: "ORCA provenance")
+        }
+    }
+
+    private var boardOperationalTruth: some View {
+        let healthState = currentHeader?.healthState ?? board.healthState
+        let freshness = currentProfile?.health.freshness ?? board.healthFreshness
+        let reason = currentProfile?.health.reason ?? board.healthReason
+        let release = currentProfile?.currentRelease
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: healthState == .healthy ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .foregroundColor(healthColor(healthState))
+                Text("OPERATIONAL TRUTH")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(AppColors.textTertiary)
+                Spacer()
+                Text(freshness.rawValue.uppercased())
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundColor(healthColor(healthState))
+            }
+            Text(reason ?? "No canonical board health checks are registered.")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(AppColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 12) {
+                if let agent = currentProfile?.primaryAgent ?? board.primaryAgent {
+                    Label(agent.capitalized, systemImage: "person.fill")
+                }
+                if let revision = release?.revision ?? board.releaseRevision {
+                    Label(revision, systemImage: "shippingbox.fill")
+                } else {
+                    Label("No observed release", systemImage: "shippingbox")
+                }
+                if let releaseFreshness = release?.freshness ?? board.releaseFreshness {
+                    Text(releaseFreshness.rawValue.capitalized)
+                }
+                Spacer(minLength: 0)
+            }
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundColor(AppColors.textTertiary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(AppColors.backgroundSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppColors.border, lineWidth: 0.5))
+    }
+
+    private func healthColor(_ state: OrcaBoardHealthState) -> Color {
+        switch state {
+        case .healthy: return AppColors.accentSuccess
+        case .attention: return AppColors.accentWarning
+        case .blocked: return AppColors.accentDanger
+        case .unknown: return AppColors.textTertiary
         }
     }
 
@@ -7490,7 +7436,13 @@ private struct WorkBoardDetailView: View {
                 Text("CURRENT IMPROVEMENT")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundColor(AppColors.textTertiary)
-                Text(board.improvementTitle ?? "No active improvement work recorded")
+                Text(
+                    currentProfile?.highestImpactBlocker
+                        ?? currentProfile?.nextGate
+                        ?? currentProfile?.currentProjectName
+                        ?? board.improvementTitle
+                        ?? "No next gate or active improvement is recorded"
+                )
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(board.improvementTitle == nil ? AppColors.textTertiary : AppColors.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
