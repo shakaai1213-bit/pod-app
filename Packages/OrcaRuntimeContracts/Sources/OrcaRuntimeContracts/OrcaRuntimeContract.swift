@@ -4,7 +4,7 @@ import OpenAPIURLSession
 
 public enum OrcaRuntimeContract: Sendable {
     public static let version = "orca.chat-runtime.v1"
-    public static let schemaSHA256 = "40a298668534e87d47abc42279d4777334e1e2c9ae92dc6e291818a8a76cfbeb"
+    public static let schemaSHA256 = "2699a91c2bc3d52cbd598e96face4a75fd07953f06e5a8774762c3d8c3b0489e"
 
     public static func makeClient(
         serverURL: URL,

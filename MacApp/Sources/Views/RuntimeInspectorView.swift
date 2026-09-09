@@ -46,11 +46,26 @@ struct RuntimeInspectorView: View {
                 if let turn = model.selectedRuntimeTurn {
                     InspectorSection(title: "Flight Recorder") {
                         InspectorValue(label: "State", value: turn.state.rawValue)
+                        InspectorValue(
+                            label: "Source",
+                            value: turn.clientProvenance.sourceSurface.rawValue
+                        )
                         InspectorValue(label: "Events", value: "\(turn.events?.count ?? 0)")
+                        InspectorValue(label: "Runs", value: workRunCount(turn))
                         InspectorValue(
                             label: "Adapter",
                             value: turn.adapter?.providerId ?? "-"
                         )
+                        if let reconciliation = model.selectedRuntimeReconciliation {
+                            InspectorValue(
+                                label: "Cursor state",
+                                value: reconciliation.cursorState.rawValue
+                            )
+                            InspectorValue(
+                                label: "Cursor",
+                                value: shortIdentifier(reconciliation.cursor)
+                            )
+                        }
                         ForEach((turn.events ?? []).suffix(8), id: \.eventId) { event in
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
                                 Image(systemName: event.eventType.isTerminal ? "checkmark.circle.fill" : "circle.fill")
@@ -65,6 +80,82 @@ struct RuntimeInspectorView: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer(minLength: 0)
+                            }
+                        }
+                    }
+
+                    InspectorSection(title: "Recovery") {
+                        InspectorValue(label: "Status", value: turn.recovery.status.rawValue)
+                        InspectorValue(
+                            label: "Last progress",
+                            value: timestamp(turn.recovery.lastProgressAt)
+                        )
+                        if let reason = turn.recovery.reason {
+                            InspectorValue(label: "Reason", value: reason)
+                        }
+                        if let owner = turn.recovery.retryOwner {
+                            InspectorValue(label: "Retry owner", value: owner)
+                        }
+                        if let action = turn.recovery.recommendedAction {
+                            Text(action)
+                                .font(.caption)
+                                .foregroundStyle(turn.recovery.isStuck ? Color.orange : Color.secondary)
+                                .textSelection(.enabled)
+                        }
+                    }
+
+                    InspectorSection(title: "Client Provenance") {
+                        InspectorValue(
+                            label: "Version",
+                            value: turn.clientProvenance.clientVersion ?? "-"
+                        )
+                        InspectorValue(
+                            label: "Build",
+                            value: turn.clientProvenance.clientBuild ?? "-"
+                        )
+                        InspectorValue(
+                            label: "Instance",
+                            value: shortIdentifier(turn.clientProvenance.clientInstanceId)
+                        )
+                        InspectorValue(
+                            label: "Device",
+                            value: shortIdentifier(turn.clientProvenance.deviceRegistrationRef)
+                        )
+                        InspectorValue(
+                            label: "Ingress",
+                            value: shortIdentifier(turn.clientProvenance.ingressEventId)
+                        )
+                    }
+
+                    InspectorSection(title: "Ordering") {
+                        InspectorValue(label: "Authority", value: turn.ordering.authority?.rawValue ?? "-")
+                        InspectorValue(
+                            label: "Sequence",
+                            value: turn.ordering.sequenceSource?.rawValue ?? "-"
+                        )
+                        InspectorValue(
+                            label: "Fallback",
+                            value: turn.ordering.fallbackOrder?.rawValue ?? "-"
+                        )
+                    }
+
+                    if let runs = turn.workRuns, !runs.isEmpty {
+                        InspectorSection(title: "Bounded Work") {
+                            ForEach(runs.suffix(8), id: \.runId) { run in
+                                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                    Image(systemName: run.isStuck ? "exclamationmark.triangle.fill" : "hammer")
+                                        .font(.caption2)
+                                        .foregroundStyle(run.isStuck ? Color.orange : Color.secondary)
+                                        .frame(width: 12)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(run.runType)
+                                            .font(.caption.monospaced())
+                                        Text("\(run.status) · \(shortIdentifier(run.runId))")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer(minLength: 0)
+                                }
                             }
                         }
                     }
@@ -155,6 +246,22 @@ struct RuntimeInspectorView: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private func workRunCount(_ turn: Components.Schemas.ChatRuntimeTurnRead) -> String {
+        let visible = turn.workRuns?.count ?? 0
+        let limit = turn.workRunsLimit.map(String.init) ?? "-"
+        return turn.workRunsTruncated == true ? "\(visible)/\(limit)+" : "\(visible)/\(limit)"
+    }
+
+    private func shortIdentifier(_ value: String?) -> String {
+        guard let value, !value.isEmpty else { return "-" }
+        guard value.count > 20 else { return value }
+        return "\(value.prefix(12))...\(value.suffix(4))"
+    }
+
+    private func timestamp(_ date: Date) -> String {
+        date.formatted(date: .abbreviated, time: .standard)
     }
 }
 

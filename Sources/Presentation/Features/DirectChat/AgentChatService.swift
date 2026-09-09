@@ -62,21 +62,45 @@ actor AgentChatService {
     struct RuntimeTurnSummary: Sendable, Hashable {
         let turnId: String
         let state: String
+        let reconciliationCursor: String?
+        let cursorState: String?
         let provider: String?
         let model: String?
         let host: String?
         let runtimeSessionId: String?
         let terminalSummary: String?
+        let sourceSurface: String
+        let recoveryStatus: String
+        let recoveryReason: String?
+        let retryOwner: String?
+        let isStuck: Bool
+        let workRunCount: Int
+        let workRunsLimit: Int
+        let workRunsTruncated: Bool
         let events: [RuntimeTimelineEntry]
 
-        init(runtime turn: Components.Schemas.ChatRuntimeTurnRead) {
+        init(
+            runtime turn: Components.Schemas.ChatRuntimeTurnRead,
+            reconciliationCursor: String? = nil,
+            cursorState: Components.Schemas.ChatRuntimeCursorState? = nil
+        ) {
             turnId = turn.turnId
             state = turn.state.rawValue
+            self.reconciliationCursor = reconciliationCursor
+            self.cursorState = cursorState?.rawValue
             provider = turn.adapter?.providerId
             model = turn.adapter?.modelId
             host = turn.adapter?.hostId
             runtimeSessionId = turn.runtimeSessionId
             terminalSummary = turn.terminalOutcome?.summary
+            sourceSurface = turn.clientProvenance.sourceSurface.rawValue
+            recoveryStatus = turn.recovery.status.rawValue
+            recoveryReason = turn.recovery.reason
+            retryOwner = turn.recovery.retryOwner
+            isStuck = turn.recovery.isStuck
+            workRunCount = (turn.workRuns ?? []).count
+            workRunsLimit = turn.workRunsLimit ?? 0
+            workRunsTruncated = turn.workRunsTruncated ?? false
             events = (turn.events ?? []).map {
                 RuntimeTimelineEntry(
                     id: $0.eventId,
@@ -679,6 +703,30 @@ actor AgentChatService {
         RuntimeTurnSummary(runtime: try await Self.runtimeClient.runtimeTurn(turnID: turnId))
     }
 
+    func runtimeUpdates(
+        turnId: String,
+        persistedCursor: String?,
+        persistCursor: @escaping @Sendable (String) -> Void
+    ) -> AsyncThrowingStream<OrcaRuntimeReconciliationUpdate, Error> {
+        OrcaRuntimeReconciliationDriver(
+            turnID: turnId,
+            persistedCursor: persistedCursor,
+            poll: { turnID, cursor in
+                try await Self.runtimeClient.reconcileRuntimeTurn(
+                    turnID: turnID,
+                    afterCursor: cursor
+                )
+            },
+            stream: { turnID, cursor in
+                try await Self.runtimeClient.runtimeTurnStream(
+                    turnID: turnID,
+                    afterCursor: cursor
+                )
+            },
+            persistCursor: persistCursor
+        ).updates()
+    }
+
     func conversationMemory(conversationId: String) async throws -> ConversationMemorySummary {
         ConversationMemorySummary(
             runtime: try await Self.runtimeClient.conversationMemory(
@@ -712,6 +760,7 @@ actor AgentChatService {
     ) async throws -> DirectAgentChatResponse {
         do {
             _ = try await Self.runtimeClient.verifyCompatibility()
+            let deviceID = OrcaDeviceIdentity.current()
             let response = try await Self.runtimeClient.send(
                 OrcaRuntimeDirectTurnRequest(
                     agentSlug: agent.id,
@@ -726,7 +775,17 @@ actor AgentChatService {
                     triageID: body.triageId,
                     triageTraceID: body.triageTraceId,
                     activeTicketID: body.activeTicketId,
-                    conversationID: body.chatThreadId
+                    conversationID: body.chatThreadId,
+                    clientVersion: Bundle.main.object(
+                        forInfoDictionaryKey: "CFBundleShortVersionString"
+                    ) as? String,
+                    clientBuild: Bundle.main.object(
+                        forInfoDictionaryKey: "CFBundleVersion"
+                    ) as? String,
+                    clientInstanceID: deviceID,
+                    deviceRegistrationRef: deviceID.hasPrefix("ed25519:")
+                        ? "orca://devices/\(deviceID)"
+                        : nil
                 )
             )
             return DirectAgentChatResponse(runtime: response)

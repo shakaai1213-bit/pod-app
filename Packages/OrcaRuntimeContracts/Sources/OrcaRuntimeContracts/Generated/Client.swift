@@ -701,6 +701,295 @@ public struct Client: APIProtocol {
             }
         )
     }
+    /// Reconcile one ORCA Chat Runtime turn
+    ///
+    /// Returns the authoritative turn snapshot and events newer than the provided cursor. Unknown or cross-turn cursors return reset_required with a complete snapshot instead of silently dropping state.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/turns/{turn_id}/reconcile`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/turns/{turn_id}/reconcile/get(reconcileRuntimeTurn)`.
+    public func reconcileRuntimeTurn(_ input: Operations.ReconcileRuntimeTurn.Input) async throws -> Operations.ReconcileRuntimeTurn.Output {
+        try await client.send(
+            input: input,
+            forOperation: Operations.ReconcileRuntimeTurn.id,
+            serializer: { input in
+                let path = try converter.renderedPath(
+                    template: "/api/v1/chat-runtime/v1/turns/{}/reconcile",
+                    parameters: [
+                        input.path.turnId
+                    ]
+                )
+                var request: HTTPTypes.HTTPRequest = .init(
+                    soar_path: path,
+                    method: .get
+                )
+                suppressMutabilityWarning(&request)
+                try converter.setQueryItemAsURI(
+                    in: &request,
+                    style: .form,
+                    explode: true,
+                    name: "after_cursor",
+                    value: input.query.afterCursor
+                )
+                converter.setAcceptHeader(
+                    in: &request.headerFields,
+                    contentTypes: input.headers.accept
+                )
+                return (request, nil)
+            },
+            deserializer: { response, responseBody in
+                switch response.status.code {
+                case 200:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.ReconcileRuntimeTurn.Output.Ok.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas.ChatRuntimeTurnReconciliationRead.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .ok(.init(body: body))
+                case 422:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.ReconcileRuntimeTurn.Output.UnprocessableContent.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas.HTTPValidationError.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .unprocessableContent(.init(body: body))
+                default:
+                    return .undocumented(
+                        statusCode: response.status.code,
+                        .init(
+                            headerFields: response.headerFields,
+                            body: responseBody
+                        )
+                    )
+                }
+            }
+        )
+    }
+    /// Stream one ORCA Chat Runtime turn
+    ///
+    /// Streams the same authoritative reconciliation envelope as REST polling. Clients may resume with after_cursor or Last-Event-ID and fall back to the reconcile route without changing cursor semantics.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/turns/{turn_id}/stream`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/turns/{turn_id}/stream/get(streamRuntimeTurn)`.
+    public func streamRuntimeTurn(_ input: Operations.StreamRuntimeTurn.Input) async throws -> Operations.StreamRuntimeTurn.Output {
+        try await client.send(
+            input: input,
+            forOperation: Operations.StreamRuntimeTurn.id,
+            serializer: { input in
+                let path = try converter.renderedPath(
+                    template: "/api/v1/chat-runtime/v1/turns/{}/stream",
+                    parameters: [
+                        input.path.turnId
+                    ]
+                )
+                var request: HTTPTypes.HTTPRequest = .init(
+                    soar_path: path,
+                    method: .get
+                )
+                suppressMutabilityWarning(&request)
+                try converter.setQueryItemAsURI(
+                    in: &request,
+                    style: .form,
+                    explode: true,
+                    name: "after_cursor",
+                    value: input.query.afterCursor
+                )
+                try converter.setHeaderFieldAsURI(
+                    in: &request.headerFields,
+                    name: "Last-Event-ID",
+                    value: input.headers.lastEventID
+                )
+                converter.setAcceptHeader(
+                    in: &request.headerFields,
+                    contentTypes: input.headers.accept
+                )
+                return (request, nil)
+            },
+            deserializer: { response, responseBody in
+                switch response.status.code {
+                case 200:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.StreamRuntimeTurn.Output.Ok.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            OpenAPIRuntime.OpenAPIValueContainer.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .ok(.init(body: body))
+                case 422:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.StreamRuntimeTurn.Output.UnprocessableContent.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas.HTTPValidationError.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .unprocessableContent(.init(body: body))
+                default:
+                    return .undocumented(
+                        statusCode: response.status.code,
+                        .init(
+                            headerFields: response.headerFields,
+                            body: responseBody
+                        )
+                    )
+                }
+            }
+        )
+    }
+    /// Scan recent ORCA Chat Runtime liveness
+    ///
+    /// Performs a bounded, read-only scan for turns or nested AgentRuns that have exceeded the same server thresholds shown to Pod and Console.
+    ///
+    /// - Remark: HTTP `GET /api/v1/chat-runtime/v1/watchdog/stale-turns`.
+    /// - Remark: Generated from `#/paths//api/v1/chat-runtime/v1/watchdog/stale-turns/get(getRuntimeStaleTurns)`.
+    public func getRuntimeStaleTurns(_ input: Operations.GetRuntimeStaleTurns.Input) async throws -> Operations.GetRuntimeStaleTurns.Output {
+        try await client.send(
+            input: input,
+            forOperation: Operations.GetRuntimeStaleTurns.id,
+            serializer: { input in
+                let path = try converter.renderedPath(
+                    template: "/api/v1/chat-runtime/v1/watchdog/stale-turns",
+                    parameters: []
+                )
+                var request: HTTPTypes.HTTPRequest = .init(
+                    soar_path: path,
+                    method: .get
+                )
+                suppressMutabilityWarning(&request)
+                try converter.setQueryItemAsURI(
+                    in: &request,
+                    style: .form,
+                    explode: true,
+                    name: "lookback_hours",
+                    value: input.query.lookbackHours
+                )
+                try converter.setQueryItemAsURI(
+                    in: &request,
+                    style: .form,
+                    explode: true,
+                    name: "limit",
+                    value: input.query.limit
+                )
+                converter.setAcceptHeader(
+                    in: &request.headerFields,
+                    contentTypes: input.headers.accept
+                )
+                return (request, nil)
+            },
+            deserializer: { response, responseBody in
+                switch response.status.code {
+                case 200:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.GetRuntimeStaleTurns.Output.Ok.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas.ChatRuntimeWatchdogRead.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .ok(.init(body: body))
+                case 422:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.GetRuntimeStaleTurns.Output.UnprocessableContent.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas.HTTPValidationError.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .unprocessableContent(.init(body: body))
+                default:
+                    return .undocumented(
+                        statusCode: response.status.code,
+                        .init(
+                            headerFields: response.headerFields,
+                            body: responseBody
+                        )
+                    )
+                }
+            }
+        )
+    }
     /// List Messages
     ///
     /// List messages in a channel.
