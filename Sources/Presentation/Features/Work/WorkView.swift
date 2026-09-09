@@ -1,3 +1,4 @@
+import OrcaAPI
 import OrcaRuntimeContracts
 import SwiftData
 import SwiftUI
@@ -6094,16 +6095,22 @@ private struct WorkBoardSummary: Identifiable, Hashable {
 
     var isProtectedBoard: Bool { slug == "fund" }
 
-    var architectureLayer: String {
-        if isProductBoard { return "Products" }
-        switch slug {
-        case "north-star": return "Strategy"
-        case "platform": return "Platform"
-        case "operations": return "Operations"
-        default:
-            guard let layer, !layer.isEmpty else { return "Other" }
-            return layer.capitalized
-        }
+    var architectureGroup: OrcaBoardArchitectureGroup {
+        .classify(
+            slug: slug,
+            layer: layer,
+            description: boardDescription,
+            isProduct: isProductBoard
+        )
+    }
+
+    func matches(searchQuery: String) -> Bool {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return true }
+        let publicDescription = isProtectedBoard ? nil : boardDescription
+        return [displayName, name, slug, layer, component, publicDescription]
+            .compactMap { $0 }
+            .contains { $0.localizedCaseInsensitiveContains(query) }
     }
 
     var deliveryState: String {
@@ -6960,30 +6967,27 @@ private struct WorkBoardsArchitectureView: View {
     let sourceLabel: String
     let onSelectBoard: (WorkBoardSummary) -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var searchQuery = ""
+    @State private var selectedGroup: OrcaBoardArchitectureGroup?
 
-    private var groupedBoards: [(layer: String, boards: [WorkBoardSummary])] {
-        let grouped = Dictionary(grouping: boards, by: \.architectureLayer)
-        let order = ["Products", "Platform", "Operations", "Strategy", "Other"]
-        return grouped
-            .map { (layer: $0.key, boards: $0.value.sorted { $0.displayName < $1.displayName }) }
-            .sorted {
-                let lhs = order.firstIndex(of: $0.layer) ?? Int.max
-                let rhs = order.firstIndex(of: $1.layer) ?? Int.max
-                if lhs != rhs { return lhs < rhs }
-                return $0.layer < $1.layer
-            }
+    private var visibleBoards: [WorkBoardSummary] {
+        boards.filter { board in
+            (selectedGroup == nil || board.architectureGroup == selectedGroup)
+                && board.matches(searchQuery: searchQuery)
+        }
     }
 
-    private var totalProjects: Int {
-        boards.reduce(0) { $0 + $1.projectCount }
-    }
-
-    private var totalActive: Int {
-        boards.reduce(0) { $0 + $1.activeCount }
-    }
-
-    private var totalTickets: Int {
-        boards.reduce(0) { $0 + $1.ticketCount }
+    private var groupedBoards: [(group: OrcaBoardArchitectureGroup, boards: [WorkBoardSummary])] {
+        let grouped = Dictionary(grouping: visibleBoards, by: \.architectureGroup)
+        return OrcaBoardArchitectureGroup.allCases.compactMap { group in
+            guard let boards = grouped[group], !boards.isEmpty else { return nil }
+            return (
+                group,
+                boards.sorted {
+                    $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+                }
+            )
+        }
     }
 
     var body: some View {
@@ -6992,8 +6996,21 @@ private struct WorkBoardsArchitectureView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     header
                     totalsGrid
-                    ForEach(groupedBoards, id: \.layer) { group in
-                        architectureGroup(group.layer, boards: group.boards)
+                    ForEach(groupedBoards, id: \.group) { group in
+                        architectureGroup(group.group.rawValue, boards: group.boards)
+                    }
+                    if visibleBoards.isEmpty {
+                        if searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            ContentUnavailableView(
+                                "No Boards in This Group",
+                                systemImage: "rectangle.3.group",
+                                description: Text("Choose another board group.")
+                            )
+                            .frame(maxWidth: .infinity, minHeight: 220)
+                        } else {
+                            ContentUnavailableView.search(text: searchQuery)
+                                .frame(maxWidth: .infinity, minHeight: 220)
+                        }
                     }
                 }
                 .padding(16)
@@ -7002,6 +7019,7 @@ private struct WorkBoardsArchitectureView: View {
             .background(AppColors.backgroundPrimary.ignoresSafeArea())
             .navigationTitle("Boards")
             .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $searchQuery, prompt: "Search boards")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
@@ -7010,6 +7028,34 @@ private struct WorkBoardsArchitectureView: View {
                         Label("Close", systemImage: "xmark")
                     }
                     .foregroundColor(AppColors.accentElectric)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button {
+                            selectedGroup = nil
+                        } label: {
+                            if selectedGroup == nil {
+                                Label("All Groups", systemImage: "checkmark")
+                            } else {
+                                Text("All Groups")
+                            }
+                        }
+                        Divider()
+                        ForEach(OrcaBoardArchitectureGroup.allCases) { group in
+                            Button {
+                                selectedGroup = group
+                            } label: {
+                                if selectedGroup == group {
+                                    Label(group.rawValue, systemImage: "checkmark")
+                                } else {
+                                    Text(group.rawValue)
+                                }
+                            }
+                        }
+                    } label: {
+                        Image(systemName: selectedGroup == nil ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
+                    }
+                    .accessibilityLabel("Filter board groups")
                 }
             }
         }
@@ -7041,10 +7087,10 @@ private struct WorkBoardsArchitectureView: View {
 
     private var totalsGrid: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-            architectureMetric("Boards", "\(boards.count)")
-            architectureMetric("Project links", "\(totalProjects)")
-            architectureMetric("Active links", "\(totalActive)")
-            architectureMetric("Board tickets", "\(totalTickets)")
+            architectureMetric("Boards", "\(visibleBoards.count)")
+            architectureMetric("Project links", "\(visibleBoards.reduce(0) { $0 + $1.projectCount })")
+            architectureMetric("Active links", "\(visibleBoards.reduce(0) { $0 + $1.activeCount })")
+            architectureMetric("Board tickets", "\(visibleBoards.reduce(0) { $0 + $1.ticketCount })")
         }
     }
 
@@ -7092,7 +7138,9 @@ private struct WorkBoardsArchitectureView: View {
                 Spacer(minLength: 0)
             }
 
-            if let description = board.boardDescription, !description.isEmpty {
+            if !board.isProtectedBoard,
+               let description = board.boardDescription,
+               !description.isEmpty {
                 Text(description)
                     .font(.system(size: 11))
                     .foregroundColor(AppColors.textSecondary)
@@ -7352,7 +7400,9 @@ private struct WorkBoardDetailView: View {
                 Spacer()
             }
 
-            if let description = board.boardDescription, !description.isEmpty {
+            if !board.isProtectedBoard,
+               let description = board.boardDescription,
+               !description.isEmpty {
                 Text(description)
                     .font(.system(size: 13))
                     .foregroundColor(AppColors.textSecondary)
