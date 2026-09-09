@@ -7175,7 +7175,7 @@ private struct WorkBoardDetailView: View {
                     Button {
                         Task {
                             await model.load(board: board)
-                            if board.slug != "fund", let boardId = UUID(uuidString: board.id) {
+                            if !board.isProtectedBoard, let boardId = UUID(uuidString: board.id) {
                                 await boardPlanModel.load(boardId: boardId, force: true)
                             }
                         }
@@ -7190,7 +7190,7 @@ private struct WorkBoardDetailView: View {
                     selectedSection = .overview
                 }
                 await model.load(board: board)
-                if board.slug != "fund", let boardId = UUID(uuidString: board.id) {
+                if !board.isProtectedBoard, let boardId = UUID(uuidString: board.id) {
                     await boardPlanModel.load(boardId: boardId)
                 }
             }
