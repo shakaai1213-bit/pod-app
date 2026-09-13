@@ -10,6 +10,8 @@ import OrcaRuntimeContracts
 @MainActor
 final class OrcaMacModel {
     static let defaultServerAddress = OrcaEndpointPolicy.productionOrigin
+    static let initialConversationRefreshLimit = 200
+    static let incrementalConversationRefreshLimit = 50
 
     var selectedAgentID: String
     var selectedSection: ConsoleSection
@@ -632,8 +634,12 @@ final class OrcaMacModel {
         guard let conversationID = conversations[agentID]?.conversationID
             ?? storedConversationID(for: agentID) else { return }
         do {
-            let remote = try await loadAllMessages(service: service, conversationID: conversationID)
             var state = conversations[agentID] ?? ConversationState(conversationID: conversationID)
+            let remote = try await loadRecentMessages(
+                service: service,
+                conversationID: conversationID,
+                hasCanonicalMessages: state.messages.contains { $0.deliveryState == .persisted }
+            )
             state.conversationID = conversationID
             state.mergeCanonical(remote.map(Self.transcriptMessage))
             conversations[agentID] = state
@@ -822,8 +828,12 @@ final class OrcaMacModel {
     ) async {
         guard let service else { return }
         do {
-            let remote = try await loadAllMessages(service: service, conversationID: conversationID)
             var state = conversations[agentID] ?? ConversationState(conversationID: conversationID)
+            let remote = try await loadRecentMessages(
+                service: service,
+                conversationID: conversationID,
+                hasCanonicalMessages: state.messages.contains { $0.deliveryState == .persisted }
+            )
             state.conversationID = conversationID
             state.mergeCanonical(remote.map(Self.transcriptMessage))
             conversations[agentID] = state
@@ -945,25 +955,24 @@ final class OrcaMacModel {
         ))
     }
 
-    private func loadAllMessages(
+    static func conversationRefreshLimit(hasCanonicalMessages: Bool) -> Int {
+        hasCanonicalMessages
+            ? incrementalConversationRefreshLimit
+            : initialConversationRefreshLimit
+    }
+
+    private func loadRecentMessages(
         service: any OrcaRuntimeServing,
-        conversationID: String
+        conversationID: String,
+        hasCanonicalMessages: Bool
     ) async throws -> [OrcaRuntimeConversationMessage] {
-        let pageSize = 200
-        let maximum = 5_000
-        var offset = 0
-        var output: [OrcaRuntimeConversationMessage] = []
-        while output.count < maximum {
-            let page = try await service.messages(
-                conversationID: conversationID,
-                offset: offset,
-                limit: pageSize
+        try await service.messages(
+            conversationID: conversationID,
+            offset: 0,
+            limit: Self.conversationRefreshLimit(
+                hasCanonicalMessages: hasCanonicalMessages
             )
-            output.append(contentsOf: page)
-            if page.count < pageSize { break }
-            offset += page.count
-        }
-        return output
+        )
     }
 
     private func storeConversationID(_ conversationID: String, for agentID: String) {
