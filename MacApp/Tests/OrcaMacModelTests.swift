@@ -102,6 +102,17 @@ final class OrcaMacModelTests: XCTestCase {
         _ = OrcaMacModel.applyLatestMemoryProposal
     }
 
+    func testConversationRefreshUsesBoundedRecentWindows() {
+        XCTAssertEqual(
+            OrcaMacModel.conversationRefreshLimit(hasCanonicalMessages: false),
+            200
+        )
+        XCTAssertEqual(
+            OrcaMacModel.conversationRefreshLimit(hasCanonicalMessages: true),
+            50
+        )
+    }
+
     func testCanonicalMergeDeduplicatesAndPreservesPending() {
         let start = Date(timeIntervalSince1970: 1_000)
         var state = ConversationState()
