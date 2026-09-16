@@ -61,6 +61,8 @@ final class OrcaMacModel {
     var workbenchError: String?
     var workbenchNotice: String?
 
+    @ObservationIgnored private var workbenchFetchGeneration = 0
+
     @ObservationIgnored private let tokenStore: any RuntimeTokenStoring
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var service: (any OrcaRuntimeServing)?
@@ -483,14 +485,22 @@ final class OrcaMacModel {
         guard agents.contains(where: { $0.id == id }) else { return }
         selectedAgentID = id
         defaults.set(id, forKey: "orca.mac.selected-agent")
+        workbenchFetchGeneration += 1
+        workbenchTickets = []
+        workbenchContract = nil
+        workbenchSession = nil
+        selectedWorkbenchTicketID = nil
         selectedWorkbenchOperationID = nil
+        workbenchError = nil
         Task { await refreshWorkbench(silent: true) }
     }
 
     func selectWorkbenchTicket(_ id: String?) {
+        guard id == nil || workbenchTickets.contains(where: { $0.id == id }) else { return }
         selectedWorkbenchTicketID = id
         selectedWorkbenchOperationID = nil
         workbenchSession = nil
+        workbenchError = nil
         Task { await refreshWorkbenchSession(silent: true) }
     }
 
@@ -500,12 +510,18 @@ final class OrcaMacModel {
 
     func refreshWorkbench(silent: Bool = false) async {
         guard let consoleService else { return }
+        workbenchFetchGeneration += 1
+        let generation = workbenchFetchGeneration
+        let agentID = selectedAgentID
         isLoadingWorkbench = true
-        defer { isLoadingWorkbench = false }
+        defer {
+            if generation == workbenchFetchGeneration { isLoadingWorkbench = false }
+        }
         do {
-            async let contract = consoleService.workbenchContract(agentSlug: selectedAgentID)
-            async let tickets = consoleService.workbenchTickets(agentSlug: selectedAgentID)
+            async let contract = consoleService.workbenchContract(agentSlug: agentID)
+            async let tickets = consoleService.workbenchTickets(agentSlug: agentID)
             let (nextContract, nextTickets) = try await (contract, tickets)
+            guard generation == workbenchFetchGeneration, selectedAgentID == agentID else { return }
             workbenchContract = nextContract
             workbenchTickets = nextTickets
             if selectedWorkbenchTicketID == nil
@@ -521,21 +537,31 @@ final class OrcaMacModel {
             await refreshWorkbenchSession(silent: true)
             lastUpdatedAt = Date()
         } catch {
+            guard generation == workbenchFetchGeneration, selectedAgentID == agentID else { return }
+            workbenchSession = nil
             workbenchError = error.localizedDescription
             if !silent { presentedError = error.localizedDescription }
         }
     }
 
     func refreshWorkbenchSession(silent: Bool = false) async {
-        guard let consoleService, let ticketID = selectedWorkbenchTicketID else {
+        guard let consoleService,
+              let ticketID = selectedWorkbenchTicketID,
+              workbenchTickets.contains(where: { $0.id == ticketID }) else {
             workbenchSession = nil
             return
         }
+        let generation = workbenchFetchGeneration
+        let agentID = selectedAgentID
+        workbenchError = nil
         do {
             let next = try await consoleService.workbenchSession(
                 ticketID: ticketID,
-                agentSlug: selectedAgentID
+                agentSlug: agentID
             )
+            guard generation == workbenchFetchGeneration,
+                  selectedAgentID == agentID,
+                  selectedWorkbenchTicketID == ticketID else { return }
             workbenchSession = next
             workbenchContract = next.contract
             workbenchError = nil
@@ -545,6 +571,9 @@ final class OrcaMacModel {
             }
             lastUpdatedAt = Date()
         } catch {
+            guard generation == workbenchFetchGeneration,
+                  selectedAgentID == agentID,
+                  selectedWorkbenchTicketID == ticketID else { return }
             workbenchError = error.localizedDescription
             if !silent { presentedError = error.localizedDescription }
         }
