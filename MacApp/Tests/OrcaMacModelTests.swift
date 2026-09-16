@@ -1685,6 +1685,87 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertEqual(profile.fullProfile?.health.state, OrcaBoardHealthState.healthy)
     }
 
+    func testWorkbenchAgentSwitchClearsStaleTicketSelection() {
+        let suiteName = "OrcaMacModelTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let model = OrcaMacModel(
+            tokenStore: TestRuntimeTokenStore(token: nil),
+            defaults: defaults
+        )
+        model.selectedAgentID = "coral"
+        model.workbenchTickets = [
+            WorkbenchTicketSummary(
+                id: "ticket-coral",
+                title: "Coral ticket",
+                status: "open",
+                flowState: "in_progress",
+                priority: "P1",
+                nextAction: nil
+            ),
+        ]
+        model.selectedWorkbenchTicketID = "ticket-coral"
+        model.selectedWorkbenchOperationID = "run-1"
+        model.workbenchError = "ORCA returned HTTP 404: Ticket not found"
+
+        model.selectWorkbenchAgent("shaka")
+
+        XCTAssertEqual(model.selectedAgentID, "shaka")
+        XCTAssertNil(model.selectedWorkbenchTicketID)
+        XCTAssertNil(model.selectedWorkbenchOperationID)
+        XCTAssertTrue(model.workbenchTickets.isEmpty)
+        XCTAssertNil(model.workbenchSession)
+        XCTAssertNil(model.workbenchError)
+    }
+
+    func testWorkbenchTicketSelectionRejectsTicketOutsideCurrentAgentScope() {
+        let suiteName = "OrcaMacModelTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let model = OrcaMacModel(
+            tokenStore: TestRuntimeTokenStore(token: nil),
+            defaults: defaults
+        )
+        model.selectedAgentID = "coral"
+        model.workbenchTickets = [
+            WorkbenchTicketSummary(
+                id: "ticket-coral",
+                title: "Coral ticket",
+                status: "open",
+                flowState: nil,
+                priority: nil,
+                nextAction: nil
+            ),
+        ]
+        model.selectedWorkbenchTicketID = "ticket-coral"
+
+        model.selectWorkbenchTicket("ticket-from-other-agent")
+
+        XCTAssertEqual(model.selectedWorkbenchTicketID, "ticket-coral")
+
+        model.selectWorkbenchTicket(nil)
+        XCTAssertNil(model.selectedWorkbenchTicketID)
+    }
+
+    func testWorkbenchSessionRefreshWithoutSelectionClearsSessionAndKeepsError() async {
+        let suiteName = "OrcaMacModelTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let model = OrcaMacModel(
+            tokenStore: TestRuntimeTokenStore(token: nil),
+            defaults: defaults
+        )
+        model.selectedAgentID = "coral"
+        model.workbenchTickets = []
+        model.selectedWorkbenchTicketID = nil
+        model.workbenchError = "ORCA returned HTTP 404: Ticket not found"
+
+        await model.refreshWorkbenchSession(silent: true)
+
+        XCTAssertNil(model.workbenchSession)
+        XCTAssertEqual(model.workbenchError, "ORCA returned HTTP 404: Ticket not found")
+    }
+
     private static let workbenchHostJSON = #"{"host_id":"shaka-mac","capability_id":"engineering.workspace","state":"attested","ready":true,"reason":"fresh","observed_at":"2026-08-18T04:00:00Z","expires_at":null,"evidence_refs":["attestation-evidence://shaka-mac/canary"],"policy_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}"#
 
     // Fixture mirrors SPEC-WAITING-ON-TONY's WaitingOnCaptainResponse and
