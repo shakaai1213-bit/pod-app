@@ -552,6 +552,196 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertEqual(approved.id, "run-c9")
     }
 
+    func testEligibleApprovalIsDecidable() {
+        let approval = Self.eligibleApproval()
+
+        XCTAssertNil(approval.blockReason)
+        XCTAssertTrue(approval.canResolve)
+        XCTAssertEqual(approval.resolvedTicketID, "ticket-1")
+    }
+
+    func testEachGuardConditionBlocksWithSpecificReason() {
+        let cases: [(ConsoleApprovalRecord, ConsoleApprovalBlockReason)] = [
+            (Self.eligibleApproval(status: "approved"), .notPending),
+            (Self.eligibleApproval(authority: "coral"), .authorityMismatch),
+            (Self.eligibleApproval(viewerAuthorized: false), .viewerNotAuthorized),
+            (Self.eligibleApproval(resolutionEnabled: false), .resolutionHeld),
+            (Self.eligibleApproval(selfApprovalProhibited: true), .selfApprovalProhibited),
+            (Self.eligibleApproval(targetReference: nil, linkedTicketIDs: []), .ticketUnresolved),
+            (Self.eligibleApproval(targetReference: nil, linkedTicketIDs: ["ticket-1", "ticket-2"]), .ticketUnresolved),
+        ]
+        for (approval, expected) in cases {
+            XCTAssertEqual(approval.blockReason, expected)
+            XCTAssertFalse(approval.canResolve)
+            XCTAssertEqual(approval.blockReason?.message, expected.message)
+        }
+        XCTAssertEqual(
+            Set(ConsoleApprovalBlockReason.allCases.map(\.message)).count,
+            ConsoleApprovalBlockReason.allCases.count
+        )
+    }
+
+    func testEndpointMismatchIsNotDecidable() {
+        let approval = Self.eligibleApproval(
+            decisionEndpoint: "/api/v1/approvals/approval-1"
+        )
+
+        XCTAssertEqual(approval.blockReason, .endpointMismatch)
+        XCTAssertFalse(approval.canResolve)
+    }
+
+    func testTicketIDResolvesFromTargetReferenceWhenLinkedIDsAbsent() {
+        let approval = Self.eligibleApproval(linkedTicketIDs: [])
+
+        XCTAssertEqual(approval.resolvedTicketID, "ticket-1")
+        XCTAssertTrue(approval.canResolve)
+    }
+
+    func testConflictingTargetReferenceIsAmbiguous() {
+        let approval = Self.eligibleApproval(
+            targetReference: "ticket-9",
+            linkedTicketIDs: ["ticket-1", "ticket-2"]
+        )
+
+        XCTAssertNil(approval.resolvedTicketID)
+        XCTAssertEqual(approval.blockReason, .ticketUnresolved)
+    }
+
+    func testRejectWithEmptyReasonIsRefusedBeforeNetwork() async {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        var requestCount = 0
+        TestURLProtocol.response = { _ in
+            requestCount += 1
+            return (500, Data())
+        }
+        defer { TestURLProtocol.response = nil }
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+
+        do {
+            _ = try await service.decideTicketApproval(
+                ticketID: "ticket-1",
+                approvalID: "approval-1",
+                decision: .rejected,
+                reason: "   "
+            )
+            XCTFail("Empty rejection reason must be refused")
+        } catch let error as ConsoleTicketApprovalError {
+            XCTAssertEqual(error, .emptyRejectionReason)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+        XCTAssertEqual(requestCount, 0)
+    }
+
+    func testSuccessfulApproveIssuesSinglePatchWithConsoleAttribution() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let lock = NSLock()
+        var patchCount = 0
+        TestURLProtocol.response = { request in
+            XCTAssertEqual(request.httpMethod, "PATCH")
+            XCTAssertEqual(request.url?.path, "/api/v1/tickets/ticket-1/approvals/approval-1")
+            lock.withLock { patchCount += 1 }
+            let body = try TestURLProtocol.bodyData(for: request)
+            let object = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: body) as? [String: Any]
+            )
+            XCTAssertEqual(object["status"] as? String, "approved")
+            XCTAssertEqual(object["reason"] as? String, "Looks correct.")
+            XCTAssertEqual(object["source"] as? String, "console.tickets.approval_resolution")
+            XCTAssertEqual(object["lane"] as? String, "human_approval_resolution")
+            let trace = try XCTUnwrap(object["trace_id"] as? String)
+            XCTAssertTrue(trace.hasPrefix("console-approval-approved-"))
+            XCTAssertFalse(trace.hasPrefix("pod-"))
+            return (200, Data(#"{"approval_id":"approval-1","ticket_id":"ticket-1","status":"approved"}"#.utf8))
+        }
+        defer { TestURLProtocol.response = nil }
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+
+        let result = try await service.decideTicketApproval(
+            ticketID: "ticket-1",
+            approvalID: "approval-1",
+            decision: .approved,
+            reason: "Looks correct."
+        )
+
+        XCTAssertEqual(lock.withLock { patchCount }, 1)
+        XCTAssertEqual(result.status, "approved")
+    }
+
+    func testDecisionFailureSurfacesAPIErrorMessage() async {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        TestURLProtocol.response = { _ in
+            (403, Data(#"{"detail":"Only the approval authority may decide this approval."}"#.utf8))
+        }
+        defer { TestURLProtocol.response = nil }
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+
+        do {
+            _ = try await service.decideTicketApproval(
+                ticketID: "ticket-1",
+                approvalID: "approval-1",
+                decision: .approved,
+                reason: "Looks correct."
+            )
+            XCTFail("403 must throw")
+        } catch let error as OrcaConsoleServiceError {
+            guard case let .httpStatus(code, detail) = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertEqual(code, 403)
+            XCTAssertEqual(detail, "Only the approval authority may decide this approval.")
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    private static func eligibleApproval(
+        id: String = "approval-1",
+        authority: String = "tony",
+        status: String = "pending",
+        decisionEndpoint: String? = "/api/v1/tickets/ticket-1/approvals/approval-1",
+        viewerAuthorized: Bool = true,
+        resolutionEnabled: Bool = true,
+        selfApprovalProhibited: Bool = false,
+        targetType: String? = "ticket",
+        targetReference: String? = "ticket-1",
+        linkedTicketIDs: [String] = ["ticket-1"]
+    ) -> ConsoleApprovalRecord {
+        ConsoleApprovalRecord(
+            id: id,
+            authority: authority,
+            status: status,
+            decisionEndpoint: decisionEndpoint,
+            viewerAuthorized: viewerAuthorized,
+            resolutionEnabled: resolutionEnabled,
+            selfApprovalProhibited: selfApprovalProhibited,
+            targetType: targetType,
+            targetReference: targetReference,
+            linkedTicketIDs: linkedTicketIDs
+        )
+    }
+
     private static let workbenchHostJSON = #"{"host_id":"shaka-mac","capability_id":"engineering.workspace","state":"attested","ready":true,"reason":"fresh","observed_at":"2026-08-18T04:00:00Z","expires_at":null,"evidence_refs":["attestation-evidence://shaka-mac/canary"],"policy_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}"#
 
     private static let workbenchContractJSON = "{\"schema\":\"orca.engineering-workbench.v1\",\"enabled\":true,\"mode\":\"active\",\"host\":\(workbenchHostJSON),\"worker_lane\":\"engineering-host\",\"policy_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"roots\":[{\"id\":\"pod-client\",\"label\":\"Pod and Console\",\"description\":\"Native source\",\"access\":\"read_test\",\"source_mutation\":false}],\"actions\":[{\"id\":\"git.status\",\"label\":\"Git Status\",\"kind\":\"diff\",\"requires_approval\":false,\"mutates_source\":false,\"default_timeout_seconds\":30,\"allowed_root_ids\":[\"pod-client\"],\"available\":true,\"blocked_reasons\":[]}],\"lifecycle\":[\"request.persisted\"],\"guarantees\":[\"AgentRun first\"]}"

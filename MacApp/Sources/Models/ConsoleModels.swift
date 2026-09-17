@@ -31,6 +31,80 @@ struct ConsoleRecord: Identifiable, Equatable, Sendable {
     let status: String?
     let group: String
     let fields: [ConsoleField]
+    let approval: ConsoleApprovalRecord?
+}
+
+enum ConsoleApprovalBlockReason: String, Equatable, Sendable, CaseIterable {
+    case notPending
+    case authorityMismatch
+    case viewerNotAuthorized
+    case resolutionHeld
+    case selfApprovalProhibited
+    case endpointMismatch
+    case ticketUnresolved
+
+    var message: String {
+        switch self {
+        case .notPending:
+            return "Not decidable: this approval is no longer pending."
+        case .authorityMismatch:
+            return "Not decidable here: the approval authority is not the signed-in viewer."
+        case .viewerNotAuthorized:
+            return "Not decidable here: the signed-in viewer is not authorized to decide this approval."
+        case .resolutionHeld:
+            return "Not decidable: resolution is held for this approval."
+        case .selfApprovalProhibited:
+            return "Not decidable here: self-approval is prohibited for this approval."
+        case .endpointMismatch:
+            return "Not decidable: the server-supplied decision endpoint does not match the expected ticket-scoped path."
+        case .ticketUnresolved:
+            return "Not decidable: no single unambiguous linked ticket could be resolved."
+        }
+    }
+}
+
+struct ConsoleApprovalRecord: Equatable, Sendable {
+    let id: String
+    let authority: String
+    let status: String
+    let decisionEndpoint: String?
+    let viewerAuthorized: Bool
+    let resolutionEnabled: Bool
+    let selfApprovalProhibited: Bool
+    let targetType: String?
+    let targetReference: String?
+    let linkedTicketIDs: [String]
+
+    var resolvedTicketID: String? {
+        let linked = Set(linkedTicketIDs)
+        if linked.count == 1, let ticketID = linked.first {
+            return ticketID
+        }
+        if targetType?.lowercased() == "ticket",
+           let reference = targetReference,
+           !reference.isEmpty {
+            if linked.isEmpty || linked.contains(reference) {
+                return reference
+            }
+        }
+        return nil
+    }
+
+    var blockReason: ConsoleApprovalBlockReason? {
+        guard status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "pending" else {
+            return .notPending
+        }
+        guard authority == "tony" else { return .authorityMismatch }
+        guard viewerAuthorized else { return .viewerNotAuthorized }
+        guard resolutionEnabled else { return .resolutionHeld }
+        guard !selfApprovalProhibited else { return .selfApprovalProhibited }
+        guard let ticketID = resolvedTicketID else { return .ticketUnresolved }
+        let expectedEndpoint = "/api/v1/tickets/\(ticketID)/approvals/\(id)"
+        guard decisionEndpoint == expectedEndpoint else { return .endpointMismatch }
+        return nil
+    }
+
+    var canResolve: Bool { blockReason == nil }
 }
 
 struct ConsoleSectionSnapshot: Equatable, Sendable {
@@ -101,24 +175,45 @@ struct ConsoleSectionSnapshot: Equatable, Sendable {
             subtitle: item.reason,
             status: item.stale ? "stale" : item.status,
             group: group.rawValue,
-            fields: fields
+            fields: fields,
+            approval: nil
         )
     }
 
     private static func approvalRecord(
         _ approval: OrcaWorkControlProjection.Approval
     ) -> ConsoleRecord {
-        ConsoleRecord(
+        let decision = ConsoleApprovalRecord(
+            id: approval.id,
+            authority: approval.authority,
+            status: approval.stale ? "stale" : "pending",
+            decisionEndpoint: approval.decisionEndpoint,
+            viewerAuthorized: approval.viewerAuthorized,
+            resolutionEnabled: approval.resolutionEnabled,
+            selfApprovalProhibited: approval.selfApprovalProhibited,
+            targetType: approval.targetType,
+            targetReference: approval.targetReference,
+            linkedTicketIDs: approval.linkedTicketIDs
+        )
+        var fields = [
+            ConsoleField(label: "ID", value: approval.id),
+            ConsoleField(label: "Authority", value: approval.authority),
+            ConsoleField(label: "Resolution", value: approval.resolutionEnabled ? "Enabled" : "Held"),
+        ]
+        if let ticketID = decision.resolvedTicketID {
+            fields.append(ConsoleField(label: "Ticket", value: ticketID))
+        }
+        if let reason = decision.blockReason {
+            fields.append(ConsoleField(label: "Decision", value: reason.message))
+        }
+        return ConsoleRecord(
             id: "approval:\(approval.id)",
             title: approval.actionType.replacingOccurrences(of: "_", with: " ").capitalized,
             subtitle: approval.reason,
             status: approval.stale ? "stale" : "pending",
             group: OrcaWorkControlProjection.Group.approvals.rawValue,
-            fields: [
-                ConsoleField(label: "ID", value: approval.id),
-                ConsoleField(label: "Authority", value: approval.authority),
-                ConsoleField(label: "Resolution", value: approval.resolutionEnabled ? "Enabled" : "Held"),
-            ]
+            fields: fields,
+            approval: decision
         )
     }
 }
