@@ -2,6 +2,56 @@ import Foundation
 import OrcaAPI
 import OrcaRuntimeContracts
 
+enum ConsoleTicketApprovalDecision: String, Equatable, Sendable {
+    case approved
+    case rejected
+}
+
+enum ConsoleTicketApprovalError: Error, LocalizedError, Equatable {
+    case notDecidable(ConsoleApprovalBlockReason)
+    case emptyRejectionReason
+
+    var errorDescription: String? {
+        switch self {
+        case let .notDecidable(reason): return reason.message
+        case .emptyRejectionReason: return "A reason is required to reject an approval."
+        }
+    }
+}
+
+struct ConsoleTicketApprovalResolution: Encodable, Equatable, Sendable {
+    let status: String
+    let reason: String
+    let traceId: String
+    let source: String
+    let lane: String
+
+    enum CodingKeys: String, CodingKey {
+        case status, reason, source, lane
+        case traceId = "trace_id"
+    }
+
+    init(status: String, reason: String, traceId: String, source: String, lane: String) {
+        self.status = status
+        self.reason = reason
+        self.traceId = traceId
+        self.source = source
+        self.lane = lane
+    }
+}
+
+struct ConsoleTicketApprovalResult: Decodable, Equatable, Sendable {
+    let approvalId: String?
+    let ticketId: String?
+    let status: String?
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case approvalId = "approval_id"
+        case ticketId = "ticket_id"
+    }
+}
+
 enum OrcaConsoleServiceError: Error, LocalizedError {
     case missingCredential
     case invalidResponse
@@ -247,7 +297,7 @@ actor OrcaConsoleService {
         return ConsoleSectionSnapshot(
             section: .fund,
             metrics: [],
-            records: [ConsoleRecord(id: "fund-landing", title: "Fund Operating View", subtitle: "ORCA protected read model", status: "protected", group: "Fund", fields: fields)],
+            records: [ConsoleRecord(id: "fund-landing", title: "Fund Operating View", subtitle: "ORCA protected read model", status: "protected", group: "Fund", fields: fields, approval: nil)],
             sources: ["/api/v1/fund/landing"],
             updatedAt: Date()
         )
@@ -314,6 +364,36 @@ actor OrcaConsoleService {
             method: "POST",
             path: "/api/v1/engineering-workbench/operations/\(runID)/approval",
             payload: decision
+        )
+    }
+
+    static let ticketApprovalSource = "console.tickets.approval_resolution"
+    static let ticketApprovalLane = "human_approval_resolution"
+
+    func decideTicketApproval(
+        ticketID: String,
+        approvalID: String,
+        decision: ConsoleTicketApprovalDecision,
+        reason: String
+    ) async throws -> ConsoleTicketApprovalResult {
+        let trimmedReason = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        if decision == .rejected && trimmedReason.isEmpty {
+            throw ConsoleTicketApprovalError.emptyRejectionReason
+        }
+        let tracePrefix = decision == .approved
+            ? "console-approval-approved"
+            : "console-approval-rejected"
+        let payload = ConsoleTicketApprovalResolution(
+            status: decision.rawValue,
+            reason: trimmedReason,
+            traceId: "\(tracePrefix)-\(UUID().uuidString.lowercased())",
+            source: Self.ticketApprovalSource,
+            lane: Self.ticketApprovalLane
+        )
+        return try await requestJSON(
+            method: "PATCH",
+            path: "/api/v1/tickets/\(ticketID)/approvals/\(approvalID)",
+            payload: payload
         )
     }
 
@@ -541,7 +621,8 @@ actor OrcaConsoleService {
                 subtitle: subtitle == title ? nil : subtitle,
                 status: status,
                 group: group,
-                fields: fields
+                fields: fields,
+                approval: nil
             )
         }
     }

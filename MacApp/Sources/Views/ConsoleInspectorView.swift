@@ -42,6 +42,10 @@ struct ConsoleInspectorView: View {
                             }
                         }
                     }
+
+                    if let approval = record.approval {
+                        ApprovalDecisionSection(recordID: record.id, approval: approval)
+                    }
                 } else {
                     InspectorSection(title: "Section") {
                         InspectorValue(label: "View", value: model.selectedSection.title)
@@ -73,5 +77,76 @@ struct ConsoleInspectorView: View {
             .padding(16)
         }
         .background(Color(nsColor: .windowBackgroundColor))
+    }
+}
+
+private struct ApprovalDecisionSection: View {
+    @Environment(OrcaMacModel.self) private var model
+    let recordID: String
+    let approval: ConsoleApprovalRecord
+
+    @State private var rejectionReason = ""
+
+    var body: some View {
+        InspectorSection(title: "Decision") {
+            if approval.canResolve {
+                TextField("Rejection reason (required to reject)", text: $rejectionReason)
+                    .textFieldStyle(.roundedBorder)
+                HStack(spacing: 8) {
+                    Button {
+                        Task {
+                            await model.decideTicketApproval(
+                                recordID: recordID,
+                                decision: .approved,
+                                reason: "Approved from ORCA Console."
+                            )
+                        }
+                    } label: {
+                        Label("Approve", systemImage: "checkmark")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.orcaGreen)
+
+                    Button {
+                        Task {
+                            await model.decideTicketApproval(
+                                recordID: recordID,
+                                decision: .rejected,
+                                reason: rejectionReason
+                            )
+                        }
+                    } label: {
+                        Label("Reject", systemImage: "xmark")
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(Color.orcaCoral)
+                    .disabled(rejectionReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                .disabled(model.isDecidingApproval)
+            } else if let reason = approval.blockReason {
+                Label(reason.message, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(Color.orcaAmber)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if model.isDecidingApproval {
+                ProgressView()
+                    .controlSize(.small)
+            }
+            if let error = model.approvalError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(Color.orcaCoral)
+                    .textSelection(.enabled)
+            }
+            if let notice = model.approvalNotice {
+                Text(notice)
+                    .font(.caption)
+                    .foregroundStyle(Color.orcaGreen)
+                    .textSelection(.enabled)
+            }
+        }
     }
 }

@@ -60,6 +60,9 @@ final class OrcaMacModel {
     var isSubmittingWorkbench = false
     var workbenchError: String?
     var workbenchNotice: String?
+    var isDecidingApproval = false
+    var approvalNotice: String?
+    var approvalError: String?
 
     @ObservationIgnored private let tokenStore: any RuntimeTokenStoring
     @ObservationIgnored private let defaults: UserDefaults
@@ -624,6 +627,50 @@ final class OrcaMacModel {
             await refreshWorkbenchSession(silent: true)
         } catch {
             workbenchError = error.localizedDescription
+            presentedError = error.localizedDescription
+        }
+    }
+
+    func decideTicketApproval(
+        recordID: String,
+        decision: ConsoleTicketApprovalDecision,
+        reason: String
+    ) async {
+        approvalNotice = nil
+        approvalError = nil
+        guard let consoleService, !isDecidingApproval else { return }
+        guard let record = sectionSnapshots[selectedSection]?.records.first(where: { $0.id == recordID }),
+              let approval = record.approval else {
+            approvalError = "That approval is no longer in view. Refresh and try again."
+            return
+        }
+        guard let ticketID = approval.resolvedTicketID else {
+            approvalError = ConsoleApprovalBlockReason.ticketUnresolved.message
+            return
+        }
+        guard approval.canResolve else {
+            approvalError = approval.blockReason?.message
+            return
+        }
+        let trimmedReason = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        if decision == .rejected && trimmedReason.isEmpty {
+            approvalError = ConsoleTicketApprovalError.emptyRejectionReason.errorDescription
+            return
+        }
+        isDecidingApproval = true
+        defer { isDecidingApproval = false }
+        do {
+            let result = try await consoleService.decideTicketApproval(
+                ticketID: ticketID,
+                approvalID: approval.id,
+                decision: decision,
+                reason: trimmedReason
+            )
+            approvalNotice = "Approval \(approval.id) is \(result.status ?? decision.rawValue)."
+            approvalError = nil
+            await refreshSelectedSection(silent: true)
+        } catch {
+            approvalError = error.localizedDescription
             presentedError = error.localizedDescription
         }
     }
