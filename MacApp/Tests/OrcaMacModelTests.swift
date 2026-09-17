@@ -583,7 +583,7 @@ final class OrcaMacModelTests: XCTestCase {
 
     func testEndpointMismatchIsNotDecidable() {
         let approval = Self.eligibleApproval(
-            decisionEndpoint: "/api/v1/approvals/approval-1"
+            decisionEndpoint: "/api/v1/approvals/other-approval"
         )
 
         XCTAssertEqual(approval.blockReason, .endpointMismatch)
@@ -626,8 +626,8 @@ final class OrcaMacModelTests: XCTestCase {
 
         do {
             _ = try await service.decideTicketApproval(
-                ticketID: "ticket-1",
                 approvalID: "approval-1",
+                decisionEndpoint: "/api/v1/approvals/approval-1",
                 decision: .rejected,
                 reason: "   "
             )
@@ -672,8 +672,8 @@ final class OrcaMacModelTests: XCTestCase {
         )
 
         let result = try await service.decideTicketApproval(
-            ticketID: "ticket-1",
             approvalID: "approval-1",
+            decisionEndpoint: "/api/v1/tickets/ticket-1/approvals/approval-1",
             decision: .approved,
             reason: "Looks correct."
         )
@@ -699,8 +699,8 @@ final class OrcaMacModelTests: XCTestCase {
 
         do {
             _ = try await service.decideTicketApproval(
-                ticketID: "ticket-1",
                 approvalID: "approval-1",
+                decisionEndpoint: "/api/v1/tickets/ticket-1/approvals/approval-1",
                 decision: .approved,
                 reason: "Looks correct."
             )
@@ -716,11 +716,166 @@ final class OrcaMacModelTests: XCTestCase {
         }
     }
 
+    func testFlatDecisionEndpointIsDecidable() {
+        let approval = Self.flatBundleApproval()
+
+        XCTAssertNil(approval.blockReason)
+        XCTAssertTrue(approval.canResolve)
+    }
+
+    func testTicketScopedDecisionEndpointIsStillDecidable() {
+        let approval = Self.eligibleApproval()
+
+        XCTAssertNil(approval.blockReason)
+        XCTAssertTrue(approval.canResolve)
+    }
+
+    func testEndpointWithDifferentApprovalIDIsMismatch() {
+        let flat = Self.flatBundleApproval(
+            decisionEndpoint: "/api/v1/approvals/approval-other"
+        )
+        let scoped = Self.eligibleApproval(
+            decisionEndpoint: "/api/v1/tickets/ticket-1/approvals/approval-other"
+        )
+
+        XCTAssertEqual(flat.blockReason, .endpointMismatch)
+        XCTAssertEqual(scoped.blockReason, .endpointMismatch)
+        XCTAssertFalse(flat.canResolve)
+        XCTAssertFalse(scoped.canResolve)
+    }
+
+    func testEndpointWithExtraSegmentsOrQueryStringIsMismatch() {
+        let extraSegments = Self.flatBundleApproval(
+            decisionEndpoint: "/api/v1/approvals/approval-1/extra"
+        )
+        let queryString = Self.flatBundleApproval(
+            decisionEndpoint: "/api/v1/approvals/approval-1?decide=approve"
+        )
+        let prefixed = Self.flatBundleApproval(
+            decisionEndpoint: "https://other.example.com/api/v1/approvals/approval-1"
+        )
+
+        for approval in [extraSegments, queryString, prefixed] {
+            XCTAssertEqual(approval.blockReason, .endpointMismatch)
+            XCTAssertFalse(approval.canResolve)
+        }
+    }
+
+    func testNilDecisionEndpointReportsAuthorityNotEndpointMismatch() {
+        let flat = Self.flatBundleApproval(decisionEndpoint: nil)
+        let scoped = Self.eligibleApproval(decisionEndpoint: nil)
+
+        XCTAssertEqual(flat.blockReason, .viewerNotAuthorized)
+        XCTAssertEqual(scoped.blockReason, .viewerNotAuthorized)
+        XCTAssertNotEqual(flat.blockReason, .endpointMismatch)
+        XCTAssertFalse(flat.canResolve)
+        XCTAssertFalse(scoped.canResolve)
+    }
+
+    func testApprovingFlatFormRecordPatchesFlatEndpoint() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let lock = NSLock()
+        var patchCount = 0
+        TestURLProtocol.response = { request in
+            XCTAssertEqual(request.httpMethod, "PATCH")
+            XCTAssertEqual(request.url?.path, "/api/v1/approvals/approval-1")
+            XCTAssertNil(request.url?.query)
+            lock.withLock { patchCount += 1 }
+            let body = try TestURLProtocol.bodyData(for: request)
+            let object = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: body) as? [String: Any]
+            )
+            XCTAssertEqual(object["status"] as? String, "approved")
+            XCTAssertEqual(object["source"] as? String, "console.tickets.approval_resolution")
+            XCTAssertEqual(object["lane"] as? String, "human_approval_resolution")
+            let trace = try XCTUnwrap(object["trace_id"] as? String)
+            XCTAssertTrue(trace.hasPrefix("console-approval-approved-"))
+            XCTAssertFalse(trace.hasPrefix("pod-"))
+            return (200, Data(#"{"approval_id":"approval-1","status":"approved"}"#.utf8))
+        }
+        defer { TestURLProtocol.response = nil }
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+
+        let result = try await service.decideTicketApproval(
+            approvalID: "approval-1",
+            decisionEndpoint: "/api/v1/approvals/approval-1",
+            decision: .approved,
+            reason: "Looks correct."
+        )
+
+        XCTAssertEqual(lock.withLock { patchCount }, 1)
+        XCTAssertEqual(result.status, "approved")
+    }
+
+    func testApprovingTicketScopedRecordPatchesTicketEndpoint() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let lock = NSLock()
+        var patchCount = 0
+        TestURLProtocol.response = { request in
+            XCTAssertEqual(request.httpMethod, "PATCH")
+            XCTAssertEqual(request.url?.path, "/api/v1/tickets/ticket-1/approvals/approval-1")
+            lock.withLock { patchCount += 1 }
+            return (200, Data(#"{"approval_id":"approval-1","ticket_id":"ticket-1","status":"approved"}"#.utf8))
+        }
+        defer { TestURLProtocol.response = nil }
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+
+        let result = try await service.decideTicketApproval(
+            approvalID: "approval-1",
+            decisionEndpoint: "/api/v1/tickets/ticket-1/approvals/approval-1",
+            decision: .approved,
+            reason: "Looks correct."
+        )
+
+        XCTAssertEqual(lock.withLock { patchCount }, 1)
+        XCTAssertEqual(result.status, "approved")
+    }
+
     private static func eligibleApproval(
         id: String = "approval-1",
         authority: String = "tony",
         status: String = "pending",
         decisionEndpoint: String? = "/api/v1/tickets/ticket-1/approvals/approval-1",
+        viewerAuthorized: Bool = true,
+        resolutionEnabled: Bool = true,
+        selfApprovalProhibited: Bool = false,
+        targetType: String? = "ticket",
+        targetReference: String? = "ticket-1",
+        linkedTicketIDs: [String] = ["ticket-1"]
+    ) -> ConsoleApprovalRecord {
+        ConsoleApprovalRecord(
+            id: id,
+            authority: authority,
+            status: status,
+            decisionEndpoint: decisionEndpoint,
+            viewerAuthorized: viewerAuthorized,
+            resolutionEnabled: resolutionEnabled,
+            selfApprovalProhibited: selfApprovalProhibited,
+            targetType: targetType,
+            targetReference: targetReference,
+            linkedTicketIDs: linkedTicketIDs
+        )
+    }
+
+    private static func flatBundleApproval(
+        id: String = "approval-1",
+        authority: String = "tony",
+        status: String = "pending",
+        decisionEndpoint: String? = "/api/v1/approvals/approval-1",
         viewerAuthorized: Bool = true,
         resolutionEnabled: Bool = true,
         selfApprovalProhibited: Bool = false,

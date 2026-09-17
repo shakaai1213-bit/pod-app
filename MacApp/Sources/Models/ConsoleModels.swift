@@ -56,7 +56,7 @@ enum ConsoleApprovalBlockReason: String, Equatable, Sendable, CaseIterable {
         case .selfApprovalProhibited:
             return "Not decidable here: self-approval is prohibited for this approval."
         case .endpointMismatch:
-            return "Not decidable: the server-supplied decision endpoint does not match the expected ticket-scoped path."
+            return "Not decidable: the server-supplied decision endpoint does not match either expected approval path."
         case .ticketUnresolved:
             return "Not decidable: no single unambiguous linked ticket could be resolved."
         }
@@ -98,9 +98,12 @@ struct ConsoleApprovalRecord: Equatable, Sendable {
         guard viewerAuthorized else { return .viewerNotAuthorized }
         guard resolutionEnabled else { return .resolutionHeld }
         guard !selfApprovalProhibited else { return .selfApprovalProhibited }
+        guard let decisionEndpoint else { return .viewerNotAuthorized }
+        let flatEndpoint = "/api/v1/approvals/\(id)"
+        if decisionEndpoint == flatEndpoint { return nil }
         guard let ticketID = resolvedTicketID else { return .ticketUnresolved }
-        let expectedEndpoint = "/api/v1/tickets/\(ticketID)/approvals/\(id)"
-        guard decisionEndpoint == expectedEndpoint else { return .endpointMismatch }
+        let ticketEndpoint = "/api/v1/tickets/\(ticketID)/approvals/\(id)"
+        guard decisionEndpoint == ticketEndpoint else { return .endpointMismatch }
         return nil
     }
 
