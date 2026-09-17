@@ -371,14 +371,20 @@ actor OrcaConsoleService {
     static let ticketApprovalLane = "human_approval_resolution"
 
     func decideTicketApproval(
-        ticketID: String,
         approvalID: String,
+        decisionEndpoint: String,
         decision: ConsoleTicketApprovalDecision,
         reason: String
     ) async throws -> ConsoleTicketApprovalResult {
         let trimmedReason = reason.trimmingCharacters(in: .whitespacesAndNewlines)
         if decision == .rejected && trimmedReason.isEmpty {
             throw ConsoleTicketApprovalError.emptyRejectionReason
+        }
+        let flatEndpoint = "/api/v1/approvals/\(approvalID)"
+        let isTicketScoped = decisionEndpoint.hasPrefix("/api/v1/tickets/")
+            && decisionEndpoint.hasSuffix("/approvals/\(approvalID)")
+        guard decisionEndpoint == flatEndpoint || isTicketScoped else {
+            throw ConsoleTicketApprovalError.notDecidable(.endpointMismatch)
         }
         let tracePrefix = decision == .approved
             ? "console-approval-approved"
@@ -392,7 +398,7 @@ actor OrcaConsoleService {
         )
         return try await requestJSON(
             method: "PATCH",
-            path: "/api/v1/tickets/\(ticketID)/approvals/\(approvalID)",
+            path: decisionEndpoint,
             payload: payload
         )
     }

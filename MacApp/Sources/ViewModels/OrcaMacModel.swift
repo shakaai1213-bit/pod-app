@@ -644,12 +644,12 @@ final class OrcaMacModel {
             approvalError = "That approval is no longer in view. Refresh and try again."
             return
         }
-        guard let ticketID = approval.resolvedTicketID else {
-            approvalError = ConsoleApprovalBlockReason.ticketUnresolved.message
-            return
-        }
         guard approval.canResolve else {
             approvalError = approval.blockReason?.message
+            return
+        }
+        guard let decisionEndpoint = approval.decisionEndpoint else {
+            approvalError = ConsoleApprovalBlockReason.viewerNotAuthorized.message
             return
         }
         let trimmedReason = reason.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -661,8 +661,8 @@ final class OrcaMacModel {
         defer { isDecidingApproval = false }
         do {
             let result = try await consoleService.decideTicketApproval(
-                ticketID: ticketID,
                 approvalID: approval.id,
+                decisionEndpoint: decisionEndpoint,
                 decision: decision,
                 reason: trimmedReason
             )
