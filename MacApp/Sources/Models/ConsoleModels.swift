@@ -67,6 +67,7 @@ struct ConsoleApprovalRecord: Equatable, Sendable {
     let id: String
     let authority: String
     let status: String
+    let stale: Bool
     let decisionEndpoint: String?
     let viewerAuthorized: Bool
     let resolutionEnabled: Bool
@@ -189,7 +190,8 @@ struct ConsoleSectionSnapshot: Equatable, Sendable {
         let decision = ConsoleApprovalRecord(
             id: approval.id,
             authority: approval.authority,
-            status: approval.stale ? "stale" : "pending",
+            status: approval.status,
+            stale: approval.stale,
             decisionEndpoint: approval.decisionEndpoint,
             viewerAuthorized: approval.viewerAuthorized,
             resolutionEnabled: approval.resolutionEnabled,
@@ -201,6 +203,8 @@ struct ConsoleSectionSnapshot: Equatable, Sendable {
         var fields = [
             ConsoleField(label: "ID", value: approval.id),
             ConsoleField(label: "Authority", value: approval.authority),
+            ConsoleField(label: "Status", value: approval.status),
+            ConsoleField(label: "Staleness", value: approval.stale ? "Stale" : "Fresh"),
             ConsoleField(label: "Resolution", value: approval.resolutionEnabled ? "Enabled" : "Held"),
         ]
         if let ticketID = decision.resolvedTicketID {

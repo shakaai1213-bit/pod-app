@@ -258,6 +258,11 @@ final class OrcaMacModelTests: XCTestCase {
             Set(["Ready Now", "Assigned", "Decision Queue"])
         )
         XCTAssertEqual(Set(snapshot.records.map(\.title)), Set(["Prove Work Control", "Sign Standard"]))
+        let approvalRecord = snapshot.records.first { $0.group == "Decision Queue" }
+        XCTAssertEqual(approvalRecord?.status, "pending")
+        XCTAssertEqual(approvalRecord?.approval?.status, "pending")
+        XCTAssertEqual(approvalRecord?.approval?.stale, false)
+        XCTAssertTrue(approvalRecord?.fields.contains { $0.label == "Staleness" && $0.value == "Fresh" } ?? false)
         XCTAssertEqual(
             Set(snapshot.sources),
             Set([
@@ -266,6 +271,26 @@ final class OrcaMacModelTests: XCTestCase {
                 "bundle:\(String(repeating: "d", count: 64))",
             ])
         )
+    }
+
+    func testStalePendingApprovalFromBundleIsDecidable() async throws {
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789"
+        )
+        let snapshot = try await service.snapshot(
+            for: .work,
+            workControl: Self.staleWorkControlBundle
+        )
+
+        let record = try XCTUnwrap(snapshot.records.first { $0.group == "Decision Queue" })
+        let approval = try XCTUnwrap(record.approval)
+        XCTAssertEqual(approval.status, "pending")
+        XCTAssertTrue(approval.stale)
+        XCTAssertNil(approval.blockReason)
+        XCTAssertTrue(approval.canResolve)
+        XCTAssertTrue(record.fields.contains { $0.label == "Staleness" && $0.value == "Stale" })
     }
 
     func testConversationPersistenceChangesWithOrganizationAndClearsLegacyKey() {
@@ -761,6 +786,37 @@ final class OrcaMacModelTests: XCTestCase {
         }
     }
 
+    func testStalePendingApprovalIsDecidable() {
+        let flat = Self.flatBundleApproval(stale: true)
+        let scoped = Self.eligibleApproval(stale: true)
+
+        XCTAssertNil(flat.blockReason)
+        XCTAssertNil(scoped.blockReason)
+        XCTAssertTrue(flat.canResolve)
+        XCTAssertTrue(scoped.canResolve)
+        XCTAssertTrue(flat.stale)
+        XCTAssertTrue(scoped.stale)
+    }
+
+    func testFreshPendingApprovalIsDecidable() {
+        let approval = Self.flatBundleApproval(stale: false)
+
+        XCTAssertNil(approval.blockReason)
+        XCTAssertTrue(approval.canResolve)
+        XCTAssertFalse(approval.stale)
+    }
+
+    func testDecidedApprovalIsNotPendingWhetherStaleOrFresh() {
+        for status in ["approved", "rejected"] {
+            for stale in [false, true] {
+                let approval = Self.flatBundleApproval(status: status, stale: stale)
+                XCTAssertEqual(approval.blockReason, .notPending)
+                XCTAssertFalse(approval.canResolve)
+                XCTAssertEqual(approval.stale, stale)
+            }
+        }
+    }
+
     func testNilDecisionEndpointReportsAuthorityNotEndpointMismatch() {
         let flat = Self.flatBundleApproval(decisionEndpoint: nil)
         let scoped = Self.eligibleApproval(decisionEndpoint: nil)
@@ -849,6 +905,7 @@ final class OrcaMacModelTests: XCTestCase {
         id: String = "approval-1",
         authority: String = "tony",
         status: String = "pending",
+        stale: Bool = false,
         decisionEndpoint: String? = "/api/v1/tickets/ticket-1/approvals/approval-1",
         viewerAuthorized: Bool = true,
         resolutionEnabled: Bool = true,
@@ -861,6 +918,7 @@ final class OrcaMacModelTests: XCTestCase {
             id: id,
             authority: authority,
             status: status,
+            stale: stale,
             decisionEndpoint: decisionEndpoint,
             viewerAuthorized: viewerAuthorized,
             resolutionEnabled: resolutionEnabled,
@@ -875,6 +933,7 @@ final class OrcaMacModelTests: XCTestCase {
         id: String = "approval-1",
         authority: String = "tony",
         status: String = "pending",
+        stale: Bool = false,
         decisionEndpoint: String? = "/api/v1/approvals/approval-1",
         viewerAuthorized: Bool = true,
         resolutionEnabled: Bool = true,
@@ -887,6 +946,7 @@ final class OrcaMacModelTests: XCTestCase {
             id: id,
             authority: authority,
             status: status,
+            stale: stale,
             decisionEndpoint: decisionEndpoint,
             viewerAuthorized: viewerAuthorized,
             resolutionEnabled: resolutionEnabled,
@@ -902,6 +962,32 @@ final class OrcaMacModelTests: XCTestCase {
     private static let workbenchContractJSON = "{\"schema\":\"orca.engineering-workbench.v1\",\"enabled\":true,\"mode\":\"active\",\"host\":\(workbenchHostJSON),\"worker_lane\":\"engineering-host\",\"policy_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"roots\":[{\"id\":\"pod-client\",\"label\":\"Pod and Console\",\"description\":\"Native source\",\"access\":\"read_test\",\"source_mutation\":false}],\"actions\":[{\"id\":\"git.status\",\"label\":\"Git Status\",\"kind\":\"diff\",\"requires_approval\":false,\"mutates_source\":false,\"default_timeout_seconds\":30,\"allowed_root_ids\":[\"pod-client\"],\"available\":true,\"blocked_reasons\":[]}],\"lifecycle\":[\"request.persisted\"],\"guarantees\":[\"AgentRun first\"]}"
 
     private static let workbenchOperationJSON = #"{"id":"run-c9","ticket_id":"ticket-c9","parent_run_id":null,"trace_id":"engineering-test","status":"queued","action_id":"git.status","action_kind":"diff","root_id":"pod-client","relative_path":".","worker_lane":"engineering-host","agent_slug":"coral","requires_approval":false,"approval_id":null,"approval_status":null,"idempotency_key":"workbench-test-1","outcome":null,"evidence":"Queued","artifacts":{"engineering_request":{"root_id":"pod-client"}},"error":null,"created_at":"2026-08-18T04:00:00Z","updated_at":"2026-08-18T04:00:00Z","started_at":null,"completed_at":null}"#
+
+    private static let staleWorkControlBundle: Components.Schemas.ChatRuntimeWorkControlBundleRead = {
+        var bundle = workControlBundle
+        let staleApproval = Components.Schemas.ChatRuntimeWorkApprovalRead(
+            actionType: "sign_standard",
+            approvalId: "approval-release",
+            authority: "tony",
+            authorizationReason: "Aloha is the registered authority.",
+            createdAt: Date(timeIntervalSince1970: 1_786_000_000),
+            decisionEndpoint: "/api/v1/approvals/approval-release",
+            linkedTaskIds: [],
+            linkedTicketIds: ["ticket-runtime"],
+            noCascade: false,
+            resolutionEnabled: true,
+            selfApprovalProhibited: false,
+            stale: true,
+            staleAfterHours: 24,
+            status: .pending,
+            targetRef: "ticket-runtime",
+            targetType: "ticket",
+            viewerAuthorized: true
+        )
+        bundle.approvalQueue = [staleApproval]
+        bundle.approvalInventory = [staleApproval]
+        return bundle
+    }()
 
     private static let workControlBundle: Components.Schemas.ChatRuntimeWorkControlBundleRead = {
         let item = Components.Schemas.ChatRuntimeWorkItemRead(

@@ -31,6 +31,7 @@ public struct OrcaWorkControlProjection: Hashable, Sendable {
         public let id: String
         public let actionType: String
         public let authority: String
+        public let status: String
         public let reason: String
         public let targetType: String?
         public let targetReference: String?
@@ -140,6 +141,7 @@ private extension OrcaWorkControlProjection.Approval {
         id = approval.approvalId
         actionType = approval.actionType
         authority = approval.authority
+        status = approval.status?.rawValue ?? "pending"
         reason = approval.authorizationReason
         targetType = approval.targetType
         targetReference = approval.targetRef
