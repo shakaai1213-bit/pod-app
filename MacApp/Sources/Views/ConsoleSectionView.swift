@@ -101,49 +101,95 @@ struct ConsoleSectionView: View {
                     metrics
                     Divider()
                 }
+                if model.workMetricFilter != nil {
+                    filterBanner
+                    Divider()
+                }
                 records
             }
         }
     }
 
     private var metrics: some View {
-        LazyVGrid(
+        let isWorkAgentView = section == .work && model.workMode == .agentWork
+        return LazyVGrid(
             columns: [GridItem(.adaptive(minimum: 130, maximum: 210), spacing: 10)],
             alignment: .leading,
             spacing: 10
         ) {
             ForEach(model.selectedSnapshot.metrics) { metric in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(metric.label.uppercased())
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Text(metric.value)
-                        .font(.title3.weight(.semibold))
-                        .lineLimit(1)
-                    if let status = metric.status {
-                        Text(status.replacingOccurrences(of: "_", with: " ").capitalized)
-                            .font(.caption2)
-                            .foregroundStyle(statusColor(status))
+                let isActive = isWorkAgentView && model.workMetricFilter?.id == metric.id
+                Button {
+                    model.toggleWorkMetricFilter(metric.id)
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(metric.label.uppercased())
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Text(metric.value)
+                            .font(.title3.weight(.semibold))
+                            .lineLimit(1)
+                        if let status = metric.status {
+                            Text(status.replacingOccurrences(of: "_", with: " ").capitalized)
+                                .font(.caption2)
+                                .foregroundStyle(statusColor(status))
+                        }
                     }
+                    .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
+                    .padding(10)
+                    .background(
+                        isActive ? Color.orcaCyan.opacity(0.14) : Color(nsColor: .controlBackgroundColor),
+                        in: RoundedRectangle(cornerRadius: 6)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(isActive ? Color.orcaCyan : Color(nsColor: .separatorColor), lineWidth: isActive ? 2 : 1)
+                    )
+                    .contentShape(Rectangle())
                 }
-                .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
-                .padding(10)
-                .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
-                )
+                .buttonStyle(.plain)
+                .disabled(!isWorkAgentView)
+                .help(isWorkAgentView
+                    ? (isActive ? "Clear the \(metric.label) filter" : "Filter the list to \(metric.label)")
+                    : metric.label)
+                .accessibilityAddTraits(isActive ? .isSelected : [])
             }
         }
         .padding(14)
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
+    private var filterBanner: some View {
+        HStack(spacing: 8) {
+            Text("Filtered to \(activeFilterLabel)")
+                .font(.caption.weight(.semibold))
+            Button("Clear") { model.toggleWorkMetricFilter(model.workMetricFilter?.id ?? "") }
+                .font(.caption.weight(.semibold))
+                .buttonStyle(.borderless)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 6)
+        .background(Color.orcaCyan.opacity(0.08))
+    }
+
+    private var activeFilterLabel: String {
+        guard let filter = model.workMetricFilter,
+              let metric = model.selectedSnapshot.metrics.first(where: { $0.id == filter.id }) else {
+            return ""
+        }
+        return metric.label
+    }
+
+    private var displayedRecords: [ConsoleRecord] {
+        model.displayedWorkRecords
+    }
+
     private var records: some View {
         List(selection: recordSelection) {
             ForEach(groupNames, id: \.self) { group in
                 Section(group) {
-                    ForEach(model.selectedSnapshot.records.filter { $0.group == group }) { record in
+                    ForEach(displayedRecords.filter { $0.group == group }) { record in
                         ConsoleRecordRow(record: record)
                             .tag(record.id)
                     }
@@ -152,11 +198,19 @@ struct ConsoleSectionView: View {
         }
         .listStyle(.inset)
         .overlay {
-            if model.selectedSnapshot.records.isEmpty && !model.isLoadingSection {
-                ContentUnavailableView(
-                    "No \(section.title) Records",
-                    systemImage: section.symbol
-                )
+            if displayedRecords.isEmpty && !model.isLoadingSection {
+                if let filter = model.workMetricFilter {
+                    ContentUnavailableView(
+                        filter.emptyTitle,
+                        systemImage: "line.3.horizontal.decrease.circle",
+                        description: Text("No records match the active filter. Tap the card again to show everything.")
+                    )
+                } else {
+                    ContentUnavailableView(
+                        "No \(section.title) Records",
+                        systemImage: section.symbol
+                    )
+                }
             }
         }
     }
@@ -183,7 +237,7 @@ struct ConsoleSectionView: View {
     }
 
     private var groupNames: [String] {
-        model.selectedSnapshot.records.reduce(into: []) { groups, record in
+        displayedRecords.reduce(into: []) { groups, record in
             if !groups.contains(record.group) { groups.append(record.group) }
         }
     }

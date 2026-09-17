@@ -302,6 +302,185 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertTrue(record.fields.contains { $0.label == "Staleness" && $0.value == "Stale" })
     }
 
+    func testMetricCardFilterNarrowsRecordsToMatchingBucket() async throws {
+        let snapshot = try await workSnapshot()
+        let model = makeModel()
+        model.sectionSnapshots[.work] = snapshot
+        model.selectSection(.work, refresh: false)
+        model.selectWorkMode(.agentWork)
+
+        model.toggleWorkMetricFilter("ready")
+
+        XCTAssertEqual(model.workMetricFilter, .ready)
+        XCTAssertEqual(model.displayedWorkRecords.map(\.group), ["Ready Now"])
+        XCTAssertEqual(model.displayedWorkRecords.map(\.title), ["Prove Work Control"])
+        XCTAssertGreaterThan(model.selectedSnapshot.records.count, model.displayedWorkRecords.count)
+    }
+
+    func testTappingActiveMetricCardClearsFilter() async throws {
+        let snapshot = try await workSnapshot()
+        let model = makeModel()
+        model.sectionSnapshots[.work] = snapshot
+        model.selectSection(.work, refresh: false)
+        model.selectWorkMode(.agentWork)
+
+        model.toggleWorkMetricFilter("approvals")
+        XCTAssertEqual(model.workMetricFilter, .approvals)
+        model.toggleWorkMetricFilter("approvals")
+
+        XCTAssertNil(model.workMetricFilter)
+        XCTAssertEqual(model.displayedWorkRecords, snapshot.records)
+    }
+
+    func testOnlyOneMetricFilterIsActiveAtATime() async throws {
+        let snapshot = try await workSnapshot()
+        let model = makeModel()
+        model.sectionSnapshots[.work] = snapshot
+        model.selectSection(.work, refresh: false)
+        model.selectWorkMode(.agentWork)
+
+        model.toggleWorkMetricFilter("ready")
+        model.toggleWorkMetricFilter("assigned")
+
+        XCTAssertEqual(model.workMetricFilter, .assigned)
+        XCTAssertEqual(model.displayedWorkRecords.map(\.group), ["Assigned"])
+    }
+
+    func testApprovalsFilterIncludesDecisionQueueAndApprovalAttention() async throws {
+        let snapshot = try await workSnapshot()
+        let model = makeModel()
+        model.sectionSnapshots[.work] = snapshot
+        model.selectSection(.work, refresh: false)
+        model.selectWorkMode(.agentWork)
+
+        model.toggleWorkMetricFilter("approvals")
+
+        XCTAssertEqual(
+            Set(model.displayedWorkRecords.map(\.group)),
+            Set(["Decision Queue", "Approval Attention"])
+        )
+        XCTAssertEqual(
+            Set(model.displayedWorkRecords.map(\.title)),
+            Set(["Sign Standard", "Credential Rotation"])
+        )
+    }
+
+    func testFilterWithNoMatchingRecordsYieldsExplicitEmptyState() async throws {
+        let snapshot = try await workSnapshot()
+        let model = makeModel()
+        model.sectionSnapshots[.work] = snapshot
+        model.selectSection(.work, refresh: false)
+        model.selectWorkMode(.agentWork)
+
+        model.toggleWorkMetricFilter("waiting")
+
+        XCTAssertTrue(model.displayedWorkRecords.isEmpty)
+        XCTAssertEqual(model.workMetricFilter?.emptyTitle, "No waiting records")
+        XCTAssertEqual(ConsoleWorkMetricFilter.approvals.emptyTitle, "No approvals")
+    }
+
+    func testMetricCardCountsAreUnchangedByActiveFilter() async throws {
+        let snapshot = try await workSnapshot()
+        let model = makeModel()
+        model.sectionSnapshots[.work] = snapshot
+        model.selectSection(.work, refresh: false)
+        model.selectWorkMode(.agentWork)
+        let before = model.selectedSnapshot.metrics
+
+        model.toggleWorkMetricFilter("approvals")
+
+        XCTAssertEqual(model.selectedSnapshot.metrics, before)
+        XCTAssertEqual(model.selectedSnapshot.records, snapshot.records)
+        XCTAssertEqual(model.selectedSnapshot.metrics.first(where: { $0.id == "approvals" })?.value, "1")
+    }
+
+    func testFilterSurvivesSnapshotRefreshOfSameView() async throws {
+        let snapshot = try await workSnapshot()
+        let model = makeModel()
+        model.sectionSnapshots[.work] = snapshot
+        model.selectSection(.work, refresh: false)
+        model.selectWorkMode(.agentWork)
+        model.toggleWorkMetricFilter("approvals")
+
+        model.sectionSnapshots[.work] = try await workSnapshot()
+
+        XCTAssertEqual(model.workMetricFilter, .approvals)
+        XCTAssertEqual(
+            Set(model.displayedWorkRecords.map(\.group)),
+            Set(["Decision Queue", "Approval Attention"])
+        )
+    }
+
+    func testChangingSelectedAgentResetsFilter() async throws {
+        let snapshot = try await workSnapshot()
+        let model = makeModel()
+        model.sectionSnapshots[.work] = snapshot
+        model.selectSection(.work, refresh: false)
+        model.selectWorkMode(.agentWork)
+        model.toggleWorkMetricFilter("approvals")
+
+        model.selectWorkControlAgent("maui")
+
+        XCTAssertNil(model.workMetricFilter)
+    }
+
+    func testChangingSectionResetsFilter() async throws {
+        let snapshot = try await workSnapshot()
+        let model = makeModel()
+        model.sectionSnapshots[.work] = snapshot
+        model.selectSection(.work, refresh: false)
+        model.selectWorkMode(.agentWork)
+        model.toggleWorkMetricFilter("approvals")
+
+        model.selectSection(.overview, refresh: false)
+
+        XCTAssertNil(model.workMetricFilter)
+    }
+
+    func testFilterExcludingSelectedRecordClearsInspectorSelection() async throws {
+        let snapshot = try await workSnapshot()
+        let model = makeModel()
+        model.sectionSnapshots[.work] = snapshot
+        model.selectSection(.work, refresh: false)
+        model.selectWorkMode(.agentWork)
+        let readyRecord = try XCTUnwrap(snapshot.records.first { $0.group == "Ready Now" })
+        model.selectRecord(readyRecord.id)
+
+        model.toggleWorkMetricFilter("approvals")
+
+        XCTAssertNil(model.selectedRecordID)
+        XCTAssertNil(model.selectedRecord)
+    }
+
+    func testFilterIncludingSelectedRecordKeepsInspectorSelection() async throws {
+        let snapshot = try await workSnapshot()
+        let model = makeModel()
+        model.sectionSnapshots[.work] = snapshot
+        model.selectSection(.work, refresh: false)
+        model.selectWorkMode(.agentWork)
+        let approvalRecord = try XCTUnwrap(snapshot.records.first { $0.group == "Approval Attention" })
+        model.selectRecord(approvalRecord.id)
+
+        model.toggleWorkMetricFilter("approvals")
+
+        XCTAssertEqual(model.selectedRecordID, approvalRecord.id)
+        XCTAssertEqual(model.selectedRecord, approvalRecord)
+    }
+
+    func testEveryWorkMetricCardHasAFilter() async throws {
+        let snapshot = try await workSnapshot()
+        let readyRecords = snapshot.records(matching: .ready)
+        XCTAssertEqual(readyRecords, snapshot.records.filter { $0.group == "Ready Now" })
+
+        for metric in snapshot.metrics {
+            XCTAssertNotNil(
+                ConsoleWorkMetricFilter.filter(forMetricID: metric.id),
+                "Metric card \(metric.id) must be filterable"
+            )
+        }
+        XCTAssertNil(ConsoleWorkMetricFilter.filter(forMetricID: "unknown-metric"))
+    }
+
     func testConversationPersistenceChangesWithOrganizationAndClearsLegacyKey() {
         let suiteName = "OrcaMacModelTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -917,6 +1096,22 @@ final class OrcaMacModelTests: XCTestCase {
 
         XCTAssertEqual(lock.withLock { patchCount }, 1)
         XCTAssertEqual(result.status, "approved")
+    }
+
+    private func makeModel() -> OrcaMacModel {
+        OrcaMacModel(
+            tokenStore: TestRuntimeTokenStore(token: nil),
+            defaults: UserDefaults(suiteName: "OrcaMacModelTests.\(UUID().uuidString)")!
+        )
+    }
+
+    private func workSnapshot() async throws -> ConsoleSectionSnapshot {
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789"
+        )
+        return try await service.snapshot(for: .work, workControl: Self.workControlBundle)
     }
 
     private static func eligibleApproval(

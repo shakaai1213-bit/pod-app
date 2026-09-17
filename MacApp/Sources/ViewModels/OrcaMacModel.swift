@@ -38,6 +38,7 @@ final class OrcaMacModel {
     var providerControl: Components.Schemas.ChatRuntimeProviderControlBundleRead?
     var workControl: OrcaWorkControlProjection?
     var workMode: ConsoleWorkMode = .portfolio
+    var workMetricFilter: ConsoleWorkMetricFilter?
     var boards: [OrcaBoardDirectoryItem] = []
     var boardPlansByID: [UUID: OrcaBoardPlan] = [:]
     var selectedBoardID: UUID?
@@ -118,6 +119,26 @@ final class OrcaMacModel {
     var selectedRecord: ConsoleRecord? {
         guard let selectedRecordID else { return nil }
         return selectedSnapshot.records.first(where: { $0.id == selectedRecordID })
+    }
+
+    var displayedWorkRecords: [ConsoleRecord] {
+        guard let workMetricFilter else { return selectedSnapshot.records }
+        return selectedSnapshot.records(matching: workMetricFilter)
+    }
+
+    func toggleWorkMetricFilter(_ metricID: String) {
+        guard selectedSection == .work, workMode == .agentWork else { return }
+        guard let filter = ConsoleWorkMetricFilter.filter(forMetricID: metricID) else { return }
+        workMetricFilter = workMetricFilter == filter ? nil : filter
+        reconcileRecordSelectionWithFilter()
+    }
+
+    private func reconcileRecordSelectionWithFilter() {
+        guard let workMetricFilter, let selectedRecordID else { return }
+        let visible = selectedSnapshot.records(matching: workMetricFilter)
+        if !visible.contains(where: { $0.id == selectedRecordID }) {
+            self.selectedRecordID = nil
+        }
     }
 
     var selectedWorkbenchTicket: WorkbenchTicketSummary? {
@@ -240,6 +261,7 @@ final class OrcaMacModel {
             agents = runtimeAgents
             if !agents.contains(where: { $0.id == selectedAgentID }) {
                 selectedAgentID = agents[0].id
+                workMetricFilter = nil
             }
             let channelIDs = try await nextConsoleService.directAgentChannelIDs(
                 allowedAgentIDs: Set(agents.map(\.id))
@@ -335,6 +357,7 @@ final class OrcaMacModel {
     func selectSection(_ section: ConsoleSection, refresh: Bool = true) {
         selectedSection = section
         selectedRecordID = nil
+        workMetricFilter = nil
         defaults.set(section.rawValue, forKey: "orca.mac.selected-section")
         guard refresh else { return }
         Task { await refreshCurrentSurface(silent: true) }
@@ -344,6 +367,7 @@ final class OrcaMacModel {
         guard agents.contains(where: { $0.id == id }) else { return }
         selectedAgentID = id
         selectedRecordID = nil
+        workMetricFilter = nil
         defaults.set(id, forKey: "orca.mac.selected-agent")
         Task { await refreshSelectedSection(silent: true) }
     }
