@@ -116,8 +116,49 @@ struct ConsoleApprovalRecord: Equatable, Sendable {
     let targetType: String?
     let targetReference: String?
     let linkedTicketIDs: [String]
+    let ticketTitle: String?
+    let ticketStatus: String?
+    let approvalGate: String?
+    let reason: String?
+    let requestedBy: String?
 
     static let captainAuthority = "tony"
+
+    init(
+        id: String,
+        authority: String,
+        status: String,
+        stale: Bool,
+        decisionEndpoint: String?,
+        viewerAuthorized: Bool,
+        resolutionEnabled: Bool,
+        selfApprovalProhibited: Bool,
+        targetType: String?,
+        targetReference: String?,
+        linkedTicketIDs: [String],
+        ticketTitle: String? = nil,
+        ticketStatus: String? = nil,
+        approvalGate: String? = nil,
+        reason: String? = nil,
+        requestedBy: String? = nil
+    ) {
+        self.id = id
+        self.authority = authority
+        self.status = status
+        self.stale = stale
+        self.decisionEndpoint = decisionEndpoint
+        self.viewerAuthorized = viewerAuthorized
+        self.resolutionEnabled = resolutionEnabled
+        self.selfApprovalProhibited = selfApprovalProhibited
+        self.targetType = targetType
+        self.targetReference = targetReference
+        self.linkedTicketIDs = linkedTicketIDs
+        self.ticketTitle = ticketTitle
+        self.ticketStatus = ticketStatus
+        self.approvalGate = approvalGate
+        self.reason = reason
+        self.requestedBy = requestedBy
+    }
 
     var isCaptainAuthority: Bool {
         authority.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == Self.captainAuthority
@@ -166,6 +207,15 @@ struct ConsoleApprovalRecord: Equatable, Sendable {
         let ticketEndpoint = "/api/v1/tickets/\(ticketID)/approvals/\(id)"
         guard decisionEndpoint == ticketEndpoint else { return .endpointMismatch }
         return nil
+    }
+
+    var isProtectedTicketContext: Bool {
+        ticketTitle == nil
+            && ticketStatus == nil
+            && approvalGate == nil
+            && reason == nil
+            && requestedBy == nil
+            && resolvedTicketID != nil
     }
 
     var canResolve: Bool { blockReason == nil }
@@ -265,7 +315,12 @@ struct ConsoleSectionSnapshot: Equatable, Sendable {
             selfApprovalProhibited: approval.selfApprovalProhibited,
             targetType: approval.targetType,
             targetReference: approval.targetReference,
-            linkedTicketIDs: approval.linkedTicketIDs
+            linkedTicketIDs: approval.linkedTicketIDs,
+            ticketTitle: approval.ticketTitle,
+            ticketStatus: approval.ticketStatus,
+            approvalGate: approval.approvalGate,
+            reason: approval.ticketReason,
+            requestedBy: approval.requestedBy
         )
         var fields = [
             ConsoleField(label: "ID", value: approval.id),
@@ -284,11 +339,12 @@ struct ConsoleSectionSnapshot: Equatable, Sendable {
         } else if let reason = decision.blockReason {
             fields.append(ConsoleField(label: "Decision", value: reason.message))
         }
+        let actionTitle = approval.actionType.replacingOccurrences(of: "_", with: " ").capitalized
         return ConsoleRecord(
             id: "\(group.rawValue):\(approval.id)",
-            title: approval.actionType.replacingOccurrences(of: "_", with: " ").capitalized,
-            subtitle: approval.reason,
-            status: approval.stale ? "stale" : "pending",
+            title: approval.ticketTitle ?? actionTitle,
+            subtitle: "\(actionTitle) · authority: \(approval.authority)",
+            status: approval.stale ? "stale" : (approval.ticketStatus ?? "pending"),
             group: group.rawValue,
             fields: fields,
             approval: decision

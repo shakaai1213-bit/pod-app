@@ -43,6 +43,11 @@ public struct OrcaWorkControlProjection: Hashable, Sendable {
         public let selfApprovalProhibited: Bool
         public let stale: Bool
         public let createdAt: Date
+        public let ticketTitle: String?
+        public let ticketStatus: String?
+        public let approvalGate: String?
+        public let ticketReason: String?
+        public let requestedBy: String?
     }
 
     public struct Counts: Hashable, Sendable {
@@ -136,8 +141,8 @@ private extension OrcaWorkControlProjection.Item {
     }
 }
 
-private extension OrcaWorkControlProjection.Approval {
-    init(_ approval: Components.Schemas.ChatRuntimeWorkApprovalRead) {
+extension OrcaWorkControlProjection.Approval {
+    public init(_ approval: Components.Schemas.ChatRuntimeWorkApprovalRead) {
         id = approval.approvalId
         actionType = approval.actionType
         authority = approval.authority
@@ -153,6 +158,11 @@ private extension OrcaWorkControlProjection.Approval {
         selfApprovalProhibited = approval.selfApprovalProhibited
         stale = approval.stale
         createdAt = approval.createdAt
+        ticketTitle = approval.ticketTitle
+        ticketStatus = approval.ticketStatus
+        approvalGate = approval.approvalGate
+        ticketReason = approval.ticketReason
+        requestedBy = approval.requestedBy
     }
 }
 
