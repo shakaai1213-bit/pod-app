@@ -1910,6 +1910,11 @@
             "title": "Action Type",
             "type": "string"
           },
+          "approval_gate": {
+            "maxLength": 128,
+            "title": "Approval Gate",
+            "type": "string"
+          },
           "approval_id": {
             "format": "uuid",
             "title": "Approval Id",
@@ -1957,6 +1962,16 @@
             "title": "No Cascade",
             "type": "boolean"
           },
+          "reason": {
+            "maxLength": 2000,
+            "title": "Reason",
+            "type": "string"
+          },
+          "requested_by": {
+            "maxLength": 128,
+            "title": "Requested By",
+            "type": "string"
+          },
           "resolution_enabled": {
             "title": "Resolution Enabled",
             "type": "boolean"
@@ -1993,6 +2008,16 @@
           "target_type": {
             "maxLength": 64,
             "title": "Target Type",
+            "type": "string"
+          },
+          "ticket_status": {
+            "maxLength": 64,
+            "title": "Ticket Status",
+            "type": "string"
+          },
+          "ticket_title": {
+            "maxLength": 256,
+            "title": "Ticket Title",
             "type": "string"
           },
           "viewer_authorized": {

@@ -44,6 +44,7 @@ struct ConsoleInspectorView: View {
                     }
 
                     if let approval = record.approval {
+                        ApprovalWhySection(approval: approval)
                         ApprovalDecisionSection(recordID: record.id, approval: approval)
                     }
                 } else {
@@ -77,6 +78,33 @@ struct ConsoleInspectorView: View {
             .padding(16)
         }
         .background(Color(nsColor: .windowBackgroundColor))
+    }
+}
+
+private struct ApprovalWhySection: View {
+    let approval: ConsoleApprovalRecord
+
+    var body: some View {
+        if let reason = approval.reason {
+            InspectorSection(title: "Why") {
+                Text(reason)
+                    .font(.caption)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let gate = approval.approvalGate {
+                    InspectorValue(label: "Gate", value: gate)
+                }
+                if let requestedBy = approval.requestedBy {
+                    InspectorValue(label: "Requested by", value: requestedBy)
+                }
+            }
+        } else if approval.isProtectedTicketContext {
+            InspectorSection(title: "Why") {
+                Text("Protected ticket — details withheld")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 }
 

@@ -239,8 +239,147 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertEqual(value.objectValue?["items"]?.displayValue, "1 items")
     }
 
-    func testWorkSnapshotProjectsValidatedRuntimeWorkControl() async throws {
-        let service = OrcaConsoleService(
+    func testApprovalDecodesTicketContextFieldsWhenPresent() throws {
+        let json = """
+        {
+          "action_type": "credential_rotation",
+          "approval_id": "approval-ctx-1",
+          "authority": "tony",
+          "authorization_reason": "Signed-in human owns credential rotation.",
+          "created_at": "2026-09-17T04:00:00Z",
+          "decision_endpoint": "/api/v1/approvals/approval-ctx-1",
+          "linked_task_ids": [],
+          "linked_ticket_ids": ["ticket-a"],
+          "no_cascade": false,
+          "reason": "Ticket 824 rotates the macOS deploy key.",
+          "requested_by": "maui",
+          "resolution_enabled": true,
+          "self_approval_prohibited": false,
+          "stale": false,
+          "stale_after_hours": 72,
+          "status": "pending",
+          "target_ref": "ticket-a",
+          "target_type": "ticket",
+          "ticket_status": "in_review",
+          "ticket_title": "Rotate macOS Deploy Key",
+          "approval_gate": "pre_merge",
+          "viewer_authorized": true
+        }
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let approval = try decoder.decode(
+            Components.Schemas.ChatRuntimeWorkApprovalRead.self,
+            from: Data(json.utf8)
+        )
+        XCTAssertEqual(approval.ticketTitle, "Rotate macOS Deploy Key")
+        XCTAssertEqual(approval.ticketStatus, "in_review")
+        XCTAssertEqual(approval.approvalGate, "pre_merge")
+        XCTAssertEqual(approval.ticketReason, "Ticket 824 rotates the macOS deploy key.")
+        XCTAssertEqual(approval.requestedBy, "maui")
+
+        let projection = OrcaWorkControlProjection.Approval(approval)
+        XCTAssertEqual(projection.ticketTitle, "Rotate macOS Deploy Key")
+        XCTAssertEqual(projection.ticketStatus, "in_review")
+        XCTAssertEqual(projection.approvalGate, "pre_merge")
+        XCTAssertEqual(projection.ticketReason, "Ticket 824 rotates the macOS deploy key.")
+        XCTAssertEqual(projection.requestedBy, "maui")
+    }
+
+    func testApprovalDecodesWithoutTicketContextFields() throws {
+        let json = """
+        {
+          "action_type": "credential_rotation",
+          "approval_id": "approval-ctx-2",
+          "authority": "tony",
+          "authorization_reason": "Signed-in human owns credential rotation.",
+          "created_at": "2026-09-17T04:00:00Z",
+          "decision_endpoint": "/api/v1/approvals/approval-ctx-2",
+          "linked_task_ids": [],
+          "linked_ticket_ids": ["ticket-b"],
+          "no_cascade": false,
+          "resolution_enabled": true,
+          "self_approval_prohibited": false,
+          "stale": false,
+          "stale_after_hours": 72,
+          "status": "pending",
+          "target_ref": "ticket-b",
+          "target_type": "ticket",
+          "viewer_authorized": true
+        }
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let approval = try decoder.decode(
+            Components.Schemas.ChatRuntimeWorkApprovalRead.self,
+            from: Data(json.utf8)
+        )
+        XCTAssertNil(approval.ticketTitle)
+        XCTAssertNil(approval.ticketStatus)
+        XCTAssertNil(approval.approvalGate)
+        XCTAssertNil(approval.ticketReason)
+        XCTAssertNil(approval.requestedBy)
+
+        let projection = OrcaWorkControlProjection.Approval(approval)
+        XCTAssertNil(projection.ticketTitle)
+        XCTAssertNil(projection.ticketReason)
+    }
+
+    func testTicketTitleTakesPrecedenceOverActionTypeTitle() async throws {
+        let snapshot = try await workSnapshot()
+        let attentionRecord = try XCTUnwrap(snapshot.records.first { $0.group == "Approval Attention" })
+        let queueRecord = try XCTUnwrap(snapshot.records.first { $0.group == "Decision Queue" })
+
+        XCTAssertEqual(attentionRecord.title, "Rotate Deploy Signing Key")
+        XCTAssertEqual(queueRecord.title, "Sign Standard")
+        XCTAssertNotEqual(attentionRecord.title, queueRecord.title)
+        XCTAssertNotEqual(attentionRecord.id, queueRecord.id)
+    }
+
+    func testProtectedApprovalContextIsDetected() {
+        let protectedApproval = Self.eligibleApproval()
+        XCTAssertNil(protectedApproval.ticketTitle)
+        XCTAssertNil(protectedApproval.ticketStatus)
+        XCTAssertNil(protectedApproval.approvalGate)
+        XCTAssertNil(protectedApproval.reason)
+        XCTAssertNil(protectedApproval.requestedBy)
+        XCTAssertNotNil(protectedApproval.resolvedTicketID)
+        XCTAssertTrue(protectedApproval.isProtectedTicketContext)
+
+        let withContext = ConsoleApprovalRecord(
+            id: "approval-ctx-3",
+            authority: "tony",
+            status: "pending",
+            stale: false,
+            decisionEndpoint: "/api/v1/approvals/approval-ctx-3",
+            viewerAuthorized: true,
+            resolutionEnabled: true,
+            selfApprovalProhibited: false,
+            targetType: "ticket",
+            targetReference: "ticket-1",
+            linkedTicketIDs: ["ticket-1"],
+            ticketTitle: "Rotate macOS Deploy Key",
+            reason: "Key expires next week."
+        )
+        XCTAssertFalse(withContext.isProtectedTicketContext)
+
+        let noTicket = ConsoleApprovalRecord(
+            id: "approval-ctx-4",
+            authority: "tony",
+            status: "pending",
+            stale: false,
+            decisionEndpoint: nil,
+            viewerAuthorized: true,
+            resolutionEnabled: true,
+            selfApprovalProhibited: false,
+            targetType: nil,
+            targetReference: nil,
+            linkedTicketIDs: []
+        )
+        XCTAssertFalse(noTicket.isProtectedTicketContext)
+    }
+
+    func testWorkSnapshotProjectsValidatedRuntimeWorkControl() async throws {        let service = OrcaConsoleService(
             serverURL: URL(string: "http://127.0.0.1:8000")!,
             tokenStore: TestRuntimeTokenStore(token: "console-token"),
             deviceID: "test-device-id-0123456789"
@@ -257,12 +396,20 @@ final class OrcaMacModelTests: XCTestCase {
             Set(snapshot.records.map(\.group)),
             Set(["Ready Now", "Assigned", "Decision Queue", "Approval Attention"])
         )
-        XCTAssertEqual(Set(snapshot.records.map(\.title)), Set(["Prove Work Control", "Sign Standard", "Credential Rotation"]))
+        XCTAssertEqual(Set(snapshot.records.map(\.title)), Set(["Prove Work Control", "Sign Standard", "Rotate Deploy Signing Key"]))
         let approvalRecord = snapshot.records.first { $0.group == "Decision Queue" }
         XCTAssertEqual(approvalRecord?.status, "pending")
         XCTAssertEqual(approvalRecord?.approval?.status, "pending")
         XCTAssertEqual(approvalRecord?.approval?.stale, false)
         XCTAssertTrue(approvalRecord?.fields.contains { $0.label == "Staleness" && $0.value == "Fresh" } ?? false)
+        XCTAssertNil(approvalRecord?.approval?.ticketTitle)
+        XCTAssertNil(approvalRecord?.approval?.ticketStatus)
+        XCTAssertNil(approvalRecord?.approval?.approvalGate)
+        XCTAssertNil(approvalRecord?.approval?.reason)
+        XCTAssertNil(approvalRecord?.approval?.requestedBy)
+        XCTAssertEqual(approvalRecord?.title, "Sign Standard")
+        XCTAssertEqual(approvalRecord?.subtitle, "Sign Standard · authority: aloha")
+        XCTAssertEqual(approvalRecord?.approval?.isProtectedTicketContext, true)
         let attentionRecord = try XCTUnwrap(snapshot.records.first { $0.group == "Approval Attention" })
         let attentionApproval = try XCTUnwrap(attentionRecord.approval)
         XCTAssertEqual(attentionApproval.id, "approval-credential-rotation")
@@ -271,6 +418,15 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertNil(attentionApproval.blockReason)
         XCTAssertTrue(attentionApproval.canResolve)
         XCTAssertEqual(attentionApproval.decisionEndpoint, "/api/v1/approvals/approval-credential-rotation")
+        XCTAssertEqual(attentionRecord.title, "Rotate Deploy Signing Key")
+        XCTAssertEqual(attentionRecord.subtitle, "Credential Rotation · authority: tony")
+        XCTAssertEqual(attentionRecord.status, "in_review")
+        XCTAssertEqual(attentionApproval.ticketTitle, "Rotate Deploy Signing Key")
+        XCTAssertEqual(attentionApproval.ticketStatus, "in_review")
+        XCTAssertEqual(attentionApproval.reason, "Rotate the deploy signing key before expiry.")
+        XCTAssertEqual(attentionApproval.requestedBy, "maui")
+        XCTAssertNil(attentionApproval.approvalGate)
+        XCTAssertFalse(attentionApproval.isProtectedTicketContext)
         XCTAssertEqual(Set(snapshot.records.map(\.id)).count, snapshot.records.count)
         XCTAssertEqual(
             Set(snapshot.sources),
@@ -361,7 +517,7 @@ final class OrcaMacModelTests: XCTestCase {
         )
         XCTAssertEqual(
             Set(model.displayedWorkRecords.map(\.title)),
-            Set(["Sign Standard", "Credential Rotation"])
+            Set(["Sign Standard", "Rotate Deploy Signing Key"])
         )
     }
 
@@ -1376,6 +1532,8 @@ final class OrcaMacModelTests: XCTestCase {
             linkedTaskIds: [],
             linkedTicketIds: ["ticket-runtime"],
             noCascade: false,
+            ticketReason: "Rotate the deploy signing key before expiry.",
+            requestedBy: "maui",
             resolutionEnabled: true,
             selfApprovalProhibited: false,
             stale: false,
@@ -1383,6 +1541,8 @@ final class OrcaMacModelTests: XCTestCase {
             status: .pending,
             targetRef: "ticket-runtime",
             targetType: "ticket",
+            ticketStatus: "in_review",
+            ticketTitle: "Rotate Deploy Signing Key",
             viewerAuthorized: true
         )
         let counts = Components.Schemas.ChatRuntimeWorkControlCountsRead(

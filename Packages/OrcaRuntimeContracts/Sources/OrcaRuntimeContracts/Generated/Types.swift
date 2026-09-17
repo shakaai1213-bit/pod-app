@@ -2715,6 +2715,8 @@ public enum Components {
             public var actionType: Swift.String
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/approval_id`.
             public var approvalId: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/approval_gate`.
+            public var approvalGate: Swift.String?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/authority`.
             public var authority: Swift.String
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/authorization_reason`.
@@ -2729,6 +2731,10 @@ public enum Components {
             public var linkedTicketIds: [Swift.String]?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/no_cascade`.
             public var noCascade: Swift.Bool
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/reason`.
+            public var ticketReason: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/requested_by`.
+            public var requestedBy: Swift.String?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/resolution_enabled`.
             public var resolutionEnabled: Swift.Bool
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/secondary_authority`.
@@ -2749,6 +2755,10 @@ public enum Components {
             public var targetRef: Swift.String?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/target_type`.
             public var targetType: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/ticket_status`.
+            public var ticketStatus: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/ticket_title`.
+            public var ticketTitle: Swift.String?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/viewer_authorized`.
             public var viewerAuthorized: Swift.Bool
             /// Creates a new `ChatRuntimeWorkApprovalRead`.
@@ -2756,6 +2766,7 @@ public enum Components {
             /// - Parameters:
             ///   - actionType:
             ///   - approvalId:
+            ///   - approvalGate:
             ///   - authority:
             ///   - authorizationReason:
             ///   - createdAt:
@@ -2763,6 +2774,8 @@ public enum Components {
             ///   - linkedTaskIds:
             ///   - linkedTicketIds:
             ///   - noCascade:
+            ///   - reason:
+            ///   - requestedBy:
             ///   - resolutionEnabled:
             ///   - secondaryAuthority:
             ///   - selfApprovalProhibited:
@@ -2771,10 +2784,13 @@ public enum Components {
             ///   - status:
             ///   - targetRef:
             ///   - targetType:
+            ///   - ticketStatus:
+            ///   - ticketTitle:
             ///   - viewerAuthorized:
             public init(
                 actionType: Swift.String,
                 approvalId: Swift.String,
+                approvalGate: Swift.String? = nil,
                 authority: Swift.String,
                 authorizationReason: Swift.String,
                 createdAt: Foundation.Date,
@@ -2782,6 +2798,8 @@ public enum Components {
                 linkedTaskIds: [Swift.String]? = nil,
                 linkedTicketIds: [Swift.String]? = nil,
                 noCascade: Swift.Bool,
+                ticketReason: Swift.String? = nil,
+                requestedBy: Swift.String? = nil,
                 resolutionEnabled: Swift.Bool,
                 secondaryAuthority: Swift.String? = nil,
                 selfApprovalProhibited: Swift.Bool,
@@ -2790,10 +2808,13 @@ public enum Components {
                 status: Components.Schemas.ChatRuntimeWorkApprovalRead.StatusPayload? = nil,
                 targetRef: Swift.String? = nil,
                 targetType: Swift.String? = nil,
+                ticketStatus: Swift.String? = nil,
+                ticketTitle: Swift.String? = nil,
                 viewerAuthorized: Swift.Bool
             ) {
                 self.actionType = actionType
                 self.approvalId = approvalId
+                self.approvalGate = approvalGate
                 self.authority = authority
                 self.authorizationReason = authorizationReason
                 self.createdAt = createdAt
@@ -2801,6 +2822,8 @@ public enum Components {
                 self.linkedTaskIds = linkedTaskIds
                 self.linkedTicketIds = linkedTicketIds
                 self.noCascade = noCascade
+                self.ticketReason = ticketReason
+                self.requestedBy = requestedBy
                 self.resolutionEnabled = resolutionEnabled
                 self.secondaryAuthority = secondaryAuthority
                 self.selfApprovalProhibited = selfApprovalProhibited
@@ -2809,11 +2832,14 @@ public enum Components {
                 self.status = status
                 self.targetRef = targetRef
                 self.targetType = targetType
+                self.ticketStatus = ticketStatus
+                self.ticketTitle = ticketTitle
                 self.viewerAuthorized = viewerAuthorized
             }
             public enum CodingKeys: String, CodingKey {
                 case actionType = "action_type"
                 case approvalId = "approval_id"
+                case approvalGate = "approval_gate"
                 case authority
                 case authorizationReason = "authorization_reason"
                 case createdAt = "created_at"
@@ -2821,6 +2847,8 @@ public enum Components {
                 case linkedTaskIds = "linked_task_ids"
                 case linkedTicketIds = "linked_ticket_ids"
                 case noCascade = "no_cascade"
+                case ticketReason = "reason"
+                case requestedBy = "requested_by"
                 case resolutionEnabled = "resolution_enabled"
                 case secondaryAuthority = "secondary_authority"
                 case selfApprovalProhibited = "self_approval_prohibited"
@@ -2829,6 +2857,8 @@ public enum Components {
                 case status
                 case targetRef = "target_ref"
                 case targetType = "target_type"
+                case ticketStatus = "ticket_status"
+                case ticketTitle = "ticket_title"
                 case viewerAuthorized = "viewer_authorized"
             }
         }
