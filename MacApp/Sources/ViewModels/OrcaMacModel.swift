@@ -649,7 +649,7 @@ final class OrcaMacModel {
             return
         }
         guard let decisionEndpoint = approval.decisionEndpoint else {
-            approvalError = ConsoleApprovalBlockReason.viewerNotAuthorized.message
+            approvalError = ConsoleApprovalBlockReason.authorityMismatch(approval.authority).message
             return
         }
         let trimmedReason = reason.trimmingCharacters(in: .whitespacesAndNewlines)

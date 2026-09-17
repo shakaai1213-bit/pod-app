@@ -255,14 +255,23 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertEqual(snapshot.metrics.first(where: { $0.id == "approvals" })?.value, "1")
         XCTAssertEqual(
             Set(snapshot.records.map(\.group)),
-            Set(["Ready Now", "Assigned", "Decision Queue"])
+            Set(["Ready Now", "Assigned", "Decision Queue", "Approval Attention"])
         )
-        XCTAssertEqual(Set(snapshot.records.map(\.title)), Set(["Prove Work Control", "Sign Standard"]))
+        XCTAssertEqual(Set(snapshot.records.map(\.title)), Set(["Prove Work Control", "Sign Standard", "Credential Rotation"]))
         let approvalRecord = snapshot.records.first { $0.group == "Decision Queue" }
         XCTAssertEqual(approvalRecord?.status, "pending")
         XCTAssertEqual(approvalRecord?.approval?.status, "pending")
         XCTAssertEqual(approvalRecord?.approval?.stale, false)
         XCTAssertTrue(approvalRecord?.fields.contains { $0.label == "Staleness" && $0.value == "Fresh" } ?? false)
+        let attentionRecord = try XCTUnwrap(snapshot.records.first { $0.group == "Approval Attention" })
+        let attentionApproval = try XCTUnwrap(attentionRecord.approval)
+        XCTAssertEqual(attentionApproval.id, "approval-credential-rotation")
+        XCTAssertEqual(attentionApproval.authority, "tony")
+        XCTAssertEqual(attentionApproval.status, "pending")
+        XCTAssertNil(attentionApproval.blockReason)
+        XCTAssertTrue(attentionApproval.canResolve)
+        XCTAssertEqual(attentionApproval.decisionEndpoint, "/api/v1/approvals/approval-credential-rotation")
+        XCTAssertEqual(Set(snapshot.records.map(\.id)).count, snapshot.records.count)
         XCTAssertEqual(
             Set(snapshot.sources),
             Set([
@@ -588,8 +597,8 @@ final class OrcaMacModelTests: XCTestCase {
     func testEachGuardConditionBlocksWithSpecificReason() {
         let cases: [(ConsoleApprovalRecord, ConsoleApprovalBlockReason)] = [
             (Self.eligibleApproval(status: "approved"), .notPending),
-            (Self.eligibleApproval(authority: "coral"), .authorityMismatch),
-            (Self.eligibleApproval(viewerAuthorized: false), .viewerNotAuthorized),
+            (Self.eligibleApproval(authority: "coral", viewerAuthorized: false), .authorityMismatch("coral")),
+            (Self.eligibleApproval(authority: "tony", viewerAuthorized: false), .authorityMismatch("tony")),
             (Self.eligibleApproval(resolutionEnabled: false), .resolutionHeld),
             (Self.eligibleApproval(selfApprovalProhibited: true), .selfApprovalProhibited),
             (Self.eligibleApproval(targetReference: nil, linkedTicketIDs: []), .ticketUnresolved),
@@ -604,6 +613,14 @@ final class OrcaMacModelTests: XCTestCase {
             Set(ConsoleApprovalBlockReason.allCases.map(\.message)).count,
             ConsoleApprovalBlockReason.allCases.count
         )
+    }
+
+    func testAuthorizedAuthorityIsDecidableRegardlessOfRegistryName() {
+        for authority in ["tony", "maui"] {
+            let approval = Self.eligibleApproval(authority: authority, viewerAuthorized: true)
+            XCTAssertNil(approval.blockReason)
+            XCTAssertTrue(approval.canResolve)
+        }
     }
 
     func testEndpointMismatchIsNotDecidable() {
@@ -817,13 +834,14 @@ final class OrcaMacModelTests: XCTestCase {
         }
     }
 
-    func testNilDecisionEndpointReportsAuthorityNotEndpointMismatch() {
-        let flat = Self.flatBundleApproval(decisionEndpoint: nil)
-        let scoped = Self.eligibleApproval(decisionEndpoint: nil)
+    func testNilDecisionEndpointReportsAuthorityMismatch() {
+        let flat = Self.flatBundleApproval(authority: "maui", decisionEndpoint: nil)
+        let scoped = Self.eligibleApproval(authority: "maui", decisionEndpoint: nil)
 
-        XCTAssertEqual(flat.blockReason, .viewerNotAuthorized)
-        XCTAssertEqual(scoped.blockReason, .viewerNotAuthorized)
+        XCTAssertEqual(flat.blockReason, .authorityMismatch("maui"))
+        XCTAssertEqual(scoped.blockReason, .authorityMismatch("maui"))
         XCTAssertNotEqual(flat.blockReason, .endpointMismatch)
+        XCTAssertTrue(flat.blockReason?.message.contains("maui") ?? false)
         XCTAssertFalse(flat.canResolve)
         XCTAssertFalse(scoped.canResolve)
     }
@@ -1023,6 +1041,25 @@ final class OrcaMacModelTests: XCTestCase {
             targetType: "ticket",
             viewerAuthorized: true
         )
+        let attentionApproval = Components.Schemas.ChatRuntimeWorkApprovalRead(
+            actionType: "credential_rotation",
+            approvalId: "approval-credential-rotation",
+            authority: "tony",
+            authorizationReason: "Credential rotation belongs to the signed-in human.",
+            createdAt: Date(timeIntervalSince1970: 1_787_000_100),
+            decisionEndpoint: "/api/v1/approvals/approval-credential-rotation",
+            linkedTaskIds: [],
+            linkedTicketIds: ["ticket-runtime"],
+            noCascade: false,
+            resolutionEnabled: true,
+            selfApprovalProhibited: false,
+            stale: false,
+            staleAfterHours: 72,
+            status: .pending,
+            targetRef: "ticket-runtime",
+            targetType: "ticket",
+            viewerAuthorized: true
+        )
         let counts = Components.Schemas.ChatRuntimeWorkControlCountsRead(
             activeWorkerRuns: 0,
             approvalInventory: 1,
@@ -1047,7 +1084,7 @@ final class OrcaMacModelTests: XCTestCase {
         return .init(
             agentId: "agent-coral",
             agentKey: "coral",
-            approvalInventory: [approval],
+            approvalInventory: [approval, attentionApproval],
             approvalQueue: [approval],
             assignedWork: [item],
             authority: .orca,
