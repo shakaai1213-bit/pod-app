@@ -18,6 +18,46 @@ struct ConsoleMetric: Identifiable, Equatable, Sendable {
     let status: String?
 }
 
+enum ConsoleWorkMetricFilter: String, CaseIterable, Identifiable, Sendable {
+    case ready
+    case assigned
+    case waiting
+    case approvals
+    case protected
+    case historical
+
+    var id: String { rawValue }
+
+    var groups: Set<String> {
+        switch self {
+        case .ready: [OrcaWorkControlProjection.Group.readyNow.rawValue]
+        case .assigned: [OrcaWorkControlProjection.Group.assigned.rawValue]
+        case .waiting: [OrcaWorkControlProjection.Group.waitingOnOthers.rawValue]
+        case .approvals: [
+                OrcaWorkControlProjection.Group.approvals.rawValue,
+                OrcaWorkControlProjection.Group.approvalAttention.rawValue,
+            ]
+        case .protected: [OrcaWorkControlProjection.Group.protected.rawValue]
+        case .historical: [OrcaWorkControlProjection.Group.historical.rawValue]
+        }
+    }
+
+    var emptyTitle: String {
+        switch self {
+        case .ready: "No Ready Now records"
+        case .assigned: "No assigned records"
+        case .waiting: "No waiting records"
+        case .approvals: "No approvals"
+        case .protected: "No protected records"
+        case .historical: "No historical records"
+        }
+    }
+
+    static func filter(forMetricID id: String) -> ConsoleWorkMetricFilter? {
+        ConsoleWorkMetricFilter(rawValue: id)
+    }
+}
+
 struct ConsoleField: Identifiable, Equatable, Sendable {
     var id: String { label }
     let label: String
@@ -126,6 +166,10 @@ struct ConsoleSectionSnapshot: Equatable, Sendable {
             sources: [],
             updatedAt: .distantPast
         )
+    }
+
+    func records(matching filter: ConsoleWorkMetricFilter) -> [ConsoleRecord] {
+        records.filter { filter.groups.contains($0.group) }
     }
 
     static func workControl(_ projection: OrcaWorkControlProjection) -> ConsoleSectionSnapshot {
