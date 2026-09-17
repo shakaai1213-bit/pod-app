@@ -34,23 +34,24 @@ struct ConsoleRecord: Identifiable, Equatable, Sendable {
     let approval: ConsoleApprovalRecord?
 }
 
-enum ConsoleApprovalBlockReason: String, Equatable, Sendable, CaseIterable {
+enum ConsoleApprovalBlockReason: Equatable, Sendable {
     case notPending
-    case authorityMismatch
-    case viewerNotAuthorized
+    case authorityMismatch(String)
     case resolutionHeld
     case selfApprovalProhibited
     case endpointMismatch
     case ticketUnresolved
 
+    static var allCases: [ConsoleApprovalBlockReason] {
+        [.notPending, .authorityMismatch(""), .resolutionHeld, .selfApprovalProhibited, .endpointMismatch, .ticketUnresolved]
+    }
+
     var message: String {
         switch self {
         case .notPending:
             return "Not decidable: this approval is no longer pending."
-        case .authorityMismatch:
-            return "Not decidable here: the approval authority is not the signed-in viewer."
-        case .viewerNotAuthorized:
-            return "Not decidable here: the signed-in viewer is not authorized to decide this approval."
+        case let .authorityMismatch(authority):
+            return "Not decidable here: this approval is \(authority)'s to decide."
         case .resolutionHeld:
             return "Not decidable: resolution is held for this approval."
         case .selfApprovalProhibited:
@@ -95,11 +96,10 @@ struct ConsoleApprovalRecord: Equatable, Sendable {
         guard status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "pending" else {
             return .notPending
         }
-        guard authority == "tony" else { return .authorityMismatch }
-        guard viewerAuthorized else { return .viewerNotAuthorized }
+        guard viewerAuthorized else { return .authorityMismatch(authority) }
         guard resolutionEnabled else { return .resolutionHeld }
         guard !selfApprovalProhibited else { return .selfApprovalProhibited }
-        guard let decisionEndpoint else { return .viewerNotAuthorized }
+        guard let decisionEndpoint else { return .authorityMismatch(authority) }
         let flatEndpoint = "/api/v1/approvals/\(id)"
         if decisionEndpoint == flatEndpoint { return nil }
         guard let ticketID = resolvedTicketID else { return .ticketUnresolved }
@@ -139,10 +139,12 @@ struct ConsoleSectionSnapshot: Equatable, Sendable {
             ConsoleMetric(id: "historical", label: "Historical", value: "\(counts.historical)", status: nil),
         ]
         var records: [ConsoleRecord] = []
-        for group in OrcaWorkControlProjection.Group.allCases where group != .approvals {
+        for group in OrcaWorkControlProjection.Group.allCases
+        where group != .approvals && group != .approvalAttention {
             records += projection.items(in: group).map { workRecord($0, group: group) }
         }
-        records += projection.approvals.map(approvalRecord)
+        records += projection.approvals.map { approvalRecord($0, group: .approvals) }
+        records += projection.approvalAttention.map { approvalRecord($0, group: .approvalAttention) }
         return ConsoleSectionSnapshot(
             section: .work,
             metrics: metrics,
@@ -185,7 +187,8 @@ struct ConsoleSectionSnapshot: Equatable, Sendable {
     }
 
     private static func approvalRecord(
-        _ approval: OrcaWorkControlProjection.Approval
+        _ approval: OrcaWorkControlProjection.Approval,
+        group: OrcaWorkControlProjection.Group
     ) -> ConsoleRecord {
         let decision = ConsoleApprovalRecord(
             id: approval.id,
@@ -214,11 +217,11 @@ struct ConsoleSectionSnapshot: Equatable, Sendable {
             fields.append(ConsoleField(label: "Decision", value: reason.message))
         }
         return ConsoleRecord(
-            id: "approval:\(approval.id)",
+            id: "\(group.rawValue):\(approval.id)",
             title: approval.actionType.replacingOccurrences(of: "_", with: " ").capitalized,
             subtitle: approval.reason,
             status: approval.stale ? "stale" : "pending",
-            group: OrcaWorkControlProjection.Group.approvals.rawValue,
+            group: group.rawValue,
             fields: fields,
             approval: decision
         )
