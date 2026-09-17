@@ -777,9 +777,9 @@ final class OrcaMacModelTests: XCTestCase {
         let cases: [(ConsoleApprovalRecord, ConsoleApprovalBlockReason)] = [
             (Self.eligibleApproval(status: "approved"), .notPending),
             (Self.eligibleApproval(authority: "coral", viewerAuthorized: false), .authorityMismatch("coral")),
-            (Self.eligibleApproval(authority: "tony", viewerAuthorized: false), .authorityMismatch("tony")),
+            (Self.eligibleApproval(authority: "maui", viewerAuthorized: false), .authorityMismatch("maui")),
             (Self.eligibleApproval(resolutionEnabled: false), .resolutionHeld),
-            (Self.eligibleApproval(selfApprovalProhibited: true), .selfApprovalProhibited),
+            (Self.eligibleApproval(authority: "maui", selfApprovalProhibited: true), .selfApprovalProhibited),
             (Self.eligibleApproval(targetReference: nil, linkedTicketIDs: []), .ticketUnresolved),
             (Self.eligibleApproval(targetReference: nil, linkedTicketIDs: ["ticket-1", "ticket-2"]), .ticketUnresolved),
         ]
@@ -804,6 +804,7 @@ final class OrcaMacModelTests: XCTestCase {
 
     func testEndpointMismatchIsNotDecidable() {
         let approval = Self.eligibleApproval(
+            authority: "maui",
             decisionEndpoint: "/api/v1/approvals/other-approval"
         )
 
@@ -953,9 +954,11 @@ final class OrcaMacModelTests: XCTestCase {
 
     func testEndpointWithDifferentApprovalIDIsMismatch() {
         let flat = Self.flatBundleApproval(
+            authority: "maui",
             decisionEndpoint: "/api/v1/approvals/approval-other"
         )
         let scoped = Self.eligibleApproval(
+            authority: "maui",
             decisionEndpoint: "/api/v1/tickets/ticket-1/approvals/approval-other"
         )
 
@@ -967,12 +970,15 @@ final class OrcaMacModelTests: XCTestCase {
 
     func testEndpointWithExtraSegmentsOrQueryStringIsMismatch() {
         let extraSegments = Self.flatBundleApproval(
+            authority: "maui",
             decisionEndpoint: "/api/v1/approvals/approval-1/extra"
         )
         let queryString = Self.flatBundleApproval(
+            authority: "maui",
             decisionEndpoint: "/api/v1/approvals/approval-1?decide=approve"
         )
         let prefixed = Self.flatBundleApproval(
+            authority: "maui",
             decisionEndpoint: "https://other.example.com/api/v1/approvals/approval-1"
         )
 
@@ -1023,6 +1029,130 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertTrue(flat.blockReason?.message.contains("maui") ?? false)
         XCTAssertFalse(flat.canResolve)
         XCTAssertFalse(scoped.canResolve)
+    }
+
+    func testAgentAuthorityApprovalShowsNoDecisionControl() {
+        let approval = Self.flatBundleApproval(authority: "maui", viewerAuthorized: false)
+
+        XCTAssertFalse(approval.showsDecisionControl)
+        XCTAssertNil(approval.captainDecisionEndpoint)
+        XCTAssertEqual(approval.blockReason, .authorityMismatch("maui"))
+        XCTAssertEqual(approval.blockReason?.message, "This approval is maui's to decide.")
+    }
+
+    func testAgentAuthorityApprovalNeverRoutsToCaptainPath() {
+        let approval = Self.flatBundleApproval(
+            authority: "maui",
+            decisionEndpoint: "/api/v1/approvals/approval-1",
+            viewerAuthorized: true
+        )
+
+        XCTAssertNil(approval.captainDecisionEndpoint)
+        XCTAssertFalse(approval.showsDecisionControl)
+        XCTAssertFalse(approval.isCaptainAuthority)
+    }
+
+    func testCaptainApprovalIgnoresAgentComputedViewerFlags() {
+        let approval = Self.flatBundleApproval(
+            id: "f8ec2e96",
+            authority: "tony",
+            decisionEndpoint: "/api/v1/approvals/f8ec2e96",
+            viewerAuthorized: false,
+            selfApprovalProhibited: true,
+            targetReference: "ticket-f8",
+            linkedTicketIDs: ["ticket-f8"]
+        )
+
+        XCTAssertTrue(approval.isCaptainAuthority)
+        XCTAssertNil(approval.blockReason)
+        XCTAssertTrue(approval.canResolve)
+        XCTAssertTrue(approval.showsDecisionControl)
+        XCTAssertEqual(
+            approval.captainDecisionEndpoint,
+            "/api/v1/tickets/ticket-f8/approvals/f8ec2e96"
+        )
+    }
+
+    func testCaptainPathIsComputedLocallyIgnoringBundleEndpoint() {
+        let approval = Self.eligibleApproval(
+            id: "approval-captain",
+            authority: "tony",
+            decisionEndpoint: "https://other.example.com/api/v1/approvals/approval-captain",
+            viewerAuthorized: false,
+            selfApprovalProhibited: true
+        )
+
+        XCTAssertEqual(
+            approval.captainDecisionEndpoint,
+            "/api/v1/tickets/ticket-1/approvals/approval-captain"
+        )
+        XCTAssertTrue(approval.showsDecisionControl)
+    }
+
+    func testCaptainApprovalWithoutResolvableTicketIsUnresolved() {
+        let approval = Self.eligibleApproval(
+            authority: "tony",
+            viewerAuthorized: false,
+            selfApprovalProhibited: true,
+            targetType: nil,
+            targetReference: nil,
+            linkedTicketIDs: []
+        )
+
+        XCTAssertEqual(approval.blockReason, .ticketUnresolved)
+        XCTAssertFalse(approval.canResolve)
+        XCTAssertFalse(approval.showsDecisionControl)
+        XCTAssertNil(approval.captainDecisionEndpoint)
+    }
+
+    func testCaptainApprovalNotPendingShowsNoControl() {
+        let approval = Self.eligibleApproval(
+            authority: "tony",
+            status: "approved",
+            viewerAuthorized: false,
+            selfApprovalProhibited: true
+        )
+
+        XCTAssertEqual(approval.blockReason, .notPending)
+        XCTAssertFalse(approval.showsDecisionControl)
+    }
+
+    func testCaptainApprovalHeldResolutionShowsNoControl() {
+        let approval = Self.eligibleApproval(
+            authority: "tony",
+            viewerAuthorized: false,
+            resolutionEnabled: false,
+            selfApprovalProhibited: true
+        )
+
+        XCTAssertEqual(approval.blockReason, .resolutionHeld)
+        XCTAssertFalse(approval.showsDecisionControl)
+    }
+
+    func testSelectingDifferentRecordClearsApprovalError() {
+        let model = makeModel()
+        model.approvalError = "ORCA returned HTTP 401."
+
+        model.selectRecord("record-b")
+
+        XCTAssertNil(model.approvalError)
+    }
+
+    func testTogglingMetricFilterClearsApprovalError() async throws {
+        let snapshot = try await workSnapshot()
+        let model = makeModel()
+        model.sectionSnapshots[.work] = snapshot
+        model.selectSection(.work, refresh: false)
+        model.selectWorkMode(.agentWork)
+        model.approvalError = "ORCA returned HTTP 401."
+
+        model.toggleWorkMetricFilter("approvals")
+        XCTAssertNil(model.approvalError)
+
+        model.approvalError = "ORCA returned HTTP 401."
+        model.toggleWorkMetricFilter("approvals")
+
+        XCTAssertNil(model.approvalError)
     }
 
     func testApprovingFlatFormRecordPatchesFlatEndpoint() async throws {

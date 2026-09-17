@@ -130,6 +130,7 @@ final class OrcaMacModel {
         guard selectedSection == .work, workMode == .agentWork else { return }
         guard let filter = ConsoleWorkMetricFilter.filter(forMetricID: metricID) else { return }
         workMetricFilter = workMetricFilter == filter ? nil : filter
+        clearStaleApprovalOutcome()
         reconcileRecordSelectionWithFilter()
     }
 
@@ -139,6 +140,17 @@ final class OrcaMacModel {
         if !visible.contains(where: { $0.id == selectedRecordID }) {
             self.selectedRecordID = nil
         }
+    }
+
+    private func clearStaleApprovalOutcome() {
+        guard approvalError != nil || approvalNotice != nil else { return }
+        approvalError = nil
+        approvalNotice = nil
+    }
+
+    private func recordSelectionChanged(to id: String?) {
+        guard id != selectedRecordID else { return }
+        clearStaleApprovalOutcome()
     }
 
     var selectedWorkbenchTicket: WorkbenchTicketSummary? {
@@ -355,6 +367,7 @@ final class OrcaMacModel {
     }
 
     func selectSection(_ section: ConsoleSection, refresh: Bool = true) {
+        recordSelectionChanged(to: nil)
         selectedSection = section
         selectedRecordID = nil
         workMetricFilter = nil
@@ -365,6 +378,7 @@ final class OrcaMacModel {
 
     func selectWorkControlAgent(_ id: String) {
         guard agents.contains(where: { $0.id == id }) else { return }
+        recordSelectionChanged(to: nil)
         selectedAgentID = id
         selectedRecordID = nil
         workMetricFilter = nil
@@ -373,6 +387,7 @@ final class OrcaMacModel {
     }
 
     func selectWorkMode(_ mode: ConsoleWorkMode) {
+        recordSelectionChanged(to: nil)
         workMode = mode
         selectedRecordID = nil
         if mode == .portfolio, boardPlan == nil {
@@ -388,6 +403,7 @@ final class OrcaMacModel {
     }
 
     func selectRecord(_ id: String?) {
+        recordSelectionChanged(to: id)
         selectedRecordID = id
     }
 
@@ -412,6 +428,7 @@ final class OrcaMacModel {
             lastUpdatedAt = snapshot.updatedAt
             if let selectedRecordID,
                !snapshot.records.contains(where: { $0.id == selectedRecordID }) {
+                recordSelectionChanged(to: nil)
                 self.selectedRecordID = nil
             }
             if section == .work {
@@ -666,19 +683,28 @@ final class OrcaMacModel {
         guard let record = sectionSnapshots[selectedSection]?.records.first(where: { $0.id == recordID }),
               let approval = record.approval else {
             approvalError = "That approval is no longer in view. Refresh and try again."
+            presentedError = nil
+            return
+        }
+        guard approval.isCaptainAuthority else {
+            approvalError = ConsoleApprovalBlockReason.authorityMismatch(approval.authority).message
+            presentedError = nil
             return
         }
         guard approval.canResolve else {
             approvalError = approval.blockReason?.message
+            presentedError = nil
             return
         }
-        guard let decisionEndpoint = approval.decisionEndpoint else {
-            approvalError = ConsoleApprovalBlockReason.authorityMismatch(approval.authority).message
+        guard let decisionEndpoint = approval.captainDecisionEndpoint else {
+            approvalError = ConsoleApprovalBlockReason.ticketUnresolved.message
+            presentedError = nil
             return
         }
         let trimmedReason = reason.trimmingCharacters(in: .whitespacesAndNewlines)
         if decision == .rejected && trimmedReason.isEmpty {
             approvalError = ConsoleTicketApprovalError.emptyRejectionReason.errorDescription
+            presentedError = nil
             return
         }
         isDecidingApproval = true
