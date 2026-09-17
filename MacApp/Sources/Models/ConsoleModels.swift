@@ -91,7 +91,7 @@ enum ConsoleApprovalBlockReason: Equatable, Sendable {
         case .notPending:
             return "Not decidable: this approval is no longer pending."
         case let .authorityMismatch(authority):
-            return "Not decidable here: this approval is \(authority)'s to decide."
+            return "This approval is \(authority)'s to decide."
         case .resolutionHeld:
             return "Not decidable: resolution is held for this approval."
         case .selfApprovalProhibited:
@@ -117,6 +117,21 @@ struct ConsoleApprovalRecord: Equatable, Sendable {
     let targetReference: String?
     let linkedTicketIDs: [String]
 
+    static let captainAuthority = "tony"
+
+    var isCaptainAuthority: Bool {
+        authority.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == Self.captainAuthority
+    }
+
+    var captainDecisionEndpoint: String? {
+        guard isCaptainAuthority, let ticketID = resolvedTicketID else { return nil }
+        return "/api/v1/tickets/\(ticketID)/approvals/\(id)"
+    }
+
+    var showsDecisionControl: Bool {
+        isCaptainAuthority && canResolve
+    }
+
     var resolvedTicketID: String? {
         let linked = Set(linkedTicketIDs)
         if linked.count == 1, let ticketID = linked.first {
@@ -135,6 +150,11 @@ struct ConsoleApprovalRecord: Equatable, Sendable {
     var blockReason: ConsoleApprovalBlockReason? {
         guard status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "pending" else {
             return .notPending
+        }
+        if isCaptainAuthority {
+            guard resolutionEnabled else { return .resolutionHeld }
+            guard captainDecisionEndpoint != nil else { return .ticketUnresolved }
+            return nil
         }
         guard viewerAuthorized else { return .authorityMismatch(authority) }
         guard resolutionEnabled else { return .resolutionHeld }
@@ -257,7 +277,11 @@ struct ConsoleSectionSnapshot: Equatable, Sendable {
         if let ticketID = decision.resolvedTicketID {
             fields.append(ConsoleField(label: "Ticket", value: ticketID))
         }
-        if let reason = decision.blockReason {
+        if decision.showsDecisionControl {
+            if let endpoint = decision.captainDecisionEndpoint {
+                fields.append(ConsoleField(label: "Decision Path", value: endpoint))
+            }
+        } else if let reason = decision.blockReason {
             fields.append(ConsoleField(label: "Decision", value: reason.message))
         }
         return ConsoleRecord(

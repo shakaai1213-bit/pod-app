@@ -89,24 +89,28 @@ private struct ApprovalDecisionSection: View {
 
     var body: some View {
         InspectorSection(title: "Decision") {
-            if approval.canResolve {
-                TextField("Rejection reason (required to reject)", text: $rejectionReason)
-                    .textFieldStyle(.roundedBorder)
-                HStack(spacing: 8) {
-                    Button {
-                        Task {
-                            await model.decideTicketApproval(
-                                recordID: recordID,
-                                decision: .approved,
-                                reason: "Approved from ORCA Console."
-                            )
-                        }
-                    } label: {
-                        Label("Approve", systemImage: "checkmark")
+            if approval.showsDecisionControl {
+                Button {
+                    Task {
+                        await model.decideTicketApproval(
+                            recordID: recordID,
+                            decision: .approved,
+                            reason: "Approved from ORCA Console."
+                        )
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Color.orcaGreen)
+                } label: {
+                    Label("Approve", systemImage: "checkmark")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.orcaGreen)
 
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Reject")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.orcaCoral)
+                    TextField("Rejection reason (required)", text: $rejectionReason)
+                        .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("Rejection reason")
                     Button {
                         Task {
                             await model.decideTicketApproval(
