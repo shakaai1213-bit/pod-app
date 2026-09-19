@@ -109,6 +109,20 @@ public protocol APIProtocol: Sendable {
     /// - Remark: HTTP `POST /api/v1/conversations/{conversation_id}/memory/proposals/{proposal_id}/apply`.
     /// - Remark: Generated from `#/paths//api/v1/conversations/{conversation_id}/memory/proposals/{proposal_id}/apply/post(applyConversationMemoryProposal)`.
     func applyConversationMemoryProposal(_ input: Operations.ApplyConversationMemoryProposal.Input) async throws -> Operations.ApplyConversationMemoryProposal.Output
+    /// Read Ticket Chat Thread
+    ///
+    /// Read the existing ticket-scoped chat thread, or 404 when none exists.
+    ///
+    /// - Remark: HTTP `GET /api/v1/tickets/{ticket_id}/chat-thread`.
+    /// - Remark: Generated from `#/paths//api/v1/tickets/{ticket_id}/chat-thread/get(readTicketChatThread)`.
+    func readTicketChatThread(_ input: Operations.ReadTicketChatThread.Input) async throws -> Operations.ReadTicketChatThread.Output
+    /// Ensure Ticket Chat Thread
+    ///
+    /// Idempotently ensure the ticket-scoped chat thread for the owning agent.
+    ///
+    /// - Remark: HTTP `POST /api/v1/tickets/{ticket_id}/chat-thread`.
+    /// - Remark: Generated from `#/paths//api/v1/tickets/{ticket_id}/chat-thread/post(ensureTicketChatThread)`.
+    func ensureTicketChatThread(_ input: Operations.EnsureTicketChatThread.Input) async throws -> Operations.EnsureTicketChatThread.Output
 }
 
 /// Convenience overloads for operation inputs.
@@ -301,6 +315,36 @@ extension APIProtocol {
             path: path,
             headers: headers,
             body: body
+        ))
+    }
+    /// Read Ticket Chat Thread
+    ///
+    /// Read the existing ticket-scoped chat thread, or 404 when none exists.
+    ///
+    /// - Remark: HTTP `GET /api/v1/tickets/{ticket_id}/chat-thread`.
+    /// - Remark: Generated from `#/paths//api/v1/tickets/{ticket_id}/chat-thread/get(readTicketChatThread)`.
+    public func readTicketChatThread(
+        path: Operations.ReadTicketChatThread.Input.Path,
+        headers: Operations.ReadTicketChatThread.Input.Headers = .init()
+    ) async throws -> Operations.ReadTicketChatThread.Output {
+        try await readTicketChatThread(Operations.ReadTicketChatThread.Input(
+            path: path,
+            headers: headers
+        ))
+    }
+    /// Ensure Ticket Chat Thread
+    ///
+    /// Idempotently ensure the ticket-scoped chat thread for the owning agent.
+    ///
+    /// - Remark: HTTP `POST /api/v1/tickets/{ticket_id}/chat-thread`.
+    /// - Remark: Generated from `#/paths//api/v1/tickets/{ticket_id}/chat-thread/post(ensureTicketChatThread)`.
+    public func ensureTicketChatThread(
+        path: Operations.EnsureTicketChatThread.Input.Path,
+        headers: Operations.EnsureTicketChatThread.Input.Headers = .init()
+    ) async throws -> Operations.EnsureTicketChatThread.Output {
+        try await ensureTicketChatThread(Operations.EnsureTicketChatThread.Input(
+            path: path,
+            headers: headers
         ))
     }
 }
@@ -2438,6 +2482,13 @@ public enum Components {
             }
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnCreate/source_surface`.
             public var sourceSurface: Components.Schemas.ChatRuntimeTurnCreate.SourceSurfacePayload?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnCreate/thread_scope`.
+            @frozen public enum ThreadScopePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case direct = "direct"
+                case ticket = "ticket"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnCreate/thread_scope`.
+            public var threadScope: Components.Schemas.ChatRuntimeTurnCreate.ThreadScopePayload?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnCreate/trace_id`.
             public var traceId: Swift.String
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnCreate/triage_id`.
@@ -2458,6 +2509,7 @@ public enum Components {
             ///   - originRequestId:
             ///   - originThreadId:
             ///   - sourceSurface:
+            ///   - threadScope:
             ///   - traceId:
             ///   - triageId:
             ///   - triageTraceId:
@@ -2473,6 +2525,7 @@ public enum Components {
                 originRequestId: Swift.String? = nil,
                 originThreadId: Swift.String? = nil,
                 sourceSurface: Components.Schemas.ChatRuntimeTurnCreate.SourceSurfacePayload? = nil,
+                threadScope: Components.Schemas.ChatRuntimeTurnCreate.ThreadScopePayload? = nil,
                 traceId: Swift.String,
                 triageId: Swift.String? = nil,
                 triageTraceId: Swift.String? = nil
@@ -2488,6 +2541,7 @@ public enum Components {
                 self.originRequestId = originRequestId
                 self.originThreadId = originThreadId
                 self.sourceSurface = sourceSurface
+                self.threadScope = threadScope
                 self.traceId = traceId
                 self.triageId = triageId
                 self.triageTraceId = triageTraceId
@@ -2504,6 +2558,7 @@ public enum Components {
                 case originRequestId = "origin_request_id"
                 case originThreadId = "origin_thread_id"
                 case sourceSurface = "source_surface"
+                case threadScope = "thread_scope"
                 case traceId = "trace_id"
                 case triageId = "triage_id"
                 case triageTraceId = "triage_trace_id"
@@ -2713,10 +2768,10 @@ public enum Components {
         public struct ChatRuntimeWorkApprovalRead: Codable, Hashable, Sendable {
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/action_type`.
             public var actionType: Swift.String
-            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/approval_id`.
-            public var approvalId: Swift.String
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/approval_gate`.
             public var approvalGate: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/approval_id`.
+            public var approvalId: Swift.String
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/authority`.
             public var authority: Swift.String
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/authorization_reason`.
@@ -2732,7 +2787,7 @@ public enum Components {
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/no_cascade`.
             public var noCascade: Swift.Bool
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/reason`.
-            public var ticketReason: Swift.String?
+            public var reason: Swift.String?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/requested_by`.
             public var requestedBy: Swift.String?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeWorkApprovalRead/resolution_enabled`.
@@ -2765,8 +2820,8 @@ public enum Components {
             ///
             /// - Parameters:
             ///   - actionType:
-            ///   - approvalId:
             ///   - approvalGate:
+            ///   - approvalId:
             ///   - authority:
             ///   - authorizationReason:
             ///   - createdAt:
@@ -2789,8 +2844,8 @@ public enum Components {
             ///   - viewerAuthorized:
             public init(
                 actionType: Swift.String,
-                approvalId: Swift.String,
                 approvalGate: Swift.String? = nil,
+                approvalId: Swift.String,
                 authority: Swift.String,
                 authorizationReason: Swift.String,
                 createdAt: Foundation.Date,
@@ -2798,7 +2853,7 @@ public enum Components {
                 linkedTaskIds: [Swift.String]? = nil,
                 linkedTicketIds: [Swift.String]? = nil,
                 noCascade: Swift.Bool,
-                ticketReason: Swift.String? = nil,
+                reason: Swift.String? = nil,
                 requestedBy: Swift.String? = nil,
                 resolutionEnabled: Swift.Bool,
                 secondaryAuthority: Swift.String? = nil,
@@ -2813,8 +2868,8 @@ public enum Components {
                 viewerAuthorized: Swift.Bool
             ) {
                 self.actionType = actionType
-                self.approvalId = approvalId
                 self.approvalGate = approvalGate
+                self.approvalId = approvalId
                 self.authority = authority
                 self.authorizationReason = authorizationReason
                 self.createdAt = createdAt
@@ -2822,7 +2877,7 @@ public enum Components {
                 self.linkedTaskIds = linkedTaskIds
                 self.linkedTicketIds = linkedTicketIds
                 self.noCascade = noCascade
-                self.ticketReason = ticketReason
+                self.reason = reason
                 self.requestedBy = requestedBy
                 self.resolutionEnabled = resolutionEnabled
                 self.secondaryAuthority = secondaryAuthority
@@ -2838,8 +2893,8 @@ public enum Components {
             }
             public enum CodingKeys: String, CodingKey {
                 case actionType = "action_type"
-                case approvalId = "approval_id"
                 case approvalGate = "approval_gate"
+                case approvalId = "approval_id"
                 case authority
                 case authorizationReason = "authorization_reason"
                 case createdAt = "created_at"
@@ -2847,7 +2902,7 @@ public enum Components {
                 case linkedTaskIds = "linked_task_ids"
                 case linkedTicketIds = "linked_ticket_ids"
                 case noCascade = "no_cascade"
-                case ticketReason = "reason"
+                case reason
                 case requestedBy = "requested_by"
                 case resolutionEnabled = "resolution_enabled"
                 case secondaryAuthority = "secondary_authority"
@@ -3920,6 +3975,13 @@ public enum Components {
             public var originThreadId: Swift.String?
             /// - Remark: Generated from `#/components/schemas/DirectAgentChatRequest/reply_to_message_id`.
             public var replyToMessageId: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/DirectAgentChatRequest/thread_scope`.
+            @frozen public enum ThreadScopePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case direct = "direct"
+                case ticket = "ticket"
+            }
+            /// - Remark: Generated from `#/components/schemas/DirectAgentChatRequest/thread_scope`.
+            public var threadScope: Components.Schemas.DirectAgentChatRequest.ThreadScopePayload?
             /// - Remark: Generated from `#/components/schemas/DirectAgentChatRequest/trace_id`.
             public var traceId: Swift.String?
             /// - Remark: Generated from `#/components/schemas/DirectAgentChatRequest/triage_id`.
@@ -3943,6 +4005,7 @@ public enum Components {
             ///   - originRequestId:
             ///   - originThreadId:
             ///   - replyToMessageId:
+            ///   - threadScope:
             ///   - traceId:
             ///   - triageId:
             ///   - triageTraceId:
@@ -3961,6 +4024,7 @@ public enum Components {
                 originRequestId: Swift.String? = nil,
                 originThreadId: Swift.String? = nil,
                 replyToMessageId: Swift.String? = nil,
+                threadScope: Components.Schemas.DirectAgentChatRequest.ThreadScopePayload? = nil,
                 traceId: Swift.String? = nil,
                 triageId: Swift.String? = nil,
                 triageTraceId: Swift.String? = nil
@@ -3979,6 +4043,7 @@ public enum Components {
                 self.originRequestId = originRequestId
                 self.originThreadId = originThreadId
                 self.replyToMessageId = replyToMessageId
+                self.threadScope = threadScope
                 self.traceId = traceId
                 self.triageId = triageId
                 self.triageTraceId = triageTraceId
@@ -3998,6 +4063,7 @@ public enum Components {
                 case originRequestId = "origin_request_id"
                 case originThreadId = "origin_thread_id"
                 case replyToMessageId = "reply_to_message_id"
+                case threadScope = "thread_scope"
                 case traceId = "trace_id"
                 case triageId = "triage_id"
                 case triageTraceId = "triage_trace_id"
@@ -4071,6 +4137,49 @@ public enum Components {
             }
             public enum CodingKeys: String, CodingKey {
                 case detail
+            }
+        }
+        /// Ticket-scoped chat thread binding for the owning agent lane.
+        ///
+        /// - Remark: Generated from `#/components/schemas/TicketChatThreadRead`.
+        public struct TicketChatThreadRead: Codable, Hashable, Sendable {
+            /// - Remark: Generated from `#/components/schemas/TicketChatThreadRead/channel_id`.
+            public var channelId: Swift.String
+            /// - Remark: Generated from `#/components/schemas/TicketChatThreadRead/created`.
+            public var created: Swift.Bool
+            /// - Remark: Generated from `#/components/schemas/TicketChatThreadRead/messages_endpoint`.
+            public var messagesEndpoint: Swift.String
+            /// - Remark: Generated from `#/components/schemas/TicketChatThreadRead/owner_agent_slug`.
+            public var ownerAgentSlug: Swift.String
+            /// - Remark: Generated from `#/components/schemas/TicketChatThreadRead/ticket_id`.
+            public var ticketId: Swift.String
+            /// Creates a new `TicketChatThreadRead`.
+            ///
+            /// - Parameters:
+            ///   - channelId:
+            ///   - created:
+            ///   - messagesEndpoint:
+            ///   - ownerAgentSlug:
+            ///   - ticketId:
+            public init(
+                channelId: Swift.String,
+                created: Swift.Bool,
+                messagesEndpoint: Swift.String,
+                ownerAgentSlug: Swift.String,
+                ticketId: Swift.String
+            ) {
+                self.channelId = channelId
+                self.created = created
+                self.messagesEndpoint = messagesEndpoint
+                self.ownerAgentSlug = ownerAgentSlug
+                self.ticketId = ticketId
+            }
+            public enum CodingKeys: String, CodingKey {
+                case channelId = "channel_id"
+                case created
+                case messagesEndpoint = "messages_endpoint"
+                case ownerAgentSlug = "owner_agent_slug"
+                case ticketId = "ticket_id"
             }
         }
         /// - Remark: Generated from `#/components/schemas/ValidationError`.
@@ -6388,6 +6497,368 @@ public enum Operations {
             /// - Throws: An error if `self` is not `.unprocessableContent`.
             /// - SeeAlso: `.unprocessableContent`.
             public var unprocessableContent: Operations.ApplyConversationMemoryProposal.Output.UnprocessableContent {
+                get throws {
+                    switch self {
+                    case let .unprocessableContent(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unprocessableContent",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        @frozen public enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            public init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            public var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            public static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// Read Ticket Chat Thread
+    ///
+    /// Read the existing ticket-scoped chat thread, or 404 when none exists.
+    ///
+    /// - Remark: HTTP `GET /api/v1/tickets/{ticket_id}/chat-thread`.
+    /// - Remark: Generated from `#/paths//api/v1/tickets/{ticket_id}/chat-thread/get(readTicketChatThread)`.
+    public enum ReadTicketChatThread {
+        public static let id: Swift.String = "readTicketChatThread"
+        public struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/tickets/{ticket_id}/chat-thread/GET/path`.
+            public struct Path: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/tickets/{ticket_id}/chat-thread/GET/path/ticket_id`.
+                public var ticketId: Swift.String
+                /// Creates a new `Path`.
+                ///
+                /// - Parameters:
+                ///   - ticketId:
+                public init(ticketId: Swift.String) {
+                    self.ticketId = ticketId
+                }
+            }
+            public var path: Operations.ReadTicketChatThread.Input.Path
+            /// - Remark: Generated from `#/paths/api/v1/tickets/{ticket_id}/chat-thread/GET/header`.
+            public struct Headers: Sendable, Hashable {
+                public var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ReadTicketChatThread.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                public init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.ReadTicketChatThread.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            public var headers: Operations.ReadTicketChatThread.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - path:
+            ///   - headers:
+            public init(
+                path: Operations.ReadTicketChatThread.Input.Path,
+                headers: Operations.ReadTicketChatThread.Input.Headers = .init()
+            ) {
+                self.path = path
+                self.headers = headers
+            }
+        }
+        @frozen public enum Output: Sendable, Hashable {
+            public struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/tickets/{ticket_id}/chat-thread/GET/responses/200/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/tickets/{ticket_id}/chat-thread/GET/responses/200/content/application\/json`.
+                    case json(Components.Schemas.TicketChatThreadRead)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.TicketChatThreadRead {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.ReadTicketChatThread.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.ReadTicketChatThread.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// Successful Response
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/tickets/{ticket_id}/chat-thread/get(readTicketChatThread)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.ReadTicketChatThread.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            public var ok: Operations.ReadTicketChatThread.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct UnprocessableContent: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/tickets/{ticket_id}/chat-thread/GET/responses/422/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/tickets/{ticket_id}/chat-thread/GET/responses/422/content/application\/json`.
+                    case json(Components.Schemas.HTTPValidationError)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.HTTPValidationError {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.ReadTicketChatThread.Output.UnprocessableContent.Body
+                /// Creates a new `UnprocessableContent`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.ReadTicketChatThread.Output.UnprocessableContent.Body) {
+                    self.body = body
+                }
+            }
+            /// Validation Error
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/tickets/{ticket_id}/chat-thread/get(readTicketChatThread)/responses/422`.
+            ///
+            /// HTTP response code: `422 unprocessableContent`.
+            case unprocessableContent(Operations.ReadTicketChatThread.Output.UnprocessableContent)
+            /// The associated value of the enum case if `self` is `.unprocessableContent`.
+            ///
+            /// - Throws: An error if `self` is not `.unprocessableContent`.
+            /// - SeeAlso: `.unprocessableContent`.
+            public var unprocessableContent: Operations.ReadTicketChatThread.Output.UnprocessableContent {
+                get throws {
+                    switch self {
+                    case let .unprocessableContent(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unprocessableContent",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        @frozen public enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            public init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            public var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            public static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// Ensure Ticket Chat Thread
+    ///
+    /// Idempotently ensure the ticket-scoped chat thread for the owning agent.
+    ///
+    /// - Remark: HTTP `POST /api/v1/tickets/{ticket_id}/chat-thread`.
+    /// - Remark: Generated from `#/paths//api/v1/tickets/{ticket_id}/chat-thread/post(ensureTicketChatThread)`.
+    public enum EnsureTicketChatThread {
+        public static let id: Swift.String = "ensureTicketChatThread"
+        public struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/tickets/{ticket_id}/chat-thread/POST/path`.
+            public struct Path: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/tickets/{ticket_id}/chat-thread/POST/path/ticket_id`.
+                public var ticketId: Swift.String
+                /// Creates a new `Path`.
+                ///
+                /// - Parameters:
+                ///   - ticketId:
+                public init(ticketId: Swift.String) {
+                    self.ticketId = ticketId
+                }
+            }
+            public var path: Operations.EnsureTicketChatThread.Input.Path
+            /// - Remark: Generated from `#/paths/api/v1/tickets/{ticket_id}/chat-thread/POST/header`.
+            public struct Headers: Sendable, Hashable {
+                public var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.EnsureTicketChatThread.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                public init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.EnsureTicketChatThread.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            public var headers: Operations.EnsureTicketChatThread.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - path:
+            ///   - headers:
+            public init(
+                path: Operations.EnsureTicketChatThread.Input.Path,
+                headers: Operations.EnsureTicketChatThread.Input.Headers = .init()
+            ) {
+                self.path = path
+                self.headers = headers
+            }
+        }
+        @frozen public enum Output: Sendable, Hashable {
+            public struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/tickets/{ticket_id}/chat-thread/POST/responses/200/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/tickets/{ticket_id}/chat-thread/POST/responses/200/content/application\/json`.
+                    case json(Components.Schemas.TicketChatThreadRead)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.TicketChatThreadRead {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.EnsureTicketChatThread.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.EnsureTicketChatThread.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// Successful Response
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/tickets/{ticket_id}/chat-thread/post(ensureTicketChatThread)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.EnsureTicketChatThread.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            public var ok: Operations.EnsureTicketChatThread.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            public struct UnprocessableContent: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/tickets/{ticket_id}/chat-thread/POST/responses/422/content`.
+                @frozen public enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/tickets/{ticket_id}/chat-thread/POST/responses/422/content/application\/json`.
+                    case json(Components.Schemas.HTTPValidationError)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    public var json: Components.Schemas.HTTPValidationError {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                public var body: Operations.EnsureTicketChatThread.Output.UnprocessableContent.Body
+                /// Creates a new `UnprocessableContent`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                public init(body: Operations.EnsureTicketChatThread.Output.UnprocessableContent.Body) {
+                    self.body = body
+                }
+            }
+            /// Validation Error
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/tickets/{ticket_id}/chat-thread/post(ensureTicketChatThread)/responses/422`.
+            ///
+            /// HTTP response code: `422 unprocessableContent`.
+            case unprocessableContent(Operations.EnsureTicketChatThread.Output.UnprocessableContent)
+            /// The associated value of the enum case if `self` is `.unprocessableContent`.
+            ///
+            /// - Throws: An error if `self` is not `.unprocessableContent`.
+            /// - SeeAlso: `.unprocessableContent`.
+            public var unprocessableContent: Operations.EnsureTicketChatThread.Output.UnprocessableContent {
                 get throws {
                     switch self {
                     case let .unprocessableContent(response):

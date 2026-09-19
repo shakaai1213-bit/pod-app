@@ -440,6 +440,25 @@ actor OrcaConsoleService {
         return output
     }
 
+    func ensureTicketChatThread(ticketID: String) async throws -> ConsoleTicketChatThread {
+        try await requestJSON(
+            method: "POST",
+            path: "/api/v1/tickets/\(ticketID)/chat-thread"
+        )
+    }
+
+    func ticketChatThread(ticketID: String) async throws -> ConsoleTicketChatThread? {
+        do {
+            return try await requestJSON(
+                method: "GET",
+                path: "/api/v1/tickets/\(ticketID)/chat-thread"
+            )
+        } catch let error as OrcaConsoleServiceError {
+            guard case .httpStatus(404, _) = error else { throw error }
+            return nil
+        }
+    }
+
     private func get(_ path: String) async throws -> ConsoleJSON {
         let data = try await requestData(method: "GET", path: path)
         let value = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
@@ -652,6 +671,22 @@ actor OrcaConsoleService {
             if let value = object[key]?.displayValue, !value.isEmpty { return value }
         }
         return nil
+    }
+}
+
+struct ConsoleTicketChatThread: Decodable, Equatable, Sendable {
+    let ticketId: String
+    let channelId: String
+    let ownerAgentSlug: String
+    let created: Bool
+    let messagesEndpoint: String
+
+    enum CodingKeys: String, CodingKey {
+        case created
+        case ticketId = "ticket_id"
+        case channelId = "channel_id"
+        case ownerAgentSlug = "owner_agent_slug"
+        case messagesEndpoint = "messages_endpoint"
     }
 }
 

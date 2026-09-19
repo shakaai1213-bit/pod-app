@@ -1707,6 +1707,15 @@
             "title": "Source Surface",
             "type": "string"
           },
+          "thread_scope": {
+            "default": "direct",
+            "enum": [
+              "direct",
+              "ticket"
+            ],
+            "title": "Thread Scope",
+            "type": "string"
+          },
           "trace_id": {
             "maxLength": 128,
             "minLength": 1,
@@ -1911,7 +1920,7 @@
             "type": "string"
           },
           "approval_gate": {
-            "maxLength": 128,
+            "maxLength": 255,
             "title": "Approval Gate",
             "type": "string"
           },
@@ -1963,12 +1972,12 @@
             "type": "boolean"
           },
           "reason": {
-            "maxLength": 2000,
+            "maxLength": 4000,
             "title": "Reason",
             "type": "string"
           },
           "requested_by": {
-            "maxLength": 128,
+            "maxLength": 256,
             "title": "Requested By",
             "type": "string"
           },
@@ -2016,7 +2025,7 @@
             "type": "string"
           },
           "ticket_title": {
-            "maxLength": 256,
+            "maxLength": 1000,
             "title": "Ticket Title",
             "type": "string"
           },
@@ -2959,6 +2968,15 @@
             "title": "Reply To Message Id",
             "type": "string"
           },
+          "thread_scope": {
+            "default": "direct",
+            "enum": [
+              "direct",
+              "ticket"
+            ],
+            "title": "Thread Scope",
+            "type": "string"
+          },
           "trace_id": {
             "maxLength": 128,
             "title": "Trace Id",
@@ -3038,6 +3056,42 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "TicketChatThreadRead": {
+        "description": "Ticket-scoped chat thread binding for the owning agent lane.",
+        "properties": {
+          "channel_id": {
+            "format": "uuid",
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "messages_endpoint": {
+            "title": "Messages Endpoint",
+            "type": "string"
+          },
+          "owner_agent_slug": {
+            "title": "Owner Agent Slug",
+            "type": "string"
+          },
+          "ticket_id": {
+            "format": "uuid",
+            "title": "Ticket Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticket_id",
+          "channel_id",
+          "owner_agent_slug",
+          "created",
+          "messages_endpoint"
+        ],
+        "title": "TicketChatThreadRead",
         "type": "object"
       },
       "ValidationError": {
@@ -3727,6 +3781,102 @@
           "conversation-memory"
         ]
       }
+    },
+    "/api/v1/tickets/{ticket_id}/chat-thread": {
+      "get": {
+        "description": "Read the existing ticket-scoped chat thread, or 404 when none exists.",
+        "operationId": "readTicketChatThread",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ticket_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Ticket Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketChatThreadRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read Ticket Chat Thread",
+        "tags": [
+          "tickets"
+        ]
+      },
+      "post": {
+        "description": "Idempotently ensure the ticket-scoped chat thread for the owning agent.",
+        "operationId": "ensureTicketChatThread",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ticket_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Ticket Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketChatThreadRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Ensure Ticket Chat Thread",
+        "tags": [
+          "tickets"
+        ]
+      }
     }
   },
   "tags": [
@@ -3736,5 +3886,5 @@
     }
   ],
   "x-orca-contract-version": "orca.chat-runtime.v1",
-  "x-orca-schema-sha256": "40a298668534e87d47abc42279d4777334e1e2c9ae92dc6e291818a8a76cfbeb"
+  "x-orca-schema-sha256": "f36ec06f40888f18d6fcf3e68b6062183f944ed98c22f37bac838bbd1df57d34"
 }

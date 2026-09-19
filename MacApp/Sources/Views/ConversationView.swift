@@ -17,23 +17,44 @@ struct ConversationView: View {
 
     private var conversationHeader: some View {
         HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(model.selectedAgent.accent.color.opacity(0.16))
-                Image(systemName: model.selectedAgent.symbol)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(model.selectedAgent.accent.color)
-            }
-            .frame(width: 34, height: 34)
+            if let ticketChat = model.activeTicketChat {
+                Button {
+                    model.closeTicketChat()
+                } label: {
+                    Label("Back to ticket", systemImage: "chevron.left")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text(model.selectedAgent.name)
-                    .font(.headline)
-                Text(model.selectedAgent.role)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(ticketChat.title)
+                        .font(.headline)
+                        .lineLimit(1)
+                    Text("Ticket \(ticketChat.ticketID) · with \(ticketChat.ownerSlug)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+            } else {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(model.selectedAgent.accent.color.opacity(0.16))
+                    Image(systemName: model.selectedAgent.symbol)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(model.selectedAgent.accent.color)
+                }
+                .frame(width: 34, height: 34)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(model.selectedAgent.name)
+                        .font(.headline)
+                    Text(model.selectedAgent.role)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
             }
-            Spacer()
 
             if model.isSending {
                 ProgressView()
@@ -113,9 +134,10 @@ struct ConversationView: View {
 
     private var composer: some View {
         @Bindable var model = model
+        let recipient = model.activeTicketChat?.ownerSlug ?? model.selectedAgent.name
         return HStack(alignment: .bottom, spacing: 10) {
             TextField(
-                "Message \(model.selectedAgent.name)",
+                "Message \(recipient)",
                 text: $model.draft,
                 axis: .vertical
             )

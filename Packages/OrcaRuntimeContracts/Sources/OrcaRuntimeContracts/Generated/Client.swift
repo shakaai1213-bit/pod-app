@@ -1173,4 +1173,176 @@ public struct Client: APIProtocol {
             }
         )
     }
+    /// Read Ticket Chat Thread
+    ///
+    /// Read the existing ticket-scoped chat thread, or 404 when none exists.
+    ///
+    /// - Remark: HTTP `GET /api/v1/tickets/{ticket_id}/chat-thread`.
+    /// - Remark: Generated from `#/paths//api/v1/tickets/{ticket_id}/chat-thread/get(readTicketChatThread)`.
+    public func readTicketChatThread(_ input: Operations.ReadTicketChatThread.Input) async throws -> Operations.ReadTicketChatThread.Output {
+        try await client.send(
+            input: input,
+            forOperation: Operations.ReadTicketChatThread.id,
+            serializer: { input in
+                let path = try converter.renderedPath(
+                    template: "/api/v1/tickets/{}/chat-thread",
+                    parameters: [
+                        input.path.ticketId
+                    ]
+                )
+                var request: HTTPTypes.HTTPRequest = .init(
+                    soar_path: path,
+                    method: .get
+                )
+                suppressMutabilityWarning(&request)
+                converter.setAcceptHeader(
+                    in: &request.headerFields,
+                    contentTypes: input.headers.accept
+                )
+                return (request, nil)
+            },
+            deserializer: { response, responseBody in
+                switch response.status.code {
+                case 200:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.ReadTicketChatThread.Output.Ok.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas.TicketChatThreadRead.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .ok(.init(body: body))
+                case 422:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.ReadTicketChatThread.Output.UnprocessableContent.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas.HTTPValidationError.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .unprocessableContent(.init(body: body))
+                default:
+                    return .undocumented(
+                        statusCode: response.status.code,
+                        .init(
+                            headerFields: response.headerFields,
+                            body: responseBody
+                        )
+                    )
+                }
+            }
+        )
+    }
+    /// Ensure Ticket Chat Thread
+    ///
+    /// Idempotently ensure the ticket-scoped chat thread for the owning agent.
+    ///
+    /// - Remark: HTTP `POST /api/v1/tickets/{ticket_id}/chat-thread`.
+    /// - Remark: Generated from `#/paths//api/v1/tickets/{ticket_id}/chat-thread/post(ensureTicketChatThread)`.
+    public func ensureTicketChatThread(_ input: Operations.EnsureTicketChatThread.Input) async throws -> Operations.EnsureTicketChatThread.Output {
+        try await client.send(
+            input: input,
+            forOperation: Operations.EnsureTicketChatThread.id,
+            serializer: { input in
+                let path = try converter.renderedPath(
+                    template: "/api/v1/tickets/{}/chat-thread",
+                    parameters: [
+                        input.path.ticketId
+                    ]
+                )
+                var request: HTTPTypes.HTTPRequest = .init(
+                    soar_path: path,
+                    method: .post
+                )
+                suppressMutabilityWarning(&request)
+                converter.setAcceptHeader(
+                    in: &request.headerFields,
+                    contentTypes: input.headers.accept
+                )
+                return (request, nil)
+            },
+            deserializer: { response, responseBody in
+                switch response.status.code {
+                case 200:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.EnsureTicketChatThread.Output.Ok.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas.TicketChatThreadRead.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .ok(.init(body: body))
+                case 422:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.EnsureTicketChatThread.Output.UnprocessableContent.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas.HTTPValidationError.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .unprocessableContent(.init(body: body))
+                default:
+                    return .undocumented(
+                        statusCode: response.status.code,
+                        .init(
+                            headerFields: response.headerFields,
+                            body: responseBody
+                        )
+                    )
+                }
+            }
+        )
+    }
 }

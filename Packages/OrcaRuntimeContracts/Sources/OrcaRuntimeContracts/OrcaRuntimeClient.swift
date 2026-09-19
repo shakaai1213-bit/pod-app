@@ -131,6 +131,7 @@ public struct OrcaRuntimeDirectTurnRequest: Equatable, Sendable {
     public let triageTraceID: String?
     public let activeTicketID: String?
     public let conversationID: String?
+    public let threadScope: String
 
     public init(
         agentSlug: String,
@@ -144,7 +145,8 @@ public struct OrcaRuntimeDirectTurnRequest: Equatable, Sendable {
         triageID: String? = nil,
         triageTraceID: String? = nil,
         activeTicketID: String? = nil,
-        conversationID: String? = nil
+        conversationID: String? = nil,
+        threadScope: String = "direct"
     ) {
         self.agentSlug = agentSlug
         self.content = content
@@ -158,6 +160,7 @@ public struct OrcaRuntimeDirectTurnRequest: Equatable, Sendable {
         self.triageTraceID = triageTraceID
         self.activeTicketID = activeTicketID
         self.conversationID = conversationID
+        self.threadScope = threadScope
     }
 }
 
@@ -179,6 +182,44 @@ public struct OrcaRuntimeDirectTurnResponse: Equatable, Sendable {
     public let tokenCount: Int?
     public let triageID: String?
     public let computeRunID: String?
+
+    public init(
+        conversationID: String,
+        userMessageID: String,
+        assistantMessageID: String,
+        content: String,
+        agentSlug: String,
+        traceID: String,
+        source: String,
+        lane: String,
+        deliveryMode: String? = nil,
+        provenance: String? = nil,
+        responseState: String? = nil,
+        provider: String? = nil,
+        model: String? = nil,
+        tier: String? = nil,
+        tokenCount: Int? = nil,
+        triageID: String? = nil,
+        computeRunID: String? = nil
+    ) {
+        self.conversationID = conversationID
+        self.userMessageID = userMessageID
+        self.assistantMessageID = assistantMessageID
+        self.content = content
+        self.agentSlug = agentSlug
+        self.traceID = traceID
+        self.source = source
+        self.lane = lane
+        self.deliveryMode = deliveryMode
+        self.provenance = provenance
+        self.responseState = responseState
+        self.provider = provider
+        self.model = model
+        self.tier = tier
+        self.tokenCount = tokenCount
+        self.triageID = triageID
+        self.computeRunID = computeRunID
+    }
 }
 
 public struct OrcaRuntimeConversationMessage: Equatable, Sendable {
@@ -1022,6 +1063,11 @@ public actor OrcaRuntimeClient {
         ) else {
             throw OrcaRuntimeClientError.invalidResponse("unsupported delivery mode")
         }
+        guard let threadScope = Components.Schemas.ChatRuntimeTurnCreate.ThreadScopePayload(
+            rawValue: request.threadScope
+        ) else {
+            throw OrcaRuntimeClientError.invalidResponse("unsupported thread scope")
+        }
         let history = try request.history.suffix(20).map { item in
             guard let role = Components.Schemas.ChatRuntimeHistoryMessage.RolePayload(
                 rawValue: item.role
@@ -1042,6 +1088,7 @@ public actor OrcaRuntimeClient {
             history: history,
             idempotencyKey: request.idempotencyKey,
             sourceSurface: sourceSurface,
+            threadScope: threadScope,
             traceId: request.traceID,
             triageId: request.triageID,
             triageTraceId: request.triageTraceID

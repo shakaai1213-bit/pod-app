@@ -353,7 +353,7 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertEqual(approval.ticketTitle, "Rotate macOS Deploy Key")
         XCTAssertEqual(approval.ticketStatus, "in_review")
         XCTAssertEqual(approval.approvalGate, "pre_merge")
-        XCTAssertEqual(approval.ticketReason, "Ticket 824 rotates the macOS deploy key.")
+        XCTAssertEqual(approval.reason, "Ticket 824 rotates the macOS deploy key.")
         XCTAssertEqual(approval.requestedBy, "maui")
 
         let projection = OrcaWorkControlProjection.Approval(approval)
@@ -395,7 +395,7 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertNil(approval.ticketTitle)
         XCTAssertNil(approval.ticketStatus)
         XCTAssertNil(approval.approvalGate)
-        XCTAssertNil(approval.ticketReason)
+        XCTAssertNil(approval.reason)
         XCTAssertNil(approval.requestedBy)
 
         let projection = OrcaWorkControlProjection.Approval(approval)
@@ -1671,7 +1671,7 @@ final class OrcaMacModelTests: XCTestCase {
             linkedTaskIds: [],
             linkedTicketIds: ["ticket-runtime"],
             noCascade: false,
-            ticketReason: "Rotate the deploy signing key before expiry.",
+            reason: "Rotate the deploy signing key before expiry.",
             requestedBy: "maui",
             resolutionEnabled: true,
             selfApprovalProhibited: false,
@@ -1726,4 +1726,204 @@ final class OrcaMacModelTests: XCTestCase {
             waitingOnOthers: []
         )
     }()
+
+    // MARK: - SPEC-TICKET-SCOPED-CHAT AC13
+
+    func testTicketConversationKeysByTicketAndKeepsGlobalState() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        TestURLProtocol.response = { request in
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.url?.path, "/api/v1/tickets/ticket-7/chat-thread")
+            return (200, Data(#"""
+                {"ticket_id":"ticket-7","channel_id":"channel-ticket-7","owner_agent_slug":"maui","created":true,"messages_endpoint":"/api/v1/chat/channels/channel-ticket-7/messages"}
+                """#.utf8))
+        }
+        defer { TestURLProtocol.response = nil }
+        let consoleService = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+
+        let model = makeModel()
+        model.injectServicesForTesting(runtime: nil, console: consoleService)
+        model.connectionState = .ready
+        model.selectedAgentID = "maui"
+        model.conversations["maui"] = ConversationState(
+            conversationID: "direct-channel-maui",
+            messages: [TranscriptMessage(
+                id: "m1", role: .user, content: "global",
+                createdAt: Date(), deliveryState: .persisted, retryIdentity: nil
+            )]
+        )
+
+        await model.openTicketChat(ticketID: "ticket-7", ownerSlug: "maui", title: "Rotate keys")
+
+        let context = try XCTUnwrap(model.activeTicketChat)
+        XCTAssertEqual(context.conversationKey, "ticket:ticket-7")
+        XCTAssertEqual(context.ownerSlug, "maui")
+        XCTAssertEqual(context.channelID, "channel-ticket-7")
+        XCTAssertEqual(model.selectedSection, .conversations)
+        XCTAssertEqual(
+            model.conversations["ticket:ticket-7"]?.conversationID,
+            "channel-ticket-7"
+        )
+        XCTAssertEqual(
+            model.conversations["maui"]?.conversationID,
+            "direct-channel-maui",
+            "global direct conversation must be untouched"
+        )
+        XCTAssertEqual(model.selectedConversation.conversationID, "channel-ticket-7")
+
+        model.closeTicketChat()
+        XCTAssertNil(model.activeTicketChat)
+        XCTAssertEqual(model.selectedConversation.conversationID, "direct-channel-maui")
+    }
+
+    func testTicketChatWithoutOwnerMapsToAssignOwnerMessage() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        TestURLProtocol.response = { _ in
+            (409, Data(#"{"detail":"ticket_has_no_owner"}"#.utf8))
+        }
+        defer { TestURLProtocol.response = nil }
+        let consoleService = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+
+        let model = makeModel()
+        model.injectServicesForTesting(runtime: nil, console: consoleService)
+        model.connectionState = .ready
+
+        await model.openTicketChat(ticketID: "ticket-8", ownerSlug: nil, title: "Unowned")
+
+        XCTAssertNil(model.activeTicketChat)
+        XCTAssertEqual(model.presentedError, "Assign an owner first")
+        XCTAssertFalse(model.conversations.keys.contains("ticket:ticket-8"))
+    }
+
+    func testTicketScopedTurnPayloadCarriesScopeTicketAndChannel() async throws {
+        let stub = StubRuntimeService()
+        let model = makeModel()
+        model.injectServicesForTesting(runtime: stub, console: nil)
+        model.connectionState = .ready
+        let context = OrcaMacModel.TicketChatContext(
+            ticketID: "ticket-9",
+            ownerSlug: "coral",
+            title: "Deploy",
+            channelID: "channel-ticket-9",
+            returnSection: .work,
+            returnRecordID: nil,
+            returnWorkbenchTicketID: nil
+        )
+        model.activeTicketChat = context
+        model.conversations["ticket:ticket-9"] = ConversationState(conversationID: "channel-ticket-9")
+        model.draft = "Ship it"
+
+        await model.sendDraft()
+
+        let sent = await stub.lastRequest
+        let request = try XCTUnwrap(sent)
+        XCTAssertEqual(request.agentSlug, "coral")
+        XCTAssertEqual(request.threadScope, "ticket")
+        XCTAssertEqual(request.activeTicketID, "ticket-9")
+        XCTAssertEqual(request.conversationID, "channel-ticket-9")
+        XCTAssertEqual(
+            model.conversations["ticket:ticket-9"]?.messages.last?.deliveryState,
+            .persisted
+        )
+        XCTAssertNil(model.conversations["coral"], "no global conversation state created")
+    }
+
+    func testDirectTurnDefaultsToDirectScopeAndStoredConversation() async throws {
+        let stub = StubRuntimeService()
+        let model = makeModel()
+        model.injectServicesForTesting(runtime: stub, console: nil)
+        model.connectionState = .ready
+        model.activateConversationScope(origin: "http://127.0.0.1:8000", organizationID: "test-organization")
+        model.selectedAgentID = "coral"
+        model.conversations["coral"] = ConversationState(conversationID: "direct-channel-coral")
+        model.draft = "Hello"
+
+        await model.sendDraft()
+
+        let sent = await stub.lastRequest
+        let request = try XCTUnwrap(sent)
+        XCTAssertEqual(request.threadScope, "direct")
+        XCTAssertNil(request.activeTicketID)
+        XCTAssertEqual(request.conversationID, "direct-channel-coral")
+        XCTAssertEqual(model.conversations["coral"]?.conversationID, "direct-channel-coral")
+        XCTAssertFalse(model.conversations.keys.contains { $0.hasPrefix("ticket:") })
+    }
+}
+
+private actor StubRuntimeService: OrcaRuntimeServing {
+    var lastRequest: OrcaRuntimeDirectTurnRequest?
+
+    func verifyCompatibility() async throws -> OrcaRuntimeCompatibility {
+        try OrcaRuntimeCompatibility(contractVersion: "v1", schemaSHA256: String(repeating: "a", count: 64))
+    }
+    func agentPacks() async throws -> Components.Schemas.ChatRuntimeAgentPackBundleRead {
+        throw OrcaRuntimeClientError.invalidResponse("unused")
+    }
+    func capabilities(agentKey: String) async throws -> Components.Schemas.ChatRuntimeCapabilityBundleRead {
+        throw OrcaRuntimeClientError.invalidResponse("unused")
+    }
+    func workControl(agentKey: String) async throws -> Components.Schemas.ChatRuntimeWorkControlBundleRead {
+        throw OrcaRuntimeClientError.invalidResponse("unused")
+    }
+    func providerControl() async throws -> Components.Schemas.ChatRuntimeProviderControlBundleRead {
+        throw OrcaRuntimeClientError.invalidResponse("unused")
+    }
+    func runtimeTurn(turnID: String) async throws -> Components.Schemas.ChatRuntimeTurnRead {
+        throw OrcaRuntimeClientError.httpStatus(404)
+    }
+    func conversationMemory(conversationID: String) async throws -> Components.Schemas.ConversationMemoryRead {
+        throw OrcaRuntimeClientError.invalidResponse("unused")
+    }
+    func proposeConversationMemory(
+        conversationID: String,
+        proposal: Components.Schemas.ConversationMemoryProposalCreate
+    ) async throws -> Components.Schemas.ConversationMemoryProposalRead {
+        throw OrcaRuntimeClientError.invalidResponse("unused")
+    }
+    func applyConversationMemoryProposal(
+        conversationID: String,
+        proposalID: String,
+        reason: String?
+    ) async throws -> Components.Schemas.ConversationMemoryRead {
+        throw OrcaRuntimeClientError.invalidResponse("unused")
+    }
+    func send(_ request: OrcaRuntimeDirectTurnRequest) async throws -> OrcaRuntimeDirectTurnResponse {
+        lastRequest = request
+        return OrcaRuntimeDirectTurnResponse(
+            conversationID: request.conversationID ?? "resolved-channel",
+            userMessageID: "msg-user-1",
+            assistantMessageID: "msg-assistant-1",
+            content: "",
+            agentSlug: request.agentSlug,
+            traceID: request.traceID,
+            source: "console",
+            lane: "agent_inbox",
+            deliveryMode: nil,
+            provenance: nil,
+            responseState: nil,
+            provider: nil,
+            model: nil,
+            tier: nil,
+            tokenCount: nil,
+            triageID: nil,
+            computeRunID: nil
+        )
+    }
+    func messages(conversationID: String, offset: Int, limit: Int) async throws -> [OrcaRuntimeConversationMessage] {
+        []
+    }
 }
