@@ -113,6 +113,77 @@ final class OrcaMacModelTests: XCTestCase {
         )
     }
 
+    func testAutomaticRefreshKeepsChatResponsiveWithoutHammeringWorkSurfaces() {
+        XCTAssertEqual(
+            OrcaMacModel.automaticRefreshIntervalSeconds(for: .conversations),
+            4
+        )
+        XCTAssertEqual(
+            OrcaMacModel.automaticRefreshIntervalSeconds(for: .waitingOnCaptain),
+            15
+        )
+        XCTAssertEqual(
+            OrcaMacModel.automaticRefreshIntervalSeconds(for: .work),
+            30
+        )
+        XCTAssertEqual(
+            OrcaMacModel.automaticRefreshIntervalSeconds(for: .workbench),
+            30
+        )
+    }
+
+    func testWaitingOnCaptainBackgroundRefreshIsRateLimited() {
+        let lastRefresh = Date(timeIntervalSince1970: 1_000)
+
+        XCTAssertFalse(OrcaMacModel.shouldRefreshWaitingOnCaptain(
+            lastRefreshAt: lastRefresh,
+            now: lastRefresh.addingTimeInterval(29)
+        ))
+        XCTAssertTrue(OrcaMacModel.shouldRefreshWaitingOnCaptain(
+            lastRefreshAt: lastRefresh,
+            now: lastRefresh.addingTimeInterval(30)
+        ))
+        XCTAssertTrue(OrcaMacModel.shouldRefreshWaitingOnCaptain(
+            lastRefreshAt: nil,
+            now: lastRefresh
+        ))
+    }
+
+    func testAutomaticWorkRefreshHydratesOnceThenLoadsOnlySelectedBoard() {
+        XCTAssertEqual(
+            OrcaMacModel.automaticBoardRefreshStrategy(
+                section: .work,
+                workMode: .portfolio,
+                hasBoards: false
+            ),
+            .hydratePortfolio
+        )
+        XCTAssertEqual(
+            OrcaMacModel.automaticBoardRefreshStrategy(
+                section: .work,
+                workMode: .portfolio,
+                hasBoards: true
+            ),
+            .selectedBoard
+        )
+        XCTAssertEqual(
+            OrcaMacModel.automaticBoardRefreshStrategy(
+                section: .work,
+                workMode: .agentWork,
+                hasBoards: true
+            ),
+            .none
+        )
+        XCTAssertEqual(
+            OrcaMacModel.automaticBoardRefreshStrategy(
+                section: .conversations,
+                workMode: .portfolio,
+                hasBoards: true
+            ),
+            .none
+        )
+    }
+
     func testCanonicalMergeDeduplicatesAndPreservesPending() {
         let start = Date(timeIntervalSince1970: 1_000)
         var state = ConversationState()

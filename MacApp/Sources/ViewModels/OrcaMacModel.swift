@@ -6,12 +6,19 @@ import OrcaAPI
 import OrcaRuntime
 import OrcaRuntimeContracts
 
+enum ConsoleAutomaticBoardRefreshStrategy: Equatable {
+    case none
+    case hydratePortfolio
+    case selectedBoard
+}
+
 @Observable
 @MainActor
 final class OrcaMacModel {
     static let defaultServerAddress = OrcaEndpointPolicy.productionOrigin
     static let initialConversationRefreshLimit = 200
     static let incrementalConversationRefreshLimit = 50
+    static let waitingOnCaptainRefreshIntervalSeconds: TimeInterval = 30
 
     var selectedAgentID: String
     var selectedSection: ConsoleSection
@@ -88,6 +95,7 @@ final class OrcaMacModel {
     @ObservationIgnored private var providerRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var connectInFlight: (id: UUID, task: Task<Void, Never>)?
     @ObservationIgnored private var conversationScope: (origin: String, organizationID: String)?
+    @ObservationIgnored private var lastWaitingOnCaptainRefreshAt: Date?
 
     init(
         tokenStore: any RuntimeTokenStoring = RuntimeTokenStore(),
@@ -450,6 +458,9 @@ final class OrcaMacModel {
         selectedRecordID = nil
         workMetricFilter = nil
         defaults.set(section.rawValue, forKey: "orca.mac.selected-section")
+        if refreshTask != nil {
+            beginRefreshLoop()
+        }
         guard refresh else { return }
         Task { await refreshCurrentSurface(silent: true) }
     }
@@ -485,7 +496,10 @@ final class OrcaMacModel {
         selectedRecordID = id
     }
 
-    func refreshSelectedSection(silent: Bool = false) async {
+    func refreshSelectedSection(
+        silent: Bool = false,
+        refreshPortfolio: Bool = true
+    ) async {
         guard selectedSection != .conversations,
               selectedSection != .workbench,
               let consoleService else { return }
@@ -502,6 +516,9 @@ final class OrcaMacModel {
             }
             let snapshot = try await consoleService.snapshot(for: section, workControl: bundle)
             sectionSnapshots[section] = snapshot
+            if section == .waitingOnCaptain {
+                lastWaitingOnCaptainRefreshAt = Date()
+            }
             sectionError = nil
             lastUpdatedAt = snapshot.updatedAt
             if let selectedRecordID,
@@ -509,7 +526,7 @@ final class OrcaMacModel {
                 recordSelectionChanged(to: nil)
                 self.selectedRecordID = nil
             }
-            if section == .work {
+            if section == .work, refreshPortfolio, workMode == .portfolio {
                 await refreshBoardPortfolio(silent: true)
             }
         } catch {
@@ -590,8 +607,15 @@ final class OrcaMacModel {
         }
     }
 
-    func refreshCurrentSurface(silent: Bool = false) async {
-        if selectedSection != .waitingOnCaptain {
+    func refreshCurrentSurface(
+        silent: Bool = false,
+        automatic: Bool = false
+    ) async {
+        if selectedSection != .waitingOnCaptain,
+           !automatic || Self.shouldRefreshWaitingOnCaptain(
+               lastRefreshAt: lastWaitingOnCaptainRefreshAt,
+               now: Date()
+           ) {
             await refreshWaitingOnCaptainSnapshot(silent: true)
         }
         switch selectedSection {
@@ -600,12 +624,30 @@ final class OrcaMacModel {
         case .workbench:
             await refreshWorkbench(silent: silent)
         default:
-            await refreshSelectedSection(silent: silent)
+            await refreshSelectedSection(
+                silent: silent,
+                refreshPortfolio: !automatic
+            )
+            if automatic {
+                switch Self.automaticBoardRefreshStrategy(
+                    section: selectedSection,
+                    workMode: workMode,
+                    hasBoards: !boards.isEmpty
+                ) {
+                case .hydratePortfolio:
+                    await refreshBoardPortfolio(silent: true)
+                case .selectedBoard:
+                    await refreshSelectedBoardPlan(silent: true)
+                case .none:
+                    break
+                }
+            }
         }
     }
 
     private func refreshWaitingOnCaptainSnapshot(silent: Bool) async {
         guard let consoleService else { return }
+        defer { lastWaitingOnCaptainRefreshAt = Date() }
         do {
             sectionSnapshots[.waitingOnCaptain] = try await consoleService.snapshot(
                 for: .waitingOnCaptain,
@@ -966,11 +1008,38 @@ final class OrcaMacModel {
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(4))
-                guard !Task.isCancelled, let self else { return }
-                await self.refreshCurrentSurface(silent: true)
+                guard let self else { return }
+                let delay = Self.automaticRefreshIntervalSeconds(for: self.selectedSection)
+                try? await Task.sleep(for: .seconds(delay))
+                guard !Task.isCancelled else { return }
+                await self.refreshCurrentSurface(silent: true, automatic: true)
             }
         }
+    }
+
+    static func automaticRefreshIntervalSeconds(for section: ConsoleSection) -> TimeInterval {
+        switch section {
+        case .conversations:
+            return 4
+        case .waitingOnCaptain:
+            return 15
+        default:
+            return 30
+        }
+    }
+
+    static func shouldRefreshWaitingOnCaptain(lastRefreshAt: Date?, now: Date) -> Bool {
+        guard let lastRefreshAt else { return true }
+        return now.timeIntervalSince(lastRefreshAt) >= waitingOnCaptainRefreshIntervalSeconds
+    }
+
+    static func automaticBoardRefreshStrategy(
+        section: ConsoleSection,
+        workMode: ConsoleWorkMode,
+        hasBoards: Bool
+    ) -> ConsoleAutomaticBoardRefreshStrategy {
+        guard section == .work, workMode == .portfolio else { return .none }
+        return hasBoards ? .selectedBoard : .hydratePortfolio
     }
 
     func refreshProviderControl(silent: Bool = false) async {
