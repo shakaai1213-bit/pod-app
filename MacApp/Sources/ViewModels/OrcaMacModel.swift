@@ -513,6 +513,9 @@ final class OrcaMacModel {
     }
 
     func refreshCurrentSurface(silent: Bool = false) async {
+        if selectedSection != .waitingOnCaptain {
+            await refreshWaitingOnCaptainSnapshot(silent: true)
+        }
         switch selectedSection {
         case .conversations:
             await refreshSelectedConversation(silent: silent)
@@ -520,6 +523,18 @@ final class OrcaMacModel {
             await refreshWorkbench(silent: silent)
         default:
             await refreshSelectedSection(silent: silent)
+        }
+    }
+
+    private func refreshWaitingOnCaptainSnapshot(silent: Bool) async {
+        guard let consoleService else { return }
+        do {
+            sectionSnapshots[.waitingOnCaptain] = try await consoleService.snapshot(
+                for: .waitingOnCaptain,
+                workControl: nil
+            )
+        } catch {
+            if !silent { presentedError = error.localizedDescription }
         }
     }
 

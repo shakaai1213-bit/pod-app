@@ -15,7 +15,8 @@ final class OrcaFoundationTests: XCTestCase {
     }
 
     func testSurfaceInventoryIsSharedAndFundIsProtected() {
-        XCTAssertEqual(OrcaSurfaceSection.allCases.count, 10)
+        XCTAssertEqual(OrcaSurfaceSection.allCases.count, 11)
+        XCTAssertEqual(OrcaSurfaceSection.allCases.first, .waitingOnCaptain)
         XCTAssertTrue(OrcaSurfaceSection.allCases.contains(.workbench))
         XCTAssertTrue(OrcaSurfaceSection.fund.isProtected)
         XCTAssertFalse(OrcaSurfaceSection.work.isProtected)

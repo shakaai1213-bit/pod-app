@@ -105,7 +105,11 @@ struct ConsoleSectionView: View {
                     filterBanner
                     Divider()
                 }
-                records
+                if section == .waitingOnCaptain {
+                    waitingOnCaptainRecords
+                } else {
+                    records
+                }
             }
         }
     }
@@ -183,6 +187,52 @@ struct ConsoleSectionView: View {
 
     private var displayedRecords: [ConsoleRecord] {
         model.displayedWorkRecords
+    }
+
+    @ViewBuilder
+    private var waitingOnCaptainRecords: some View {
+        if displayedRecords.isEmpty && !model.isLoadingSection {
+            VStack(spacing: 0) {
+                ContentUnavailableView(
+                    model.selectedSnapshot.emptyStateTitle
+                        ?? ConsoleSectionSnapshot.waitingOnCaptainEmptyTitle,
+                    systemImage: "checkmark.circle"
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("DELEGATION REQUESTS")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                    Text(model.selectedSnapshot.delegationEmptyStateTitle
+                        ?? ConsoleSectionSnapshot.delegationEmptyTitle)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .background(Color(nsColor: .windowBackgroundColor))
+            }
+        } else {
+            List(selection: recordSelection) {
+                Section("Waiting") {
+                    ForEach(displayedRecords) { record in
+                        ConsoleRecordRow(record: record)
+                            .tag(record.id)
+                    }
+                }
+
+                if let delegationEmptyTitle = model.selectedSnapshot.delegationEmptyStateTitle {
+                    Section("Delegation Requests") {
+                        Text(delegationEmptyTitle)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .listStyle(.inset)
+        }
     }
 
     private var records: some View {

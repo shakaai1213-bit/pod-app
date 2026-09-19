@@ -72,6 +72,37 @@ struct ConsoleRecord: Identifiable, Equatable, Sendable {
     let group: String
     let fields: [ConsoleField]
     let approval: ConsoleApprovalRecord?
+    let ticket: ConsoleWaitingTicketRecord?
+
+    init(
+        id: String,
+        title: String,
+        subtitle: String?,
+        status: String?,
+        group: String,
+        fields: [ConsoleField],
+        approval: ConsoleApprovalRecord?,
+        ticket: ConsoleWaitingTicketRecord? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.subtitle = subtitle
+        self.status = status
+        self.group = group
+        self.fields = fields
+        self.approval = approval
+        self.ticket = ticket
+    }
+}
+
+struct ConsoleWaitingTicketRecord: Equatable, Sendable {
+    let id: String
+    let endpoint: String
+    let summary: String
+    let agentSlug: String?
+    let status: String?
+    let blockedOn: String?
+    let approvalState: String?
 }
 
 enum ConsoleApprovalBlockReason: Equatable, Sendable {
@@ -221,7 +252,99 @@ struct ConsoleApprovalRecord: Equatable, Sendable {
     var canResolve: Bool { blockReason == nil }
 }
 
+struct WaitingOnCaptainCounts: Decodable, Equatable, Sendable {
+    let approvals: Int
+    let tickets: Int
+    let delegationRequests: Int
+    let stale: Int
+
+    enum CodingKeys: String, CodingKey {
+        case approvals, tickets, stale
+        case delegationRequests = "delegation_requests"
+    }
+
+    var badgeCount: Int { approvals + tickets + delegationRequests }
+
+    static let zero = WaitingOnCaptainCounts(
+        approvals: 0,
+        tickets: 0,
+        delegationRequests: 0,
+        stale: 0
+    )
+}
+
+struct WaitingOnCaptainItem: Decodable, Equatable, Sendable {
+    let id: String
+    let kind: String
+    let title: String
+    let summary: String
+    let authority: String
+    let agentSlug: String?
+    let occurredAt: Date
+    let ageHours: Double
+    let staleAfterHours: Int?
+    let isStale: Bool
+    let gateSeverity: Int
+    let endpoint: String
+    let decisionEndpoint: String?
+    let approvalId: String?
+    let ticketId: String?
+    let ticketTitle: String?
+    let ticketStatus: String?
+    let approvalGate: String?
+    let reason: String?
+    let requestedBy: String?
+
+    // Forward-compatible ticket context. Part 1 may add these pointer-safe fields;
+    // the v1 shape remains decodable when they are absent.
+    let blockedOn: String?
+    let approvalState: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, kind, title, summary, authority, endpoint, reason
+        case agentSlug = "agent_slug"
+        case occurredAt = "occurred_at"
+        case ageHours = "age_hours"
+        case staleAfterHours = "stale_after_hours"
+        case isStale = "is_stale"
+        case gateSeverity = "gate_severity"
+        case decisionEndpoint = "decision_endpoint"
+        case approvalId = "approval_id"
+        case ticketId = "ticket_id"
+        case ticketTitle = "ticket_title"
+        case ticketStatus = "ticket_status"
+        case approvalGate = "approval_gate"
+        case requestedBy = "requested_by"
+        case blockedOn = "blocked_on"
+        case approvalState = "approval_state"
+    }
+}
+
+struct WaitingOnCaptainResponse: Decodable, Equatable, Sendable {
+    let generatedAt: Date
+    let source: String
+    let counts: WaitingOnCaptainCounts
+    let items: [WaitingOnCaptainItem]
+
+    enum CodingKeys: String, CodingKey {
+        case source, counts, items
+        case generatedAt = "generated_at"
+    }
+
+    static func zero(at date: Date = Date()) -> WaitingOnCaptainResponse {
+        WaitingOnCaptainResponse(
+            generatedAt: date,
+            source: "orca.waiting-on-captain.v1",
+            counts: .zero,
+            items: []
+        )
+    }
+}
+
 struct ConsoleSectionSnapshot: Equatable, Sendable {
+    static let waitingOnCaptainEmptyTitle = "Nothing is waiting on you."
+    static let delegationEmptyTitle = "No delegation requests"
+
     let section: ConsoleSection
     let metrics: [ConsoleMetric]
     let records: [ConsoleRecord]
@@ -240,6 +363,128 @@ struct ConsoleSectionSnapshot: Equatable, Sendable {
 
     func records(matching filter: ConsoleWorkMetricFilter) -> [ConsoleRecord] {
         records.filter { filter.groups.contains($0.group) }
+    }
+
+    var badgeCount: Int {
+        guard section == .waitingOnCaptain else { return 0 }
+        let badgeMetricIDs = Set(["approvals", "tickets", "delegations"])
+        return metrics
+            .filter { badgeMetricIDs.contains($0.id) }
+            .compactMap { Int($0.value) }
+            .reduce(0, +)
+    }
+
+    var emptyStateTitle: String? {
+        section == .waitingOnCaptain && records.isEmpty
+            ? Self.waitingOnCaptainEmptyTitle
+            : nil
+    }
+
+    var delegationEmptyStateTitle: String? {
+        guard section == .waitingOnCaptain,
+              !records.contains(where: { $0.group == "Delegation Requests" }) else { return nil }
+        return Self.delegationEmptyTitle
+    }
+
+    static func waitingOnCaptain(_ response: WaitingOnCaptainResponse) -> ConsoleSectionSnapshot {
+        ConsoleSectionSnapshot(
+            section: .waitingOnCaptain,
+            metrics: [
+                ConsoleMetric(id: "approvals", label: "Approvals", value: "\(response.counts.approvals)", status: response.counts.approvals > 0 ? "pending" : "ok"),
+                ConsoleMetric(id: "tickets", label: "Tickets", value: "\(response.counts.tickets)", status: response.counts.tickets > 0 ? "attention" : "ok"),
+                ConsoleMetric(id: "delegations", label: "Delegations", value: "\(response.counts.delegationRequests)", status: response.counts.delegationRequests > 0 ? "attention" : "ok"),
+                ConsoleMetric(id: "stale", label: "Stale", value: "\(response.counts.stale)", status: response.counts.stale > 0 ? "attention" : "ok"),
+            ],
+            records: response.items.map(waitingOnCaptainRecord),
+            sources: ["/api/v1/control-room/waiting-on-captain", response.source],
+            updatedAt: response.generatedAt
+        )
+    }
+
+    private static func waitingOnCaptainRecord(_ item: WaitingOnCaptainItem) -> ConsoleRecord {
+        let group: String
+        switch item.kind {
+        case "approval": group = "Approvals"
+        case "ticket": group = "Tickets"
+        case "delegation_request": group = "Delegation Requests"
+        default: group = item.kind.replacingOccurrences(of: "_", with: " ").capitalized
+        }
+
+        let agent = item.agentSlug ?? "Unassigned"
+        let gate = item.approvalGate ?? "severity \(item.gateSeverity)"
+        let waiting = "waiting \(max(0, Int(item.ageHours.rounded(.down))))h"
+        var fields = [
+            ConsoleField(label: "ID", value: item.id),
+            ConsoleField(label: "Kind", value: item.kind.replacingOccurrences(of: "_", with: " ").capitalized),
+            ConsoleField(label: "Summary", value: item.summary),
+            ConsoleField(label: "Agent", value: agent),
+            ConsoleField(label: "Age", value: waiting),
+            ConsoleField(label: "Gate", value: gate),
+            ConsoleField(label: "Endpoint", value: item.endpoint),
+        ]
+        if let staleAfterHours = item.staleAfterHours {
+            fields.append(ConsoleField(label: "Stale After", value: "\(staleAfterHours)h"))
+        }
+        if let ticketStatus = item.ticketStatus {
+            fields.append(ConsoleField(label: "Ticket Status", value: ticketStatus))
+        }
+        if let blockedOn = item.blockedOn {
+            fields.append(ConsoleField(label: "Blocked On", value: blockedOn))
+        }
+        if let approvalState = item.approvalState {
+            fields.append(ConsoleField(label: "Approval State", value: approvalState))
+        }
+
+        let approval: ConsoleApprovalRecord?
+        if item.kind == "approval", let approvalID = item.approvalId {
+            let linkedTicketIDs = item.ticketId.map { [$0] } ?? []
+            approval = ConsoleApprovalRecord(
+                id: approvalID,
+                authority: item.authority,
+                status: "pending",
+                stale: item.isStale,
+                decisionEndpoint: item.decisionEndpoint,
+                viewerAuthorized: false,
+                resolutionEnabled: item.decisionEndpoint != nil,
+                selfApprovalProhibited: true,
+                targetType: item.ticketId == nil ? nil : "ticket",
+                targetReference: item.ticketId,
+                linkedTicketIDs: linkedTicketIDs,
+                ticketTitle: item.ticketTitle,
+                ticketStatus: item.ticketStatus,
+                approvalGate: item.approvalGate,
+                reason: item.reason,
+                requestedBy: item.requestedBy
+            )
+        } else {
+            approval = nil
+        }
+
+        let ticket: ConsoleWaitingTicketRecord?
+        if item.kind == "ticket", let ticketID = item.ticketId {
+            ticket = ConsoleWaitingTicketRecord(
+                id: ticketID,
+                endpoint: item.endpoint,
+                summary: item.summary,
+                agentSlug: item.agentSlug,
+                status: item.ticketStatus,
+                blockedOn: item.blockedOn,
+                approvalState: item.approvalState
+            )
+        } else {
+            ticket = nil
+        }
+
+        return ConsoleRecord(
+            id: item.id,
+            title: item.title,
+            subtitle: "\(agent) · \(waiting) · gate: \(gate)",
+            status: item.isStale ? "stale" : (item.ticketStatus ?? "waiting"),
+            group: group,
+            fields: fields,
+            approval: approval,
+            ticket: ticket
+        )
     }
 
     static func workControl(_ projection: OrcaWorkControlProjection) -> ConsoleSectionSnapshot {

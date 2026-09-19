@@ -47,6 +47,31 @@ struct ConsoleInspectorView: View {
                         ApprovalWhySection(approval: approval)
                         ApprovalDecisionSection(recordID: record.id, approval: approval)
                     }
+
+                    if let ticket = record.ticket {
+                        InspectorSection(title: "Ticket") {
+                            InspectorValue(label: "ID", value: ticket.id)
+                            InspectorValue(label: "Summary", value: ticket.summary)
+                            if let status = ticket.status {
+                                InspectorValue(label: "Status", value: status)
+                            }
+                            if let agent = ticket.agentSlug {
+                                InspectorValue(label: "Agent", value: agent)
+                            }
+                            if let blockedOn = ticket.blockedOn {
+                                InspectorValue(label: "Blocked On", value: blockedOn)
+                            }
+                            if let approvalState = ticket.approvalState {
+                                InspectorValue(label: "Approval State", value: approvalState)
+                            }
+                            if let url = ticketURL(for: ticket.endpoint) {
+                                Link("Open ticket endpoint", destination: url)
+                            } else {
+                                InspectorValue(label: "Endpoint", value: ticket.endpoint)
+                            }
+                        }
+                        OpenTicketChatHook(ticketID: ticket.id)
+                    }
                 } else {
                     InspectorSection(title: "Section") {
                         InspectorValue(label: "View", value: model.selectedSection.title)
@@ -78,6 +103,23 @@ struct ConsoleInspectorView: View {
             .padding(16)
         }
         .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    private func ticketURL(for endpoint: String) -> URL? {
+        guard endpoint.hasPrefix("/api/v1/tickets/"),
+              let origin = OrcaMacModel.normalizedEndpoint(model.serverAddress),
+              let url = URL(string: endpoint, relativeTo: origin)?.absoluteURL else { return nil }
+        return url
+    }
+}
+
+/// Named integration point for SPEC-TICKET-SCOPED-CHAT-2026-09-19.
+/// This section intentionally does not open or create ticket chat.
+private struct OpenTicketChatHook: View {
+    let ticketID: String
+
+    var body: some View {
+        EmptyView()
     }
 }
 

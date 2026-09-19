@@ -1,6 +1,7 @@
 import Foundation
 
 public enum OrcaSurfaceSection: String, CaseIterable, Identifiable, Codable, Sendable {
+    case waitingOnCaptain
     case overview
     case conversations
     case work
@@ -16,6 +17,7 @@ public enum OrcaSurfaceSection: String, CaseIterable, Identifiable, Codable, Sen
 
     public var title: String {
         switch self {
+        case .waitingOnCaptain: return "Waiting on Tony"
         case .overview: return "Overview"
         case .conversations: return "Conversations"
         case .work: return "Work"
@@ -31,6 +33,7 @@ public enum OrcaSurfaceSection: String, CaseIterable, Identifiable, Codable, Sen
 
     public var subtitle: String {
         switch self {
+        case .waitingOnCaptain: return "Decisions and tickets needing you"
         case .overview: return "Operating picture"
         case .conversations: return "Named-agent channels"
         case .work: return "Boards, projects, tickets, tasks, and approvals"
@@ -46,6 +49,7 @@ public enum OrcaSurfaceSection: String, CaseIterable, Identifiable, Codable, Sen
 
     public var symbol: String {
         switch self {
+        case .waitingOnCaptain: return "person.crop.circle.badge.exclamationmark"
         case .overview: return "square.grid.2x2"
         case .conversations: return "bubble.left.and.bubble.right"
         case .work: return "square.stack.3d.up"
