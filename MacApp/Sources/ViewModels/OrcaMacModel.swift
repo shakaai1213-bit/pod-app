@@ -64,6 +64,20 @@ final class OrcaMacModel {
     var isDecidingApproval = false
     var approvalNotice: String?
     var approvalError: String?
+    var activeTicketChat: TicketChatContext?
+    var isOpeningTicketChat = false
+
+    struct TicketChatContext: Equatable, Sendable {
+        let ticketID: String
+        let ownerSlug: String
+        let title: String
+        let channelID: String
+        let returnSection: ConsoleSection
+        let returnRecordID: String?
+        let returnWorkbenchTicketID: String?
+
+        var conversationKey: String { "ticket:\(ticketID)" }
+    }
 
     @ObservationIgnored private let tokenStore: any RuntimeTokenStoring
     @ObservationIgnored private let defaults: UserDefaults
@@ -97,7 +111,11 @@ final class OrcaMacModel {
     }
 
     var selectedConversation: ConversationState {
-        conversations[selectedAgentID] ?? ConversationState(
+        if let ticketChat = activeTicketChat {
+            return conversations[ticketChat.conversationKey]
+                ?? ConversationState(conversationID: ticketChat.channelID)
+        }
+        return conversations[selectedAgentID] ?? ConversationState(
             conversationID: storedConversationID(for: selectedAgentID)
         )
     }
@@ -105,11 +123,71 @@ final class OrcaMacModel {
     var selectedMessages: [TranscriptMessage] { selectedConversation.messages }
 
     var selectedRuntimeTurn: Components.Schemas.ChatRuntimeTurnRead? {
-        runtimeTurns[selectedAgentID]
+        runtimeTurns[activeTicketChat?.conversationKey ?? selectedAgentID]
     }
 
     var selectedConversationMemory: Components.Schemas.ConversationMemoryRead? {
-        conversationMemories[selectedAgentID]
+        conversationMemories[activeTicketChat?.conversationKey ?? selectedAgentID]
+    }
+
+    private var activeConversationKey: String {
+        activeTicketChat?.conversationKey ?? selectedAgentID
+    }
+
+    func openTicketChat(ticketID: String, ownerSlug: String?, title: String) async {
+        approvalError = nil
+        approvalNotice = nil
+        guard let consoleService, connectionState.isReady, !isOpeningTicketChat else { return }
+        isOpeningTicketChat = true
+        defer { isOpeningTicketChat = false }
+        do {
+            let thread = try await consoleService.ensureTicketChatThread(ticketID: ticketID)
+            let context = TicketChatContext(
+                ticketID: ticketID,
+                ownerSlug: thread.ownerAgentSlug,
+                title: title,
+                channelID: thread.channelId,
+                returnSection: selectedSection,
+                returnRecordID: selectedRecordID,
+                returnWorkbenchTicketID: selectedSection == .workbench ? selectedWorkbenchTicketID : nil
+            )
+            activeTicketChat = context
+            if conversations[context.conversationKey] == nil {
+                conversations[context.conversationKey] = ConversationState(conversationID: thread.channelId)
+            } else {
+                conversations[context.conversationKey]?.conversationID = thread.channelId
+            }
+            selectedSection = .conversations
+            await refreshSelectedConversation(silent: true)
+        } catch let error as OrcaConsoleServiceError {
+            if case let .httpStatus(409, detail) = error, detail == "ticket_has_no_owner" {
+                presentedError = "Assign an owner first"
+            } else {
+                presentedError = error.localizedDescription
+            }
+        } catch {
+            presentedError = error.localizedDescription
+        }
+    }
+
+    func closeTicketChat() {
+        guard let context = activeTicketChat else { return }
+        activeTicketChat = nil
+        selectedSection = context.returnSection
+        selectedRecordID = context.returnRecordID
+        if context.returnSection == .workbench, let ticketID = context.returnWorkbenchTicketID {
+            selectedWorkbenchTicketID = ticketID
+            Task { await refreshWorkbenchSession(silent: true) }
+        }
+        Task { await refreshCurrentSurface(silent: true) }
+    }
+
+    func injectServicesForTesting(
+        runtime: (any OrcaRuntimeServing)?,
+        console: OrcaConsoleService?
+    ) {
+        service = runtime
+        consoleService = console
     }
 
     var selectedSnapshot: ConsoleSectionSnapshot {
@@ -742,11 +820,11 @@ final class OrcaMacModel {
 
     func refreshSelectedConversation(silent: Bool = false) async {
         guard let service else { return }
-        let agentID = selectedAgentID
-        guard let conversationID = conversations[agentID]?.conversationID
-            ?? storedConversationID(for: agentID) else { return }
+        let conversationKey = activeConversationKey
+        guard let conversationID = conversations[conversationKey]?.conversationID
+            ?? (activeTicketChat == nil ? storedConversationID(for: conversationKey) : nil) else { return }
         do {
-            var state = conversations[agentID] ?? ConversationState(conversationID: conversationID)
+            var state = conversations[conversationKey] ?? ConversationState(conversationID: conversationID)
             let remote = try await loadRecentMessages(
                 service: service,
                 conversationID: conversationID,
@@ -754,10 +832,10 @@ final class OrcaMacModel {
             )
             state.conversationID = conversationID
             state.mergeCanonical(remote.map(Self.transcriptMessage))
-            conversations[agentID] = state
+            conversations[conversationKey] = state
             lastUpdatedAt = Date()
             await refreshRuntimeEvidence(
-                agentID: agentID,
+                agentID: conversationKey,
                 conversationID: conversationID,
                 turnID: state.messages.last(where: { $0.role == .user })?.id,
                 silent: silent
@@ -771,13 +849,15 @@ final class OrcaMacModel {
         let content = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !content.isEmpty, let service, connectionState.isReady else { return }
 
-        let agentID = selectedAgentID
+        let agentID = activeTicketChat?.ownerSlug ?? selectedAgentID
+        let conversationKey = activeConversationKey
+        let ticketChat = activeTicketChat
         let traceID = retryIdentity?.traceID ?? "orca-mac-\(UUID().uuidString.lowercased())"
         let idempotencyKey = retryIdentity?.idempotencyKey ?? "orca-mac-turn:\(traceID)"
         let pendingID = "pending:\(traceID)"
         let startedAt = Date()
-        var state = conversations[agentID]
-            ?? ConversationState(conversationID: storedConversationID(for: agentID))
+        var state = conversations[conversationKey]
+            ?? ConversationState(conversationID: ticketChat?.channelID ?? storedConversationID(for: agentID))
         let history = state.messages.compactMap { message -> OrcaRuntimeHistoryMessage? in
             guard message.deliveryState == .persisted, message.role != .system else { return nil }
             return OrcaRuntimeHistoryMessage(
@@ -791,7 +871,7 @@ final class OrcaMacModel {
             at: startedAt,
             retryIdentity: TurnRetryIdentity(traceID: traceID, idempotencyKey: idempotencyKey)
         )
-        conversations[agentID] = state
+        conversations[conversationKey] = state
         draft = ""
         isSending = true
         presentedError = nil
@@ -807,11 +887,15 @@ final class OrcaMacModel {
                     asyncResponse: true,
                     traceID: traceID,
                     idempotencyKey: idempotencyKey,
-                    conversationID: state.conversationID
+                    activeTicketID: ticketChat?.ticketID,
+                    conversationID: state.conversationID,
+                    threadScope: ticketChat == nil ? "direct" : "ticket"
                 )
             )
-            storeConversationID(response.conversationID, for: agentID)
-            var resolved = conversations[agentID] ?? state
+            if ticketChat == nil {
+                storeConversationID(response.conversationID, for: agentID)
+            }
+            var resolved = conversations[conversationKey] ?? state
             resolved.conversationID = response.conversationID
             var canonical = [
                 TranscriptMessage(
@@ -848,17 +932,17 @@ final class OrcaMacModel {
                 tier: response.tier,
                 computeRunID: response.computeRunID
             )
-            conversations[agentID] = resolved
+            conversations[conversationKey] = resolved
             lastUpdatedAt = Date()
             await refreshConversation(
-                agentID: agentID,
+                agentID: conversationKey,
                 conversationID: response.conversationID,
                 turnID: response.userMessageID
             )
         } catch {
-            var failed = conversations[agentID] ?? state
+            var failed = conversations[conversationKey] ?? state
             failed.failPending(id: pendingID, reason: error.localizedDescription)
-            conversations[agentID] = failed
+            conversations[conversationKey] = failed
             presentedError = error.localizedDescription
         }
         isSending = false
@@ -866,9 +950,10 @@ final class OrcaMacModel {
 
     func retryFailedMessage(_ message: TranscriptMessage) async {
         guard case .failed = message.deliveryState else { return }
-        var state = conversations[selectedAgentID] ?? ConversationState()
+        let conversationKey = activeConversationKey
+        var state = conversations[conversationKey] ?? ConversationState()
         state.messages.removeAll { $0.id == message.id }
-        conversations[selectedAgentID] = state
+        conversations[conversationKey] = state
         draft = message.content
         await sendDraft(retryIdentity: message.retryIdentity)
     }
@@ -995,7 +1080,7 @@ final class OrcaMacModel {
             runtimeTurns.removeValue(forKey: agentID)
         }
 
-        if agentID == selectedAgentID {
+        if agentID == activeConversationKey {
             runtimeEvidenceError = errors.isEmpty ? nil : errors.joined(separator: " ")
             if !silent, let runtimeEvidenceError {
                 presentedError = runtimeEvidenceError
@@ -1022,6 +1107,7 @@ final class OrcaMacModel {
             conversations.removeAll()
             runtimeTurns.removeAll()
             conversationMemories.removeAll()
+            activeTicketChat = nil
         }
         conversationScope = next
         for key in defaults.dictionaryRepresentation().keys
@@ -1049,6 +1135,7 @@ final class OrcaMacModel {
 
     private func deactivateConversationScope() {
         conversationScope = nil
+        activeTicketChat = nil
         conversations.removeAll()
         runtimeTurns.removeAll()
         conversationMemories.removeAll()

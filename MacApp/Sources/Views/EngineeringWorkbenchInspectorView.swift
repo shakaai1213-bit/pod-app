@@ -100,6 +100,19 @@ struct EngineeringWorkbenchInspectorView: View {
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 }
+                Button {
+                    Task {
+                        await model.openTicketChat(
+                            ticketID: ticket.id,
+                            ownerSlug: nil,
+                            title: ticket.title
+                        )
+                    }
+                } label: {
+                    Label("Chat with owner", systemImage: "bubble.left.and.bubble.right")
+                }
+                .buttonStyle(.bordered)
+                .disabled(model.isOpeningTicketChat || !model.connectionState.isReady)
             } else {
                 Text("No ticket selected")
                     .font(.caption)

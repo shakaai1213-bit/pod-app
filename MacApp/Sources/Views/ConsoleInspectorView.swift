@@ -70,7 +70,11 @@ struct ConsoleInspectorView: View {
                                 InspectorValue(label: "Endpoint", value: ticket.endpoint)
                             }
                         }
-                        OpenTicketChatHook(ticketID: ticket.id)
+                        OpenTicketChatHook(
+                            ticketID: ticket.id,
+                            ownerSlug: ticket.agentSlug,
+                            title: ticket.summary
+                        )
                     }
                 } else {
                     InspectorSection(title: "Section") {
@@ -113,13 +117,34 @@ struct ConsoleInspectorView: View {
     }
 }
 
-/// Named integration point for SPEC-TICKET-SCOPED-CHAT-2026-09-19.
-/// This section intentionally does not open or create ticket chat.
+/// SPEC-TICKET-SCOPED-CHAT-2026-09-19 AC9: opens the ticket-scoped thread
+/// with the ticket owner; disabled until an owner is assigned.
 private struct OpenTicketChatHook: View {
+    @Environment(OrcaMacModel.self) private var model
     let ticketID: String
+    var ownerSlug: String?
+    var title: String?
 
     var body: some View {
-        EmptyView()
+        if let ownerSlug, !ownerSlug.isEmpty {
+            Button {
+                Task {
+                    await model.openTicketChat(
+                        ticketID: ticketID,
+                        ownerSlug: ownerSlug,
+                        title: title ?? ticketID
+                    )
+                }
+            } label: {
+                Label("Chat with \(ownerSlug)", systemImage: "bubble.left.and.bubble.right")
+            }
+            .buttonStyle(.bordered)
+            .disabled(model.isOpeningTicketChat || !model.connectionState.isReady)
+        } else {
+            Label("Assign an owner first", systemImage: "person.badge.plus")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 }
 

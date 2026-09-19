@@ -534,6 +534,20 @@ struct ConsoleSectionSnapshot: Equatable, Sendable {
         if let blockedOn = item.blockedOn {
             fields.append(ConsoleField(label: "Blocked On", value: blockedOn))
         }
+        let ticket: ConsoleWaitingTicketRecord?
+        if item.kind.lowercased() == "ticket" {
+            ticket = ConsoleWaitingTicketRecord(
+                id: item.id,
+                endpoint: "/api/v1/tickets/\(item.id)",
+                summary: item.title,
+                agentSlug: nil,
+                status: item.status,
+                blockedOn: item.blockedOn,
+                approvalState: nil
+            )
+        } else {
+            ticket = nil
+        }
         return ConsoleRecord(
             id: "\(group.rawValue):\(item.id)",
             title: item.title,
@@ -541,7 +555,8 @@ struct ConsoleSectionSnapshot: Equatable, Sendable {
             status: item.stale ? "stale" : item.status,
             group: group.rawValue,
             fields: fields,
-            approval: nil
+            approval: nil,
+            ticket: ticket
         )
     }
 

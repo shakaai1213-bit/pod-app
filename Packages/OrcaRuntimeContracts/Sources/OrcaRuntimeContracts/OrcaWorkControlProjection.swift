@@ -161,7 +161,7 @@ extension OrcaWorkControlProjection.Approval {
         ticketTitle = approval.ticketTitle
         ticketStatus = approval.ticketStatus
         approvalGate = approval.approvalGate
-        ticketReason = approval.ticketReason
+        ticketReason = approval.reason
         requestedBy = approval.requestedBy
     }
 }
