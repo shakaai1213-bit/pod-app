@@ -202,10 +202,88 @@ final class OrcaMacModelTests: XCTestCase {
     func testConsoleInventoryMatchesPodOperatingAreas() {
         XCTAssertEqual(
             Set(ConsoleSection.allCases),
-            Set([.overview, .conversations, .work, .workbench, .fund, .crew, .knowledge, .lab, .runtime, .maker])
+            Set([.waitingOnCaptain, .overview, .conversations, .work, .workbench, .fund, .crew, .knowledge, .lab, .runtime, .maker])
         )
+        XCTAssertEqual(ConsoleSection.allCases.first, .waitingOnCaptain)
         XCTAssertTrue(ConsoleSection.fund.isProtected)
         XCTAssertFalse(ConsoleSection.work.isProtected)
+    }
+
+    func testWaitingOnCaptainFixtureDecodesAndMapsWithoutResorting() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let response = try decoder.decode(
+            WaitingOnCaptainResponse.self,
+            from: Data(Self.waitingOnCaptainFixtureJSON.utf8)
+        )
+
+        XCTAssertEqual(response.source, "orca.waiting-on-captain.v1")
+        XCTAssertEqual(response.counts, WaitingOnCaptainCounts(
+            approvals: 1,
+            tickets: 1,
+            delegationRequests: 0,
+            stale: 1
+        ))
+        XCTAssertEqual(response.items.map(\.id), ["ticket:ticket-1", "approval:approval-1"])
+
+        let snapshot = ConsoleSectionSnapshot.waitingOnCaptain(response)
+        XCTAssertEqual(snapshot.badgeCount, 2)
+        XCTAssertEqual(snapshot.records.map(\.id), ["ticket:ticket-1", "approval:approval-1"])
+        XCTAssertNil(snapshot.emptyStateTitle)
+        XCTAssertEqual(snapshot.delegationEmptyStateTitle, "No delegation requests")
+
+        let ticket = try XCTUnwrap(snapshot.records.first?.ticket)
+        XCTAssertEqual(ticket.id, "ticket-1")
+        XCTAssertEqual(ticket.endpoint, "/api/v1/tickets/ticket-1")
+
+        let approval = try XCTUnwrap(snapshot.records.last?.approval)
+        XCTAssertTrue(approval.isCaptainAuthority)
+        XCTAssertEqual(
+            approval.decisionEndpoint,
+            "/api/v1/tickets/ticket-2/approvals/approval-1"
+        )
+        XCTAssertTrue(approval.showsDecisionControl)
+    }
+
+    func testWaitingOnCaptainZeroState() {
+        let snapshot = ConsoleSectionSnapshot.waitingOnCaptain(
+            .zero(at: Date(timeIntervalSince1970: 1_789_000_000))
+        )
+
+        XCTAssertEqual(snapshot.badgeCount, 0)
+        XCTAssertTrue(snapshot.records.isEmpty)
+        XCTAssertEqual(snapshot.emptyStateTitle, "Nothing is waiting on you.")
+        XCTAssertEqual(snapshot.delegationEmptyStateTitle, "No delegation requests")
+        XCTAssertEqual(
+            snapshot.metrics.map(\.value),
+            ["0", "0", "0", "0"]
+        )
+    }
+
+    func testWaitingOnCaptain404ReturnsCleanZeroState() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        TestURLProtocol.response = { request in
+            XCTAssertEqual(request.httpMethod, "GET")
+            XCTAssertEqual(request.url?.path, "/api/v1/control-room/waiting-on-captain")
+            return (404, Data(#"{"detail":"not found"}"#.utf8))
+        }
+        defer { TestURLProtocol.response = nil }
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+
+        let snapshot = try await service.snapshot(
+            for: .waitingOnCaptain,
+            workControl: nil
+        )
+
+        XCTAssertEqual(snapshot.emptyStateTitle, "Nothing is waiting on you.")
+        XCTAssertEqual(snapshot.badgeCount, 0)
     }
 
     func testConsoleWorkSeparatesPortfolioFromAgentQueue() {
@@ -1457,6 +1535,67 @@ final class OrcaMacModelTests: XCTestCase {
     }
 
     private static let workbenchHostJSON = #"{"host_id":"shaka-mac","capability_id":"engineering.workspace","state":"attested","ready":true,"reason":"fresh","observed_at":"2026-08-18T04:00:00Z","expires_at":null,"evidence_refs":["attestation-evidence://shaka-mac/canary"],"policy_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}"#
+
+    // Fixture mirrors SPEC-WAITING-ON-TONY's WaitingOnCaptainResponse and
+    // WaitingOnCaptainItem shape exactly, including null card-context fields.
+    private static let waitingOnCaptainFixtureJSON = #"""
+    {
+      "generated_at": "2026-09-19T12:00:00Z",
+      "source": "orca.waiting-on-captain.v1",
+      "counts": {
+        "approvals": 1,
+        "tickets": 1,
+        "delegation_requests": 0,
+        "stale": 1
+      },
+      "items": [
+        {
+          "id": "ticket:ticket-1",
+          "kind": "ticket",
+          "title": "Choose the release window",
+          "summary": "Tony to decide the release window.",
+          "authority": "tony",
+          "agent_slug": "maui",
+          "occurred_at": "2026-09-18T05:00:00Z",
+          "age_hours": 31.0,
+          "stale_after_hours": null,
+          "is_stale": true,
+          "gate_severity": 3,
+          "endpoint": "/api/v1/tickets/ticket-1",
+          "decision_endpoint": null,
+          "approval_id": null,
+          "ticket_id": "ticket-1",
+          "ticket_title": "Choose the release window",
+          "ticket_status": "blocked",
+          "approval_gate": null,
+          "reason": "Captain input is required.",
+          "requested_by": "maui"
+        },
+        {
+          "id": "approval:approval-1",
+          "kind": "approval",
+          "title": "Approve governed release",
+          "summary": "Release approval is ready for Captain review.",
+          "authority": "tony",
+          "agent_slug": "coral",
+          "occurred_at": "2026-09-19T08:00:00Z",
+          "age_hours": 4.0,
+          "stale_after_hours": 24,
+          "is_stale": false,
+          "gate_severity": 2,
+          "endpoint": "/api/v1/approvals/approval-1",
+          "decision_endpoint": "/api/v1/tickets/ticket-2/approvals/approval-1",
+          "approval_id": "approval-1",
+          "ticket_id": "ticket-2",
+          "ticket_title": "Ship Console release",
+          "ticket_status": "in_review",
+          "approval_gate": "release",
+          "reason": "Governed release requires Captain authority.",
+          "requested_by": "coral"
+        }
+      ]
+    }
+    """#
 
     private static let workbenchContractJSON = "{\"schema\":\"orca.engineering-workbench.v1\",\"enabled\":true,\"mode\":\"active\",\"host\":\(workbenchHostJSON),\"worker_lane\":\"engineering-host\",\"policy_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"roots\":[{\"id\":\"pod-client\",\"label\":\"Pod and Console\",\"description\":\"Native source\",\"access\":\"read_test\",\"source_mutation\":false}],\"actions\":[{\"id\":\"git.status\",\"label\":\"Git Status\",\"kind\":\"diff\",\"requires_approval\":false,\"mutates_source\":false,\"default_timeout_seconds\":30,\"allowed_root_ids\":[\"pod-client\"],\"available\":true,\"blocked_reasons\":[]}],\"lifecycle\":[\"request.persisted\"],\"guarantees\":[\"AgentRun first\"]}"
 

@@ -94,6 +94,7 @@ actor OrcaConsoleService {
         workControl: Components.Schemas.ChatRuntimeWorkControlBundleRead?
     ) async throws -> ConsoleSectionSnapshot {
         switch section {
+        case .waitingOnCaptain: return try await waitingOnCaptainSnapshot()
         case .overview: return try await overviewSnapshot()
         case .conversations: return .empty(.conversations)
         case .work:
@@ -106,6 +107,19 @@ actor OrcaConsoleService {
         case .lab: return try await labSnapshot()
         case .runtime: return try await runtimeSnapshot()
         case .maker: return try await makerSnapshot()
+        }
+    }
+
+    private func waitingOnCaptainSnapshot() async throws -> ConsoleSectionSnapshot {
+        do {
+            let response: WaitingOnCaptainResponse = try await requestJSON(
+                method: "GET",
+                path: "/api/v1/control-room/waiting-on-captain"
+            )
+            return .waitingOnCaptain(response)
+        } catch let error as OrcaConsoleServiceError {
+            guard case .httpStatus(404, _) = error else { throw error }
+            return .waitingOnCaptain(.zero())
         }
     }
 

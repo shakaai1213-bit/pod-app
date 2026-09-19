@@ -31,7 +31,12 @@ struct AgentSidebarView: View {
                         Button {
                             model.selectSection(section)
                         } label: {
-                            ConsoleNavigationRow(section: section)
+                            ConsoleNavigationRow(
+                                section: section,
+                                badgeCount: section == .waitingOnCaptain
+                                    ? model.sectionSnapshots[.waitingOnCaptain]?.badgeCount ?? 0
+                                    : 0
+                            )
                         }
                         .buttonStyle(.plain)
                         .listRowBackground(
@@ -91,6 +96,7 @@ struct AgentSidebarView: View {
 
 private struct ConsoleNavigationRow: View {
     let section: ConsoleSection
+    let badgeCount: Int
 
     var body: some View {
         HStack(spacing: 10) {
@@ -113,6 +119,18 @@ private struct ConsoleNavigationRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+            }
+
+            Spacer(minLength: 4)
+
+            if badgeCount > 0 {
+                Text("\(badgeCount)")
+                    .font(.caption2.weight(.bold).monospacedDigit())
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.orcaCoral, in: Capsule())
+                    .accessibilityLabel("\(badgeCount) items waiting")
             }
         }
         .frame(height: 36)
