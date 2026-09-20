@@ -9,6 +9,9 @@ public struct OrcaWorkControlProjection: Hashable, Sendable {
         case approvalAttention = "Approval Attention"
         case protected = "Protected"
         case historical = "Historical"
+        case decisionsOnTony = "Decisions On Tony"
+        case ticketsOnTony = "Tickets On Tony"
+        case delegationRequests = "Delegation Requests"
     }
 
     public struct Item: Identifiable, Hashable, Sendable {
@@ -25,6 +28,38 @@ public struct OrcaWorkControlProjection: Hashable, Sendable {
         public let stale: Bool
         public let updatedAt: Date
         public let pendingApprovalIDs: [String]
+        public var desiredOutcome: String? = nil
+        public var needsScope: Bool = false
+
+        public init(
+            id: String,
+            kind: String,
+            title: String,
+            status: String,
+            priority: String,
+            approvalState: String,
+            reason: String,
+            blockedOn: String?,
+            waitingOn: String?,
+            executionEligible: Bool,
+            stale: Bool,
+            updatedAt: Date,
+            pendingApprovalIDs: [String]
+        ) {
+            self.id = id
+            self.kind = kind
+            self.title = title
+            self.status = status
+            self.priority = priority
+            self.approvalState = approvalState
+            self.reason = reason
+            self.blockedOn = blockedOn
+            self.waitingOn = waitingOn
+            self.executionEligible = executionEligible
+            self.stale = stale
+            self.updatedAt = updatedAt
+            self.pendingApprovalIDs = pendingApprovalIDs
+        }
     }
 
     public struct Approval: Identifiable, Hashable, Sendable {
@@ -48,6 +83,52 @@ public struct OrcaWorkControlProjection: Hashable, Sendable {
         public let approvalGate: String?
         public let ticketReason: String?
         public let requestedBy: String?
+        public var desiredOutcome: String? = nil
+        public var needsScope: Bool = false
+
+        public init(
+            id: String,
+            actionType: String,
+            authority: String,
+            status: String,
+            reason: String,
+            targetType: String?,
+            targetReference: String?,
+            linkedTicketIDs: [String],
+            linkedTaskIDs: [String],
+            decisionEndpoint: String?,
+            viewerAuthorized: Bool,
+            resolutionEnabled: Bool,
+            selfApprovalProhibited: Bool,
+            stale: Bool,
+            createdAt: Date,
+            ticketTitle: String?,
+            ticketStatus: String?,
+            approvalGate: String?,
+            ticketReason: String?,
+            requestedBy: String?
+        ) {
+            self.id = id
+            self.actionType = actionType
+            self.authority = authority
+            self.status = status
+            self.reason = reason
+            self.targetType = targetType
+            self.targetReference = targetReference
+            self.linkedTicketIDs = linkedTicketIDs
+            self.linkedTaskIDs = linkedTaskIDs
+            self.decisionEndpoint = decisionEndpoint
+            self.viewerAuthorized = viewerAuthorized
+            self.resolutionEnabled = resolutionEnabled
+            self.selfApprovalProhibited = selfApprovalProhibited
+            self.stale = stale
+            self.createdAt = createdAt
+            self.ticketTitle = ticketTitle
+            self.ticketStatus = ticketStatus
+            self.approvalGate = approvalGate
+            self.ticketReason = ticketReason
+            self.requestedBy = requestedBy
+        }
     }
 
     public struct Counts: Hashable, Sendable {
@@ -111,14 +192,178 @@ public struct OrcaWorkControlProjection: Hashable, Sendable {
         resourceEndpoints = bundle.resources.endpoints?.additionalProperties ?? [:]
     }
 
+    public struct CaptainLensItem: Decodable, Hashable, Sendable {
+        public let id: String
+        public let kind: String
+        public let title: String
+        public let summary: String
+        public let authority: String
+        public let agentSlug: String?
+        public let occurredAt: Date
+        public let ageHours: Double
+        public let staleAfterHours: Int?
+        public let isStale: Bool
+        public let gateSeverity: Int
+        public let endpoint: String
+        public let decisionEndpoint: String?
+        public let approvalId: String?
+        public let ticketId: String?
+        public let ticketTitle: String?
+        public let ticketStatus: String?
+        public let desiredOutcome: String?
+        public let needsScope: Bool
+        public let approvalGate: String?
+        public let reason: String?
+        public let requestedBy: String?
+
+        enum CodingKeys: String, CodingKey {
+            case id, kind, title, summary, authority, endpoint, reason
+            case agentSlug = "agent_slug"
+            case occurredAt = "occurred_at"
+            case ageHours = "age_hours"
+            case staleAfterHours = "stale_after_hours"
+            case isStale = "is_stale"
+            case gateSeverity = "gate_severity"
+            case decisionEndpoint = "decision_endpoint"
+            case approvalId = "approval_id"
+            case ticketId = "ticket_id"
+            case ticketTitle = "ticket_title"
+            case ticketStatus = "ticket_status"
+            case desiredOutcome = "desired_outcome"
+            case needsScope = "needs_scope"
+            case approvalGate = "approval_gate"
+            case requestedBy = "requested_by"
+        }
+    }
+
+    public struct CaptainLensGroup: Decodable, Hashable, Sendable {
+        public let name: String
+        public let items: [CaptainLensItem]
+    }
+
+    public struct CaptainLensResponse: Decodable, Hashable, Sendable {
+        public let contractVersion: String
+        public let generatedAt: Date
+        public let groups: [CaptainLensGroup]
+        public let counts: [String: Int]
+
+        enum CodingKeys: String, CodingKey {
+            case groups, counts
+            case contractVersion = "contract_version"
+            case generatedAt = "generated_at"
+        }
+    }
+
+    public init(captainLens response: CaptainLensResponse) {
+        agentID = "org"
+        agentKey = "org"
+        generatedAt = response.generatedAt
+        bundleSHA256 = ""
+        configurationSHA256 = ""
+        runtimeManifestRevision = ""
+        contractVersion = response.contractVersion
+        sourceContract = response.contractVersion
+        var groupedItems: [Group: [Item]] = [:]
+        for group in response.groups {
+            guard let key = Group(rawValue: group.name) else { continue }
+            groupedItems[key] = group.items.map { lensItem in
+                var item = Item(
+                    id: lensItem.id,
+                    kind: lensItem.kind,
+                    title: lensItem.title,
+                    status: lensItem.ticketStatus ?? (lensItem.isStale ? "stale" : "waiting"),
+                    priority: "severity \(lensItem.gateSeverity)",
+                    approvalState: "pending",
+                    reason: lensItem.summary,
+                    blockedOn: nil,
+                    waitingOn: lensItem.agentSlug,
+                    executionEligible: false,
+                    stale: lensItem.isStale,
+                    updatedAt: lensItem.occurredAt,
+                    pendingApprovalIDs: lensItem.approvalId.map { [$0] } ?? []
+                )
+                item.desiredOutcome = lensItem.desiredOutcome
+                item.needsScope = lensItem.needsScope
+                return item
+            }
+        }
+        let decisions = groupedItems[.decisionsOnTony] ?? []
+        let tickets = groupedItems[.ticketsOnTony] ?? []
+        let delegations = groupedItems[.delegationRequests] ?? []
+        let totalStale = [decisions, tickets, delegations].flatMap { $0 }.filter(\.stale).count
+        counts = Counts(
+            assigned: 0,
+            readyNow: 0,
+            waitingOnOthers: tickets.count,
+            approvals: decisions.count,
+            approvalInventory: decisions.count,
+            protected: 0,
+            historical: 0,
+            stale: totalStale,
+            plannerItems: 0,
+            projectTasks: 0,
+            activeWorkerRuns: 0,
+            workerReviewRuns: 0,
+            researchActiveRequests: 0,
+            researchAwaitingReview: 0,
+            fishProducing: 0,
+            fishBlocked: 0,
+            toolsDeclared: 0
+        )
+        readyNow = []
+        assigned = []
+        waitingOnOthers = tickets
+        let decisionByID = Dictionary(
+            uniqueKeysWithValues: response.groups
+                .first(where: { $0.name == Group.decisionsOnTony.rawValue })?.items
+                .map { ($0.id, $0) } ?? []
+        )
+        approvals = decisions.compactMap { item -> Approval? in
+            guard let approvalID = item.pendingApprovalIDs.first else { return nil }
+            let lens = decisionByID[item.id]
+            let ticketRef = lens?.ticketId
+            var approval = Approval(
+                id: approvalID,
+                actionType: item.kind,
+                authority: lens?.authority ?? "tony",
+                status: "pending",
+                reason: lens?.reason ?? item.reason,
+                targetType: ticketRef == nil ? nil : "ticket",
+                targetReference: ticketRef,
+                linkedTicketIDs: ticketRef.map { [$0] } ?? [],
+                linkedTaskIDs: [],
+                decisionEndpoint: lens?.decisionEndpoint,
+                viewerAuthorized: false,
+                resolutionEnabled: lens?.decisionEndpoint != nil,
+                selfApprovalProhibited: true,
+                stale: item.stale,
+                createdAt: item.updatedAt,
+                ticketTitle: lens?.ticketTitle ?? item.title,
+                ticketStatus: lens?.ticketStatus ?? item.status,
+                approvalGate: lens?.approvalGate,
+                ticketReason: lens?.reason ?? item.reason,
+                requestedBy: lens?.requestedBy
+            )
+            approval.desiredOutcome = item.desiredOutcome
+            approval.needsScope = item.needsScope
+            return approval
+        }
+        approvalInventory = []
+        approvalAttention = []
+        protected = []
+        historical = delegations
+        resourceEndpoints = [:]
+    }
+
     public func items(in group: Group) -> [Item] {
         switch group {
         case .readyNow: readyNow
         case .assigned: assigned
         case .waitingOnOthers: waitingOnOthers
-        case .approvals, .approvalAttention: []
+        case .approvals, .approvalAttention, .decisionsOnTony: []
         case .protected: protected
-        case .historical: historical
+        case .historical, .delegationRequests: historical
+        case .ticketsOnTony: waitingOnOthers
         }
     }
 }

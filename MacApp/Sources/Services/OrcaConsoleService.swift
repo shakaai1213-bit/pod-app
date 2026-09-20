@@ -94,12 +94,15 @@ actor OrcaConsoleService {
         workControl: Components.Schemas.ChatRuntimeWorkControlBundleRead?
     ) async throws -> ConsoleSectionSnapshot {
         switch section {
-        case .waitingOnCaptain: return try await waitingOnCaptainSnapshot()
+        case .waitingOnCaptain:
+            return try await captainWorkLensSnapshot()
         case .overview: return try await overviewSnapshot()
         case .conversations: return .empty(.conversations)
         case .work:
-            guard let workControl else { throw OrcaConsoleServiceError.invalidResponse }
-            return .workControl(OrcaWorkControlProjection(workControl))
+            if let workControl {
+                return .workControl(OrcaWorkControlProjection(workControl))
+            }
+            return try await captainWorkLensSnapshot()
         case .workbench: return .empty(.workbench)
         case .fund: return try await fundSnapshot()
         case .crew: return try await crewSnapshot()
@@ -110,16 +113,16 @@ actor OrcaConsoleService {
         }
     }
 
-    private func waitingOnCaptainSnapshot() async throws -> ConsoleSectionSnapshot {
+    private func captainWorkLensSnapshot() async throws -> ConsoleSectionSnapshot {
         do {
             let response: WaitingOnCaptainResponse = try await requestJSON(
                 method: "GET",
                 path: "/api/v1/control-room/waiting-on-captain"
             )
-            return .waitingOnCaptain(response)
+            return .captainWorkLens(response)
         } catch let error as OrcaConsoleServiceError {
             guard case .httpStatus(404, _) = error else { throw error }
-            return .waitingOnCaptain(.zero())
+            return .captainWorkLens(.zero())
         }
     }
 

@@ -213,7 +213,8 @@ final class OrcaMacModel {
     }
 
     func toggleWorkMetricFilter(_ metricID: String) {
-        guard selectedSection == .work, workMode == .agentWork else { return }
+        guard selectedSection == .work || selectedSection == .waitingOnCaptain,
+              workMode == .agentWork || workMode == .captain else { return }
         guard let filter = ConsoleWorkMetricFilter.filter(forMetricID: metricID) else { return }
         workMetricFilter = workMetricFilter == filter ? nil : filter
         clearStaleApprovalOutcome()
@@ -457,6 +458,11 @@ final class OrcaMacModel {
         selectedSection = section
         selectedRecordID = nil
         workMetricFilter = nil
+        if section == .waitingOnCaptain {
+            workMode = .captain
+        } else if section == .work, workMode == .captain {
+            workMode = .portfolio
+        }
         defaults.set(section.rawValue, forKey: "orca.mac.selected-section")
         if refreshTask != nil {
             beginRefreshLoop()
@@ -507,7 +513,7 @@ final class OrcaMacModel {
         isLoadingSection = true
         do {
             let bundle: Components.Schemas.ChatRuntimeWorkControlBundleRead?
-            if section == .work {
+            if section == .work, workMode == .agentWork {
                 guard let service else { throw OrcaConsoleServiceError.invalidResponse }
                 bundle = try await service.workControl(agentKey: selectedAgentID)
                 workControl = bundle.map(OrcaWorkControlProjection.init)
