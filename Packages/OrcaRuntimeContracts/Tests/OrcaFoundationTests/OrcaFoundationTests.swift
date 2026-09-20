@@ -295,6 +295,86 @@ final class OrcaFoundationTests: XCTestCase {
         XCTAssertTrue(contract.host.ready)
     }
 
+    func testWorkControlGroupRawValuesStayStableWithCaptainLensCases() {
+        XCTAssertEqual(OrcaWorkControlProjection.Group.readyNow.rawValue, "Ready Now")
+        XCTAssertEqual(OrcaWorkControlProjection.Group.assigned.rawValue, "Assigned")
+        XCTAssertEqual(OrcaWorkControlProjection.Group.waitingOnOthers.rawValue, "Waiting On Others")
+        XCTAssertEqual(OrcaWorkControlProjection.Group.approvals.rawValue, "Decision Queue")
+        XCTAssertEqual(OrcaWorkControlProjection.Group.approvalAttention.rawValue, "Approval Attention")
+        XCTAssertEqual(OrcaWorkControlProjection.Group.protected.rawValue, "Protected")
+        XCTAssertEqual(OrcaWorkControlProjection.Group.historical.rawValue, "Historical")
+        XCTAssertEqual(OrcaWorkControlProjection.Group.decisionsOnTony.rawValue, "Decisions On Tony")
+        XCTAssertEqual(OrcaWorkControlProjection.Group.ticketsOnTony.rawValue, "Tickets On Tony")
+        XCTAssertEqual(OrcaWorkControlProjection.Group.delegationRequests.rawValue, "Delegation Requests")
+    }
+
+    func testCaptainLensProjectionDecodesGroupedContract() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let response = try decoder.decode(
+            OrcaWorkControlProjection.CaptainLensResponse.self,
+            from: Data(#"""
+            {
+              "contract_version": "orca.captain-work-lens.v1",
+              "generated_at": "2026-09-20T12:00:00Z",
+              "groups": [
+                {"name": "Decisions On Tony", "items": [
+                  {"id": "approval:a-1", "kind": "approval", "title": "Approve release",
+                   "summary": "Release approval pending.", "authority": "tony",
+                   "agent_slug": "coral", "occurred_at": "2026-09-20T08:00:00Z",
+                   "age_hours": 4.0, "stale_after_hours": 24, "is_stale": false,
+                   "gate_severity": 2, "endpoint": "/api/v1/approvals/a-1",
+                   "decision_endpoint": "/api/v1/tickets/t-2/approvals/a-1",
+                   "approval_id": "a-1", "ticket_id": "t-2",
+                   "ticket_title": "Ship release", "ticket_status": "in_review",
+                   "desired_outcome": null, "needs_scope": false,
+                   "approval_gate": "release", "reason": "Captain authority.",
+                   "requested_by": "coral"}
+                ]},
+                {"name": "Tickets On Tony", "items": [
+                  {"id": "ticket:t-1", "kind": "ticket", "title": "Pick window",
+                   "summary": "Tony decides window.", "authority": "tony",
+                   "agent_slug": "maui", "occurred_at": "2026-09-19T05:00:00Z",
+                   "age_hours": 31.0, "stale_after_hours": null, "is_stale": true,
+                   "gate_severity": 3, "endpoint": "/api/v1/tickets/t-1",
+                   "decision_endpoint": null, "approval_id": null, "ticket_id": "t-1",
+                   "ticket_title": "Pick window", "ticket_status": "blocked",
+                   "desired_outcome": "Window chosen.", "needs_scope": true,
+                   "approval_gate": null, "reason": "Captain input required.",
+                   "requested_by": "maui"}
+                ]},
+                {"name": "Delegation Requests", "items": []}
+              ],
+              "counts": {"Decisions On Tony": 1, "Tickets On Tony": 1, "Delegation Requests": 0}
+            }
+            """#.utf8)
+        )
+
+        XCTAssertEqual(response.contractVersion, "orca.captain-work-lens.v1")
+        XCTAssertEqual(response.groups.map(\.name), ["Decisions On Tony", "Tickets On Tony", "Delegation Requests"])
+        XCTAssertEqual(response.counts["Tickets On Tony"], 1)
+
+        let projection = OrcaWorkControlProjection(captainLens: response)
+        XCTAssertEqual(projection.contractVersion, "orca.captain-work-lens.v1")
+        XCTAssertEqual(projection.counts.approvals, 1)
+        XCTAssertEqual(projection.counts.waitingOnOthers, 1)
+        XCTAssertEqual(projection.counts.stale, 1)
+
+        let decisions = projection.approvals
+        XCTAssertEqual(decisions.map(\.id), ["a-1"])
+        XCTAssertEqual(decisions.first?.authority, "tony")
+        XCTAssertEqual(decisions.first?.linkedTicketIDs, ["t-2"])
+
+        let tickets = projection.items(in: .ticketsOnTony)
+        XCTAssertEqual(tickets.map(\.id), ["ticket:t-1"])
+        XCTAssertTrue(tickets.first?.needsScope ?? false)
+        XCTAssertEqual(tickets.first?.desiredOutcome, "Window chosen.")
+        XCTAssertTrue(tickets.first?.stale ?? false)
+
+        XCTAssertTrue(projection.items(in: .delegationRequests).isEmpty)
+        XCTAssertTrue(projection.items(in: .decisionsOnTony).isEmpty)
+    }
+
     private func message(
         _ id: String,
         _ role: OrcaTranscriptRole,

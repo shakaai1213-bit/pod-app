@@ -6,9 +6,16 @@ import OrcaRuntimeContracts
 enum ConsoleWorkMode: String, CaseIterable, Identifiable {
     case portfolio
     case agentWork
+    case captain
 
     var id: String { rawValue }
-    var title: String { self == .portfolio ? "Portfolio" : "Agent Work" }
+    var title: String {
+        switch self {
+        case .portfolio: "Portfolio"
+        case .agentWork: "Agent Work"
+        case .captain: "On Tony"
+        }
+    }
 }
 
 struct ConsoleMetric: Identifiable, Equatable, Sendable {
@@ -25,6 +32,10 @@ enum ConsoleWorkMetricFilter: String, CaseIterable, Identifiable, Sendable {
     case approvals
     case protected
     case historical
+    case decisionsOnTony
+    case ticketsOnTony
+    case delegationRequests
+    case needsScope
 
     var id: String { rawValue }
 
@@ -39,6 +50,14 @@ enum ConsoleWorkMetricFilter: String, CaseIterable, Identifiable, Sendable {
             ]
         case .protected: [OrcaWorkControlProjection.Group.protected.rawValue]
         case .historical: [OrcaWorkControlProjection.Group.historical.rawValue]
+        case .decisionsOnTony: [OrcaWorkControlProjection.Group.decisionsOnTony.rawValue]
+        case .ticketsOnTony: [OrcaWorkControlProjection.Group.ticketsOnTony.rawValue]
+        case .delegationRequests: [OrcaWorkControlProjection.Group.delegationRequests.rawValue]
+        case .needsScope: [
+                OrcaWorkControlProjection.Group.decisionsOnTony.rawValue,
+                OrcaWorkControlProjection.Group.ticketsOnTony.rawValue,
+                OrcaWorkControlProjection.Group.delegationRequests.rawValue,
+            ]
         }
     }
 
@@ -50,11 +69,20 @@ enum ConsoleWorkMetricFilter: String, CaseIterable, Identifiable, Sendable {
         case .approvals: "No approvals"
         case .protected: "No protected records"
         case .historical: "No historical records"
+        case .decisionsOnTony: "No decisions waiting on Tony"
+        case .ticketsOnTony: "No tickets waiting on Tony"
+        case .delegationRequests: "No delegation requests"
+        case .needsScope: "Nothing is missing scope"
         }
     }
 
     static func filter(forMetricID id: String) -> ConsoleWorkMetricFilter? {
         ConsoleWorkMetricFilter(rawValue: id)
+    }
+
+    func matches(_ record: ConsoleRecord) -> Bool {
+        if self == .needsScope { return record.needsScope }
+        return groups.contains(record.group)
     }
 }
 
@@ -73,6 +101,8 @@ struct ConsoleRecord: Identifiable, Equatable, Sendable {
     let fields: [ConsoleField]
     let approval: ConsoleApprovalRecord?
     let ticket: ConsoleWaitingTicketRecord?
+    let desiredOutcome: String?
+    let needsScope: Bool
 
     init(
         id: String,
@@ -82,7 +112,9 @@ struct ConsoleRecord: Identifiable, Equatable, Sendable {
         group: String,
         fields: [ConsoleField],
         approval: ConsoleApprovalRecord?,
-        ticket: ConsoleWaitingTicketRecord? = nil
+        ticket: ConsoleWaitingTicketRecord? = nil,
+        desiredOutcome: String? = nil,
+        needsScope: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -92,6 +124,8 @@ struct ConsoleRecord: Identifiable, Equatable, Sendable {
         self.fields = fields
         self.approval = approval
         self.ticket = ticket
+        self.desiredOutcome = desiredOutcome
+        self.needsScope = needsScope
     }
 }
 
@@ -273,6 +307,78 @@ struct WaitingOnCaptainCounts: Decodable, Equatable, Sendable {
     )
 }
 
+struct CaptainWorkLensGroup: Decodable, Equatable, Sendable {
+    let name: String
+    let items: [WaitingOnCaptainItem]
+}
+
+struct WaitingOnCaptainResponse: Decodable, Equatable, Sendable {
+    let generatedAt: Date
+    let source: String
+    let counts: WaitingOnCaptainCounts
+    let items: [WaitingOnCaptainItem]
+    let contractVersion: String?
+    let groups: [CaptainWorkLensGroup]?
+    let lensCounts: [String: Int]?
+
+    enum CodingKeys: String, CodingKey {
+        case source, counts, items
+        case generatedAt = "generated_at"
+        case contractVersion = "contract_version"
+        case groups
+    }
+
+    init(
+        generatedAt: Date,
+        source: String,
+        counts: WaitingOnCaptainCounts,
+        items: [WaitingOnCaptainItem],
+        contractVersion: String? = nil,
+        groups: [CaptainWorkLensGroup]? = nil,
+        lensCounts: [String: Int]? = nil
+    ) {
+        self.generatedAt = generatedAt
+        self.source = source
+        self.counts = counts
+        self.items = items
+        self.contractVersion = contractVersion
+        self.groups = groups
+        self.lensCounts = lensCounts
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        generatedAt = try container.decode(Date.self, forKey: .generatedAt)
+        source = try container.decodeIfPresent(String.self, forKey: .source)
+            ?? "orca.waiting-on-captain.v1"
+        items = try container.decodeIfPresent([WaitingOnCaptainItem].self, forKey: .items) ?? []
+        contractVersion = try container.decodeIfPresent(String.self, forKey: .contractVersion)
+        groups = try container.decodeIfPresent([CaptainWorkLensGroup].self, forKey: .groups)
+        if let keyedCounts = try? container.decode(WaitingOnCaptainCounts.self, forKey: .counts) {
+            counts = keyedCounts
+            lensCounts = nil
+        } else {
+            let byGroup = try container.decodeIfPresent([String: Int].self, forKey: .counts) ?? [:]
+            lensCounts = byGroup
+            counts = WaitingOnCaptainCounts(
+                approvals: byGroup["Decisions On Tony"] ?? 0,
+                tickets: byGroup["Tickets On Tony"] ?? 0,
+                delegationRequests: byGroup["Delegation Requests"] ?? 0,
+                stale: (groups ?? []).flatMap(\.items).filter(\.isStale).count
+            )
+        }
+    }
+
+    static func zero(at date: Date = Date()) -> WaitingOnCaptainResponse {
+        WaitingOnCaptainResponse(
+            generatedAt: date,
+            source: "orca.waiting-on-captain.v1",
+            counts: .zero,
+            items: []
+        )
+    }
+}
+
 struct WaitingOnCaptainItem: Decodable, Equatable, Sendable {
     let id: String
     let kind: String
@@ -291,6 +397,8 @@ struct WaitingOnCaptainItem: Decodable, Equatable, Sendable {
     let ticketId: String?
     let ticketTitle: String?
     let ticketStatus: String?
+    let desiredOutcome: String?
+    let needsScope: Bool
     let approvalGate: String?
     let reason: String?
     let requestedBy: String?
@@ -313,37 +421,45 @@ struct WaitingOnCaptainItem: Decodable, Equatable, Sendable {
         case ticketId = "ticket_id"
         case ticketTitle = "ticket_title"
         case ticketStatus = "ticket_status"
+        case desiredOutcome = "desired_outcome"
+        case needsScope = "needs_scope"
         case approvalGate = "approval_gate"
         case requestedBy = "requested_by"
         case blockedOn = "blocked_on"
         case approvalState = "approval_state"
     }
-}
 
-struct WaitingOnCaptainResponse: Decodable, Equatable, Sendable {
-    let generatedAt: Date
-    let source: String
-    let counts: WaitingOnCaptainCounts
-    let items: [WaitingOnCaptainItem]
-
-    enum CodingKeys: String, CodingKey {
-        case source, counts, items
-        case generatedAt = "generated_at"
-    }
-
-    static func zero(at date: Date = Date()) -> WaitingOnCaptainResponse {
-        WaitingOnCaptainResponse(
-            generatedAt: date,
-            source: "orca.waiting-on-captain.v1",
-            counts: .zero,
-            items: []
-        )
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        kind = try container.decode(String.self, forKey: .kind)
+        title = try container.decode(String.self, forKey: .title)
+        summary = try container.decode(String.self, forKey: .summary)
+        authority = try container.decode(String.self, forKey: .authority)
+        agentSlug = try container.decodeIfPresent(String.self, forKey: .agentSlug)
+        occurredAt = try container.decode(Date.self, forKey: .occurredAt)
+        ageHours = try container.decode(Double.self, forKey: .ageHours)
+        staleAfterHours = try container.decodeIfPresent(Int.self, forKey: .staleAfterHours)
+        isStale = try container.decode(Bool.self, forKey: .isStale)
+        gateSeverity = try container.decode(Int.self, forKey: .gateSeverity)
+        endpoint = try container.decode(String.self, forKey: .endpoint)
+        decisionEndpoint = try container.decodeIfPresent(String.self, forKey: .decisionEndpoint)
+        approvalId = try container.decodeIfPresent(String.self, forKey: .approvalId)
+        ticketId = try container.decodeIfPresent(String.self, forKey: .ticketId)
+        ticketTitle = try container.decodeIfPresent(String.self, forKey: .ticketTitle)
+        ticketStatus = try container.decodeIfPresent(String.self, forKey: .ticketStatus)
+        desiredOutcome = try container.decodeIfPresent(String.self, forKey: .desiredOutcome)
+        needsScope = try container.decodeIfPresent(Bool.self, forKey: .needsScope) ?? false
+        approvalGate = try container.decodeIfPresent(String.self, forKey: .approvalGate)
+        reason = try container.decodeIfPresent(String.self, forKey: .reason)
+        requestedBy = try container.decodeIfPresent(String.self, forKey: .requestedBy)
+        blockedOn = try container.decodeIfPresent(String.self, forKey: .blockedOn)
+        approvalState = try container.decodeIfPresent(String.self, forKey: .approvalState)
     }
 }
 
 struct ConsoleSectionSnapshot: Equatable, Sendable {
     static let waitingOnCaptainEmptyTitle = "Nothing is waiting on you."
-    static let delegationEmptyTitle = "No delegation requests"
 
     let section: ConsoleSection
     let metrics: [ConsoleMetric]
@@ -362,54 +478,69 @@ struct ConsoleSectionSnapshot: Equatable, Sendable {
     }
 
     func records(matching filter: ConsoleWorkMetricFilter) -> [ConsoleRecord] {
-        records.filter { filter.groups.contains($0.group) }
+        records.filter { filter.matches($0) }
     }
 
     var badgeCount: Int {
-        guard section == .waitingOnCaptain else { return 0 }
-        let badgeMetricIDs = Set(["approvals", "tickets", "delegations"])
+        let badgeMetricIDs = Set(["decisionsOnTony", "ticketsOnTony", "delegationRequests"])
         return metrics
             .filter { badgeMetricIDs.contains($0.id) }
             .compactMap { Int($0.value) }
             .reduce(0, +)
     }
 
-    var emptyStateTitle: String? {
-        section == .waitingOnCaptain && records.isEmpty
-            ? Self.waitingOnCaptainEmptyTitle
-            : nil
-    }
-
-    var delegationEmptyStateTitle: String? {
-        guard section == .waitingOnCaptain,
-              !records.contains(where: { $0.group == "Delegation Requests" }) else { return nil }
-        return Self.delegationEmptyTitle
-    }
-
-    static func waitingOnCaptain(_ response: WaitingOnCaptainResponse) -> ConsoleSectionSnapshot {
-        ConsoleSectionSnapshot(
-            section: .waitingOnCaptain,
-            metrics: [
-                ConsoleMetric(id: "approvals", label: "Approvals", value: "\(response.counts.approvals)", status: response.counts.approvals > 0 ? "pending" : "ok"),
-                ConsoleMetric(id: "tickets", label: "Tickets", value: "\(response.counts.tickets)", status: response.counts.tickets > 0 ? "attention" : "ok"),
-                ConsoleMetric(id: "delegations", label: "Delegations", value: "\(response.counts.delegationRequests)", status: response.counts.delegationRequests > 0 ? "attention" : "ok"),
-                ConsoleMetric(id: "stale", label: "Stale", value: "\(response.counts.stale)", status: response.counts.stale > 0 ? "attention" : "ok"),
+    static func captainWorkLens(_ response: WaitingOnCaptainResponse) -> ConsoleSectionSnapshot {
+        let groupedRecords: [String: [ConsoleRecord]]
+        let orderedGroups: [String]
+        if let groups = response.groups {
+            orderedGroups = groups.map(\.name)
+            var mapped: [String: [ConsoleRecord]] = [:]
+            for group in groups {
+                mapped[group.name] = group.items.map { captainLensRecord($0, group: group.name) }
+            }
+            groupedRecords = mapped
+        } else {
+            orderedGroups = [
+                OrcaWorkControlProjection.Group.decisionsOnTony.rawValue,
+                OrcaWorkControlProjection.Group.ticketsOnTony.rawValue,
+                OrcaWorkControlProjection.Group.delegationRequests.rawValue,
+            ]
+            var buckets: [String: [ConsoleRecord]] = [:]
+            for item in response.items {
+                let group: String
+                switch item.kind {
+                case "approval": group = OrcaWorkControlProjection.Group.decisionsOnTony.rawValue
+                case "ticket": group = OrcaWorkControlProjection.Group.ticketsOnTony.rawValue
+                default: group = OrcaWorkControlProjection.Group.delegationRequests.rawValue
+                }
+                buckets[group, default: []].append(captainLensRecord(item, group: group))
+            }
+            groupedRecords = buckets
+        }
+        let needsScopeCount = groupedRecords.values.flatMap { $0 }.filter(\.needsScope).count
+        let metrics = [
+            ConsoleMetric(id: "decisionsOnTony", label: "Decisions", value: "\(response.counts.approvals)", status: response.counts.approvals > 0 ? "pending" : "ok"),
+            ConsoleMetric(id: "ticketsOnTony", label: "Tickets", value: "\(response.counts.tickets)", status: response.counts.tickets > 0 ? "attention" : "ok"),
+            ConsoleMetric(id: "delegationRequests", label: "Delegations", value: "\(response.counts.delegationRequests)", status: response.counts.delegationRequests > 0 ? "attention" : "ok"),
+            ConsoleMetric(id: "needsScope", label: "Needs Scope", value: "\(needsScopeCount)", status: needsScopeCount > 0 ? "attention" : "ok"),
+        ]
+        var records: [ConsoleRecord] = []
+        for group in orderedGroups {
+            records += groupedRecords[group] ?? []
+        }
+        return ConsoleSectionSnapshot(
+            section: .work,
+            metrics: metrics,
+            records: records,
+            sources: [
+                "/api/v1/control-room/waiting-on-captain",
+                response.contractVersion ?? response.source,
             ],
-            records: response.items.map(waitingOnCaptainRecord),
-            sources: ["/api/v1/control-room/waiting-on-captain", response.source],
             updatedAt: response.generatedAt
         )
     }
 
-    private static func waitingOnCaptainRecord(_ item: WaitingOnCaptainItem) -> ConsoleRecord {
-        let group: String
-        switch item.kind {
-        case "approval": group = "Approvals"
-        case "ticket": group = "Tickets"
-        case "delegation_request": group = "Delegation Requests"
-        default: group = item.kind.replacingOccurrences(of: "_", with: " ").capitalized
-        }
-
+    private static func captainLensRecord(_ item: WaitingOnCaptainItem, group: String) -> ConsoleRecord {
         let agent = item.agentSlug ?? "Unassigned"
         let gate = item.approvalGate ?? "severity \(item.gateSeverity)"
         let waiting = "waiting \(max(0, Int(item.ageHours.rounded(.down))))h"
@@ -433,6 +564,9 @@ struct ConsoleSectionSnapshot: Equatable, Sendable {
         }
         if let approvalState = item.approvalState {
             fields.append(ConsoleField(label: "Approval State", value: approvalState))
+        }
+        if let desiredOutcome = item.desiredOutcome, !desiredOutcome.isEmpty {
+            fields.append(ConsoleField(label: "Outcome", value: desiredOutcome))
         }
 
         let approval: ConsoleApprovalRecord?
@@ -483,7 +617,9 @@ struct ConsoleSectionSnapshot: Equatable, Sendable {
             group: group,
             fields: fields,
             approval: approval,
-            ticket: ticket
+            ticket: ticket,
+            desiredOutcome: item.desiredOutcome,
+            needsScope: item.needsScope
         )
     }
 

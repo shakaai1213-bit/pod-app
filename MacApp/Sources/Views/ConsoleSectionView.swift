@@ -39,7 +39,7 @@ struct ConsoleSectionView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            if section == .work {
+            if section == .work || section == .waitingOnCaptain {
                 Picker("Work view", selection: workModeSelection) {
                     ForEach(ConsoleWorkMode.allCases) { mode in
                         Text(mode.title).tag(mode)
@@ -47,7 +47,7 @@ struct ConsoleSectionView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
-                .frame(width: 210)
+                .frame(width: 270)
                 if model.workMode == .agentWork {
                     Picker("Agent", selection: workControlAgentSelection) {
                         ForEach(model.agents) { agent in
@@ -105,17 +105,18 @@ struct ConsoleSectionView: View {
                     filterBanner
                     Divider()
                 }
-                if section == .waitingOnCaptain {
-                    waitingOnCaptainRecords
-                } else {
-                    records
-                }
+                records
             }
         }
     }
 
+    private var isWorkFilterableView: Bool {
+        guard section == .work || section == .waitingOnCaptain else { return false }
+        return model.workMode == .agentWork || model.workMode == .captain
+    }
+
     private var metrics: some View {
-        let isWorkAgentView = section == .work && model.workMode == .agentWork
+        let isWorkAgentView = isWorkFilterableView
         return LazyVGrid(
             columns: [GridItem(.adaptive(minimum: 130, maximum: 210), spacing: 10)],
             alignment: .leading,
@@ -187,52 +188,6 @@ struct ConsoleSectionView: View {
 
     private var displayedRecords: [ConsoleRecord] {
         model.displayedWorkRecords
-    }
-
-    @ViewBuilder
-    private var waitingOnCaptainRecords: some View {
-        if displayedRecords.isEmpty && !model.isLoadingSection {
-            VStack(spacing: 0) {
-                ContentUnavailableView(
-                    model.selectedSnapshot.emptyStateTitle
-                        ?? ConsoleSectionSnapshot.waitingOnCaptainEmptyTitle,
-                    systemImage: "checkmark.circle"
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                Divider()
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("DELEGATION REQUESTS")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.secondary)
-                    Text(model.selectedSnapshot.delegationEmptyStateTitle
-                        ?? ConsoleSectionSnapshot.delegationEmptyTitle)
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
-                .background(Color(nsColor: .windowBackgroundColor))
-            }
-        } else {
-            List(selection: recordSelection) {
-                Section("Waiting") {
-                    ForEach(displayedRecords) { record in
-                        ConsoleRecordRow(record: record)
-                            .tag(record.id)
-                    }
-                }
-
-                if let delegationEmptyTitle = model.selectedSnapshot.delegationEmptyStateTitle {
-                    Section("Delegation Requests") {
-                        Text(delegationEmptyTitle)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .listStyle(.inset)
-        }
     }
 
     private var records: some View {
@@ -965,6 +920,7 @@ private struct ConsoleBoardDirectoryView: View {
 }
 
 private struct ConsoleRecordRow: View {
+    @Environment(OrcaMacModel.self) private var model
     let record: ConsoleRecord
 
     var body: some View {
@@ -978,6 +934,18 @@ private struct ConsoleRecordRow: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
+                }
+                if let outcome = record.desiredOutcome, !outcome.isEmpty {
+                    Text(outcome)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                if record.needsScope, model.workMode == .captain {
+                    Label("Needs Scope", systemImage: "doc.badge.gearshape")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.orange)
+                        .help("add outcome and acceptance criteria")
                 }
             }
             Spacer(minLength: 12)
