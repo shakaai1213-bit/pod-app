@@ -2340,6 +2340,15 @@ private actor StubRuntimeService: OrcaRuntimeServing {
     func runtimeTurn(turnID: String) async throws -> Components.Schemas.ChatRuntimeTurnRead {
         throw OrcaRuntimeClientError.httpStatus(404)
     }
+    func runtimeUpdates(
+        turnID: String,
+        persistedCursor: String?,
+        persistCursor: @escaping @Sendable (String) -> Void
+    ) -> AsyncThrowingStream<OrcaRuntimeReconciliationUpdate, Error> {
+        AsyncThrowingStream { continuation in
+            continuation.finish()
+        }
+    }
     func conversationMemory(conversationID: String) async throws -> Components.Schemas.ConversationMemoryRead {
         throw OrcaRuntimeClientError.invalidResponse("unused")
     }

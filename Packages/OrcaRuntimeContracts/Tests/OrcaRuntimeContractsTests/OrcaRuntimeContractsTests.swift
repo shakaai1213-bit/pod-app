@@ -523,7 +523,7 @@ func credentialRedirectsAreNeverFollowed(status: Int) throws {
     #expect(OrcaRuntimeContract.version == "orca.chat-runtime.v1")
     #expect(
         OrcaRuntimeContract.schemaSHA256
-            == "2699a91c2bc3d52cbd598e96face4a75fd07953f06e5a8774762c3d8c3b0489e"
+            == "754b79d19324744b835fd32387379a37c632007215e3be3db228a5043de9ca70"
     )
 }
 
