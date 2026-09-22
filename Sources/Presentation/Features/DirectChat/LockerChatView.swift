@@ -853,6 +853,30 @@ struct LockerChatView: View {
                         .foregroundStyle(turn.events.last?.isTerminal == true ? AppColors.accentSuccess : AppColors.accentElectric)
                 }
 
+                FlowLayout(horizontalSpacing: 8, verticalSpacing: 5) {
+                    Label(turn.sourceSurface.capitalized, systemImage: "rectangle.on.rectangle")
+                    Label(
+                        turn.recoveryStatus.capitalized,
+                        systemImage: turn.isStuck ? "exclamationmark.triangle.fill" : "heart.text.square"
+                    )
+                    Label(
+                        "\(turn.workRunCount) runs",
+                        systemImage: turn.workRunsTruncated ? "ellipsis.circle" : "hammer"
+                    )
+                    if let cursorState = turn.cursorState {
+                        Label(cursorState.replacingOccurrences(of: "_", with: " ").capitalized, systemImage: "arrow.triangle.2.circlepath")
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(turn.isStuck ? AppColors.accentWarning : AppColors.textTertiary)
+
+                if let recoveryReason = turn.recoveryReason, turn.isStuck {
+                    Text(recoveryReason)
+                        .font(.caption2)
+                        .foregroundStyle(AppColors.accentWarning)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 ForEach(turn.events.suffix(8)) { event in
                     HStack(spacing: 8) {
                         Image(systemName: event.isTerminal ? "checkmark.circle.fill" : "circle.fill")
@@ -4180,6 +4204,7 @@ struct DMBubble: View {
         case .waitingForLiveAgent: return "hourglass"
         case .claimedByAgent: return "hand.raised"
         case .working: return "gearshape.2.fill"
+        case .ticketRequired: return "text.badge.plus"
         case .responseReceived: return "checkmark.circle"
         case .deliveryNatsFailed: return "antenna.radiowaves.left.and.right.slash"
         case .agentUnresponsive: return "person.crop.circle.badge.exclamationmark"
@@ -4196,7 +4221,7 @@ struct DMBubble: View {
             return AppColors.accentElectric
         case .responseReceived:
             return AppColors.accentSuccess
-        case .deliveryNatsFailed, .agentUnresponsive, .failed, .fallbackPresented, .timedOut:
+        case .deliveryNatsFailed, .agentUnresponsive, .failed, .fallbackPresented, .ticketRequired, .timedOut:
             return AppColors.accentWarning
         case nil:
             return AppColors.textTertiary
@@ -4324,6 +4349,7 @@ private struct MessageDeliveryLedger: View {
             || deliveryState == .deliveryNatsFailed
             || deliveryState == .agentUnresponsive
             || deliveryState == .fallbackPresented
+            || deliveryState == .ticketRequired
         let timedOut = deliveryState == .timedOut
         let finalDone = deliveryState == .responseReceived
         let waiting = deliveryState == .computeRunning
@@ -4398,6 +4424,8 @@ private struct MessageDeliveryLedger: View {
             return "Agent Run queued"
         case .agentRunRunning:
             return "Agent Run running"
+        case .ticketRequired:
+            return "Attach one ORCA ticket to continue"
         case .responseReceived:
             return "Reply/evidence received"
         case .deliveryNatsFailed:

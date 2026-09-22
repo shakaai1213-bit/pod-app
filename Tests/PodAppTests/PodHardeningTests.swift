@@ -44,6 +44,30 @@ final class PodHardeningTests: XCTestCase {
         XCTAssertEqual(AppTab.maker.title, OrcaSurfaceSection.maker.title)
     }
 
+    @MainActor
+    func testTicketRequiredIsAVisibleTerminalSystemResponse() {
+        XCTAssertEqual(DMDeliveryState.parse("ticket_required"), .ticketRequired)
+        XCTAssertEqual(DMDeliveryState.ticketRequired.displayLabel, "Ticket required")
+        XCTAssertTrue(
+            DirectChatViewModel.shouldResolvePendingAsync(
+                senderAgentId: nil,
+                messageType: "system",
+                source: "orca.chat.direct",
+                responseState: "ticket_required",
+                content: "Attach a ticket before starting governed work."
+            )
+        )
+        XCTAssertFalse(
+            DirectChatViewModel.shouldResolvePendingAsync(
+                senderAgentId: nil,
+                messageType: "system",
+                source: "orca.chat.ack",
+                responseState: "waiting_for_live_agent",
+                content: "Waiting for the named agent."
+            )
+        )
+    }
+
     func testKnowledgePacketUsesCanonicalAccessLaneAndRedactionState() throws {
         let privilegedPayload = #"""
         {

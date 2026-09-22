@@ -199,21 +199,37 @@ struct EngineeringWorkbenchView: View {
     }
 
     private func actionRow(_ actionIDs: [String]) -> some View {
-        HStack(spacing: 8) {
-            ForEach(actionIDs, id: \.self) { actionID in
-                if let action = model.workbenchContract?.actions.first(where: { $0.id == actionID }) {
-                    Button {
-                        Task { await model.submitWorkbenchAction(actionID) }
-                    } label: {
-                        Label(action.label, systemImage: actionSymbol(actionID))
+        let actions = actionIDs.compactMap { id in
+            model.workbenchContract?.actions.first(where: { $0.id == id })
+        }
+        let disabledReasons = actions
+            .filter { !canRun($0) }
+            .map { actionHelp($0) }
+            .filter { !$0.isEmpty }
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                ForEach(actionIDs, id: \.self) { actionID in
+                    if let action = model.workbenchContract?.actions.first(where: { $0.id == actionID }) {
+                        Button {
+                            Task { await model.submitWorkbenchAction(actionID) }
+                        } label: {
+                            Label(action.label, systemImage: actionSymbol(actionID))
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(!canRun(action))
+                        .help(actionHelp(action))
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .disabled(!canRun(action))
-                    .help(actionHelp(action))
                 }
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
+            if let reason = disabledReasons.first {
+                Text(reason)
+                    .font(.caption2)
+                    .foregroundStyle(Color.orcaAmber)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 

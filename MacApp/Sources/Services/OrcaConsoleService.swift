@@ -94,12 +94,15 @@ actor OrcaConsoleService {
         workControl: Components.Schemas.ChatRuntimeWorkControlBundleRead?
     ) async throws -> ConsoleSectionSnapshot {
         switch section {
-        case .waitingOnCaptain: return try await waitingOnCaptainSnapshot()
+        case .waitingOnCaptain:
+            return try await captainWorkLensSnapshot()
         case .overview: return try await overviewSnapshot()
         case .conversations: return .empty(.conversations)
         case .work:
-            guard let workControl else { throw OrcaConsoleServiceError.invalidResponse }
-            return .workControl(OrcaWorkControlProjection(workControl))
+            if let workControl {
+                return .workControl(OrcaWorkControlProjection(workControl))
+            }
+            return try await captainWorkLensSnapshot()
         case .workbench: return .empty(.workbench)
         case .fund: return try await fundSnapshot()
         case .crew: return try await crewSnapshot()
@@ -110,16 +113,16 @@ actor OrcaConsoleService {
         }
     }
 
-    private func waitingOnCaptainSnapshot() async throws -> ConsoleSectionSnapshot {
+    private func captainWorkLensSnapshot() async throws -> ConsoleSectionSnapshot {
         do {
             let response: WaitingOnCaptainResponse = try await requestJSON(
                 method: "GET",
                 path: "/api/v1/control-room/waiting-on-captain"
             )
-            return .waitingOnCaptain(response)
+            return .captainWorkLens(response)
         } catch let error as OrcaConsoleServiceError {
             guard case .httpStatus(404, _) = error else { throw error }
-            return .waitingOnCaptain(.zero())
+            return .captainWorkLens(.zero())
         }
     }
 
@@ -331,8 +334,15 @@ actor OrcaConsoleService {
         }
     }
 
-    func boardDirectory() async throws -> OrcaBoardDirectory {
-        try await requestJSON(method: "GET", path: "/api/v1/boards")
+    func boardArchitectureDirectory() async throws -> OrcaBoardArchitectureDirectory {
+        try await requestJSON(method: "GET", path: OrcaBoardArchitectureEndpoint.directory)
+    }
+
+    func boardArchitectureProfile(boardID: UUID) async throws -> OrcaBoardArchitectureProfile {
+        try await requestJSON(
+            method: "GET",
+            path: OrcaBoardArchitectureEndpoint.profile(boardID: boardID)
+        )
     }
 
     func boardPlan(boardID: UUID) async throws -> OrcaBoardPlan {
@@ -340,6 +350,43 @@ actor OrcaConsoleService {
             method: "GET",
             path: "/api/v1/management/boards/\(boardID.uuidString)/plan"
         )
+    }
+
+    func boardProjects(
+        boardID: UUID,
+        protectedBoardIDs: Set<UUID>
+    ) async throws -> [OrcaBoardProjectSummary] {
+        let page: OrcaBoardCollectionPage<OrcaBoardProjectSummary> = try await requestJSON(
+            method: "GET",
+            path: "/api/v1/projects?board_id=\(boardID.uuidString)&limit=200"
+        )
+        return page.items.filter { project in
+            var projectBoardIDs = Set(project.boardIds)
+            if let primaryBoardID = project.boardId {
+                projectBoardIDs.insert(primaryBoardID)
+            }
+            return OrcaBoardProtectionPolicy.isSafeProject(
+                selectedBoardID: boardID,
+                projectBoardIDs: projectBoardIDs,
+                protectedBoardIDs: protectedBoardIDs
+            )
+        }
+    }
+
+    func boardTasks(boardID: UUID) async throws -> [OrcaBoardTaskSummary] {
+        let page: OrcaBoardCollectionPage<OrcaBoardTaskSummary> = try await requestJSON(
+            method: "GET",
+            path: "/api/v1/boards/\(boardID.uuidString)/tasks?limit=50"
+        )
+        return page.items.filter { !$0.isProtected }
+    }
+
+    func boardTickets(boardID: UUID) async throws -> [OrcaBoardTicketSummary] {
+        let page: OrcaBoardCollectionPage<OrcaBoardTicketSummary> = try await requestJSON(
+            method: "GET",
+            path: "/api/v1/boards/\(boardID.uuidString)/tickets?limit=50"
+        )
+        return page.items.filter(\.isSafeForGenericSurface)
     }
 
     func workbenchContract(agentSlug: String) async throws -> OrcaEngineeringWorkbenchContract {

@@ -42,6 +42,184 @@ final class OrcaFoundationTests: XCTestCase {
         XCTAssertEqual(plan.sourceRefs, ["/api/v1/tickets"])
     }
 
+    func testBoardDirectoryUsesOneTaxonomyAndSearchContract() throws {
+        let directory = try JSONDecoder().decode(
+            OrcaBoardDirectory.self,
+            from: Data(#"{"items":[{"id":"00000000-0000-4000-8000-000000000001","slug":"pod","name":"Pod","component":"Pod","description":"[product] Native clients"},{"id":"00000000-0000-4000-8000-000000000002","slug":"guardian","name":"Guardian","description":"Safety product"},{"id":"00000000-0000-4000-8000-000000000003","slug":"schoolhouse","name":"Schoolhouse","description":"Agent lifecycle"},{"id":"00000000-0000-4000-8000-000000000004","slug":"operations","name":"Operations","description":"Lab operations"},{"id":"00000000-0000-4000-8000-000000000005","slug":"fund","name":"Fund","description":"Protected domain"},{"id":"00000000-0000-4000-8000-000000000006","slug":"north-star","name":"North Star","description":"Strategy"}]}"#.utf8)
+        )
+
+        XCTAssertEqual(directory.items.map(\.architectureGroup), [
+            .surfaces, .products, .platform, .infrastructure, .fund, .strategy,
+        ])
+        XCTAssertEqual(
+            directory.filtered(searchQuery: "native").map(\.slug),
+            ["pod"]
+        )
+        XCTAssertEqual(
+            directory.grouped().map(\.group),
+            [.products, .surfaces, .platform, .infrastructure, .fund, .strategy]
+        )
+        XCTAssertEqual(
+            directory.filtered(group: .platform).map(\.slug),
+            ["schoolhouse"]
+        )
+        XCTAssertTrue(directory.filtered(searchQuery: "protected domain").isEmpty)
+        XCTAssertEqual(directory.filtered(searchQuery: "fund").map(\.slug), ["fund"])
+    }
+
+    func testBoardArchitectureDirectoryPreservesSignedTruthAndProtectedPointers() throws {
+        let directory = try boardArchitectureDecoder().decode(
+            OrcaBoardArchitectureDirectory.self,
+            from: Self.boardArchitectureDirectoryJSON
+        )
+
+        XCTAssertEqual(directory.profiles.map { $0.header.slug }, ["guardian", "fund"])
+        XCTAssertEqual(directory.directoryItems.map { $0.id }, directory.profiles.map { $0.id })
+        XCTAssertEqual(directory.directoryItems.map { $0.projectCount }, [3, 0])
+        XCTAssertEqual(directory.directoryItems.map { $0.ticketCount }, [5, 0])
+        XCTAssertEqual(directory.directoryItems.map { $0.isProtected }, [false, true])
+        XCTAssertEqual(directory.directoryItems.map { $0.classification }, [.product, .protectedDomain])
+        XCTAssertTrue(directory.directoryItems[0].isProduct)
+        XCTAssertTrue(OrcaBoardDirectoryItem(
+            id: UUID(uuidString: "00000000-0000-4000-8000-000000000099")!,
+            slug: "future-product",
+            name: "Future Product",
+            layer: "products",
+            component: nil,
+            boardDescription: "No legacy product marker.",
+            classification: .product,
+            projectCount: 0,
+            activeCount: 0,
+            ticketCount: 0,
+            protection: false
+        ).isProduct)
+
+        let guardian = try XCTUnwrap(directory.profiles.first?.fullProfile)
+        XCTAssertEqual(guardian.header.healthState, OrcaBoardHealthState.healthy)
+        XCTAssertEqual(guardian.health.freshness, OrcaBoardFreshnessState.fresh)
+        XCTAssertEqual(guardian.currentRelease?.revision, "guardian-r4")
+        XCTAssertEqual(guardian.currentRelease?.releaseManifestSHA256, String(repeating: "c", count: 64))
+        XCTAssertEqual(guardian.sourceRefs.map { $0.sourceType }, ["signed_operational_snapshot"])
+
+        XCTAssertNil(directory.profiles.last?.fullProfile)
+        XCTAssertEqual(directory.profiles.last?.header.classification, .protectedDomain)
+        XCTAssertFalse(directory.profiles.last?.header.detailAvailable ?? true)
+    }
+
+    func testBoardArchitectureProfilesFailClosedOnContractDrift() throws {
+        let protectedFull = Self.boardArchitectureFullJSON
+            .replacingOccurrences(of: #""protected":false"#, with: #""protected":true"#)
+        XCTAssertThrowsError(
+            try boardArchitectureDecoder().decode(
+                OrcaBoardArchitectureProfile.self,
+                from: Data(protectedFull.utf8)
+            )
+        )
+
+        for (field, value) in [
+            (#""classification":"product""#, #""classification":"protected_domain""#),
+            (#""classification":"product""#, #""classification":"unknown""#),
+            (#""group_slug":"products""#, #""group_slug":"fund""#),
+            (#""slug":"guardian""#, #""slug":"fund""#),
+        ] {
+            let protectedIdentityFull = Self.boardArchitectureFullJSON
+                .replacingOccurrences(of: field, with: value)
+            XCTAssertThrowsError(
+                try boardArchitectureDecoder().decode(
+                    OrcaBoardArchitectureProfile.self,
+                    from: Data(protectedIdentityFull.utf8)
+                )
+            )
+        }
+
+        let conflictingHealth = Self.boardArchitectureFullJSON
+            .replacingOccurrences(of: #""health_state":"healthy""#, with: #""health_state":"blocked""#)
+        XCTAssertThrowsError(
+            try boardArchitectureDecoder().decode(
+                OrcaBoardArchitectureProfile.self,
+                from: Data(conflictingHealth.utf8)
+            )
+        )
+
+        let unknownVisibility = Self.boardArchitectureFullJSON
+            .replacingOccurrences(of: #""visibility":"full""#, with: #""visibility":"summary""#)
+        XCTAssertThrowsError(
+            try boardArchitectureDecoder().decode(
+                OrcaBoardArchitectureProfile.self,
+                from: Data(unknownVisibility.utf8)
+            )
+        )
+
+        let leakedProtectedDetail = Self.boardArchitectureProtectedJSON
+            .replacingOccurrences(
+                of: #""visibility":"protected_pointer""#,
+                with: #""purpose":"secret","visibility":"protected_pointer""#
+            )
+        XCTAssertThrowsError(
+            try boardArchitectureDecoder().decode(
+                OrcaBoardArchitectureProfile.self,
+                from: Data(leakedProtectedDetail.utf8)
+            )
+        )
+
+        let prefix = #"{"schema_version":"orca.board-architecture-directory.v1","config_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generated_at":"2026-09-09T20:00:00Z","profiles":["#
+        let duplicateDirectory = Data(
+            (prefix + Self.boardArchitectureFullJSON + "," + Self.boardArchitectureFullJSON + "]}").utf8
+        )
+        XCTAssertThrowsError(
+            try boardArchitectureDecoder().decode(
+                OrcaBoardArchitectureDirectory.self,
+                from: duplicateDirectory
+            )
+        )
+    }
+
+    func testBoardDetailModelsDecodeCollectionsAndFailClosedForProtectedTickets() throws {
+        let projectPage = try JSONDecoder().decode(
+            OrcaBoardCollectionPage<OrcaBoardProjectSummary>.self,
+            from: Data(#"[{"id":"10000000-0000-4000-8000-000000000001","board_id":"00000000-0000-4000-8000-000000000001","board_ids":["00000000-0000-4000-8000-000000000002"],"name":"Runtime","status":"in_progress","stage":"build","priority":1}]"#.utf8)
+        )
+        let primaryBoardID = UUID(uuidString: "00000000-0000-4000-8000-000000000001")!
+        let linkedBoardID = UUID(uuidString: "00000000-0000-4000-8000-000000000002")!
+        XCTAssertTrue(projectPage.items[0].belongs(to: primaryBoardID))
+        XCTAssertTrue(projectPage.items[0].belongs(to: linkedBoardID))
+
+        let ticketPage = try JSONDecoder().decode(
+            OrcaBoardCollectionPage<OrcaBoardTicketSummary>.self,
+            from: Data(#"{"items":[{"id":"30000000-0000-4000-8000-000000000001","title":"Visible","status":"open","priority":"high","protected":false,"compute_tag":"code","autonomy_level":"draft_only"},{"id":"30000000-0000-4000-8000-000000000002","title":"Pointer only","status":"open","priority":"high","protected":true,"compute_tag":"code","autonomy_level":"draft_only"}]}"#.utf8)
+        )
+        XCTAssertTrue(ticketPage.items[0].isSafeForGenericSurface)
+        XCTAssertFalse(ticketPage.items[1].isSafeForGenericSurface)
+    }
+
+    func testProjectProtectionPolicyRejectsEveryProtectedBoardMembership() {
+        let selectedBoardID = UUID(uuidString: "00000000-0000-4000-8000-000000000001")!
+        let fundBoardID = UUID(uuidString: "00000000-0000-4000-8000-000000000002")!
+        let secondProtectedBoardID = UUID(uuidString: "00000000-0000-4000-8000-000000000003")!
+        let protectedBoardIDs: Set<UUID> = [fundBoardID, secondProtectedBoardID]
+
+        XCTAssertTrue(OrcaBoardProtectionPolicy.isSafeProject(
+            selectedBoardID: selectedBoardID,
+            projectBoardIDs: [selectedBoardID],
+            protectedBoardIDs: protectedBoardIDs
+        ))
+        XCTAssertFalse(OrcaBoardProtectionPolicy.isSafeProject(
+            selectedBoardID: selectedBoardID,
+            projectBoardIDs: [selectedBoardID, fundBoardID],
+            protectedBoardIDs: protectedBoardIDs
+        ))
+        XCTAssertFalse(OrcaBoardProtectionPolicy.isSafeProject(
+            selectedBoardID: selectedBoardID,
+            projectBoardIDs: [selectedBoardID, secondProtectedBoardID],
+            protectedBoardIDs: protectedBoardIDs
+        ))
+        XCTAssertFalse(OrcaBoardProtectionPolicy.isSafeProject(
+            selectedBoardID: selectedBoardID,
+            projectBoardIDs: [selectedBoardID],
+            protectedBoardIDs: []
+        ))
+    }
+
     func testBoardPlanCardDecodesCanonicalLifecycleFacets() throws {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -69,6 +247,13 @@ final class OrcaFoundationTests: XCTestCase {
         ))
         XCTAssertNil(OrcaEndpointPolicy.normalizedEndpoint("https://untrusted.example"))
         XCTAssertNil(OrcaEndpointPolicy.normalizedEndpoint("file:///tmp/orca"))
+        XCTAssertEqual(OrcaBoardArchitectureEndpoint.directory, "/api/v1/board-architecture")
+        XCTAssertEqual(
+            OrcaBoardArchitectureEndpoint.profile(
+                boardID: UUID(uuidString: "00000000-0000-4000-8000-000000000001")!
+            ),
+            "/api/v1/board-architecture/00000000-0000-4000-8000-000000000001"
+        )
     }
 
     func testConversationMergeDeduplicatesCanonicalMessagesAndPreservesPending() {
@@ -110,6 +295,86 @@ final class OrcaFoundationTests: XCTestCase {
         XCTAssertTrue(contract.host.ready)
     }
 
+    func testWorkControlGroupRawValuesStayStableWithCaptainLensCases() {
+        XCTAssertEqual(OrcaWorkControlProjection.Group.readyNow.rawValue, "Ready Now")
+        XCTAssertEqual(OrcaWorkControlProjection.Group.assigned.rawValue, "Assigned")
+        XCTAssertEqual(OrcaWorkControlProjection.Group.waitingOnOthers.rawValue, "Waiting On Others")
+        XCTAssertEqual(OrcaWorkControlProjection.Group.approvals.rawValue, "Decision Queue")
+        XCTAssertEqual(OrcaWorkControlProjection.Group.approvalAttention.rawValue, "Approval Attention")
+        XCTAssertEqual(OrcaWorkControlProjection.Group.protected.rawValue, "Protected")
+        XCTAssertEqual(OrcaWorkControlProjection.Group.historical.rawValue, "Historical")
+        XCTAssertEqual(OrcaWorkControlProjection.Group.decisionsOnTony.rawValue, "Decisions On Tony")
+        XCTAssertEqual(OrcaWorkControlProjection.Group.ticketsOnTony.rawValue, "Tickets On Tony")
+        XCTAssertEqual(OrcaWorkControlProjection.Group.delegationRequests.rawValue, "Delegation Requests")
+    }
+
+    func testCaptainLensProjectionDecodesGroupedContract() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let response = try decoder.decode(
+            OrcaWorkControlProjection.CaptainLensResponse.self,
+            from: Data(#"""
+            {
+              "contract_version": "orca.captain-work-lens.v1",
+              "generated_at": "2026-09-20T12:00:00Z",
+              "groups": [
+                {"name": "Decisions On Tony", "items": [
+                  {"id": "approval:a-1", "kind": "approval", "title": "Approve release",
+                   "summary": "Release approval pending.", "authority": "tony",
+                   "agent_slug": "coral", "occurred_at": "2026-09-20T08:00:00Z",
+                   "age_hours": 4.0, "stale_after_hours": 24, "is_stale": false,
+                   "gate_severity": 2, "endpoint": "/api/v1/approvals/a-1",
+                   "decision_endpoint": "/api/v1/tickets/t-2/approvals/a-1",
+                   "approval_id": "a-1", "ticket_id": "t-2",
+                   "ticket_title": "Ship release", "ticket_status": "in_review",
+                   "desired_outcome": null, "needs_scope": false,
+                   "approval_gate": "release", "reason": "Captain authority.",
+                   "requested_by": "coral"}
+                ]},
+                {"name": "Tickets On Tony", "items": [
+                  {"id": "ticket:t-1", "kind": "ticket", "title": "Pick window",
+                   "summary": "Tony decides window.", "authority": "tony",
+                   "agent_slug": "maui", "occurred_at": "2026-09-19T05:00:00Z",
+                   "age_hours": 31.0, "stale_after_hours": null, "is_stale": true,
+                   "gate_severity": 3, "endpoint": "/api/v1/tickets/t-1",
+                   "decision_endpoint": null, "approval_id": null, "ticket_id": "t-1",
+                   "ticket_title": "Pick window", "ticket_status": "blocked",
+                   "desired_outcome": "Window chosen.", "needs_scope": true,
+                   "approval_gate": null, "reason": "Captain input required.",
+                   "requested_by": "maui"}
+                ]},
+                {"name": "Delegation Requests", "items": []}
+              ],
+              "counts": {"Decisions On Tony": 1, "Tickets On Tony": 1, "Delegation Requests": 0}
+            }
+            """#.utf8)
+        )
+
+        XCTAssertEqual(response.contractVersion, "orca.captain-work-lens.v1")
+        XCTAssertEqual(response.groups.map(\.name), ["Decisions On Tony", "Tickets On Tony", "Delegation Requests"])
+        XCTAssertEqual(response.counts["Tickets On Tony"], 1)
+
+        let projection = OrcaWorkControlProjection(captainLens: response)
+        XCTAssertEqual(projection.contractVersion, "orca.captain-work-lens.v1")
+        XCTAssertEqual(projection.counts.approvals, 1)
+        XCTAssertEqual(projection.counts.waitingOnOthers, 1)
+        XCTAssertEqual(projection.counts.stale, 1)
+
+        let decisions = projection.approvals
+        XCTAssertEqual(decisions.map(\.id), ["a-1"])
+        XCTAssertEqual(decisions.first?.authority, "tony")
+        XCTAssertEqual(decisions.first?.linkedTicketIDs, ["t-2"])
+
+        let tickets = projection.items(in: .ticketsOnTony)
+        XCTAssertEqual(tickets.map(\.id), ["ticket:t-1"])
+        XCTAssertTrue(tickets.first?.needsScope ?? false)
+        XCTAssertEqual(tickets.first?.desiredOutcome, "Window chosen.")
+        XCTAssertTrue(tickets.first?.stale ?? false)
+
+        XCTAssertTrue(projection.items(in: .delegationRequests).isEmpty)
+        XCTAssertTrue(projection.items(in: .decisionsOnTony).isEmpty)
+    }
+
     private func message(
         _ id: String,
         _ role: OrcaTranscriptRole,
@@ -123,5 +388,21 @@ final class OrcaFoundationTests: XCTestCase {
             deliveryState: .persisted,
             retryIdentity: nil
         )
+    }
+
+    private func boardArchitectureDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }
+
+    private static let boardArchitectureFullJSON = #"{"schema_version":"orca.board-architecture-profile.v1","config_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generated_at":"2026-09-09T20:00:00Z","board_id":"00000000-0000-4000-8000-000000000010","slug":"guardian","name":"Guardian","group_id":null,"group_slug":"products","classification":"product","lifecycle_state":"active","protected":false,"public_summary":"Safety and health product.","health_state":"healthy","counts":{"project_count":3,"active_project_count":2,"task_count":7,"active_task_count":4,"ticket_count":5,"in_progress_count":6,"blocked_count":0,"review_count":1,"approval_count":0,"run_count":2,"stale_count":0},"detail_available":true,"visibility":"full","purpose":"Safety and health product.","primary_agent":"aloha","health":{"state":"healthy","reason":"All signed checks pass.","observed_at":"2026-09-09T19:59:00Z","freshness":"fresh","source_checks":["guardian.api"]},"current_release":{"revision":"guardian-r4","artifact_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","release_manifest_sha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","deployed_at":"2026-09-09T19:55:00Z","freshness":"fresh","evidence_refs":["orca://release/guardian-r4"]},"current_project_id":"10000000-0000-4000-8000-000000000010","current_project_name":"Guardian hardening","next_gate":"Run product canary","highest_impact_blocker":null,"source_refs":[{"source_type":"signed_operational_snapshot","ref":"/api/v1/state-registry/board.guardian.operational","revision":"guardian-r4","observed_at":"2026-09-09T19:59:00Z","freshness":"fresh"}]}"#
+
+    private static let boardArchitectureProtectedJSON = #"{"schema_version":"orca.board-architecture-profile.v1","config_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generated_at":"2026-09-09T20:00:00Z","board_id":"00000000-0000-4000-8000-000000000020","slug":"fund","name":"Fund","group_id":null,"group_slug":"fund","classification":"protected_domain","lifecycle_state":"active","protected":true,"public_summary":null,"health_state":"unknown","counts":{},"detail_available":false,"visibility":"protected_pointer"}"#
+
+    private static var boardArchitectureDirectoryJSON: Data {
+        let prefix = #"{"schema_version":"orca.board-architecture-directory.v1","config_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generated_at":"2026-09-09T20:00:00Z","profiles":["#
+        let payload = prefix + boardArchitectureFullJSON + "," + boardArchitectureProtectedJSON + "]}"
+        return Data(payload.utf8)
     }
 }

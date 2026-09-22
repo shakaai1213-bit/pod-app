@@ -39,7 +39,7 @@ struct ConsoleSectionView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            if section == .work {
+            if section == .work || section == .waitingOnCaptain {
                 Picker("Work view", selection: workModeSelection) {
                     ForEach(ConsoleWorkMode.allCases) { mode in
                         Text(mode.title).tag(mode)
@@ -47,7 +47,7 @@ struct ConsoleSectionView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
-                .frame(width: 210)
+                .frame(width: 270)
                 if model.workMode == .agentWork {
                     Picker("Agent", selection: workControlAgentSelection) {
                         ForEach(model.agents) { agent in
@@ -105,17 +105,18 @@ struct ConsoleSectionView: View {
                     filterBanner
                     Divider()
                 }
-                if section == .waitingOnCaptain {
-                    waitingOnCaptainRecords
-                } else {
-                    records
-                }
+                records
             }
         }
     }
 
+    private var isWorkFilterableView: Bool {
+        guard section == .work || section == .waitingOnCaptain else { return false }
+        return model.workMode == .agentWork || model.workMode == .captain
+    }
+
     private var metrics: some View {
-        let isWorkAgentView = section == .work && model.workMode == .agentWork
+        let isWorkAgentView = isWorkFilterableView
         return LazyVGrid(
             columns: [GridItem(.adaptive(minimum: 130, maximum: 210), spacing: 10)],
             alignment: .leading,
@@ -189,52 +190,6 @@ struct ConsoleSectionView: View {
         model.displayedWorkRecords
     }
 
-    @ViewBuilder
-    private var waitingOnCaptainRecords: some View {
-        if displayedRecords.isEmpty && !model.isLoadingSection {
-            VStack(spacing: 0) {
-                ContentUnavailableView(
-                    model.selectedSnapshot.emptyStateTitle
-                        ?? ConsoleSectionSnapshot.waitingOnCaptainEmptyTitle,
-                    systemImage: "checkmark.circle"
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                Divider()
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("DELEGATION REQUESTS")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.secondary)
-                    Text(model.selectedSnapshot.delegationEmptyStateTitle
-                        ?? ConsoleSectionSnapshot.delegationEmptyTitle)
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
-                .background(Color(nsColor: .windowBackgroundColor))
-            }
-        } else {
-            List(selection: recordSelection) {
-                Section("Waiting") {
-                    ForEach(displayedRecords) { record in
-                        ConsoleRecordRow(record: record)
-                            .tag(record.id)
-                    }
-                }
-
-                if let delegationEmptyTitle = model.selectedSnapshot.delegationEmptyStateTitle {
-                    Section("Delegation Requests") {
-                        Text(delegationEmptyTitle)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .listStyle(.inset)
-        }
-    }
-
     private var records: some View {
         List(selection: recordSelection) {
             ForEach(groupNames, id: \.self) { group in
@@ -293,41 +248,70 @@ struct ConsoleSectionView: View {
     }
 }
 
+private enum ConsoleBoardPane: String, CaseIterable, Identifiable {
+    case plan = "Plan"
+    case projects = "Projects"
+    case tasks = "Tasks"
+    case tickets = "Tickets"
+
+    var id: String { rawValue }
+}
+
 private struct WorkPortfolioView: View {
     @Environment(OrcaMacModel.self) private var model
+    @State private var isShowingBoardDirectory = false
+    @State private var selectedBoardPane = ConsoleBoardPane.plan
 
     private var featuredBoards: [OrcaBoardDirectoryItem] {
-        Array(model.boards.filter(\.isProduct).prefix(6))
+        Array(model.boards.filter { $0.isProduct && $0.slug != "products" }.prefix(6))
+    }
+
+    private var selectedBoard: OrcaBoardDirectoryItem? {
+        model.boards.first { $0.id == model.selectedBoardID }
+    }
+
+    private var selectedProfile: OrcaBoardArchitectureProfile? {
+        guard let id = model.selectedBoardID else { return nil }
+        return model.boardArchitectureProfilesByID[id]
     }
 
     var body: some View {
-        if model.boards.isEmpty, let error = model.boardPlanError {
-            ContentUnavailableView(
-                "ORCA Board Data Unavailable",
-                systemImage: "rectangle.3.group",
-                description: Text(error)
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if model.boards.isEmpty, model.isLoadingBoardPlan {
-            ProgressView()
+        Group {
+            if model.boards.isEmpty, let error = model.boardPlanError {
+                ContentUnavailableView(
+                    "ORCA Board Data Unavailable",
+                    systemImage: "rectangle.3.group",
+                    description: Text(error)
+                )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    if !featuredBoards.isEmpty {
-                        productSection
+            } else if model.boards.isEmpty, model.isLoadingBoardPlan {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        if !featuredBoards.isEmpty {
+                            productSection
+                        }
+                        boardPlanSection
+                        if let error = model.boardPlanError {
+                            Label(error, systemImage: "exclamationmark.triangle")
+                                .font(.caption)
+                                .foregroundStyle(Color.orcaCoral)
+                                .textSelection(.enabled)
+                        }
                     }
-                    boardPlanSection
-                    if let error = model.boardPlanError {
-                        Label(error, systemImage: "exclamationmark.triangle")
-                            .font(.caption)
-                            .foregroundStyle(Color.orcaCoral)
-                            .textSelection(.enabled)
-                    }
+                    .padding(16)
                 }
-                .padding(16)
+                .background(Color(nsColor: .textBackgroundColor))
             }
-            .background(Color(nsColor: .textBackgroundColor))
+        }
+        .sheet(isPresented: $isShowingBoardDirectory) {
+            ConsoleBoardDirectoryView()
+                .environment(model)
+        }
+        .onChange(of: model.selectedBoardID) { _, _ in
+            selectedBoardPane = .plan
         }
     }
 
@@ -348,7 +332,7 @@ private struct WorkPortfolioView: View {
                 spacing: 10
             ) {
                 ForEach(featuredBoards) { board in
-                    let plan = model.boardPlansByID[board.id]
+                    let profile = model.boardArchitectureProfilesByID[board.id]
                     Button { model.selectBoard(board.id) } label: {
                         VStack(alignment: .leading, spacing: 9) {
                             HStack(spacing: 8) {
@@ -358,14 +342,17 @@ private struct WorkPortfolioView: View {
                                     .font(.body.weight(.semibold))
                                     .lineLimit(1)
                                 Spacer(minLength: 4)
+                                Text(boardHealthLabel(profile))
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(boardHealthColor(profile))
                                 Image(systemName: "chevron.right")
                                     .font(.caption.weight(.bold))
                                     .foregroundStyle(.tertiary)
                             }
                             HStack(spacing: 12) {
-                                portfolioMetric(plan?.counts["in_progress"], "working")
-                                portfolioMetric(plan?.counts["up_next"], "up next")
-                                portfolioMetric(plan?.counts["waiting_on"], "waiting")
+                                portfolioMetric(profile?.header.counts.inProgressCount, "working")
+                                portfolioMetric(profile?.header.counts.reviewCount, "review")
+                                portfolioMetric(profile?.header.counts.blockedCount, "blocked")
                             }
                         }
                         .frame(maxWidth: .infinity, minHeight: 66, alignment: .leading)
@@ -389,24 +376,17 @@ private struct WorkPortfolioView: View {
                     Text("BOARD PLAN")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.secondary)
-                    Text(model.boardPlan?.boardName ?? "ORCA Work")
+                    Text(selectedBoard?.displayName ?? "ORCA Work")
                         .font(.title3.weight(.semibold))
                 }
                 Spacer()
-                Menu {
-                    ForEach(model.boards) { board in
-                        Button { model.selectBoard(board.id) } label: {
-                            if board.id == model.selectedBoardID {
-                                Label(board.displayName, systemImage: "checkmark")
-                            } else {
-                                Text(board.displayName)
-                            }
-                        }
-                    }
+                Button {
+                    isShowingBoardDirectory = true
                 } label: {
                     Label("All Boards", systemImage: "rectangle.grid.2x2")
                 }
-                .menuStyle(.borderlessButton)
+                .buttonStyle(.borderless)
+                .help("Browse and search all ORCA boards")
                 Button { Task { await model.refreshBoardPortfolio() } } label: {
                     Image(systemName: "arrow.clockwise")
                 }
@@ -415,6 +395,109 @@ private struct WorkPortfolioView: View {
                 .help("Refresh board plan")
             }
 
+            if selectedBoard?.isProtected == true {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "lock.shield.fill")
+                        .foregroundStyle(Color.orcaCoral)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Protected board boundary")
+                            .font(.body.weight(.semibold))
+                        Text("Fund detail remains in the authenticated Fund surface and is not copied into generic Work.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+                .padding(14)
+                .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor)))
+            } else {
+                boardArchitectureStatus
+
+                Picker("Board detail", selection: $selectedBoardPane) {
+                    ForEach(ConsoleBoardPane.allCases) { pane in
+                        Text(paneTitle(pane)).tag(pane)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 480)
+
+                boardDetailContent
+
+                if let error = model.boardDetailError, selectedBoardPane != .plan {
+                    Label(error, systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(Color.orcaCoral)
+                        .textSelection(.enabled)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var boardArchitectureStatus: some View {
+        if let profile = selectedProfile?.fullProfile {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Label(
+                        profile.health.state.rawValue.capitalized,
+                        systemImage: profile.health.state == .healthy
+                            ? "checkmark.circle.fill"
+                            : "exclamationmark.triangle.fill"
+                    )
+                    .foregroundStyle(boardHealthColor(selectedProfile))
+                    Text(profile.header.lifecycleState.rawValue.capitalized)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if let release = profile.currentRelease {
+                        Text("Release \(release.revision)")
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Text(profile.purpose)
+                    .font(.body.weight(.semibold))
+                Text(profile.health.reason)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 12) {
+                    if let owner = profile.primaryAgent {
+                        Label(owner.capitalized, systemImage: "person.fill")
+                    }
+                    Label("\(profile.sourceRefs.count) sources", systemImage: "link")
+                    Text(profile.health.freshness.rawValue.capitalized)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            .padding(12)
+            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor)))
+        }
+    }
+
+    private func boardHealthLabel(_ profile: OrcaBoardArchitectureProfile?) -> String {
+        guard let profile else { return "Unavailable" }
+        if profile.header.isProtected { return "Protected" }
+        return profile.header.healthState.rawValue.capitalized
+    }
+
+    private func boardHealthColor(_ profile: OrcaBoardArchitectureProfile?) -> Color {
+        guard let profile else { return .secondary }
+        if profile.header.isProtected { return Color.orcaCoral }
+        switch profile.header.healthState {
+        case .healthy: return Color.orcaGreen
+        case .attention: return .orange
+        case .blocked: return Color.orcaCoral
+        case .unknown: return .secondary
+        }
+    }
+
+    @ViewBuilder
+    private var boardDetailContent: some View {
+        switch selectedBoardPane {
+        case .plan:
             if let plan = model.boardPlan {
                 ScrollView(.horizontal) {
                     HStack(alignment: .top, spacing: 10) {
@@ -426,7 +509,7 @@ private struct WorkPortfolioView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.shield")
                         .foregroundStyle(Color.orcaGreen)
-                    Text("\(plan.selectionMode.replacingOccurrences(of: "_", with: " ").capitalized) · ORCA")
+                    Text("\(plan.selectionMode.replacingOccurrences(of: "_", with: " ").capitalized) - ORCA")
                     Spacer()
                     Text(plan.computedAt, style: .relative)
                 }
@@ -435,8 +518,114 @@ private struct WorkPortfolioView: View {
             } else if model.isLoadingBoardPlan {
                 ProgressView()
                     .frame(maxWidth: .infinity, minHeight: 180)
+            } else {
+                boardEmptyState("No active plan", symbol: "rectangle.3.group")
+            }
+        case .projects:
+            boardCollection(model.boardProjects, empty: "No current projects") { project in
+                boardCollectionRow(
+                    id: project.id,
+                    title: project.name,
+                    subtitle: project.goal ?? project.projectDescription,
+                    state: project.stage,
+                    trailing: "P\(project.priority)"
+                )
+            }
+        case .tasks:
+            boardCollection(model.boardTasks, empty: "No current tasks") { task in
+                boardCollectionRow(
+                    id: task.id,
+                    title: task.title,
+                    subtitle: task.taskDescription,
+                    state: task.status,
+                    trailing: task.priority.capitalized
+                )
+            }
+        case .tickets:
+            boardCollection(model.boardTickets, empty: "No direct tickets") { ticket in
+                boardCollectionRow(
+                    id: ticket.id,
+                    title: ticket.title,
+                    subtitle: nil,
+                    state: ticket.status,
+                    trailing: ticket.priority.capitalized
+                )
             }
         }
+    }
+
+    private func paneTitle(_ pane: ConsoleBoardPane) -> String {
+        switch pane {
+        case .plan: return pane.rawValue
+        case .projects: return "Projects \(model.boardProjects.count)"
+        case .tasks: return "Tasks \(model.boardTasks.count)"
+        case .tickets: return "Tickets \(model.boardTickets.count)"
+        }
+    }
+
+    @ViewBuilder
+    private func boardCollection<Item: Identifiable, Row: View>(
+        _ items: [Item],
+        empty: String,
+        @ViewBuilder row: @escaping (Item) -> Row
+    ) -> some View {
+        if model.isLoadingBoardPlan && items.isEmpty {
+            ProgressView()
+                .frame(maxWidth: .infinity, minHeight: 180)
+        } else if items.isEmpty {
+            boardEmptyState(empty, symbol: "tray")
+        } else {
+            LazyVStack(spacing: 0) {
+                ForEach(items) { item in
+                    row(item)
+                    if item.id != items.last?.id {
+                        Divider()
+                    }
+                }
+            }
+            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor)))
+        }
+    }
+
+    private func boardCollectionRow(
+        id: UUID,
+        title: String,
+        subtitle: String?,
+        state: String,
+        trailing: String
+    ) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.body.weight(.medium))
+                    .lineLimit(2)
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                Text(String(id.uuidString.prefix(8)))
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer(minLength: 12)
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(state.replacingOccurrences(of: "_", with: " ").capitalized)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(statusColor(state))
+                Text(trailing)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+    }
+
+    private func boardEmptyState(_ title: String, symbol: String) -> some View {
+        ContentUnavailableView(title, systemImage: symbol)
+            .frame(maxWidth: .infinity, minHeight: 180)
     }
 
     private func laneView(_ lane: OrcaBoardPlanLane) -> some View {
@@ -525,7 +714,213 @@ private struct WorkPortfolioView: View {
     }
 }
 
+private struct ConsoleBoardDirectoryView: View {
+    @Environment(OrcaMacModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @State private var searchQuery = ""
+    @State private var selectedGroup: OrcaBoardArchitectureGroup?
+
+    private var directory: OrcaBoardDirectory {
+        OrcaBoardDirectory(items: model.boards)
+    }
+
+    private var groups: [(group: OrcaBoardArchitectureGroup, boards: [OrcaBoardDirectoryItem])] {
+        directory.grouped(searchQuery: searchQuery, group: selectedGroup)
+    }
+
+    private var visibleBoards: [OrcaBoardDirectoryItem] {
+        directory.filtered(searchQuery: searchQuery, group: selectedGroup)
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                summary
+                Divider()
+                if visibleBoards.isEmpty {
+                    emptyDirectory
+                } else {
+                    List {
+                        ForEach(groups, id: \.group) { group in
+                            Section("\(group.group.rawValue) - \(group.boards.count)") {
+                                ForEach(group.boards) { board in
+                                    Button {
+                                        model.selectBoard(board.id)
+                                        dismiss()
+                                    } label: {
+                                        boardRow(board)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    }
+                    .listStyle(.inset)
+                }
+            }
+            .frame(minWidth: 720, minHeight: 560)
+            .navigationTitle("All Boards")
+            .searchable(text: $searchQuery, prompt: "Search boards")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { dismiss() }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        Button {
+                            selectedGroup = nil
+                        } label: {
+                            if selectedGroup == nil {
+                                Label("All Groups", systemImage: "checkmark")
+                            } else {
+                                Text("All Groups")
+                            }
+                        }
+                        Divider()
+                        ForEach(OrcaBoardArchitectureGroup.allCases) { group in
+                            Button {
+                                selectedGroup = group
+                            } label: {
+                                if selectedGroup == group {
+                                    Label(group.rawValue, systemImage: "checkmark")
+                                } else {
+                                    Text(group.rawValue)
+                                }
+                            }
+                        }
+                    } label: {
+                        Label(
+                            selectedGroup?.rawValue ?? "All Groups",
+                            systemImage: "line.3.horizontal.decrease.circle"
+                        )
+                    }
+                    .help("Filter board groups")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var emptyDirectory: some View {
+        if searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            ContentUnavailableView(
+                "No Boards in This Group",
+                systemImage: "rectangle.3.group",
+                description: Text("Choose another board group.")
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ContentUnavailableView.search(text: searchQuery)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var summary: some View {
+        HStack(spacing: 18) {
+            directoryMetric("Boards", visibleBoards.count)
+            directoryMetric("Projects", visibleBoards.reduce(0) { $0 + $1.projectCount })
+            directoryMetric("Active", visibleBoards.reduce(0) { $0 + $1.activeCount })
+            directoryMetric("Tickets", visibleBoards.reduce(0) { $0 + $1.ticketCount })
+            Spacer()
+            Label("ORCA", systemImage: "checkmark.shield")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.orcaGreen)
+        }
+        .padding(16)
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    private func directoryMetric(_ title: String, _ value: Int) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title.uppercased())
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.secondary)
+            Text("\(value)")
+                .font(.title3.weight(.semibold).monospacedDigit())
+        }
+        .frame(minWidth: 70, alignment: .leading)
+    }
+
+    private func boardRow(_ board: OrcaBoardDirectoryItem) -> some View {
+        let profile = model.boardArchitectureProfilesByID[board.id]
+        return HStack(alignment: .top, spacing: 12) {
+            Image(systemName: board.isProtected ? "lock.shield.fill" : boardSymbol(board))
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(board.isProtected ? Color.orcaCoral : Color.orcaCyan)
+                .frame(width: 30, height: 30)
+                .background(
+                    (board.isProtected ? Color.orcaCoral : Color.orcaCyan).opacity(0.12),
+                    in: RoundedRectangle(cornerRadius: 6)
+                )
+            VStack(alignment: .leading, spacing: 3) {
+                Text(board.displayName)
+                    .font(.body.weight(.semibold))
+                Text(board.isProtected ? "Protected domain" : (board.boardDescription ?? board.slug))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 12)
+            if board.isProtected {
+                Text("Protected")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Color.orcaCoral)
+            } else {
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(profile?.header.healthState.rawValue.capitalized ?? "Unavailable")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(directoryHealthColor(profile))
+                    HStack(spacing: 12) {
+                        portfolioMetric(board.projectCount, "projects")
+                        portfolioMetric(board.activeCount, "active")
+                        portfolioMetric(board.ticketCount, "tickets")
+                    }
+                }
+            }
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 5)
+        .contentShape(Rectangle())
+    }
+
+    private func directoryHealthColor(_ profile: OrcaBoardArchitectureProfile?) -> Color {
+        guard let state = profile?.header.healthState else { return .secondary }
+        switch state {
+        case .healthy: return Color.orcaGreen
+        case .attention: return .orange
+        case .blocked: return Color.orcaCoral
+        case .unknown: return .secondary
+        }
+    }
+
+    private func boardSymbol(_ board: OrcaBoardDirectoryItem) -> String {
+        switch board.architectureGroup {
+        case .products: return "shippingbox.fill"
+        case .surfaces: return "rectangle.on.rectangle.angled"
+        case .platform: return "server.rack"
+        case .infrastructure: return "wrench.and.screwdriver.fill"
+        case .fund: return "lock.shield.fill"
+        case .strategy: return "scope"
+        case .other: return "rectangle.3.group.fill"
+        }
+    }
+
+    private func portfolioMetric(_ value: Int, _ label: String) -> some View {
+        VStack(alignment: .trailing, spacing: 1) {
+            Text("\(value)")
+                .font(.caption.weight(.bold).monospacedDigit())
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(minWidth: 42, alignment: .trailing)
+    }
+}
+
 private struct ConsoleRecordRow: View {
+    @Environment(OrcaMacModel.self) private var model
     let record: ConsoleRecord
 
     var body: some View {
@@ -539,6 +934,18 @@ private struct ConsoleRecordRow: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
+                }
+                if let outcome = record.desiredOutcome, !outcome.isEmpty {
+                    Text(outcome)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                if record.needsScope, model.workMode == .captain {
+                    Label("Needs Scope", systemImage: "doc.badge.gearshape")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.orange)
+                        .help("add outcome and acceptance criteria")
                 }
             }
             Spacer(minLength: 12)

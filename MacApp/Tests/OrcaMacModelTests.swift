@@ -297,17 +297,17 @@ final class OrcaMacModelTests: XCTestCase {
         ))
         XCTAssertEqual(response.items.map(\.id), ["ticket:ticket-1", "approval:approval-1"])
 
-        let snapshot = ConsoleSectionSnapshot.waitingOnCaptain(response)
+        let snapshot = ConsoleSectionSnapshot.captainWorkLens(response)
+        XCTAssertEqual(snapshot.section, .work)
         XCTAssertEqual(snapshot.badgeCount, 2)
-        XCTAssertEqual(snapshot.records.map(\.id), ["ticket:ticket-1", "approval:approval-1"])
-        XCTAssertNil(snapshot.emptyStateTitle)
-        XCTAssertEqual(snapshot.delegationEmptyStateTitle, "No delegation requests")
+        XCTAssertEqual(snapshot.records.map(\.id), ["approval:approval-1", "ticket:ticket-1"])
+        XCTAssertEqual(snapshot.records.map(\.group), ["Decisions On Tony", "Tickets On Tony"])
 
-        let ticket = try XCTUnwrap(snapshot.records.first?.ticket)
+        let ticket = try XCTUnwrap(snapshot.records.last?.ticket)
         XCTAssertEqual(ticket.id, "ticket-1")
         XCTAssertEqual(ticket.endpoint, "/api/v1/tickets/ticket-1")
 
-        let approval = try XCTUnwrap(snapshot.records.last?.approval)
+        let approval = try XCTUnwrap(snapshot.records.first?.approval)
         XCTAssertTrue(approval.isCaptainAuthority)
         XCTAssertEqual(
             approval.decisionEndpoint,
@@ -317,17 +317,19 @@ final class OrcaMacModelTests: XCTestCase {
     }
 
     func testWaitingOnCaptainZeroState() {
-        let snapshot = ConsoleSectionSnapshot.waitingOnCaptain(
+        let snapshot = ConsoleSectionSnapshot.captainWorkLens(
             .zero(at: Date(timeIntervalSince1970: 1_789_000_000))
         )
 
         XCTAssertEqual(snapshot.badgeCount, 0)
         XCTAssertTrue(snapshot.records.isEmpty)
-        XCTAssertEqual(snapshot.emptyStateTitle, "Nothing is waiting on you.")
-        XCTAssertEqual(snapshot.delegationEmptyStateTitle, "No delegation requests")
         XCTAssertEqual(
             snapshot.metrics.map(\.value),
             ["0", "0", "0", "0"]
+        )
+        XCTAssertEqual(
+            snapshot.metrics.map(\.id),
+            ["decisionsOnTony", "ticketsOnTony", "delegationRequests", "needsScope"]
         )
     }
 
@@ -353,14 +355,127 @@ final class OrcaMacModelTests: XCTestCase {
             workControl: nil
         )
 
-        XCTAssertEqual(snapshot.emptyStateTitle, "Nothing is waiting on you.")
+        XCTAssertEqual(snapshot.section, .work)
         XCTAssertEqual(snapshot.badgeCount, 0)
+        XCTAssertTrue(snapshot.records.isEmpty)
+    }
+
+    func testCaptainLensGroupedContractDecodesIntoWorkSnapshot() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let response = try decoder.decode(
+            WaitingOnCaptainResponse.self,
+            from: Data(Self.captainWorkLensFixtureJSON.utf8)
+        )
+
+        XCTAssertEqual(response.contractVersion, "orca.captain-work-lens.v1")
+        XCTAssertEqual(response.groups?.map(\.name), ["Decisions On Tony", "Tickets On Tony", "Delegation Requests"])
+        XCTAssertEqual(response.counts.approvals, 1)
+        XCTAssertEqual(response.counts.tickets, 1)
+        XCTAssertEqual(response.counts.delegationRequests, 1)
+
+        let snapshot = ConsoleSectionSnapshot.captainWorkLens(response)
+        XCTAssertEqual(snapshot.section, .work)
+        XCTAssertEqual(snapshot.records.map(\.id), ["approval:approval-1", "ticket:ticket-1", "delegation:req-1"])
+        XCTAssertEqual(
+            snapshot.records.map(\.group),
+            ["Decisions On Tony", "Tickets On Tony", "Delegation Requests"]
+        )
+        XCTAssertEqual(snapshot.badgeCount, 3)
+        XCTAssertEqual(snapshot.metrics.first(where: { $0.id == "needsScope" })?.value, "1")
+
+        let ticketRecord = try XCTUnwrap(snapshot.records.first { $0.id == "ticket:ticket-1" })
+        XCTAssertEqual(ticketRecord.desiredOutcome, "Release window chosen.")
+        XCTAssertTrue(ticketRecord.needsScope)
+        XCTAssertTrue(ticketRecord.fields.contains { $0.label == "Outcome" && $0.value == "Release window chosen." })
+
+        let delegationRecord = try XCTUnwrap(snapshot.records.first { $0.id == "delegation:req-1" })
+        XCTAssertFalse(delegationRecord.needsScope)
+        XCTAssertNil(delegationRecord.desiredOutcome)
+        XCTAssertNil(delegationRecord.approval)
+    }
+
+    func testCaptainMetricFiltersSelectTheirGroups() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let response = try decoder.decode(
+            WaitingOnCaptainResponse.self,
+            from: Data(Self.captainWorkLensFixtureJSON.utf8)
+        )
+        let snapshot = ConsoleSectionSnapshot.captainWorkLens(response)
+
+        XCTAssertEqual(
+            snapshot.records(matching: .decisionsOnTony).map(\.id),
+            ["approval:approval-1"]
+        )
+        XCTAssertEqual(
+            snapshot.records(matching: .ticketsOnTony).map(\.id),
+            ["ticket:ticket-1"]
+        )
+        XCTAssertEqual(
+            snapshot.records(matching: .delegationRequests).map(\.id),
+            ["delegation:req-1"]
+        )
+        XCTAssertEqual(ConsoleWorkMetricFilter.decisionsOnTony.emptyTitle, "No decisions waiting on Tony")
+        XCTAssertEqual(ConsoleWorkMetricFilter.ticketsOnTony.emptyTitle, "No tickets waiting on Tony")
+        XCTAssertEqual(ConsoleWorkMetricFilter.delegationRequests.emptyTitle, "No delegation requests")
+    }
+
+    func testNeedsScopeFilterMatchesOnlyScopedRecords() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let response = try decoder.decode(
+            WaitingOnCaptainResponse.self,
+            from: Data(Self.captainWorkLensFixtureJSON.utf8)
+        )
+        let snapshot = ConsoleSectionSnapshot.captainWorkLens(response)
+
+        XCTAssertEqual(
+            snapshot.records(matching: .needsScope).map(\.id),
+            ["ticket:ticket-1"]
+        )
+    }
+
+    func testSelectingWaitingOnCaptainLandsOnWorkInCaptainMode() {
+        let model = makeModel()
+        model.selectSection(.work, refresh: false)
+        model.selectWorkMode(.agentWork)
+
+        model.selectSection(.waitingOnCaptain, refresh: false)
+
+        XCTAssertEqual(model.selectedSection, .waitingOnCaptain)
+        XCTAssertEqual(model.workMode, .captain)
+        XCTAssertNil(model.workMetricFilter)
+    }
+
+    func testCaptainModeSupportsMetricCardFiltering() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let response = try decoder.decode(
+            WaitingOnCaptainResponse.self,
+            from: Data(Self.captainWorkLensFixtureJSON.utf8)
+        )
+        let snapshot = ConsoleSectionSnapshot.captainWorkLens(response)
+        let model = makeModel()
+        model.sectionSnapshots[.waitingOnCaptain] = snapshot
+        model.selectSection(.waitingOnCaptain, refresh: false)
+
+        XCTAssertEqual(model.workMode, .captain)
+        model.toggleWorkMetricFilter("ticketsOnTony")
+
+        XCTAssertEqual(model.workMetricFilter, .ticketsOnTony)
+        XCTAssertEqual(model.displayedWorkRecords.map(\.id), ["ticket:ticket-1"])
+
+        model.toggleWorkMetricFilter("needsScope")
+        XCTAssertEqual(model.workMetricFilter, .needsScope)
+        XCTAssertEqual(model.displayedWorkRecords.map(\.id), ["ticket:ticket-1"])
     }
 
     func testConsoleWorkSeparatesPortfolioFromAgentQueue() {
-        XCTAssertEqual(ConsoleWorkMode.allCases.map(\.rawValue), ["portfolio", "agentWork"])
+        XCTAssertEqual(ConsoleWorkMode.allCases.map(\.rawValue), ["portfolio", "agentWork", "captain"])
         XCTAssertEqual(ConsoleWorkMode.portfolio.title, "Portfolio")
         XCTAssertEqual(ConsoleWorkMode.agentWork.title, "Agent Work")
+        XCTAssertEqual(ConsoleWorkMode.captain.title, "On Tony")
     }
 
     func testWorkbenchPaneBarFitsTheMinimumContentColumn() {
@@ -1605,6 +1720,167 @@ final class OrcaMacModelTests: XCTestCase {
         )
     }
 
+    func testBoardDetailServicePreservesProtectionBoundaries() async throws {
+        let boardID = UUID(uuidString: "00000000-0000-4000-8000-000000000001")!
+        let fundID = UUID(uuidString: "00000000-0000-4000-8000-000000000002")!
+        let secondProtectedID = UUID(uuidString: "00000000-0000-4000-8000-000000000003")!
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        TestURLProtocol.response = { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer console-token")
+            switch request.url?.path {
+            case "/api/v1/projects":
+                XCTAssertEqual(
+                    request.url?.query,
+                    "board_id=00000000-0000-4000-8000-000000000001&limit=200"
+                )
+                return (200, Data(#"{"items":[{"id":"10000000-0000-4000-8000-000000000001","board_id":"00000000-0000-4000-8000-000000000001","board_ids":[],"name":"Safe project","status":"in_progress","stage":"build","priority":1},{"id":"10000000-0000-4000-8000-000000000002","board_id":"00000000-0000-4000-8000-000000000001","board_ids":["00000000-0000-4000-8000-000000000002"],"name":"Fund linked","status":"in_progress","stage":"build","priority":1},{"id":"10000000-0000-4000-8000-000000000003","board_id":"00000000-0000-4000-8000-000000000001","board_ids":["00000000-0000-4000-8000-000000000003"],"name":"Second protected linked","status":"in_progress","stage":"build","priority":1}]}"#.utf8))
+            case "/api/v1/boards/00000000-0000-4000-8000-000000000001/tasks":
+                XCTAssertEqual(request.url?.query, "limit=50")
+                return (200, Data(#"{"items":[{"id":"20000000-0000-4000-8000-000000000001","title":"Safe task","status":"in_progress","priority":"high","protected":false},{"id":"20000000-0000-4000-8000-000000000002","title":"Protected task","status":"in_progress","priority":"high","protected":true,"pointer":"orca://protected/task"}]}"#.utf8))
+            case "/api/v1/boards/00000000-0000-4000-8000-000000000001/tickets":
+                XCTAssertEqual(request.url?.query, "limit=50")
+                return (200, Data(#"{"items":[{"id":"30000000-0000-4000-8000-000000000001","title":"Safe ticket","status":"open","priority":"high","protected":false,"compute_tag":"code","autonomy_level":"draft_only"},{"id":"30000000-0000-4000-8000-000000000002","title":"Protected ticket","status":"open","priority":"high","protected":true,"compute_tag":"code","autonomy_level":"draft_only"},{"id":"30000000-0000-4000-8000-000000000003","title":"Security ticket","status":"open","priority":"high","protected":false,"compute_tag":"security","autonomy_level":"protected_approval_required"}]}"#.utf8))
+            default:
+                return (404, Data(#"{"detail":"not found"}"#.utf8))
+            }
+        }
+        defer { TestURLProtocol.response = nil }
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+
+        let projects = try await service.boardProjects(
+            boardID: boardID,
+            protectedBoardIDs: [fundID, secondProtectedID]
+        )
+        let tasks = try await service.boardTasks(boardID: boardID)
+        let tickets = try await service.boardTickets(boardID: boardID)
+
+        XCTAssertEqual(projects.map(\.name), ["Safe project"])
+        XCTAssertEqual(tasks.map(\.title), ["Safe task"])
+        XCTAssertEqual(tickets.map(\.title), ["Safe ticket"])
+    }
+
+    func testBoardArchitectureServiceUsesCanonicalDirectoryAndDetailRoutes() async throws {
+        let boardID = UUID(uuidString: "00000000-0000-4000-8000-000000000010")!
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        TestURLProtocol.response = { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer console-token")
+            switch request.url?.path {
+            case "/api/v1/board-architecture":
+                return (200, Self.boardArchitectureDirectoryJSON)
+            case "/api/v1/board-architecture/00000000-0000-4000-8000-000000000010":
+                return (200, Data(Self.boardArchitectureProfileJSON.utf8))
+            default:
+                return (404, Data(#"{"detail":"not found"}"#.utf8))
+            }
+        }
+        defer { TestURLProtocol.response = nil }
+
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+
+        let directory = try await service.boardArchitectureDirectory()
+        let profile = try await service.boardArchitectureProfile(boardID: boardID)
+
+        XCTAssertEqual(directory.directoryItems.map { $0.id }, [boardID])
+        XCTAssertEqual(directory.directoryItems.map { $0.projectCount }, [3])
+        XCTAssertEqual(profile.header.boardID, boardID)
+        XCTAssertEqual(profile.fullProfile?.health.state, OrcaBoardHealthState.healthy)
+    }
+
+    func testWorkbenchAgentSwitchClearsStaleTicketSelection() {
+        let suiteName = "OrcaMacModelTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let model = OrcaMacModel(
+            tokenStore: TestRuntimeTokenStore(token: nil),
+            defaults: defaults
+        )
+        model.selectedAgentID = "coral"
+        model.workbenchTickets = [
+            WorkbenchTicketSummary(
+                id: "ticket-coral",
+                title: "Coral ticket",
+                status: "open",
+                flowState: "in_progress",
+                priority: "P1",
+                nextAction: nil
+            ),
+        ]
+        model.selectedWorkbenchTicketID = "ticket-coral"
+        model.selectedWorkbenchOperationID = "run-1"
+        model.workbenchError = "ORCA returned HTTP 404: Ticket not found"
+
+        model.selectWorkbenchAgent("shaka")
+
+        XCTAssertEqual(model.selectedAgentID, "shaka")
+        XCTAssertNil(model.selectedWorkbenchTicketID)
+        XCTAssertNil(model.selectedWorkbenchOperationID)
+        XCTAssertTrue(model.workbenchTickets.isEmpty)
+        XCTAssertNil(model.workbenchSession)
+        XCTAssertNil(model.workbenchError)
+    }
+
+    func testWorkbenchTicketSelectionRejectsTicketOutsideCurrentAgentScope() {
+        let suiteName = "OrcaMacModelTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let model = OrcaMacModel(
+            tokenStore: TestRuntimeTokenStore(token: nil),
+            defaults: defaults
+        )
+        model.selectedAgentID = "coral"
+        model.workbenchTickets = [
+            WorkbenchTicketSummary(
+                id: "ticket-coral",
+                title: "Coral ticket",
+                status: "open",
+                flowState: nil,
+                priority: nil,
+                nextAction: nil
+            ),
+        ]
+        model.selectedWorkbenchTicketID = "ticket-coral"
+
+        model.selectWorkbenchTicket("ticket-from-other-agent")
+
+        XCTAssertEqual(model.selectedWorkbenchTicketID, "ticket-coral")
+
+        model.selectWorkbenchTicket(nil)
+        XCTAssertNil(model.selectedWorkbenchTicketID)
+    }
+
+    func testWorkbenchSessionRefreshWithoutSelectionClearsSessionAndKeepsError() async {
+        let suiteName = "OrcaMacModelTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let model = OrcaMacModel(
+            tokenStore: TestRuntimeTokenStore(token: nil),
+            defaults: defaults
+        )
+        model.selectedAgentID = "coral"
+        model.workbenchTickets = []
+        model.selectedWorkbenchTicketID = nil
+        model.workbenchError = "ORCA returned HTTP 404: Ticket not found"
+
+        await model.refreshWorkbenchSession(silent: true)
+
+        XCTAssertNil(model.workbenchSession)
+        XCTAssertEqual(model.workbenchError, "ORCA returned HTTP 404: Ticket not found")
+    }
+
     private static let workbenchHostJSON = #"{"host_id":"shaka-mac","capability_id":"engineering.workspace","state":"attested","ready":true,"reason":"fresh","observed_at":"2026-08-18T04:00:00Z","expires_at":null,"evidence_refs":["attestation-evidence://shaka-mac/canary"],"policy_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}"#
 
     // Fixture mirrors SPEC-WAITING-ON-TONY's WaitingOnCaptainResponse and
@@ -1665,6 +1941,114 @@ final class OrcaMacModelTests: XCTestCase {
           "requested_by": "coral"
         }
       ]
+    }
+    """#
+    private static let boardArchitectureProfileJSON = #"{"schema_version":"orca.board-architecture-profile.v1","config_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generated_at":"2026-09-09T20:00:00.123456","board_id":"00000000-0000-4000-8000-000000000010","slug":"guardian","name":"Guardian","group_id":null,"group_slug":"products","classification":"product","lifecycle_state":"active","protected":false,"public_summary":"Safety product.","health_state":"healthy","counts":{"project_count":3,"active_project_count":2,"task_count":7,"active_task_count":4,"ticket_count":5,"in_progress_count":6,"blocked_count":0,"review_count":1},"detail_available":true,"visibility":"full","purpose":"Safety product.","primary_agent":"aloha","health":{"state":"healthy","reason":"All signed checks pass.","observed_at":"2026-09-09T19:59:00.123456","freshness":"fresh","source_checks":["guardian.api"]},"current_release":null,"current_project_id":null,"current_project_name":"Guardian hardening","next_gate":"Run product canary","highest_impact_blocker":null,"source_refs":[{"source_type":"signed_operational_snapshot","ref":"/api/v1/state-registry/board.guardian.operational","revision":"guardian-r4","observed_at":"2026-09-09T19:59:00.123456","freshness":"fresh"}]}"#
+
+    private static var boardArchitectureDirectoryJSON: Data {
+        let prefix = #"{"schema_version":"orca.board-architecture-directory.v1","config_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generated_at":"2026-09-09T20:00:00.123456","profiles":["#
+        return Data((prefix + boardArchitectureProfileJSON + "]}").utf8)
+    }
+    // Fixture mirrors the orca.captain-work-lens.v1 grouped contract from
+    // SPEC-WAITING-ON-TONY-AS-WORK-LENS-2026-09-20.
+    private static let captainWorkLensFixtureJSON = #"""
+    {
+      "contract_version": "orca.captain-work-lens.v1",
+      "generated_at": "2026-09-20T12:00:00Z",
+      "groups": [
+        {
+          "name": "Decisions On Tony",
+          "items": [
+            {
+              "id": "approval:approval-1",
+              "kind": "approval",
+              "title": "Approve governed release",
+              "summary": "Release approval is ready for Captain review.",
+              "authority": "tony",
+              "agent_slug": "coral",
+              "occurred_at": "2026-09-19T08:00:00Z",
+              "age_hours": 4.0,
+              "stale_after_hours": 24,
+              "is_stale": false,
+              "gate_severity": 2,
+              "endpoint": "/api/v1/approvals/approval-1",
+              "decision_endpoint": "/api/v1/tickets/ticket-2/approvals/approval-1",
+              "approval_id": "approval-1",
+              "ticket_id": "ticket-2",
+              "ticket_title": "Ship Console release",
+              "ticket_status": "in_review",
+              "desired_outcome": null,
+              "needs_scope": false,
+              "approval_gate": "release",
+              "reason": "Governed release requires Captain authority.",
+              "requested_by": "coral"
+            }
+          ]
+        },
+        {
+          "name": "Tickets On Tony",
+          "items": [
+            {
+              "id": "ticket:ticket-1",
+              "kind": "ticket",
+              "title": "Choose the release window",
+              "summary": "Tony to decide the release window.",
+              "authority": "tony",
+              "agent_slug": "maui",
+              "occurred_at": "2026-09-18T05:00:00Z",
+              "age_hours": 31.0,
+              "stale_after_hours": null,
+              "is_stale": true,
+              "gate_severity": 3,
+              "endpoint": "/api/v1/tickets/ticket-1",
+              "decision_endpoint": null,
+              "approval_id": null,
+              "ticket_id": "ticket-1",
+              "ticket_title": "Choose the release window",
+              "ticket_status": "blocked",
+              "desired_outcome": "Release window chosen.",
+              "needs_scope": true,
+              "approval_gate": null,
+              "reason": "Captain input is required.",
+              "requested_by": "maui"
+            }
+          ]
+        },
+        {
+          "name": "Delegation Requests",
+          "items": [
+            {
+              "id": "delegation:req-1",
+              "kind": "delegation_request",
+              "title": "Take over release notes",
+              "summary": "Delegate release notes drafting.",
+              "authority": "tony",
+              "agent_slug": null,
+              "occurred_at": "2026-09-20T01:00:00Z",
+              "age_hours": 11.0,
+              "stale_after_hours": null,
+              "is_stale": false,
+              "gate_severity": 1,
+              "endpoint": "/api/v1/delegation-requests/req-1",
+              "decision_endpoint": null,
+              "approval_id": null,
+              "ticket_id": null,
+              "ticket_title": null,
+              "ticket_status": null,
+              "desired_outcome": null,
+              "needs_scope": false,
+              "approval_gate": null,
+              "reason": null,
+              "requested_by": "coral"
+            }
+          ]
+        }
+      ],
+      "counts": {
+        "Decisions On Tony": 1,
+        "Tickets On Tony": 1,
+        "Delegation Requests": 1
+      }
     }
     """#
 
@@ -1955,6 +2339,15 @@ private actor StubRuntimeService: OrcaRuntimeServing {
     }
     func runtimeTurn(turnID: String) async throws -> Components.Schemas.ChatRuntimeTurnRead {
         throw OrcaRuntimeClientError.httpStatus(404)
+    }
+    func runtimeUpdates(
+        turnID: String,
+        persistedCursor: String?,
+        persistCursor: @escaping @Sendable (String) -> Void
+    ) -> AsyncThrowingStream<OrcaRuntimeReconciliationUpdate, Error> {
+        AsyncThrowingStream { continuation in
+            continuation.finish()
+        }
     }
     func conversationMemory(conversationID: String) async throws -> Components.Schemas.ConversationMemoryRead {
         throw OrcaRuntimeClientError.invalidResponse("unused")

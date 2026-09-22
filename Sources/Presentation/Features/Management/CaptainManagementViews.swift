@@ -47,7 +47,7 @@ final class CaptainBoardPlanViewModel {
         do {
             let response: ManagementBoardDirectoryResponseDTO = try await apiClient.get(path: "/api/v1/boards")
             boards = response.items
-                .filter { $0.slug.lowercased() != "fund" }
+                .filter { !$0.isProtected }
                 .sorted { lhs, rhs in
                     if lhs.slug == "pod" { return true }
                     if rhs.slug == "pod" { return false }

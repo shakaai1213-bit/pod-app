@@ -58,3 +58,11 @@ public enum OrcaEndpointPolicy {
         return normalizedOrigin(finalURL) == normalizedOrigin(requestURL)
     }
 }
+
+public enum OrcaBoardArchitectureEndpoint {
+    public static let directory = "/api/v1/board-architecture"
+
+    public static func profile(boardID: UUID) -> String {
+        "\(directory)/\(boardID.uuidString)"
+    }
+}

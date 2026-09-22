@@ -14,6 +14,11 @@ protocol OrcaRuntimeServing: Sendable {
     func workControl(agentKey: String) async throws -> Components.Schemas.ChatRuntimeWorkControlBundleRead
     func providerControl() async throws -> Components.Schemas.ChatRuntimeProviderControlBundleRead
     func runtimeTurn(turnID: String) async throws -> Components.Schemas.ChatRuntimeTurnRead
+    func runtimeUpdates(
+        turnID: String,
+        persistedCursor: String?,
+        persistCursor: @escaping @Sendable (String) -> Void
+    ) async -> AsyncThrowingStream<OrcaRuntimeReconciliationUpdate, Error>
     func conversationMemory(conversationID: String) async throws -> Components.Schemas.ConversationMemoryRead
     func proposeConversationMemory(
         conversationID: String,
@@ -105,6 +110,30 @@ actor OrcaRuntimeService: OrcaRuntimeServing {
 
     func runtimeTurn(turnID: String) async throws -> Components.Schemas.ChatRuntimeTurnRead {
         try await client.runtimeTurn(turnID: turnID)
+    }
+
+    func runtimeUpdates(
+        turnID: String,
+        persistedCursor: String?,
+        persistCursor: @escaping @Sendable (String) -> Void
+    ) -> AsyncThrowingStream<OrcaRuntimeReconciliationUpdate, Error> {
+        OrcaRuntimeReconciliationDriver(
+            turnID: turnID,
+            persistedCursor: persistedCursor,
+            poll: { [client] turnID, cursor in
+                try await client.reconcileRuntimeTurn(
+                    turnID: turnID,
+                    afterCursor: cursor
+                )
+            },
+            stream: { [client] turnID, cursor in
+                try await client.runtimeTurnStream(
+                    turnID: turnID,
+                    afterCursor: cursor
+                )
+            },
+            persistCursor: persistCursor
+        ).updates()
     }
 
     func conversationMemory(

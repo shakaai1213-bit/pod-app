@@ -1,5 +1,55 @@
 import Foundation
 
+public enum OrcaBoardArchitectureGroup: String, CaseIterable, Hashable, Identifiable, Sendable {
+    case products = "Products"
+    case surfaces = "Surfaces"
+    case platform = "Platform"
+    case infrastructure = "Infrastructure"
+    case fund = "Fund"
+    case strategy = "Strategy"
+    case other = "Other"
+
+    public var id: String { rawValue }
+
+    public static func classify(
+        slug: String,
+        layer: String?,
+        description: String?,
+        isProduct: Bool
+    ) -> Self {
+        let normalizedSlug = slug.lowercased()
+        switch normalizedSlug {
+        case "fund":
+            return .fund
+        case "campwatch", "guardian", "tiki":
+            return .products
+        case "pod", "products", "surfaces":
+            return .surfaces
+        case "operations", "tools", "governance":
+            return .infrastructure
+        case "north-star":
+            return .strategy
+        case "compute", "jarvis", "memory", "nerve", "platform", "schoolhouse", "orca":
+            return .platform
+        default:
+            break
+        }
+
+        if isProduct { return .products }
+        switch layer?.lowercased() {
+        case "product", "products": return .products
+        case "surface", "surfaces": return .surfaces
+        case "platform": return .platform
+        case "infrastructure", "operations": return .infrastructure
+        case "fund": return .fund
+        case "strategy": return .strategy
+        default:
+            let normalizedDescription = description?.lowercased() ?? ""
+            return normalizedDescription.contains("[product") ? .products : .other
+        }
+    }
+}
+
 public struct OrcaBoardDirectoryItem: Decodable, Identifiable, Hashable, Sendable {
     public let id: UUID
     public let slug: String
@@ -7,26 +57,47 @@ public struct OrcaBoardDirectoryItem: Decodable, Identifiable, Hashable, Sendabl
     public let layer: String?
     public let component: String?
     public let boardDescription: String?
+    public let classification: OrcaBoardClassification?
     public let projectCount: Int
     public let activeCount: Int
     public let ticketCount: Int
+    public let protection: Bool
 
     public var displayName: String {
         guard let component, !component.isEmpty else { return name }
         return component
     }
 
-    public var isProtected: Bool { slug.lowercased() == "fund" }
+    public var isProtected: Bool { protection }
 
     public var isProduct: Bool {
+        if classification == .product { return true }
         let description = boardDescription?.lowercased() ?? ""
         return description.contains("[product")
             || description.contains("product vertical")
             || ["campwatch", "guardian", "tiki"].contains(slug.lowercased())
     }
 
+    public var architectureGroup: OrcaBoardArchitectureGroup {
+        .classify(
+            slug: slug,
+            layer: layer,
+            description: boardDescription,
+            isProduct: isProduct
+        )
+    }
+
+    public func matches(searchQuery: String) -> Bool {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return true }
+        let publicDescription = isProtected ? nil : boardDescription
+        return [displayName, name, slug, layer, component, publicDescription]
+            .compactMap { $0 }
+            .contains { $0.localizedCaseInsensitiveContains(query) }
+    }
+
     private enum CodingKeys: String, CodingKey {
-        case id, slug, name, layer, component, description, objective
+        case id, slug, name, layer, component, description, objective, classification, protected
         case projectCount = "project_count"
         case projectsCount = "projects_count"
         case totalProjects = "total_projects"
@@ -47,6 +118,7 @@ public struct OrcaBoardDirectoryItem: Decodable, Identifiable, Hashable, Sendabl
         component = try container.decodeIfPresent(String.self, forKey: .component)
         boardDescription = try container.decodeIfPresent(String.self, forKey: .description)
             ?? container.decodeIfPresent(String.self, forKey: .objective)
+        classification = try container.decodeIfPresent(OrcaBoardClassification.self, forKey: .classification)
         projectCount = Self.firstInt(
             in: container,
             keys: [.projectCount, .projectsCount, .totalProjects]
@@ -59,6 +131,51 @@ public struct OrcaBoardDirectoryItem: Decodable, Identifiable, Hashable, Sendabl
             in: container,
             keys: [.ticketCount, .ticketsCount, .directTicketCount]
         ) ?? 0
+        protection = try container.decodeIfPresent(Bool.self, forKey: .protected)
+            ?? (slug.lowercased() == "fund")
+    }
+
+    public init(
+        id: UUID,
+        slug: String,
+        name: String,
+        layer: String?,
+        component: String?,
+        boardDescription: String?,
+        classification: OrcaBoardClassification? = nil,
+        projectCount: Int,
+        activeCount: Int,
+        ticketCount: Int,
+        protection: Bool
+    ) {
+        self.id = id
+        self.slug = slug
+        self.name = name
+        self.layer = layer
+        self.component = component
+        self.boardDescription = boardDescription
+        self.classification = classification
+        self.projectCount = projectCount
+        self.activeCount = activeCount
+        self.ticketCount = ticketCount
+        self.protection = protection
+    }
+
+    public init(profile: OrcaBoardArchitectureProfile) {
+        let header = profile.header
+        self.init(
+            id: header.boardID,
+            slug: header.slug,
+            name: header.name,
+            layer: header.groupSlug,
+            component: nil,
+            boardDescription: header.publicSummary,
+            classification: header.classification,
+            projectCount: header.counts.projectCount ?? 0,
+            activeCount: header.counts.activeProjectCount ?? 0,
+            ticketCount: header.counts.ticketCount ?? 0,
+            protection: header.isProtected
+        )
     }
 
     private static func firstInt(
@@ -77,6 +194,10 @@ public struct OrcaBoardDirectoryItem: Decodable, Identifiable, Hashable, Sendabl
 public struct OrcaBoardDirectory: Decodable, Hashable, Sendable {
     public let items: [OrcaBoardDirectoryItem]
 
+    public init(items: [OrcaBoardDirectoryItem]) {
+        self.items = items
+    }
+
     public init(from decoder: Decoder) throws {
         if var container = try? decoder.unkeyedContainer() {
             var result: [OrcaBoardDirectoryItem] = []
@@ -91,6 +212,33 @@ public struct OrcaBoardDirectory: Decodable, Hashable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey { case items }
+
+    public func filtered(
+        searchQuery: String = "",
+        group: OrcaBoardArchitectureGroup? = nil
+    ) -> [OrcaBoardDirectoryItem] {
+        items.filter { item in
+            (group == nil || item.architectureGroup == group)
+                && item.matches(searchQuery: searchQuery)
+        }
+    }
+
+    public func grouped(
+        searchQuery: String = "",
+        group: OrcaBoardArchitectureGroup? = nil
+    ) -> [(group: OrcaBoardArchitectureGroup, boards: [OrcaBoardDirectoryItem])] {
+        let filteredItems = filtered(searchQuery: searchQuery, group: group)
+        let groupedItems = Dictionary(grouping: filteredItems, by: \.architectureGroup)
+        return OrcaBoardArchitectureGroup.allCases.compactMap { architectureGroup in
+            guard let boards = groupedItems[architectureGroup], !boards.isEmpty else { return nil }
+            return (
+                architectureGroup,
+                boards.sorted {
+                    $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+                }
+            )
+        }
+    }
 }
 
 public struct OrcaEvidenceReference: Decodable, Hashable, Sendable {
