@@ -1651,7 +1651,8 @@ final class OrcaMacModelTests: XCTestCase {
     private func makeModel() -> OrcaMacModel {
         OrcaMacModel(
             tokenStore: TestRuntimeTokenStore(token: nil),
-            defaults: UserDefaults(suiteName: "OrcaMacModelTests.\(UUID().uuidString)")!
+            defaults: UserDefaults(suiteName: "OrcaMacModelTests.\(UUID().uuidString)")!,
+            deviceIDProvider: { "test-device-id-0123456789" }
         )
     }
 
@@ -2290,6 +2291,7 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertEqual(request.threadScope, "ticket")
         XCTAssertEqual(request.activeTicketID, "ticket-9")
         XCTAssertEqual(request.conversationID, "channel-ticket-9")
+        XCTAssertEqual(request.clientInstanceID, "test-device-id-0123456789")
         XCTAssertEqual(
             model.conversations["ticket:ticket-9"]?.messages.last?.deliveryState,
             .persisted
