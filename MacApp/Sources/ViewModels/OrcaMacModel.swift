@@ -96,6 +96,7 @@ final class OrcaMacModel {
 
     @ObservationIgnored private let tokenStore: any RuntimeTokenStoring
     @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let deviceIDProvider: () -> String
     @ObservationIgnored private let runtimeCursorStore: OrcaRuntimeCursorStore
     @ObservationIgnored private var service: (any OrcaRuntimeServing)?
     @ObservationIgnored private var consoleService: OrcaConsoleService?
@@ -110,10 +111,12 @@ final class OrcaMacModel {
 
     init(
         tokenStore: any RuntimeTokenStoring = RuntimeTokenStore(),
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        deviceIDProvider: @escaping () -> String = { OrcaDeviceIdentity.current() }
     ) {
         self.tokenStore = tokenStore
         self.defaults = defaults
+        self.deviceIDProvider = deviceIDProvider
         runtimeCursorStore = OrcaRuntimeCursorStore(defaults: defaults)
         serverAddress = defaults.string(forKey: "orca.mac.runtime.server")
             ?? Self.defaultServerAddress
@@ -1063,7 +1066,7 @@ final class OrcaMacModel {
         presentedError = nil
 
         do {
-            let deviceID = OrcaDeviceIdentity.current()
+            let deviceID = deviceIDProvider()
             let response = try await service.send(
                 OrcaRuntimeDirectTurnRequest(
                     agentSlug: agentID,
