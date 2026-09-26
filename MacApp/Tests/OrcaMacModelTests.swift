@@ -540,7 +540,7 @@ final class OrcaMacModelTests: XCTestCase {
         let session = URLSession(configuration: configuration)
         TestURLProtocol.response = { request in
             if request.url?.path == "/api/v1/fund/landing" {
-                return (200, Data(#"{"status":"available","source_fresh":true,"headline":"Synthetic Fund"}"#.utf8))
+                return (200, Data(#"{"status":"degraded","source_fresh":false,"verified_financial_data_available":false,"headline":"Synthetic Fund","account_usd":123456}"#.utf8))
             }
             return (503, Data())
         }
@@ -556,7 +556,9 @@ final class OrcaMacModelTests: XCTestCase {
 
         XCTAssertEqual(snapshot.metrics.first { $0.id == "fund-cockpit" }?.value, "Unavailable")
         XCTAssertEqual(snapshot.metrics.first { $0.id == "fund-engines" }?.value, "-")
+        XCTAssertEqual(snapshot.metrics.first { $0.id == "fund-source" }?.value, "Check")
         XCTAssertEqual(snapshot.records.map(\.id), ["fund-landing"])
+        XCTAssertFalse(snapshot.records[0].fields.contains { $0.label == "Account USD" })
     }
 
     func testApprovalDecodesTicketContextFieldsWhenPresent() throws {

@@ -325,13 +325,18 @@ actor OrcaConsoleService {
         let shadows = payload?["shadows"]?.objectValue?["candidates"]?.objectValue
         let predictors = payload?["predictors"]?.objectValue?["predictors"]?.objectValue
         let captures = payload?["run_capture"]?.objectValue?["symbols"]?.objectValue
+        let landingAvailable = text(landing, key: "status") == "available"
+            && bool(landing, key: "source_fresh") == true
+        let verifiedFinancialData = bool(landing, key: "verified_financial_data_available") == true
 
         let landingKeys: [(String, String)] = [
             ("headline", "Headline"), ("mode", "Mode"), ("readiness", "Readiness"),
-            ("generated_at", "As of"), ("account_usd", "Account USD"),
+            ("generated_at", "As of"), ("kill_switch_status", "Kill switch"),
+        ] + (verifiedFinancialData ? [
+            ("account_usd", "Account USD"),
             ("net_pnl_usd", "Net P&L USD"), ("closed_trades", "Closed trades"),
-            ("sharpe", "Sharpe"), ("kill_switch_status", "Kill switch"),
-        ]
+            ("sharpe", "Sharpe"),
+        ] : [])
         let fields = landingKeys.compactMap { key, label -> ConsoleField? in
             guard let value = text(landing, key: key) else { return nil }
             return ConsoleField(label: label, value: value)
@@ -340,7 +345,7 @@ actor OrcaConsoleService {
             id: "fund-landing",
             title: "Fund Operating View",
             subtitle: "ORCA protected read model",
-            status: bool(landing, key: "source_fresh") == true ? "current" : "stale",
+            status: landingAvailable ? "current" : "check",
             group: "Fund",
             fields: fields,
             approval: nil
@@ -386,7 +391,7 @@ actor OrcaConsoleService {
         return ConsoleSectionSnapshot(
             section: .fund,
             metrics: [
-                ConsoleMetric(id: "fund-source", label: "Fund source", value: bool(landing, key: "source_fresh") == true ? "Current" : "Stale", status: bool(landing, key: "source_fresh") == true ? "ok" : "attention"),
+                ConsoleMetric(id: "fund-source", label: "Fund source", value: landingAvailable ? "Current" : "Check", status: landingAvailable ? "ok" : "attention"),
                 ConsoleMetric(id: "fund-cockpit", label: "Cockpit", value: cockpitStatus.capitalized, status: cockpitStatus),
                 metric("fund-engines", "Engines", recognized ? engines.count : nil),
                 ConsoleMetric(id: "fund-sync", label: "ORCA sync", value: sync.map { "\($0["in_sync"]?.displayValue ?? "-")/\($0["total"]?.displayValue ?? "-")" } ?? "-", status: problems.isEmpty && available ? "ok" : "attention"),
