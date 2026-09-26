@@ -82,6 +82,23 @@ func fundCockpitRouteDecodes() throws {
     #expect(payload.alerts.map(\.name) == ["Synthetic alert"])
 }
 
+@Test("Fund predictor decodes skill and random baseline semantics")
+func fundPredictorSkillDecodes() throws {
+    let current = try makeDecoder().decode(
+        FundCockpitPredictorDTO.self,
+        from: Data(#"{"skill":"no_skill","baseline_kind":"random","accuracy":0.33,"random_baseline":0.33}"#.utf8)
+    )
+    #expect(current.skill == "no_skill")
+    #expect(current.baselineKind == "random")
+
+    let older = try makeDecoder().decode(
+        FundCockpitPredictorDTO.self,
+        from: Data(#"{"verdict":"pending"}"#.utf8)
+    )
+    #expect(older.skill == nil)
+    #expect(older.baselineKind == nil)
+}
+
 private func fixture(_ name: String) throws -> Data {
     let url = try #require(Bundle.module.url(forResource: name, withExtension: "json", subdirectory: "Fixtures"))
     return try Data(contentsOf: url)

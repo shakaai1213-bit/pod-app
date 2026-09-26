@@ -94,11 +94,14 @@ struct FundCockpitPredictorDTO: Decodable {
     let nResolved: Int?
     let accuracy: Double?
     let randomBaseline: Double?
+    let skill: String?
+    let baselineKind: String?
 
     enum CodingKeys: String, CodingKey {
-        case label, verdict, accuracy
+        case label, verdict, accuracy, skill
         case nResolved = "n_resolved"
         case randomBaseline = "random_baseline"
+        case baselineKind = "baseline_kind"
     }
 }
 

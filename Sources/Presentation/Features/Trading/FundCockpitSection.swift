@@ -174,9 +174,14 @@ struct FundCockpitSection: View {
     }
 
     private func predictorRead(_ predictor: FundCockpitPredictorDTO) -> String {
-        guard let accuracy = predictor.accuracy, let baseline = predictor.randomBaseline else {
-            return predictor.verdict ?? "pending"
+        let skill = predictor.skill?.replacingOccurrences(of: "_", with: " ").uppercased()
+            ?? predictor.verdict
+            ?? "pending"
+        guard predictor.baselineKind == "random",
+              let accuracy = predictor.accuracy,
+              let baseline = predictor.randomBaseline else {
+            return skill
         }
-        return "\(Int((accuracy * 100).rounded()))% / \(Int((baseline * 100).rounded()))% base"
+        return "\(skill) - \(Int((accuracy * 100).rounded()))% vs \(Int((baseline * 100).rounded()))% random"
     }
 }
