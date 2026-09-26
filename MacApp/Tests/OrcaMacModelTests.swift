@@ -561,6 +561,37 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertFalse(snapshot.records[0].fields.contains { $0.label == "Account USD" })
     }
 
+    func testFundSnapshotDoesNotRenderStaleCockpitRecords() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        TestURLProtocol.response = { request in
+            switch request.url?.path {
+            case "/api/v1/fund/landing":
+                return (200, Data(#"{"status":"available","source_fresh":true,"headline":"Synthetic Fund"}"#.utf8))
+            case "/api/v1/fund/routes/cockpit":
+                return (200, Data(#"{"status":"available","quality":"stale","stale":true,"data":{"schema_version":"fund_routes_cockpit/v0","route":"fund.cockpit","payload":{"engines":{"rows":[{"engine":"Old engine","verdict":"ok"}]},"orca_sync":{"in_sync":4,"total":4,"problems":[]},"alerts":[{"name":"Old alert","severity":"warn"}]}}}"#.utf8))
+            default:
+                return (404, Data())
+            }
+        }
+        defer { TestURLProtocol.response = nil }
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+
+        let snapshot = try await service.snapshot(for: .fund, workControl: nil)
+
+        XCTAssertEqual(snapshot.metrics.first { $0.id == "fund-cockpit" }?.value, "Stale")
+        XCTAssertEqual(snapshot.metrics.first { $0.id == "fund-engines" }?.value, "-")
+        XCTAssertEqual(snapshot.metrics.first { $0.id == "fund-sync" }?.value, "-")
+        XCTAssertEqual(snapshot.metrics.first { $0.id == "fund-alerts" }?.value, "-")
+        XCTAssertEqual(snapshot.records.map(\.id), ["fund-landing"])
+    }
+
     func testApprovalDecodesTicketContextFieldsWhenPresent() throws {
         let json = """
         {

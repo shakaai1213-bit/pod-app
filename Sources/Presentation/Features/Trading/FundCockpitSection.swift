@@ -4,7 +4,8 @@ struct FundCockpitSection: View {
     let viewModel: FundCockpitViewModel
 
     private var payload: FundCockpitPayloadDTO? {
-        guard viewModel.feed?.data?.schemaVersion == "fund_routes_cockpit/v0",
+        guard viewModel.feed?.isAvailable == true,
+              viewModel.feed?.data?.schemaVersion == "fund_routes_cockpit/v0",
               viewModel.feed?.data?.route == "fund.cockpit" else { return nil }
         return viewModel.feed?.data?.payload
     }
@@ -27,11 +28,6 @@ struct FundCockpitSection: View {
             }
 
             if let payload {
-                if viewModel.feed?.isAvailable != true {
-                    Text(viewModel.errorMessage ?? "Last known snapshot. Refresh to check ORCA.")
-                        .podTextStyle(.caption, color: AppColors.accentWarning)
-                }
-
                 HStack(spacing: Theme.md) {
                     metric("Engines", value: "\(payload.engines.rows.count)")
                     metric("ORCA sync", value: payload.orcaSync.map { "\($0.inSync)/\($0.total)" } ?? "-")
@@ -70,7 +66,7 @@ struct FundCockpitSection: View {
                 VStack(alignment: .leading, spacing: Theme.xs) {
                     Text("ENGINE HEALTH")
                         .podTextStyle(.label, color: AppColors.textTertiary)
-                    ForEach(payload.engines.rows) { row in
+                    ForEach(Array(payload.engines.rows.enumerated()), id: \.offset) { _, row in
                         HStack(alignment: .firstTextBaseline, spacing: Theme.sm) {
                             Text(row.engine)
                                 .podTextStyle(.body, color: AppColors.textPrimary)
@@ -109,7 +105,7 @@ struct FundCockpitSection: View {
                     VStack(alignment: .leading, spacing: Theme.xs) {
                         Text("EXECUTION SERVICES")
                             .podTextStyle(.label, color: AppColors.textTertiary)
-                        ForEach(payload.execution) { service in
+                        ForEach(Array(payload.execution.enumerated()), id: \.offset) { _, service in
                             HStack(spacing: Theme.sm) {
                                 Circle()
                                     .fill(service.alive ? AppColors.accentSuccess : AppColors.accentDanger)
@@ -129,7 +125,7 @@ struct FundCockpitSection: View {
                     VStack(alignment: .leading, spacing: Theme.xs) {
                         Text("ALERTS")
                             .podTextStyle(.label, color: AppColors.textTertiary)
-                        ForEach(payload.alerts) { alert in
+                        ForEach(Array(payload.alerts.enumerated()), id: \.offset) { _, alert in
                             HStack(alignment: .firstTextBaseline, spacing: Theme.sm) {
                                 Text(alert.name)
                                     .podTextStyle(.caption, color: AppColors.textSecondary)

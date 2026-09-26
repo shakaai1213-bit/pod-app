@@ -350,7 +350,7 @@ actor OrcaConsoleService {
             fields: fields,
             approval: nil
         )]
-        if recognized {
+        if available {
             for (index, value) in engines.prefix(16).enumerated() {
                 let engine = value.objectValue ?? [:]
                 records.append(ConsoleRecord(
@@ -393,12 +393,12 @@ actor OrcaConsoleService {
             metrics: [
                 ConsoleMetric(id: "fund-source", label: "Fund source", value: landingAvailable ? "Current" : "Check", status: landingAvailable ? "ok" : "attention"),
                 ConsoleMetric(id: "fund-cockpit", label: "Cockpit", value: cockpitStatus.capitalized, status: cockpitStatus),
-                metric("fund-engines", "Engines", recognized ? engines.count : nil),
-                ConsoleMetric(id: "fund-sync", label: "ORCA sync", value: sync.map { "\($0["in_sync"]?.displayValue ?? "-")/\($0["total"]?.displayValue ?? "-")" } ?? "-", status: problems.isEmpty && available ? "ok" : "attention"),
-                metric("fund-shadows", "Shadows", shadows?.count),
-                metric("fund-predictors", "Predictors", predictors?.count),
-                metric("fund-captures", "Runs captured", captures?.values.filter { $0.objectValue?["run_detected"] == .bool(true) }.count),
-                metric("fund-alerts", "Alerts", recognized ? alerts.count : nil),
+                metric("fund-engines", "Engines", available ? engines.count : nil),
+                ConsoleMetric(id: "fund-sync", label: "ORCA sync", value: available ? (sync.map { "\($0["in_sync"]?.displayValue ?? "-")/\($0["total"]?.displayValue ?? "-")" } ?? "-") : "-", status: available ? (problems.isEmpty ? "ok" : "attention") : "attention"),
+                metric("fund-shadows", "Shadows", available ? shadows?.count : nil),
+                metric("fund-predictors", "Predictors", available ? predictors?.count : nil),
+                metric("fund-captures", "Runs captured", available ? captures?.values.filter { $0.objectValue?["run_detected"] == .bool(true) }.count : nil),
+                metric("fund-alerts", "Alerts", available ? alerts.count : nil),
             ],
             records: records,
             sources: ["/api/v1/fund/landing", "/api/v1/fund/routes/cockpit"],
