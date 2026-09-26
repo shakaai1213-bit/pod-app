@@ -1,0 +1,27 @@
+{
+  "status": "available",
+  "quality": "available",
+  "stale": false,
+  "as_of": "2026-09-26T11:15:00Z",
+  "data": {
+    "schema_version": "fund_routes_cockpit/v0",
+    "route": "fund.cockpit",
+    "generated_at": "2026-09-26T11:15:00Z",
+    "payload": {
+      "generated_at": "2026-09-26T11:15:00Z",
+      "execution": [{"label": "synthetic desk", "alive": true}],
+      "engines": {
+        "generated_at": "2026-09-26T11:00:00Z",
+        "rows": [{"engine": "Synthetic engine", "pillar": "research", "verdict": "healthy", "note": "fixture"}]
+      },
+      "predictors": {
+        "predictors": {"synthetic": {"label": "Synthetic predictor", "verdict": "watch", "n_resolved": 3, "accuracy": 0.5, "random_baseline": 0.4}}
+      },
+      "shadows": {"ok": true, "candidates": {"synthetic": {"stage": "watch", "status": "active", "trade_count": 2}}, "problems": []},
+      "run_capture": {"symbols": {"SYNTH": {"run_detected": true}}},
+      "orca_sync": {"total": 40, "in_sync": 39, "problems": [{"surface": "synthetic route", "verdict": "DIVERGED"}]},
+      "chieffish": {"ok": true, "pending_before": 1},
+      "alerts": [{"severity": "warn", "name": "Synthetic alert", "detail": "fixture only"}]
+    }
+  }
+}

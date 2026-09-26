@@ -68,6 +68,20 @@ func fundAvailableRouteDecodes() throws {
     #expect(closed.closedAt == "2026-07-09T21:00:00Z")
 }
 
+@Test("Fund cockpit decodes the protected read model")
+func fundCockpitRouteDecodes() throws {
+    let feed = try makeDecoder().decode(FundCockpitFeedDTO.self, from: fixture("fund-cockpit-available"))
+    let payload = try #require(feed.data?.payload)
+
+    #expect(feed.isAvailable)
+    #expect(payload.engines.rows.map(\.engine) == ["Synthetic engine"])
+    #expect(payload.orcaSync?.inSync == 39)
+    #expect(payload.orcaSync?.problems.first?.surface == "synthetic route")
+    #expect(payload.shadows?.candidates.count == 1)
+    #expect(payload.runCapture?.symbols["SYNTH"]?.runDetected == true)
+    #expect(payload.alerts.map(\.name) == ["Synthetic alert"])
+}
+
 private func fixture(_ name: String) throws -> Data {
     let url = try #require(Bundle.module.url(forResource: name, withExtension: "json", subdirectory: "Fixtures"))
     return try Data(contentsOf: url)
