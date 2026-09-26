@@ -503,6 +503,62 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertEqual(value.objectValue?["items"]?.displayValue, "1 items")
     }
 
+    func testFundSnapshotShowsPartialCockpitAndSyncProblems() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        TestURLProtocol.response = { request in
+            switch request.url?.path {
+            case "/api/v1/fund/landing":
+                return (200, Data(#"{"status":"available","source_fresh":true,"headline":"Synthetic Fund","mode":"paper","readiness":"review"}"#.utf8))
+            case "/api/v1/fund/routes/cockpit":
+                return (200, Data(#"{"status":"available","quality":"available","stale":false,"data":{"schema_version":"fund_routes_cockpit/v0","route":"fund.cockpit","payload":{"engines":{"rows":[{"engine":"Synthetic engine","verdict":"ok"}]},"orca_sync":{"in_sync":3,"total":4,"problems":[{"surface":"Synthetic route","verdict":"stale"}]},"alerts":[{"name":"Synthetic alert","severity":"warn"}]}}}"#.utf8))
+            default:
+                return (404, Data())
+            }
+        }
+        defer { TestURLProtocol.response = nil }
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+
+        let snapshot = try await service.snapshot(for: .fund, workControl: nil)
+
+        XCTAssertEqual(snapshot.metrics.first { $0.id == "fund-cockpit" }?.value, "Partial")
+        XCTAssertEqual(snapshot.metrics.first { $0.id == "fund-sync" }?.value, "3/4")
+        XCTAssertEqual(snapshot.records.first { $0.id == "fund-engine-0" }?.title, "Synthetic engine")
+        XCTAssertEqual(snapshot.records.first { $0.id == "fund-sync-0" }?.title, "Synthetic route")
+        XCTAssertEqual(snapshot.records.first { $0.id == "fund-alert-0" }?.title, "Synthetic alert")
+    }
+
+    func testFundSnapshotKeepsLandingWhenCockpitUnavailable() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        TestURLProtocol.response = { request in
+            if request.url?.path == "/api/v1/fund/landing" {
+                return (200, Data(#"{"status":"available","source_fresh":true,"headline":"Synthetic Fund"}"#.utf8))
+            }
+            return (503, Data())
+        }
+        defer { TestURLProtocol.response = nil }
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+
+        let snapshot = try await service.snapshot(for: .fund, workControl: nil)
+
+        XCTAssertEqual(snapshot.metrics.first { $0.id == "fund-cockpit" }?.value, "Unavailable")
+        XCTAssertEqual(snapshot.metrics.first { $0.id == "fund-engines" }?.value, "-")
+        XCTAssertEqual(snapshot.records.map(\.id), ["fund-landing"])
+    }
+
     func testApprovalDecodesTicketContextFieldsWhenPresent() throws {
         let json = """
         {

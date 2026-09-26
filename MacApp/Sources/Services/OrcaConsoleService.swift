@@ -306,16 +306,97 @@ actor OrcaConsoleService {
     }
 
     private func fundSnapshot() async throws -> ConsoleSectionSnapshot {
-        let value = try await get("/api/v1/fund/landing")
-        let fields = value.objectValue?.keys.sorted().compactMap { key -> ConsoleField? in
-            guard let display = value.objectValue?[key]?.displayValue else { return nil }
-            return ConsoleField(label: key.replacingOccurrences(of: "_", with: " ").capitalized, value: display)
-        } ?? []
+        let landing = try await get("/api/v1/fund/landing")
+        let cockpit = try? await get("/api/v1/fund/routes/cockpit")
+        let envelope = cockpit?.objectValue?["data"]?.objectValue
+        let payload = envelope?["payload"]?.objectValue
+        let recognized = envelope?["schema_version"]?.displayValue == "fund_routes_cockpit/v0"
+            && envelope?["route"]?.displayValue == "fund.cockpit"
+            && payload != nil
+        let available = recognized && cockpit.flatMap { text($0, key: "status") } == "available"
+            && cockpit.flatMap { text($0, key: "quality") } == "available"
+            && cockpit.flatMap { bool($0, key: "stale") } == false
+        let sync = payload?["orca_sync"]?.objectValue
+        let problems = sync?["problems"]?.arrayValue ?? []
+        let cockpitStatus = available ? (problems.isEmpty ? "current" : "partial")
+            : (cockpit.flatMap { text($0, key: "quality") } == "stale" ? "stale" : "unavailable")
+        let engines = payload?["engines"]?.objectValue?["rows"]?.arrayValue ?? []
+        let alerts = payload?["alerts"]?.arrayValue ?? []
+        let shadows = payload?["shadows"]?.objectValue?["candidates"]?.objectValue
+        let predictors = payload?["predictors"]?.objectValue?["predictors"]?.objectValue
+        let captures = payload?["run_capture"]?.objectValue?["symbols"]?.objectValue
+
+        let landingKeys: [(String, String)] = [
+            ("headline", "Headline"), ("mode", "Mode"), ("readiness", "Readiness"),
+            ("generated_at", "As of"), ("account_usd", "Account USD"),
+            ("net_pnl_usd", "Net P&L USD"), ("closed_trades", "Closed trades"),
+            ("sharpe", "Sharpe"), ("kill_switch_status", "Kill switch"),
+        ]
+        let fields = landingKeys.compactMap { key, label -> ConsoleField? in
+            guard let value = text(landing, key: key) else { return nil }
+            return ConsoleField(label: label, value: value)
+        }
+        var records = [ConsoleRecord(
+            id: "fund-landing",
+            title: "Fund Operating View",
+            subtitle: "ORCA protected read model",
+            status: bool(landing, key: "source_fresh") == true ? "current" : "stale",
+            group: "Fund",
+            fields: fields,
+            approval: nil
+        )]
+        if recognized {
+            for (index, value) in engines.prefix(16).enumerated() {
+                let engine = value.objectValue ?? [:]
+                records.append(ConsoleRecord(
+                    id: "fund-engine-\(index)",
+                    title: engine["engine"]?.displayValue ?? "Unknown engine",
+                    subtitle: engine["pillar"]?.displayValue,
+                    status: engine["verdict"]?.displayValue ?? "unknown",
+                    group: "Engines",
+                    fields: [],
+                    approval: nil
+                ))
+            }
+            for (index, value) in problems.prefix(12).enumerated() {
+                let problem = value.objectValue ?? [:]
+                records.append(ConsoleRecord(
+                    id: "fund-sync-\(index)",
+                    title: problem["surface"]?.displayValue ?? "Unknown route",
+                    subtitle: "ORCA sync needs attention",
+                    status: problem["verdict"]?.displayValue ?? "check",
+                    group: "ORCA Sync",
+                    fields: [],
+                    approval: nil
+                ))
+            }
+            for (index, value) in alerts.prefix(12).enumerated() {
+                let alert = value.objectValue ?? [:]
+                records.append(ConsoleRecord(
+                    id: "fund-alert-\(index)",
+                    title: alert["name"]?.displayValue ?? "Fund alert",
+                    subtitle: nil,
+                    status: alert["severity"]?.displayValue ?? "attention",
+                    group: "Alerts",
+                    fields: [],
+                    approval: nil
+                ))
+            }
+        }
         return ConsoleSectionSnapshot(
             section: .fund,
-            metrics: [],
-            records: [ConsoleRecord(id: "fund-landing", title: "Fund Operating View", subtitle: "ORCA protected read model", status: "protected", group: "Fund", fields: fields, approval: nil)],
-            sources: ["/api/v1/fund/landing"],
+            metrics: [
+                ConsoleMetric(id: "fund-source", label: "Fund source", value: bool(landing, key: "source_fresh") == true ? "Current" : "Stale", status: bool(landing, key: "source_fresh") == true ? "ok" : "attention"),
+                ConsoleMetric(id: "fund-cockpit", label: "Cockpit", value: cockpitStatus.capitalized, status: cockpitStatus),
+                metric("fund-engines", "Engines", recognized ? engines.count : nil),
+                ConsoleMetric(id: "fund-sync", label: "ORCA sync", value: sync.map { "\($0["in_sync"]?.displayValue ?? "-")/\($0["total"]?.displayValue ?? "-")" } ?? "-", status: problems.isEmpty && available ? "ok" : "attention"),
+                metric("fund-shadows", "Shadows", shadows?.count),
+                metric("fund-predictors", "Predictors", predictors?.count),
+                metric("fund-captures", "Runs captured", captures?.values.filter { $0.objectValue?["run_detected"] == .bool(true) }.count),
+                metric("fund-alerts", "Alerts", recognized ? alerts.count : nil),
+            ],
+            records: records,
+            sources: ["/api/v1/fund/landing", "/api/v1/fund/routes/cockpit"],
             updatedAt: Date()
         )
     }
