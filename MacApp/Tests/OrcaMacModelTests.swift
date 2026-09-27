@@ -360,6 +360,51 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertTrue(snapshot.records.isEmpty)
     }
 
+    func testOverviewIsStatusOnlyAndAttentionMatchesCaptainLensCount() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        TestURLProtocol.response = { request in
+            XCTAssertEqual(request.httpMethod, "GET")
+            switch request.url?.path {
+            case "/api/v1/control-room/waiting-on-captain":
+                return (200, Data(Self.captainWorkLensFixtureJSON.utf8))
+            case "/api/v1/control-room/central-agent-health":
+                return (200, Data(#"{"status":"healthy"}"#.utf8))
+            case "/api/v1/boards":
+                return (200, Data(#"{"total":4}"#.utf8))
+            case "/api/v1/tickets":
+                return (200, Data(#"[{"id":"ticket-1"},{"id":"ticket-2"}]"#.utf8))
+            case "/api/v1/agents":
+                return (200, Data(#"{"total":7}"#.utf8))
+            case "/api/v1/startup/status":
+                return (200, Data(#"{"ok":true}"#.utf8))
+            default:
+                XCTFail("Unexpected Overview request: \(request.url?.path ?? "nil")")
+                return (404, Data())
+            }
+        }
+        defer { TestURLProtocol.response = nil }
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+
+        let snapshot = try await service.snapshot(for: .overview, workControl: nil)
+
+        XCTAssertEqual(snapshot.section, .overview)
+        XCTAssertTrue(snapshot.records.isEmpty)
+        XCTAssertEqual(snapshot.metrics.map(\.id), ["attention", "boards", "tickets", "agents", "agent-health", "startup"])
+        XCTAssertEqual(snapshot.metrics.first { $0.id == "attention" }?.value, "3")
+        XCTAssertEqual(snapshot.metrics.first { $0.id == "boards" }?.value, "4")
+        XCTAssertEqual(snapshot.metrics.first { $0.id == "tickets" }?.value, "2")
+        XCTAssertEqual(snapshot.metrics.first { $0.id == "agents" }?.value, "7")
+        XCTAssertTrue(snapshot.sources.contains("orca.captain-work-lens.v1"))
+        XCTAssertFalse(snapshot.sources.contains("/api/v1/control-room/captain-inbox"))
+    }
+
     func testCaptainLensGroupedContractDecodesIntoWorkSnapshot() throws {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -443,7 +488,18 @@ final class OrcaMacModelTests: XCTestCase {
 
         model.selectSection(.waitingOnCaptain, refresh: false)
 
-        XCTAssertEqual(model.selectedSection, .waitingOnCaptain)
+        XCTAssertEqual(model.selectedSection, .work)
+        XCTAssertEqual(model.workMode, .captain)
+        XCTAssertNil(model.workMetricFilter)
+    }
+
+    func testOverviewAttentionCardLandsOnWorkInCaptainMode() {
+        let model = makeModel()
+        model.selectSection(.overview, refresh: false)
+
+        model.activateConsoleMetric("attention", refresh: false)
+
+        XCTAssertEqual(model.selectedSection, .work)
         XCTAssertEqual(model.workMode, .captain)
         XCTAssertNil(model.workMetricFilter)
     }
@@ -457,7 +513,7 @@ final class OrcaMacModelTests: XCTestCase {
         )
         let snapshot = ConsoleSectionSnapshot.captainWorkLens(response)
         let model = makeModel()
-        model.sectionSnapshots[.waitingOnCaptain] = snapshot
+        model.sectionSnapshots[.work] = snapshot
         model.selectSection(.waitingOnCaptain, refresh: false)
 
         XCTAssertEqual(model.workMode, .captain)
