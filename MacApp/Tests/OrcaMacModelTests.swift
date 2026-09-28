@@ -493,6 +493,75 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertNil(model.workMetricFilter)
     }
 
+    func testSelectingWaitingOnCaptainPersistsAcrossRelaunch() {
+        let suiteName = "OrcaMacModelTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let firstModel = OrcaMacModel(
+            tokenStore: TestRuntimeTokenStore(token: nil),
+            defaults: defaults
+        )
+
+        firstModel.selectSection(.waitingOnCaptain, refresh: false)
+
+        let relaunchedModel = OrcaMacModel(
+            tokenStore: TestRuntimeTokenStore(token: nil),
+            defaults: defaults
+        )
+        XCTAssertEqual(relaunchedModel.selectedSection, .work)
+        XCTAssertEqual(relaunchedModel.workMode, .captain)
+    }
+
+    func testSwitchingWorkModeRefreshesEachModesRecords() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        TestURLProtocol.response = { request in
+            XCTAssertEqual(request.url?.path, "/api/v1/control-room/waiting-on-captain")
+            return (200, Data(Self.captainWorkLensFixtureJSON.utf8))
+        }
+        defer { TestURLProtocol.response = nil }
+        let consoleService = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+        let runtimeService = StubRuntimeService(workControlBundle: Self.workControlBundle)
+        let model = makeModel()
+        model.selectSection(.work, refresh: false)
+        model.injectServicesForTesting(runtime: runtimeService, console: consoleService)
+
+        model.selectWorkMode(.captain)
+        try await waitForWorkSource(
+            "/api/v1/control-room/waiting-on-captain",
+            model: model
+        )
+        XCTAssertEqual(
+            Set(model.selectedSnapshot.records.map(\.id)),
+            Set(["approval:approval-1", "ticket:ticket-1", "delegation:req-1"])
+        )
+
+        model.selectWorkMode(.agentWork)
+        try await waitForWorkSource(
+            "/api/v1/chat-runtime/v1/agents/coral/work-control",
+            model: model
+        )
+        XCTAssertFalse(model.selectedSnapshot.records.contains { $0.id == "ticket:ticket-1" })
+        XCTAssertTrue(model.selectedSnapshot.records.contains { $0.title == "Prove Work Control" })
+
+        model.selectWorkMode(.captain)
+        try await waitForWorkSource(
+            "/api/v1/control-room/waiting-on-captain",
+            model: model
+        )
+        XCTAssertEqual(
+            Set(model.selectedSnapshot.records.map(\.id)),
+            Set(["approval:approval-1", "ticket:ticket-1", "delegation:req-1"])
+        )
+        XCTAssertFalse(model.selectedSnapshot.records.contains { $0.title == "Prove Work Control" })
+    }
+
     func testOverviewAttentionCardLandsOnWorkInCaptainMode() {
         let model = makeModel()
         model.selectSection(.overview, refresh: false)
@@ -1712,6 +1781,17 @@ final class OrcaMacModelTests: XCTestCase {
         )
     }
 
+    private func waitForWorkSource(
+        _ source: String,
+        model: OrcaMacModel
+    ) async throws {
+        for _ in 0..<100 {
+            if model.selectedSnapshot.sources.contains(source) { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTFail("Timed out waiting for Work source \(source)")
+    }
+
     private func workSnapshot() async throws -> ConsoleSectionSnapshot {
         let service = OrcaConsoleService(
             serverURL: URL(string: "http://127.0.0.1:8000")!,
@@ -2400,10 +2480,16 @@ private actor StubRuntimeService: OrcaRuntimeServing {
     var lastRequest: OrcaRuntimeDirectTurnRequest?
     let replyContent: String
     let replyLane: String
+    private let workControlBundle: Components.Schemas.ChatRuntimeWorkControlBundleRead?
 
-    init(replyContent: String = "", replyLane: String = "agent_inbox") {
+    init(
+        replyContent: String = "",
+        replyLane: String = "agent_inbox",
+        workControlBundle: Components.Schemas.ChatRuntimeWorkControlBundleRead? = nil
+    ) {
         self.replyContent = replyContent
         self.replyLane = replyLane
+        self.workControlBundle = workControlBundle
     }
 
     func verifyCompatibility() async throws -> OrcaRuntimeCompatibility {
@@ -2416,6 +2502,7 @@ private actor StubRuntimeService: OrcaRuntimeServing {
         throw OrcaRuntimeClientError.invalidResponse("unused")
     }
     func workControl(agentKey: String) async throws -> Components.Schemas.ChatRuntimeWorkControlBundleRead {
+        if let workControlBundle { return workControlBundle }
         throw OrcaRuntimeClientError.invalidResponse("unused")
     }
     func providerControl() async throws -> Components.Schemas.ChatRuntimeProviderControlBundleRead {

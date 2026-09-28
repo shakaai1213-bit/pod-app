@@ -124,6 +124,9 @@ final class OrcaMacModel {
         selectedAgentID = AgentProfile.fallbackRoster.contains(where: { $0.id == storedAgent })
             ? storedAgent
             : "coral"
+        workMode = ConsoleWorkMode(
+            rawValue: defaults.string(forKey: "orca.mac.work-mode") ?? ""
+        ) ?? .portfolio
         let storedSection = ConsoleSection(
             rawValue: defaults.string(forKey: "orca.mac.selected-section") ?? "overview"
         ) ?? .overview
@@ -131,6 +134,7 @@ final class OrcaMacModel {
             selectedSection = .work
             workMode = .captain
             defaults.set(ConsoleSection.work.rawValue, forKey: "orca.mac.selected-section")
+            defaults.set(ConsoleWorkMode.captain.rawValue, forKey: "orca.mac.work-mode")
         } else {
             selectedSection = storedSection
         }
@@ -502,6 +506,7 @@ final class OrcaMacModel {
             }
         }
         defaults.set(selectedSection.rawValue, forKey: "orca.mac.selected-section")
+        defaults.set(workMode.rawValue, forKey: "orca.mac.work-mode")
         if refreshTask != nil {
             beginRefreshLoop()
         }
@@ -523,9 +528,8 @@ final class OrcaMacModel {
         recordSelectionChanged(to: nil)
         workMode = mode
         selectedRecordID = nil
-        if mode == .portfolio, boardPlan == nil {
-            Task { await refreshBoardPortfolio(silent: true) }
-        }
+        defaults.set(mode.rawValue, forKey: "orca.mac.work-mode")
+        Task { await refreshSelectedSection(silent: true) }
     }
 
     func selectBoard(_ id: UUID) {
