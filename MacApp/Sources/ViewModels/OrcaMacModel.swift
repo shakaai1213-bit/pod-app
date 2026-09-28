@@ -93,6 +93,7 @@ final class OrcaMacModel {
     }
 
     @ObservationIgnored private var workbenchFetchGeneration = 0
+    @ObservationIgnored private var sectionFetchGeneration = 0
 
     @ObservationIgnored private let tokenStore: any RuntimeTokenStoring
     @ObservationIgnored private let defaults: UserDefaults
@@ -557,21 +558,36 @@ final class OrcaMacModel {
         guard selectedSection != .conversations,
               selectedSection != .workbench,
               let consoleService else { return }
+        sectionFetchGeneration += 1
+        let generation = sectionFetchGeneration
         let section = selectedSection
+        let mode = workMode
+        let agentID = selectedAgentID
         isLoadingSection = true
+        defer {
+            if generation == sectionFetchGeneration { isLoadingSection = false }
+        }
         do {
             let bundle: Components.Schemas.ChatRuntimeWorkControlBundleRead?
-            if section == .work, workMode == .agentWork {
+            if section == .work, mode == .agentWork {
                 guard let service else { throw OrcaConsoleServiceError.invalidResponse }
-                bundle = try await service.workControl(agentKey: selectedAgentID)
+                bundle = try await service.workControl(agentKey: agentID)
+                guard generation == sectionFetchGeneration,
+                      section == selectedSection,
+                      mode == workMode,
+                      agentID == selectedAgentID else { return }
                 workControl = bundle.map(OrcaWorkControlProjection.init)
             } else {
                 bundle = nil
             }
             let snapshot = try await consoleService.snapshot(for: section, workControl: bundle)
+            guard generation == sectionFetchGeneration,
+                  section == selectedSection,
+                  mode == workMode,
+                  agentID == selectedAgentID else { return }
             sectionSnapshots[section] = snapshot
             if section == .waitingOnCaptain
-                || section == .work && workMode == .captain {
+                || section == .work && mode == .captain {
                 sectionSnapshots[.waitingOnCaptain] = snapshot
                 lastWaitingOnCaptainRefreshAt = Date()
             }
@@ -582,14 +598,17 @@ final class OrcaMacModel {
                 recordSelectionChanged(to: nil)
                 self.selectedRecordID = nil
             }
-            if section == .work, refreshPortfolio, workMode == .portfolio {
+            if section == .work, refreshPortfolio, mode == .portfolio {
                 await refreshBoardPortfolio(silent: true)
             }
         } catch {
+            guard generation == sectionFetchGeneration,
+                  section == selectedSection,
+                  mode == workMode,
+                  agentID == selectedAgentID else { return }
             sectionError = error.localizedDescription
             if !silent { presentedError = error.localizedDescription }
         }
-        isLoadingSection = false
     }
 
     func refreshBoardPortfolio(silent: Bool = false) async {
