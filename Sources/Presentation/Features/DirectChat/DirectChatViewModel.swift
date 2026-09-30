@@ -12,6 +12,40 @@ extension Notification.Name {
 final class DirectChatViewModel {
     static let memoryReviewActionTitle = "Review and Apply"
 
+    enum StreamDisposition: Equatable {
+        case terminal, liveInboxAck, asyncComputeAck, content
+    }
+
+    static func streamDisposition(
+        terminalKind: OrcaRuntimeTerminalKind?,
+        requestedMode: DMDeliveryMode,
+        responseMode: DMDeliveryMode?,
+        provenance: DMResponseProvenance?,
+        state: DMDeliveryState?
+    ) -> StreamDisposition {
+        if terminalKind != nil { return .terminal }
+        if requestedMode == .liveInbox || responseMode == .liveInbox
+            || provenance == .liveInbox || provenance == .coordinationReview {
+            return .liveInboxAck
+        }
+        if state == .computeRunning { return .asyncComputeAck }
+        return .content
+    }
+
+    enum FallbackRouteDecision: Equatable {
+        case allowed, unreadable, missing, forbidden
+    }
+
+    static func fallbackRouteDecision(
+        readRoute: () async throws -> OrcaRuntimeTurnRoute?
+    ) async -> FallbackRouteDecision {
+        let route: OrcaRuntimeTurnRoute?
+        do { route = try await readRoute() }
+        catch { return .unreadable }
+        guard let route else { return .missing }
+        return route.forbidsComputeFallback ? .forbidden : .allowed
+    }
+
     // MARK: - State
 
     var navigationPath = NavigationPath()
@@ -1363,13 +1397,15 @@ final class DirectChatViewModel {
                     let responseMode = DMDeliveryMode.parse(chunk.metadata?.deliveryMode)
                     let responseProvenance = DMResponseProvenance.parse(chunk.metadata?.provenance)
                     let responseState = DMDeliveryState.parse(chunk.metadata?.responseState)
-                    let isLiveInboxAck = terminalKind == nil && (deliveryMode == .liveInbox
-                        || responseMode == .liveInbox
-                        || responseProvenance == .liveInbox
-                        || responseProvenance == .coordinationReview)
-                    let isAsyncComputeAck = terminalKind == nil && responseState == .computeRunning
+                    let disposition = Self.streamDisposition(
+                        terminalKind: terminalKind,
+                        requestedMode: deliveryMode,
+                        responseMode: responseMode,
+                        provenance: responseProvenance,
+                        state: responseState
+                    )
 
-                    if terminalKind != nil {
+                    if disposition == .terminal {
                         assistantMsg.role = "system"
                         assistantMsg.content = chunk.content
                         assistantMsg.source = chunk.metadata?.source
@@ -1378,7 +1414,7 @@ final class DirectChatViewModel {
                         assistantMsg.provenance = DMResponseProvenance.system.rawValue
                         assistantMsg.deliveryState = responseState?.rawValue ?? DMDeliveryState.failed.rawValue
                         routeProgressSteps = Self.routeProgressSteps(for: deliveryMode, stage: .failed)
-                    } else if isLiveInboxAck {
+                    } else if disposition == .liveInboxAck {
                         assistantMsg.content = Self.liveInboxAckText(for: agent)
                         assistantMsg.source = "orca.chat.ack"
                         assistantMsg.lane = "direct_agent_inbox"
@@ -1386,7 +1422,7 @@ final class DirectChatViewModel {
                         assistantMsg.provenance = responseProvenance?.rawValue ?? DMResponseProvenance.liveInbox.rawValue
                         assistantMsg.deliveryState = DMDeliveryState.waitingForLiveAgent.rawValue
                         routeProgressSteps = Self.routeProgressSteps(for: deliveryMode, stage: .waitingLive)
-                    } else if isAsyncComputeAck {
+                    } else if disposition == .asyncComputeAck {
                         assistantMsg.content = Self.computeAcceptedText(for: agent, ack: chunk.content)
                         assistantMsg.source = chunk.metadata?.source
                         assistantMsg.lane = chunk.metadata?.lane
@@ -2674,19 +2710,19 @@ final class DirectChatViewModel {
 
         // The route is server-owned. A missing or unreadable route cannot
         // authorize a client-side substitute for a named-agent turn.
-        let route: OrcaRuntimeTurnRoute?
-        do {
-            route = try await AgentChatService(agent: agent)
+        let routeDecision = await Self.fallbackRouteDecision {
+            try await AgentChatService(agent: agent)
                 .runtimeTurn(turnId: userRemoteId).turnRoute
-        } catch {
+        }
+        if routeDecision == .unreadable {
             liveChatStatus = "ORCA could not verify this turn's route. No fallback was requested."
             return
         }
-        guard let route else {
+        if routeDecision == .missing {
             liveChatStatus = "ORCA did not provide this turn's route. No fallback was requested."
             return
         }
-        if route.forbidsComputeFallback {
+        if routeDecision == .forbidden {
             liveChatStatus = "ORCA kept this \(agent.name) turn on its required route. No substitute was requested."
             await importORCAChannelHistory(agent: agent, channelId: channelId)
             return
