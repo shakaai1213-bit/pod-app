@@ -519,6 +519,43 @@ func credentialRedirectsAreNeverFollowed(status: Int) throws {
     #expect(await counter.value == 0)
 }
 
+@Test func runtimeTurnShowsServerRejectionInsteadOfDecodeError() async throws {
+    let middleware = OrcaRuntimeTurnErrorMiddleware()
+    let request = HTTPRequest(method: .post, scheme: "https", authority: "orca.test", path: "/turns")
+    do {
+        _ = try await middleware.intercept(
+            request,
+            body: nil,
+            baseURL: URL(string: "https://orca.test")!,
+            operationID: "createRuntimeTurn"
+        ) { _, _, _ in
+            let body = HTTPBody(Data(#"{"detail":"Explicit ticket reference conflicts with active_ticket_id."}"#.utf8))
+            return (HTTPResponse(status: .init(code: 422)), body)
+        }
+        Issue.record("A rejected turn did not surface its ORCA reason")
+    } catch let error as OrcaRuntimeClientError {
+        #expect(error == .serverRejection(
+            status: 422,
+            detail: "Explicit ticket reference conflicts with active_ticket_id."
+        ))
+    }
+}
+
+@Test func runtimeTurnKeepsStructuredValidationResponse() async throws {
+    let middleware = OrcaRuntimeTurnErrorMiddleware()
+    let request = HTTPRequest(method: .post, scheme: "https", authority: "orca.test", path: "/turns")
+    let (_, body) = try await middleware.intercept(
+        request,
+        body: nil,
+        baseURL: URL(string: "https://orca.test")!,
+        operationID: "createRuntimeTurn"
+    ) { _, _, _ in
+        (HTTPResponse(status: .init(code: 422)), HTTPBody(Data(#"{"detail":[]}"#.utf8)))
+    }
+    let bytes = try await Data(collecting: #require(body), upTo: 64 * 1024)
+    #expect(String(decoding: bytes, as: UTF8.self) == #"{"detail":[]}"#)
+}
+
 @Test func contractMetadataIsPinned() {
     #expect(OrcaRuntimeContract.version == "orca.chat-runtime.v1")
     #expect(

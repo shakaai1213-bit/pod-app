@@ -132,7 +132,7 @@ struct ConversationView: View {
                         ForEach(model.selectedMessages) { message in
                             TranscriptRow(
                                 message: message,
-                                agent: model.selectedAgent,
+                                agent: model.conversationAgent,
                                 retry: { Task { await model.retryFailedMessage(message) } }
                             )
                             .id(message.id)

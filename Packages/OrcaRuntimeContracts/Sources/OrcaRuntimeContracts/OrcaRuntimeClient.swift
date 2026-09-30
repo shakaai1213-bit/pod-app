@@ -15,6 +15,7 @@ public enum OrcaRuntimeClientError: Error, Equatable, LocalizedError {
     case incompatibleSchema(expected: String, actual: String)
     case missingContractIdentity
     case httpStatus(Int)
+    case serverRejection(status: Int, detail: String)
     case invalidResponse(String)
 
     public var errorDescription: String? {
@@ -27,9 +28,34 @@ public enum OrcaRuntimeClientError: Error, Equatable, LocalizedError {
             return "ORCA runtime did not provide a contract identity."
         case let .httpStatus(status):
             return "ORCA runtime returned HTTP \(status)."
+        case let .serverRejection(status, detail):
+            return "ORCA runtime rejected the turn (HTTP \(status)): \(detail)"
         case let .invalidResponse(reason):
             return "ORCA runtime returned an invalid response: \(reason)."
         }
+    }
+}
+
+struct OrcaRuntimeTurnErrorMiddleware: ClientMiddleware {
+    func intercept(
+        _ request: HTTPRequest,
+        body: HTTPBody?,
+        baseURL: URL,
+        operationID: String,
+        next: @Sendable (HTTPRequest, HTTPBody?, URL) async throws -> (HTTPResponse, HTTPBody?)
+    ) async throws -> (HTTPResponse, HTTPBody?) {
+        let (response, responseBody) = try await next(request, body, baseURL)
+        guard operationID == "createRuntimeTurn",
+              response.status.code == 422,
+              let responseBody else {
+            return (response, responseBody)
+        }
+        let bytes = try await Data(collecting: responseBody, upTo: 64 * 1024)
+        if let payload = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any],
+           let detail = payload["detail"] as? String {
+            throw OrcaRuntimeClientError.serverRejection(status: 422, detail: detail)
+        }
+        return (response, HTTPBody(bytes))
     }
 }
 
@@ -281,7 +307,8 @@ public actor OrcaRuntimeClient {
                     tokenProvider: tokenProvider,
                     deviceIDProvider: deviceIDProvider,
                     requestProofProvider: requestProofProvider
-                )
+                ),
+                OrcaRuntimeTurnErrorMiddleware()
             ],
             session: session
         )

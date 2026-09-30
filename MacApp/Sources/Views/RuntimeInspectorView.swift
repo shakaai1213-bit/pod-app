@@ -18,8 +18,8 @@ struct RuntimeInspectorView: View {
                 }
 
                 InspectorSection(title: "Conversation") {
-                    InspectorValue(label: "Agent", value: model.selectedAgent.name)
-                    InspectorValue(label: "Lane", value: model.selectedAgent.lane.rawValue)
+                    InspectorValue(label: "Agent", value: model.conversationAgent.name)
+                    InspectorValue(label: "Lane", value: model.conversationAgent.lane.rawValue)
                     InspectorValue(
                         label: "ID",
                         value: model.selectedConversation.conversationID.map { String($0.prefix(12)) } ?? "-"
