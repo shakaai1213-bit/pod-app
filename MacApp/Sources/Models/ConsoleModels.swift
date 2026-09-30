@@ -492,6 +492,7 @@ struct TeamWorkLensItem: Decodable, Equatable, Sendable {
     let endpoint: String
     let protected: Bool
     let stale: Bool
+    let ageHours: Int?
     let executionEligible: Bool
     let approvalState: String?
     let blockedOn: String?
@@ -503,6 +504,7 @@ struct TeamWorkLensItem: Decodable, Equatable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case id, kind, title, summary, status, priority, endpoint, protected, stale, authority
+        case ageHours = "age_hours"
         case agentSlug = "agent_slug"
         case executionEligible = "execution_eligible"
         case approvalState = "approval_state"
@@ -570,6 +572,9 @@ struct ConsoleSectionSnapshot: Equatable, Sendable {
                     ConsoleField(label: "Endpoint", value: item.endpoint),
                     ConsoleField(label: "Execution", value: item.executionEligible ? "Eligible" : "Held"),
                 ]
+                if let ageHours = item.ageHours {
+                    fields.append(ConsoleField(label: "Age", value: "\(ageHours)h"))
+                }
                 if let authority = item.authority {
                     fields.append(ConsoleField(label: "Approval Authority", value: authority))
                 }
