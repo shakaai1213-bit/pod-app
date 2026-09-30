@@ -181,7 +181,6 @@ public enum OrcaRuntimeTerminalKind: String, Sendable {
     case heldForExplicitEscalation = "held_for_explicit_escalation"
     case routeUnavailable = "route_unavailable"
     case providerFailure = "provider_failure"
-    case responseTooLong = "response_too_long"
 
     public init?(lane: String?) {
         guard let lane, let value = Self(rawValue: lane) else { return nil }
