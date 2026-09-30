@@ -2017,7 +2017,7 @@ final class DirectChatViewModel {
                     return
                 }
             if hasPendingLiveInboxReply(for: agent) {
-                liveChatStatus = "Live reply window expired for \(agent.name). Requesting an honest compute fallback draft."
+                liveChatStatus = "Live reply window expired for \(agent.name). Checking ORCA's route."
                 markLiveInboxWaitTimedOut(for: agent, since: minimumCreatedAt)
                 await requestLiveInboxFallback(for: agent, channelId: channelId, since: minimumCreatedAt)
             } else {
@@ -2669,6 +2669,26 @@ final class DirectChatViewModel {
               let userRemoteId = userMessage.remoteMessageId,
               !userRemoteId.isEmpty else {
             liveChatStatus = "Still waiting for \(agent.name). Fallback draft is unavailable until ORCA records the source message."
+            return
+        }
+
+        // The route is server-owned. A missing or unreadable route cannot
+        // authorize a client-side substitute for a named-agent turn.
+        let route: OrcaRuntimeTurnRoute?
+        do {
+            route = try await AgentChatService(agent: agent)
+                .runtimeTurn(turnId: userRemoteId).turnRoute
+        } catch {
+            liveChatStatus = "ORCA could not verify this turn's route. No fallback was requested."
+            return
+        }
+        guard let route else {
+            liveChatStatus = "ORCA did not provide this turn's route. No fallback was requested."
+            return
+        }
+        if route.forbidsComputeFallback {
+            liveChatStatus = "ORCA kept this \(agent.name) turn on its required route. No substitute was requested."
+            await importORCAChannelHistory(agent: agent, channelId: channelId)
             return
         }
 

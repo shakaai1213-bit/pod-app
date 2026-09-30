@@ -69,6 +69,7 @@ actor AgentChatService {
         let host: String?
         let runtimeSessionId: String?
         let terminalSummary: String?
+        let turnRoute: OrcaRuntimeTurnRoute?
         let sourceSurface: String
         let recoveryStatus: String
         let recoveryReason: String?
@@ -93,6 +94,7 @@ actor AgentChatService {
             host = turn.adapter?.hostId
             runtimeSessionId = turn.runtimeSessionId
             terminalSummary = turn.terminalOutcome?.summary
+            turnRoute = turn.turnRoute.flatMap { OrcaRuntimeTurnRoute(rawValue: $0.rawValue) }
             sourceSurface = turn.clientProvenance.sourceSurface.rawValue
             recoveryStatus = turn.recovery.status.rawValue
             recoveryReason = turn.recovery.reason

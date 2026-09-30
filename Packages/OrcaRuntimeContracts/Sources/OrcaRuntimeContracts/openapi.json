@@ -97,6 +97,16 @@
             "title": "Source",
             "type": "string"
           },
+          "terminal_kind": {
+            "enum": [
+              "held",
+              "held_for_explicit_escalation",
+              "route_unavailable",
+              "provider_failure"
+            ],
+            "title": "Terminal Kind",
+            "type": "string"
+          },
           "trace_id": {
             "title": "Trace Id",
             "type": "string"
@@ -1643,6 +1653,16 @@
             "minLength": 1,
             "title": "Summary",
             "type": "string"
+          },
+          "terminal_kind": {
+            "enum": [
+              "held",
+              "held_for_explicit_escalation",
+              "route_unavailable",
+              "provider_failure"
+            ],
+            "title": "Terminal Kind",
+            "type": "string"
           }
         },
         "required": [
@@ -1858,6 +1878,12 @@
             "title": "Idempotency Key",
             "type": "string"
           },
+          "identity_attestation": {
+            "maxLength": 4096,
+            "minLength": 32,
+            "title": "Identity Attestation",
+            "type": "string"
+          },
           "origin_chat_id": {
             "minimum": 1.0,
             "title": "Origin Chat Id",
@@ -1983,6 +2009,9 @@
             "format": "uuid",
             "title": "Turn Id",
             "type": "string"
+          },
+          "turn_route": {
+            "$ref": "#/components/schemas/TurnRoute"
           },
           "work_runs": {
             "items": {
@@ -2142,6 +2171,16 @@
             "title": "Reply State",
             "type": "string"
           },
+          "terminal_kind": {
+            "enum": [
+              "held",
+              "held_for_explicit_escalation",
+              "route_unavailable",
+              "provider_failure"
+            ],
+            "title": "Terminal Kind",
+            "type": "string"
+          },
           "tier": {
             "maxLength": 128,
             "title": "Tier",
@@ -2165,6 +2204,9 @@
           },
           "turn": {
             "$ref": "#/components/schemas/ChatRuntimeTurnRead"
+          },
+          "turn_route": {
+            "$ref": "#/components/schemas/TurnRoute"
           }
         },
         "required": [
@@ -3322,6 +3364,24 @@
             "title": "Fallback Available At",
             "type": "string"
           },
+          "identity_classification": {
+            "maxLength": 64,
+            "title": "Identity Classification",
+            "type": "string"
+          },
+          "identity_decision_id": {
+            "format": "uuid",
+            "title": "Identity Decision Id",
+            "type": "string"
+          },
+          "identity_route": {
+            "enum": [
+              "frontier_required",
+              "frontier_required_unavailable"
+            ],
+            "title": "Identity Route",
+            "type": "string"
+          },
           "lane": {
             "title": "Lane",
             "type": "string"
@@ -3352,6 +3412,16 @@
           },
           "source": {
             "title": "Source",
+            "type": "string"
+          },
+          "terminal_kind": {
+            "enum": [
+              "held",
+              "held_for_explicit_escalation",
+              "route_unavailable",
+              "provider_failure"
+            ],
+            "title": "Terminal Kind",
             "type": "string"
           },
           "tier": {
@@ -3468,6 +3538,13 @@
             "maxLength": 160,
             "minLength": 1,
             "title": "Idempotency Key",
+            "type": "string"
+          },
+          "identity_attestation": {
+            "description": "Opaque, one-use server attestation; never copied into prompts or logs.",
+            "maxLength": 4096,
+            "minLength": 32,
+            "title": "Identity Attestation",
             "type": "string"
           },
           "origin_chat_id": {
@@ -3615,6 +3692,16 @@
         ],
         "title": "TicketChatThreadRead",
         "type": "object"
+      },
+      "TurnRoute": {
+        "enum": [
+          "kimi_required",
+          "held_for_explicit_escalation",
+          "held",
+          "frontier_required"
+        ],
+        "title": "TurnRoute",
+        "type": "string"
       },
       "ValidationError": {
         "properties": {
@@ -4587,5 +4674,5 @@
     }
   ],
   "x-orca-contract-version": "orca.chat-runtime.v1",
-  "x-orca-schema-sha256": "754b79d19324744b835fd32387379a37c632007215e3be3db228a5043de9ca70"
+  "x-orca-schema-sha256": "33bed4cd0cd25c51056a650cfbfc27447a4f52790724d8544e165b2e92f183ad"
 }

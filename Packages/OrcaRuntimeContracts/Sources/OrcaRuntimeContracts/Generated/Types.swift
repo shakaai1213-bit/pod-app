@@ -472,6 +472,15 @@ public enum Components {
             public var senderUserId: Swift.String?
             /// - Remark: Generated from `#/components/schemas/ChatMessageRead/source`.
             public var source: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/ChatMessageRead/terminal_kind`.
+            @frozen public enum TerminalKindPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case held = "held"
+                case heldForExplicitEscalation = "held_for_explicit_escalation"
+                case routeUnavailable = "route_unavailable"
+                case providerFailure = "provider_failure"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatMessageRead/terminal_kind`.
+            public var terminalKind: Components.Schemas.ChatMessageRead.TerminalKindPayload?
             /// - Remark: Generated from `#/components/schemas/ChatMessageRead/trace_id`.
             public var traceId: Swift.String?
             /// - Remark: Generated from `#/components/schemas/ChatMessageRead/triage_id`.
@@ -504,6 +513,7 @@ public enum Components {
             ///   - senderType:
             ///   - senderUserId:
             ///   - source:
+            ///   - terminalKind:
             ///   - traceId:
             ///   - triageId:
             ///   - triageTraceId:
@@ -530,6 +540,7 @@ public enum Components {
                 senderType: Swift.String? = nil,
                 senderUserId: Swift.String? = nil,
                 source: Swift.String? = nil,
+                terminalKind: Components.Schemas.ChatMessageRead.TerminalKindPayload? = nil,
                 traceId: Swift.String? = nil,
                 triageId: Swift.String? = nil,
                 triageTraceId: Swift.String? = nil,
@@ -556,6 +567,7 @@ public enum Components {
                 self.senderType = senderType
                 self.senderUserId = senderUserId
                 self.source = source
+                self.terminalKind = terminalKind
                 self.traceId = traceId
                 self.triageId = triageId
                 self.triageTraceId = triageTraceId
@@ -583,6 +595,7 @@ public enum Components {
                 case senderType = "sender_type"
                 case senderUserId = "sender_user_id"
                 case source
+                case terminalKind = "terminal_kind"
                 case traceId = "trace_id"
                 case triageId = "triage_id"
                 case triageTraceId = "triage_trace_id"
@@ -2505,6 +2518,15 @@ public enum Components {
             public var state: Components.Schemas.ChatRuntimeProgressState
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeTerminalOutcomeRead/summary`.
             public var summary: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTerminalOutcomeRead/terminal_kind`.
+            @frozen public enum TerminalKindPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case held = "held"
+                case heldForExplicitEscalation = "held_for_explicit_escalation"
+                case routeUnavailable = "route_unavailable"
+                case providerFailure = "provider_failure"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTerminalOutcomeRead/terminal_kind`.
+            public var terminalKind: Components.Schemas.ChatRuntimeTerminalOutcomeRead.TerminalKindPayload?
             /// Creates a new `ChatRuntimeTerminalOutcomeRead`.
             ///
             /// - Parameters:
@@ -2513,18 +2535,21 @@ public enum Components {
             ///   - evidenceRefs:
             ///   - state:
             ///   - summary:
+            ///   - terminalKind:
             public init(
                 completedAt: Foundation.Date,
                 errorCode: Swift.String? = nil,
                 evidenceRefs: [Swift.String]? = nil,
                 state: Components.Schemas.ChatRuntimeProgressState,
-                summary: Swift.String
+                summary: Swift.String,
+                terminalKind: Components.Schemas.ChatRuntimeTerminalOutcomeRead.TerminalKindPayload? = nil
             ) {
                 self.completedAt = completedAt
                 self.errorCode = errorCode
                 self.evidenceRefs = evidenceRefs
                 self.state = state
                 self.summary = summary
+                self.terminalKind = terminalKind
             }
             public enum CodingKeys: String, CodingKey {
                 case completedAt = "completed_at"
@@ -2532,6 +2557,7 @@ public enum Components {
                 case evidenceRefs = "evidence_refs"
                 case state
                 case summary
+                case terminalKind = "terminal_kind"
             }
         }
         /// Ordered event envelope shared by REST reads and resumable streams.
@@ -2734,6 +2760,8 @@ public enum Components {
             public var history: [Components.Schemas.ChatRuntimeHistoryMessage]?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnCreate/idempotency_key`.
             public var idempotencyKey: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnCreate/identity_attestation`.
+            public var identityAttestation: Swift.String?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnCreate/origin_chat_id`.
             public var originChatId: Swift.Int?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnCreate/origin_request_id`.
@@ -2775,6 +2803,7 @@ public enum Components {
             ///   - deviceRegistrationRef:
             ///   - history:
             ///   - idempotencyKey:
+            ///   - identityAttestation:
             ///   - originChatId:
             ///   - originRequestId:
             ///   - originThreadId:
@@ -2795,6 +2824,7 @@ public enum Components {
                 deviceRegistrationRef: Swift.String? = nil,
                 history: [Components.Schemas.ChatRuntimeHistoryMessage]? = nil,
                 idempotencyKey: Swift.String,
+                identityAttestation: Swift.String? = nil,
                 originChatId: Swift.Int? = nil,
                 originRequestId: Swift.String? = nil,
                 originThreadId: Swift.String? = nil,
@@ -2815,6 +2845,7 @@ public enum Components {
                 self.deviceRegistrationRef = deviceRegistrationRef
                 self.history = history
                 self.idempotencyKey = idempotencyKey
+                self.identityAttestation = identityAttestation
                 self.originChatId = originChatId
                 self.originRequestId = originRequestId
                 self.originThreadId = originThreadId
@@ -2836,6 +2867,7 @@ public enum Components {
                 case deviceRegistrationRef = "device_registration_ref"
                 case history
                 case idempotencyKey = "idempotency_key"
+                case identityAttestation = "identity_attestation"
                 case originChatId = "origin_chat_id"
                 case originRequestId = "origin_request_id"
                 case originThreadId = "origin_thread_id"
@@ -2880,6 +2912,8 @@ public enum Components {
             public var terminalOutcome: Components.Schemas.ChatRuntimeTerminalOutcomeRead?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnRead/turn_id`.
             public var turnId: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnRead/turn_route`.
+            public var turnRoute: Components.Schemas.TurnRoute?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnRead/work_runs`.
             public var workRuns: [Components.Schemas.ChatRuntimeWorkRunRead]?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnRead/work_runs_limit`.
@@ -2904,6 +2938,7 @@ public enum Components {
             ///   - state:
             ///   - terminalOutcome:
             ///   - turnId:
+            ///   - turnRoute:
             ///   - workRuns:
             ///   - workRunsLimit:
             ///   - workRunsTruncated:
@@ -2923,6 +2958,7 @@ public enum Components {
                 state: Components.Schemas.ChatRuntimeProgressState,
                 terminalOutcome: Components.Schemas.ChatRuntimeTerminalOutcomeRead? = nil,
                 turnId: Swift.String,
+                turnRoute: Components.Schemas.TurnRoute? = nil,
                 workRuns: [Components.Schemas.ChatRuntimeWorkRunRead]? = nil,
                 workRunsLimit: Swift.Int? = nil,
                 workRunsTruncated: Swift.Bool? = nil
@@ -2942,6 +2978,7 @@ public enum Components {
                 self.state = state
                 self.terminalOutcome = terminalOutcome
                 self.turnId = turnId
+                self.turnRoute = turnRoute
                 self.workRuns = workRuns
                 self.workRunsLimit = workRunsLimit
                 self.workRunsTruncated = workRunsTruncated
@@ -2962,6 +2999,7 @@ public enum Components {
                 case state
                 case terminalOutcome = "terminal_outcome"
                 case turnId = "turn_id"
+                case turnRoute = "turn_route"
                 case workRuns = "work_runs"
                 case workRunsLimit = "work_runs_limit"
                 case workRunsTruncated = "work_runs_truncated"
@@ -3078,6 +3116,15 @@ public enum Components {
             public var replySource: Swift.String
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnSubmissionRead/reply_state`.
             public var replyState: Swift.String
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnSubmissionRead/terminal_kind`.
+            @frozen public enum TerminalKindPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case held = "held"
+                case heldForExplicitEscalation = "held_for_explicit_escalation"
+                case routeUnavailable = "route_unavailable"
+                case providerFailure = "provider_failure"
+            }
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnSubmissionRead/terminal_kind`.
+            public var terminalKind: Components.Schemas.ChatRuntimeTurnSubmissionRead.TerminalKindPayload?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnSubmissionRead/tier`.
             public var tier: Swift.String?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnSubmissionRead/token_count`.
@@ -3088,6 +3135,8 @@ public enum Components {
             public var triageId: Swift.String?
             /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnSubmissionRead/turn`.
             public var turn: Components.Schemas.ChatRuntimeTurnRead
+            /// - Remark: Generated from `#/components/schemas/ChatRuntimeTurnSubmissionRead/turn_route`.
+            public var turnRoute: Components.Schemas.TurnRoute?
             /// Creates a new `ChatRuntimeTurnSubmissionRead`.
             ///
             /// - Parameters:
@@ -3101,11 +3150,13 @@ public enum Components {
             ///   - replyMessageId:
             ///   - replySource:
             ///   - replyState:
+            ///   - terminalKind:
             ///   - tier:
             ///   - tokenCount:
             ///   - traceId:
             ///   - triageId:
             ///   - turn:
+            ///   - turnRoute:
             public init(
                 agentKey: Swift.String,
                 computeRunId: Swift.String? = nil,
@@ -3117,11 +3168,13 @@ public enum Components {
                 replyMessageId: Swift.String,
                 replySource: Swift.String,
                 replyState: Swift.String,
+                terminalKind: Components.Schemas.ChatRuntimeTurnSubmissionRead.TerminalKindPayload? = nil,
                 tier: Swift.String? = nil,
                 tokenCount: Swift.Int? = nil,
                 traceId: Swift.String,
                 triageId: Swift.String? = nil,
-                turn: Components.Schemas.ChatRuntimeTurnRead
+                turn: Components.Schemas.ChatRuntimeTurnRead,
+                turnRoute: Components.Schemas.TurnRoute? = nil
             ) {
                 self.agentKey = agentKey
                 self.computeRunId = computeRunId
@@ -3133,11 +3186,13 @@ public enum Components {
                 self.replyMessageId = replyMessageId
                 self.replySource = replySource
                 self.replyState = replyState
+                self.terminalKind = terminalKind
                 self.tier = tier
                 self.tokenCount = tokenCount
                 self.traceId = traceId
                 self.triageId = triageId
                 self.turn = turn
+                self.turnRoute = turnRoute
             }
             public enum CodingKeys: String, CodingKey {
                 case agentKey = "agent_key"
@@ -3150,11 +3205,13 @@ public enum Components {
                 case replyMessageId = "reply_message_id"
                 case replySource = "reply_source"
                 case replyState = "reply_state"
+                case terminalKind = "terminal_kind"
                 case tier
                 case tokenCount = "token_count"
                 case traceId = "trace_id"
                 case triageId = "triage_id"
                 case turn
+                case turnRoute = "turn_route"
             }
         }
         /// Pointer-safe stale turn or nested run surfaced for support review.
@@ -4485,6 +4542,17 @@ public enum Components {
             public var deliveryMode: Swift.String?
             /// - Remark: Generated from `#/components/schemas/DirectAgentChatMetadata/fallback_available_at`.
             public var fallbackAvailableAt: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/DirectAgentChatMetadata/identity_classification`.
+            public var identityClassification: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/DirectAgentChatMetadata/identity_decision_id`.
+            public var identityDecisionId: Swift.String?
+            /// - Remark: Generated from `#/components/schemas/DirectAgentChatMetadata/identity_route`.
+            @frozen public enum IdentityRoutePayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case frontierRequired = "frontier_required"
+                case frontierRequiredUnavailable = "frontier_required_unavailable"
+            }
+            /// - Remark: Generated from `#/components/schemas/DirectAgentChatMetadata/identity_route`.
+            public var identityRoute: Components.Schemas.DirectAgentChatMetadata.IdentityRoutePayload?
             /// - Remark: Generated from `#/components/schemas/DirectAgentChatMetadata/lane`.
             public var lane: Swift.String
             /// - Remark: Generated from `#/components/schemas/DirectAgentChatMetadata/model`.
@@ -4517,6 +4585,15 @@ public enum Components {
             public var responseState: Swift.String?
             /// - Remark: Generated from `#/components/schemas/DirectAgentChatMetadata/source`.
             public var source: Swift.String
+            /// - Remark: Generated from `#/components/schemas/DirectAgentChatMetadata/terminal_kind`.
+            @frozen public enum TerminalKindPayload: String, Codable, Hashable, Sendable, CaseIterable {
+                case held = "held"
+                case heldForExplicitEscalation = "held_for_explicit_escalation"
+                case routeUnavailable = "route_unavailable"
+                case providerFailure = "provider_failure"
+            }
+            /// - Remark: Generated from `#/components/schemas/DirectAgentChatMetadata/terminal_kind`.
+            public var terminalKind: Components.Schemas.DirectAgentChatMetadata.TerminalKindPayload?
             /// - Remark: Generated from `#/components/schemas/DirectAgentChatMetadata/tier`.
             public var tier: Swift.String?
             /// - Remark: Generated from `#/components/schemas/DirectAgentChatMetadata/token_count`.
@@ -4534,6 +4611,9 @@ public enum Components {
             ///   - computeRunId:
             ///   - deliveryMode:
             ///   - fallbackAvailableAt:
+            ///   - identityClassification:
+            ///   - identityDecisionId:
+            ///   - identityRoute:
             ///   - lane:
             ///   - model:
             ///   - originDeliveryReceipt:
@@ -4541,6 +4621,7 @@ public enum Components {
             ///   - replyWindowSeconds:
             ///   - responseState:
             ///   - source:
+            ///   - terminalKind:
             ///   - tier:
             ///   - tokenCount:
             ///   - traceId:
@@ -4551,6 +4632,9 @@ public enum Components {
                 computeRunId: Swift.String? = nil,
                 deliveryMode: Swift.String? = nil,
                 fallbackAvailableAt: Swift.String? = nil,
+                identityClassification: Swift.String? = nil,
+                identityDecisionId: Swift.String? = nil,
+                identityRoute: Components.Schemas.DirectAgentChatMetadata.IdentityRoutePayload? = nil,
                 lane: Swift.String,
                 model: Swift.String? = nil,
                 originDeliveryReceipt: Components.Schemas.DirectAgentChatMetadata.OriginDeliveryReceiptPayload? = nil,
@@ -4558,6 +4642,7 @@ public enum Components {
                 replyWindowSeconds: Swift.Int? = nil,
                 responseState: Swift.String? = nil,
                 source: Swift.String,
+                terminalKind: Components.Schemas.DirectAgentChatMetadata.TerminalKindPayload? = nil,
                 tier: Swift.String? = nil,
                 tokenCount: Swift.Int? = nil,
                 traceId: Swift.String,
@@ -4568,6 +4653,9 @@ public enum Components {
                 self.computeRunId = computeRunId
                 self.deliveryMode = deliveryMode
                 self.fallbackAvailableAt = fallbackAvailableAt
+                self.identityClassification = identityClassification
+                self.identityDecisionId = identityDecisionId
+                self.identityRoute = identityRoute
                 self.lane = lane
                 self.model = model
                 self.originDeliveryReceipt = originDeliveryReceipt
@@ -4575,6 +4663,7 @@ public enum Components {
                 self.replyWindowSeconds = replyWindowSeconds
                 self.responseState = responseState
                 self.source = source
+                self.terminalKind = terminalKind
                 self.tier = tier
                 self.tokenCount = tokenCount
                 self.traceId = traceId
@@ -4586,6 +4675,9 @@ public enum Components {
                 case computeRunId = "compute_run_id"
                 case deliveryMode = "delivery_mode"
                 case fallbackAvailableAt = "fallback_available_at"
+                case identityClassification = "identity_classification"
+                case identityDecisionId = "identity_decision_id"
+                case identityRoute = "identity_route"
                 case lane
                 case model
                 case originDeliveryReceipt = "origin_delivery_receipt"
@@ -4593,6 +4685,7 @@ public enum Components {
                 case replyWindowSeconds = "reply_window_seconds"
                 case responseState = "response_state"
                 case source
+                case terminalKind = "terminal_kind"
                 case tier
                 case tokenCount = "token_count"
                 case traceId = "trace_id"
@@ -4632,6 +4725,10 @@ public enum Components {
             public var history: [Components.Schemas.DirectAgentChatMessage]?
             /// - Remark: Generated from `#/components/schemas/DirectAgentChatRequest/idempotency_key`.
             public var idempotencyKey: Swift.String?
+            /// Opaque, one-use server attestation; never copied into prompts or logs.
+            ///
+            /// - Remark: Generated from `#/components/schemas/DirectAgentChatRequest/identity_attestation`.
+            public var identityAttestation: Swift.String?
             /// - Remark: Generated from `#/components/schemas/DirectAgentChatRequest/origin_chat_id`.
             public var originChatId: Swift.Int?
             /// - Remark: Generated from `#/components/schemas/DirectAgentChatRequest/origin_request_id`.
@@ -4670,6 +4767,7 @@ public enum Components {
             ///   - fallbackReason:
             ///   - history:
             ///   - idempotencyKey:
+            ///   - identityAttestation: Opaque, one-use server attestation; never copied into prompts or logs.
             ///   - originChatId:
             ///   - originRequestId:
             ///   - originThreadId:
@@ -4693,6 +4791,7 @@ public enum Components {
                 fallbackReason: Swift.String? = nil,
                 history: [Components.Schemas.DirectAgentChatMessage]? = nil,
                 idempotencyKey: Swift.String? = nil,
+                identityAttestation: Swift.String? = nil,
                 originChatId: Swift.Int? = nil,
                 originRequestId: Swift.String? = nil,
                 originThreadId: Swift.String? = nil,
@@ -4716,6 +4815,7 @@ public enum Components {
                 self.fallbackReason = fallbackReason
                 self.history = history
                 self.idempotencyKey = idempotencyKey
+                self.identityAttestation = identityAttestation
                 self.originChatId = originChatId
                 self.originRequestId = originRequestId
                 self.originThreadId = originThreadId
@@ -4740,6 +4840,7 @@ public enum Components {
                 case fallbackReason = "fallback_reason"
                 case history
                 case idempotencyKey = "idempotency_key"
+                case identityAttestation = "identity_attestation"
                 case originChatId = "origin_chat_id"
                 case originRequestId = "origin_request_id"
                 case originThreadId = "origin_thread_id"
@@ -4862,6 +4963,13 @@ public enum Components {
                 case ownerAgentSlug = "owner_agent_slug"
                 case ticketId = "ticket_id"
             }
+        }
+        /// - Remark: Generated from `#/components/schemas/TurnRoute`.
+        @frozen public enum TurnRoute: String, Codable, Hashable, Sendable, CaseIterable {
+            case kimiRequired = "kimi_required"
+            case heldForExplicitEscalation = "held_for_explicit_escalation"
+            case held = "held"
+            case frontierRequired = "frontier_required"
         }
         /// - Remark: Generated from `#/components/schemas/ValidationError`.
         public struct ValidationError: Codable, Hashable, Sendable {
