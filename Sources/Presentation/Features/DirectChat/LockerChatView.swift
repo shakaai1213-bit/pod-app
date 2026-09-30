@@ -3668,6 +3668,13 @@ struct SonarComputeRunDTO: Decodable {
 // MARK: - Message Bubble
 
 struct DMBubble: View {
+    static func terminalPresentation(lane: String?) -> (label: String, icon: String)? {
+        guard let terminalKind = OrcaRuntimeTerminalKind(lane: lane) else { return nil }
+        return terminalKind.isHold
+            ? ("Paused by ORCA", "pause.circle")
+            : ("Could not answer", "exclamationmark.circle")
+    }
+
     let message: DMMessage
     let agent: AgentInfo
     let lifecycle: AgentRunTraceLifecycle?
@@ -4058,8 +4065,8 @@ struct DMBubble: View {
     }
 
     private var visibleProvenanceLabel: String {
-        if let terminalKind = OrcaRuntimeTerminalKind(lane: message.lane) {
-            return terminalKind.isHold ? "Paused by ORCA" : "Could not answer"
+        if let terminal = Self.terminalPresentation(lane: message.lane) {
+            return terminal.label
         }
         if let computeDraftLabel {
             return computeDraftLabel
@@ -4233,8 +4240,8 @@ struct DMBubble: View {
     }
 
     private var provenanceIcon: String {
-        if let terminalKind = OrcaRuntimeTerminalKind(lane: message.lane) {
-            return terminalKind.isHold ? "pause.circle" : "exclamationmark.circle"
+        if let terminal = Self.terminalPresentation(lane: message.lane) {
+            return terminal.icon
         }
         switch provenance {
         case .coordinationReview: return "person.2.wave.2"
