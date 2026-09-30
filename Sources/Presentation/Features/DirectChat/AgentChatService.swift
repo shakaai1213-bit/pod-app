@@ -309,6 +309,8 @@ actor AgentChatService {
         let triageId: String?
         let computeRunId: String?
 
+        var terminalKind: OrcaRuntimeTerminalKind? { .init(lane: lane) }
+
         var displayName: String? {
             let route = tier ?? backend
             switch (route?.isEmpty == false ? route : nil, model?.isEmpty == false ? model : nil) {
@@ -384,6 +386,8 @@ actor AgentChatService {
             let deliveryEvidence: String?
             let triageId: String?
             let computeRunId: String?
+
+            var terminalKind: OrcaRuntimeTerminalKind? { .init(lane: lane) }
 
             enum CodingKeys: String, CodingKey {
                 case model, backend, tier, source, lane, provenance
@@ -660,11 +664,11 @@ actor AgentChatService {
                         provenance: parsedProvenance,
                         responseState: parsedState
                     )
-                    let isAsyncAck = parsedMode == .liveInbox
+                    let isAsyncAck = response.metadata.terminalKind == nil && (parsedMode == .liveInbox
                         || parsedProvenance == .liveInbox
                         || parsedProvenance == .coordinationReview
                         || effectiveState == .computeRunning
-                        || effectiveState == .waitingForLiveAgent
+                        || effectiveState == .waitingForLiveAgent)
                     if content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !isAsyncAck {
                         continuation.finish(throwing: AgentChatError.noResponse)
                         return

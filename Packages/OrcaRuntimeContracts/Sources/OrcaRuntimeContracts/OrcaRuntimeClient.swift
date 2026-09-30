@@ -176,6 +176,23 @@ public struct OrcaRuntimeDirectTurnRequest: Equatable, Sendable {
     }
 }
 
+public enum OrcaRuntimeTerminalKind: String, Sendable {
+    case held
+    case heldForExplicitEscalation = "held_for_explicit_escalation"
+    case routeUnavailable = "route_unavailable"
+    case providerFailure = "provider_failure"
+    case responseTooLong = "response_too_long"
+
+    public init?(lane: String?) {
+        guard let lane, let value = Self(rawValue: lane) else { return nil }
+        self = value
+    }
+
+    public var isHold: Bool {
+        self == .held || self == .heldForExplicitEscalation
+    }
+}
+
 public struct OrcaRuntimeDirectTurnResponse: Equatable, Sendable {
     public let conversationID: String
     public let userMessageID: String
@@ -194,6 +211,8 @@ public struct OrcaRuntimeDirectTurnResponse: Equatable, Sendable {
     public let tokenCount: Int?
     public let triageID: String?
     public let computeRunID: String?
+
+    public var terminalKind: OrcaRuntimeTerminalKind? { .init(lane: lane) }
 
     public init(
         conversationID: String,
@@ -247,6 +266,8 @@ public struct OrcaRuntimeConversationMessage: Equatable, Sendable {
     public let deliveryState: String?
     public let createdAt: Date
     public let updatedAt: Date
+
+    public var terminalKind: OrcaRuntimeTerminalKind? { .init(lane: lane) }
 }
 
 public actor OrcaRuntimeClient {

@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import UIKit
+import OrcaRuntimeContracts
 
 // MARK: - LockerChat Module
 // 1:1 DM conversation surface for agent lanes.
@@ -4057,6 +4058,9 @@ struct DMBubble: View {
     }
 
     private var visibleProvenanceLabel: String {
+        if let terminalKind = OrcaRuntimeTerminalKind(lane: message.lane) {
+            return terminalKind.isHold ? "Paused by ORCA" : "Could not answer"
+        }
         if let computeDraftLabel {
             return computeDraftLabel
         }
@@ -4229,6 +4233,9 @@ struct DMBubble: View {
     }
 
     private var provenanceIcon: String {
+        if let terminalKind = OrcaRuntimeTerminalKind(lane: message.lane) {
+            return terminalKind.isHold ? "pause.circle" : "exclamationmark.circle"
+        }
         switch provenance {
         case .coordinationReview: return "person.2.wave.2"
         case .timeoutFallback: return "clock.badge.exclamationmark"
@@ -4243,6 +4250,9 @@ struct DMBubble: View {
     }
 
     private var provenanceColor: Color {
+        if OrcaRuntimeTerminalKind(lane: message.lane) != nil {
+            return AppColors.accentWarning
+        }
         switch provenance {
         case .coordinationReview: return AppColors.accentSuccess
         case .timeoutFallback: return AppColors.accentWarning

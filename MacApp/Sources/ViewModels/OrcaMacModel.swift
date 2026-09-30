@@ -1111,7 +1111,7 @@ final class OrcaMacModel {
                 canonical.append(
                     TranscriptMessage(
                         id: response.assistantMessageID,
-                        role: .agent,
+                        role: response.terminalKind == nil ? .agent : .system,
                         content: response.content,
                         createdAt: Date(),
                         deliveryState: .persisted,
@@ -1493,7 +1493,7 @@ final class OrcaMacModel {
         _ message: OrcaRuntimeConversationMessage
     ) -> TranscriptMessage {
         let role: TranscriptRole
-        if message.messageType.lowercased() == "system" {
+        if message.messageType.lowercased() == "system" || message.terminalKind != nil {
             role = .system
         } else if message.senderAgentID == nil {
             role = .user
