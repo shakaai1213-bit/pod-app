@@ -176,6 +176,33 @@ public struct OrcaRuntimeDirectTurnRequest: Equatable, Sendable {
     }
 }
 
+public enum OrcaRuntimeTerminalKind: String, Sendable {
+    case held
+    case heldForExplicitEscalation = "held_for_explicit_escalation"
+    case routeUnavailable = "route_unavailable"
+    case providerFailure = "provider_failure"
+
+    public init?(lane: String?) {
+        guard let lane, let value = Self(rawValue: lane) else { return nil }
+        self = value
+    }
+
+    public var isHold: Bool {
+        self == .held || self == .heldForExplicitEscalation
+    }
+}
+
+public enum OrcaRuntimeTurnRoute: String, Sendable {
+    case kimiRequired = "kimi_required"
+    case heldForExplicitEscalation = "held_for_explicit_escalation"
+    case held
+    case frontierRequired = "frontier_required"
+
+    public var forbidsComputeFallback: Bool {
+        true
+    }
+}
+
 public struct OrcaRuntimeDirectTurnResponse: Equatable, Sendable {
     public let conversationID: String
     public let userMessageID: String
@@ -185,6 +212,8 @@ public struct OrcaRuntimeDirectTurnResponse: Equatable, Sendable {
     public let traceID: String
     public let source: String
     public let lane: String
+    public let terminalKind: OrcaRuntimeTerminalKind?
+    public let turnRoute: OrcaRuntimeTurnRoute?
     public let deliveryMode: String?
     public let provenance: String?
     public let responseState: String?
@@ -204,6 +233,8 @@ public struct OrcaRuntimeDirectTurnResponse: Equatable, Sendable {
         traceID: String,
         source: String,
         lane: String,
+        terminalKind: OrcaRuntimeTerminalKind? = nil,
+        turnRoute: OrcaRuntimeTurnRoute? = nil,
         deliveryMode: String? = nil,
         provenance: String? = nil,
         responseState: String? = nil,
@@ -222,6 +253,8 @@ public struct OrcaRuntimeDirectTurnResponse: Equatable, Sendable {
         self.traceID = traceID
         self.source = source
         self.lane = lane
+        self.terminalKind = terminalKind ?? OrcaRuntimeTerminalKind(lane: lane)
+        self.turnRoute = turnRoute
         self.deliveryMode = deliveryMode
         self.provenance = provenance
         self.responseState = responseState
@@ -243,10 +276,12 @@ public struct OrcaRuntimeConversationMessage: Equatable, Sendable {
     public let traceID: String?
     public let source: String?
     public let lane: String?
+    public let terminalKind: OrcaRuntimeTerminalKind?
     public let responseState: String?
     public let deliveryState: String?
     public let createdAt: Date
     public let updatedAt: Date
+
 }
 
 public actor OrcaRuntimeClient {
@@ -1383,6 +1418,10 @@ public actor OrcaRuntimeClient {
             traceID: response.traceId,
             source: response.replySource,
             lane: response.replyLane,
+            terminalKind: OrcaRuntimeTerminalKind(
+                rawValue: response.terminalKind?.rawValue ?? response.replyLane
+            ),
+            turnRoute: response.turnRoute.flatMap { OrcaRuntimeTurnRoute(rawValue: $0.rawValue) },
             deliveryMode: response.deliveryMode?.rawValue,
             provenance: response.provenance,
             responseState: response.replyState,
@@ -1425,6 +1464,7 @@ public actor OrcaRuntimeClient {
                 traceID: $0.traceId,
                 source: $0.source,
                 lane: $0.lane,
+                terminalKind: OrcaRuntimeTerminalKind(rawValue: $0.terminalKind?.rawValue ?? $0.lane ?? ""),
                 responseState: $0.responseState,
                 deliveryState: $0.deliveryState,
                 createdAt: $0.createdAt,

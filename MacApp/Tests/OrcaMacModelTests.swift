@@ -2319,10 +2319,36 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertEqual(model.conversations["coral"]?.conversationID, "direct-channel-coral")
         XCTAssertFalse(model.conversations.keys.contains { $0.hasPrefix("ticket:") })
     }
+
+    func testHeldDirectTurnDisplaysAsSystemNotice() async throws {
+        let stub = StubRuntimeService(
+            replyContent: "This turn is paused pending review.",
+            replyLane: "held_for_explicit_escalation"
+        )
+        let model = makeModel()
+        model.injectServicesForTesting(runtime: stub, console: nil)
+        model.connectionState = .ready
+        model.selectedAgentID = "coral"
+        model.draft = "Review this protected turn"
+
+        await model.sendDraft()
+
+        let messages = try XCTUnwrap(model.conversations["coral"]?.messages)
+        XCTAssertEqual(messages.last?.role, .system)
+        XCTAssertEqual(messages.last?.content, "This turn is paused pending review.")
+        XCTAssertFalse(messages.contains { $0.role == .agent })
+    }
 }
 
 private actor StubRuntimeService: OrcaRuntimeServing {
     var lastRequest: OrcaRuntimeDirectTurnRequest?
+    let replyContent: String
+    let replyLane: String
+
+    init(replyContent: String = "", replyLane: String = "agent_inbox") {
+        self.replyContent = replyContent
+        self.replyLane = replyLane
+    }
 
     func verifyCompatibility() async throws -> OrcaRuntimeCompatibility {
         try OrcaRuntimeCompatibility(contractVersion: "v1", schemaSHA256: String(repeating: "a", count: 64))
@@ -2373,11 +2399,11 @@ private actor StubRuntimeService: OrcaRuntimeServing {
             conversationID: request.conversationID ?? "resolved-channel",
             userMessageID: "msg-user-1",
             assistantMessageID: "msg-assistant-1",
-            content: "",
+            content: replyContent,
             agentSlug: request.agentSlug,
             traceID: request.traceID,
             source: "console",
-            lane: "agent_inbox",
+            lane: replyLane,
             deliveryMode: nil,
             provenance: nil,
             responseState: nil,

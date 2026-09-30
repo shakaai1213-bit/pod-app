@@ -69,6 +69,7 @@ actor AgentChatService {
         let host: String?
         let runtimeSessionId: String?
         let terminalSummary: String?
+        let turnRoute: OrcaRuntimeTurnRoute?
         let sourceSurface: String
         let recoveryStatus: String
         let recoveryReason: String?
@@ -93,6 +94,7 @@ actor AgentChatService {
             host = turn.adapter?.hostId
             runtimeSessionId = turn.runtimeSessionId
             terminalSummary = turn.terminalOutcome?.summary
+            turnRoute = turn.turnRoute.flatMap { OrcaRuntimeTurnRoute(rawValue: $0.rawValue) }
             sourceSurface = turn.clientProvenance.sourceSurface.rawValue
             recoveryStatus = turn.recovery.status.rawValue
             recoveryReason = turn.recovery.reason
@@ -309,6 +311,8 @@ actor AgentChatService {
         let triageId: String?
         let computeRunId: String?
 
+        var terminalKind: OrcaRuntimeTerminalKind? { .init(lane: lane) }
+
         var displayName: String? {
             let route = tier ?? backend
             switch (route?.isEmpty == false ? route : nil, model?.isEmpty == false ? model : nil) {
@@ -384,6 +388,8 @@ actor AgentChatService {
             let deliveryEvidence: String?
             let triageId: String?
             let computeRunId: String?
+
+            var terminalKind: OrcaRuntimeTerminalKind? { .init(lane: lane) }
 
             enum CodingKeys: String, CodingKey {
                 case model, backend, tier, source, lane, provenance
@@ -660,11 +666,11 @@ actor AgentChatService {
                         provenance: parsedProvenance,
                         responseState: parsedState
                     )
-                    let isAsyncAck = parsedMode == .liveInbox
+                    let isAsyncAck = response.metadata.terminalKind == nil && (parsedMode == .liveInbox
                         || parsedProvenance == .liveInbox
                         || parsedProvenance == .coordinationReview
                         || effectiveState == .computeRunning
-                        || effectiveState == .waitingForLiveAgent
+                        || effectiveState == .waitingForLiveAgent)
                     if content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !isAsyncAck {
                         continuation.finish(throwing: AgentChatError.noResponse)
                         return

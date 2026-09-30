@@ -1359,16 +1359,26 @@ final class DirectChatViewModel {
                     traceId: assistantMsg.traceId
                 )
                 for try await chunk in stream {
+                    let terminalKind = chunk.metadata?.terminalKind
                     let responseMode = DMDeliveryMode.parse(chunk.metadata?.deliveryMode)
                     let responseProvenance = DMResponseProvenance.parse(chunk.metadata?.provenance)
                     let responseState = DMDeliveryState.parse(chunk.metadata?.responseState)
-                    let isLiveInboxAck = deliveryMode == .liveInbox
+                    let isLiveInboxAck = terminalKind == nil && (deliveryMode == .liveInbox
                         || responseMode == .liveInbox
                         || responseProvenance == .liveInbox
-                        || responseProvenance == .coordinationReview
-                    let isAsyncComputeAck = responseState == .computeRunning
+                        || responseProvenance == .coordinationReview)
+                    let isAsyncComputeAck = terminalKind == nil && responseState == .computeRunning
 
-                    if isLiveInboxAck {
+                    if terminalKind != nil {
+                        assistantMsg.role = "system"
+                        assistantMsg.content = chunk.content
+                        assistantMsg.source = chunk.metadata?.source
+                        assistantMsg.lane = chunk.metadata?.lane
+                        assistantMsg.deliveryMode = chunk.metadata?.deliveryMode
+                        assistantMsg.provenance = DMResponseProvenance.system.rawValue
+                        assistantMsg.deliveryState = responseState?.rawValue ?? DMDeliveryState.failed.rawValue
+                        routeProgressSteps = Self.routeProgressSteps(for: deliveryMode, stage: .failed)
+                    } else if isLiveInboxAck {
                         assistantMsg.content = Self.liveInboxAckText(for: agent)
                         assistantMsg.source = "orca.chat.ack"
                         assistantMsg.lane = "direct_agent_inbox"
@@ -2007,7 +2017,7 @@ final class DirectChatViewModel {
                     return
                 }
             if hasPendingLiveInboxReply(for: agent) {
-                liveChatStatus = "Live reply window expired for \(agent.name). Requesting an honest compute fallback draft."
+                liveChatStatus = "Live reply window expired for \(agent.name). Checking ORCA's route."
                 markLiveInboxWaitTimedOut(for: agent, since: minimumCreatedAt)
                 await requestLiveInboxFallback(for: agent, channelId: channelId, since: minimumCreatedAt)
             } else {
@@ -2662,6 +2672,26 @@ final class DirectChatViewModel {
             return
         }
 
+        // The route is server-owned. A missing or unreadable route cannot
+        // authorize a client-side substitute for a named-agent turn.
+        let route: OrcaRuntimeTurnRoute?
+        do {
+            route = try await AgentChatService(agent: agent)
+                .runtimeTurn(turnId: userRemoteId).turnRoute
+        } catch {
+            liveChatStatus = "ORCA could not verify this turn's route. No fallback was requested."
+            return
+        }
+        guard let route else {
+            liveChatStatus = "ORCA did not provide this turn's route. No fallback was requested."
+            return
+        }
+        if route.forbidsComputeFallback {
+            liveChatStatus = "ORCA kept this \(agent.name) turn on its required route. No substitute was requested."
+            await importORCAChannelHistory(agent: agent, channelId: channelId)
+            return
+        }
+
         let traceId = pending.traceId ?? userMessage.traceId ?? Self.makeTraceId(prefix: "pod-chat-fallback")
         pending.deliveryState = DMDeliveryState.computeRunning.rawValue
         pending.provenance = DMResponseProvenance.compute.rawValue
@@ -2820,14 +2850,20 @@ final class DirectChatViewModel {
         }
 
         return currentMessages.contains { message in
-            guard message.role == "assistant",
+            guard message.role == "assistant" || message.role == "system",
                   message.timestamp >= source.timestamp,
-                  message.traceId == sourceTraceId,
-                  DMDeliveryState.parse(message.deliveryState) == .responseReceived else {
+                  message.traceId == sourceTraceId else {
                 return false
             }
 
             let lane = message.lane?.lowercased() ?? ""
+            if OrcaRuntimeTerminalKind(lane: lane) != nil {
+                return true
+            }
+            guard message.role == "assistant",
+                  DMDeliveryState.parse(message.deliveryState) == .responseReceived else {
+                return false
+            }
             let messageSource = message.source?.lowercased() ?? ""
             return DMResponseProvenance.parse(message.provenance) == .liveInbox
                 || DMDeliveryMode.parse(message.deliveryMode) == .liveInbox
