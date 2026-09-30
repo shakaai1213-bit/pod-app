@@ -233,7 +233,7 @@ final class OrcaMacModel {
 
     func toggleWorkMetricFilter(_ metricID: String) {
         guard selectedSection == .work || selectedSection == .waitingOnCaptain,
-              workMode == .agentWork || workMode == .captain else { return }
+              workMode == .agentWork || workMode == .captain || workMode == .team else { return }
         guard let filter = ConsoleWorkMetricFilter.filter(forMetricID: metricID) else { return }
         workMetricFilter = workMetricFilter == filter ? nil : filter
         clearStaleApprovalOutcome()
@@ -546,7 +546,12 @@ final class OrcaMacModel {
             } else {
                 bundle = nil
             }
-            let snapshot = try await consoleService.snapshot(for: section, workControl: bundle)
+            let snapshot: ConsoleSectionSnapshot
+            if section == .work, workMode == .team {
+                snapshot = try await consoleService.teamWorkLensSnapshot()
+            } else {
+                snapshot = try await consoleService.snapshot(for: section, workControl: bundle)
+            }
             sectionSnapshots[section] = snapshot
             if section == .waitingOnCaptain {
                 lastWaitingOnCaptainRefreshAt = Date()

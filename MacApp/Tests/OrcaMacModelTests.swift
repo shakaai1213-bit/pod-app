@@ -472,10 +472,49 @@ final class OrcaMacModelTests: XCTestCase {
     }
 
     func testConsoleWorkSeparatesPortfolioFromAgentQueue() {
-        XCTAssertEqual(ConsoleWorkMode.allCases.map(\.rawValue), ["portfolio", "agentWork", "captain"])
+        XCTAssertEqual(ConsoleWorkMode.allCases.map(\.rawValue), ["portfolio", "agentWork", "captain", "team"])
         XCTAssertEqual(ConsoleWorkMode.portfolio.title, "Portfolio")
         XCTAssertEqual(ConsoleWorkMode.agentWork.title, "Agent Work")
         XCTAssertEqual(ConsoleWorkMode.captain.title, "On Tony")
+        XCTAssertEqual(ConsoleWorkMode.team.title, "All Agents")
+    }
+
+    func testTeamWorkLensUsesOneOrgRequestAndShowsOwnersWithoutDecisionControls() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        var requestCount = 0
+        TestURLProtocol.response = { request in
+            requestCount += 1
+            XCTAssertEqual(request.url?.path, "/api/v1/control-room/team-work")
+            return (200, Data(#"""
+            {
+              "contract_version": "orca.team-work-lens.v1",
+              "generated_at": "2026-09-30T18:00:00Z",
+              "roster": ["aloha", "chief", "coral", "maui", "reef", "rooster", "shaka"],
+              "provisioned_agents": ["coral", "maui"],
+              "counts": {"Ready Now": 1, "Assigned": 0, "Waiting On Others": 0, "Decision Queue": 1, "Approval Attention": 0, "Protected": 1, "Historical": 0},
+              "groups": [
+                {"name": "Ready Now", "items": [{"id":"ticket:t1","kind":"ticket","title":"Fix Console","summary":"ready","agent_slug":"coral","status":"open","priority":"high","endpoint":"/api/v1/tickets/t1","protected":false,"stale":false,"execution_eligible":true,"approval_state":"not_required","blocked_on":null,"desired_outcome":"Works","needs_scope":false,"authority":null,"approval_id":null,"linked_ticket_ids":[]}]},
+                {"name": "Decision Queue", "items": [{"id":"approval:a1","kind":"approval","title":"Review approval","summary":"waiting for maui","agent_slug":"maui","status":"pending","priority":"high","endpoint":"/api/v1/approvals/a1","protected":false,"stale":false,"execution_eligible":false,"approval_state":"pending","blocked_on":null,"desired_outcome":null,"needs_scope":false,"authority":"maui","approval_id":"a1","linked_ticket_ids":["t1"]}]},
+                {"name": "Protected", "items": [{"id":"ticket:t2","kind":"ticket","title":"t2","summary":"Protected work pointer","agent_slug":"coral","status":"open","priority":"high","endpoint":"/api/v1/tickets/t2","protected":true,"stale":false,"execution_eligible":false,"approval_state":null,"blocked_on":null,"desired_outcome":null,"needs_scope":false,"authority":null,"approval_id":null,"linked_ticket_ids":[]}]}
+              ]
+            }
+            """#.utf8))
+        }
+        defer { TestURLProtocol.response = nil }
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "test-token"),
+            session: session
+        )
+        let snapshot = try await service.teamWorkLensSnapshot()
+        XCTAssertEqual(requestCount, 1)
+        XCTAssertEqual(snapshot.records.count, 3)
+        XCTAssertEqual(snapshot.metrics.first(where: { $0.id == "approvals" })?.value, "1")
+        XCTAssertEqual(snapshot.records.first?.subtitle, "coral · ready")
+        XCTAssertTrue(snapshot.records.allSatisfy { $0.approval == nil })
+        XCTAssertNil(snapshot.records.last?.desiredOutcome)
     }
 
     func testWorkbenchPaneBarFitsTheMinimumContentColumn() {
