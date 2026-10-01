@@ -23,6 +23,7 @@ private enum FundSurfaceMode: String, CaseIterable, Identifiable {
 struct TradingView: View {
 
     @State private var viewModel = TradingViewModel()
+    @State private var cockpitModel = FundCockpitViewModel()
     @State private var selectedMode: FundSurfaceMode = .overview
 
     var body: some View {
@@ -47,7 +48,10 @@ struct TradingView: View {
                             .tint(AppColors.accentElectric)
                     } else {
                         Button {
-                            Task { await viewModel.loadData() }
+                            Task {
+                                await viewModel.loadData()
+                                await cockpitModel.load()
+                            }
                         } label: {
                             Image(systemName: "arrow.clockwise")
                                 .font(.system(size: 16, weight: .semibold))
@@ -58,9 +62,11 @@ struct TradingView: View {
             }
             .refreshable {
                 await viewModel.loadData()
+                await cockpitModel.load()
             }
             .task {
                 await viewModel.loadData()
+                await cockpitModel.load()
             }
         }
     }
@@ -121,6 +127,7 @@ struct TradingView: View {
     private var fundModeContent: some View {
         switch selectedMode {
         case .overview:
+            FundCockpitSection(viewModel: cockpitModel)
             pnlSection
         case .trades:
             FundTradesCard()

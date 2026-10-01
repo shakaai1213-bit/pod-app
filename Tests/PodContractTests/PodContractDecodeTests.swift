@@ -68,6 +68,51 @@ func fundAvailableRouteDecodes() throws {
     #expect(closed.closedAt == "2026-07-09T21:00:00Z")
 }
 
+@Test("Fund cockpit decodes the protected read model")
+func fundCockpitRouteDecodes() throws {
+    let feed = try makeDecoder().decode(FundCockpitFeedDTO.self, from: fixture("fund-cockpit-available"))
+    let payload = try #require(feed.data?.payload)
+
+    #expect(feed.isAvailable)
+    #expect(payload.engines.rows.map(\.engine) == ["Synthetic engine"])
+    #expect(payload.orcaSync?.inSync == 39)
+    #expect(payload.orcaSync?.problems.first?.surface == "synthetic route")
+    #expect(payload.shadows?.candidates.count == 1)
+    #expect(payload.runCapture?.symbols["SYNTH"]?.runDetected == true)
+    #expect(payload.alerts.map(\.name) == ["Synthetic alert"])
+}
+
+@Test("Fund cockpit keeps unknown liveness and uses the post-feed queue")
+func fundCockpitUnknownLivenessAndQueue() throws {
+    let execution = try makeDecoder().decode(
+        FundCockpitExecutionDTO.self,
+        from: Data(#"{"label":"synthetic","alive":null}"#.utf8)
+    )
+    let queue = try makeDecoder().decode(
+        FundCockpitChieffishDTO.self,
+        from: Data(#"{"pending_before":1,"pending_after":2}"#.utf8)
+    )
+    #expect(execution.alive == nil)
+    #expect(queue.pendingAfter == 2)
+}
+
+@Test("Fund predictor decodes skill and random baseline semantics")
+func fundPredictorSkillDecodes() throws {
+    let current = try makeDecoder().decode(
+        FundCockpitPredictorDTO.self,
+        from: Data(#"{"skill":"no_skill","baseline_kind":"random","accuracy":0.33,"random_baseline":0.33}"#.utf8)
+    )
+    #expect(current.skill == "no_skill")
+    #expect(current.baselineKind == "random")
+
+    let older = try makeDecoder().decode(
+        FundCockpitPredictorDTO.self,
+        from: Data(#"{"verdict":"pending"}"#.utf8)
+    )
+    #expect(older.skill == nil)
+    #expect(older.baselineKind == nil)
+}
+
 private func fixture(_ name: String) throws -> Data {
     let url = try #require(Bundle.module.url(forResource: name, withExtension: "json", subdirectory: "Fixtures"))
     return try Data(contentsOf: url)

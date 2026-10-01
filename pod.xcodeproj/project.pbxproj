@@ -10,6 +10,7 @@
 		00A593658BB8B41971F04918 /* ORCAProjectsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B012FA2131C7C588DFF4EBAB /* ORCAProjectsView.swift */; };
 		00E5120390A25C364860CB9E /* VoiceCompanionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 123B9D533AE21BBEEF5A4607 /* VoiceCompanionView.swift */; };
 		018E19CAFF8BA60C2A88E95E /* OrcaRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = DF130082CD33A44C8229F091 /* OrcaRuntime */; };
+		03B05CA508D2127789657309 /* FundCockpitDTO.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66877A90A6809E627B65339D /* FundCockpitDTO.swift */; };
 		06AF85E590D1677BF0CA067C /* StandardEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5D15A077B49CD21B9DDADD5 /* StandardEditorView.swift */; };
 		09171C1766C130BFDB1E66F7 /* VoiceCompanionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30A2E30B6BCD93E8C0D2E71C /* VoiceCompanionViewModel.swift */; };
 		115714EE9EE458D6F1609B08 /* OnboardingViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 348A3B6C0FA234B66DDC7B35 /* OnboardingViewModel.swift */; };
@@ -21,6 +22,7 @@
 		1CE5ECB5B90CBAEBF1759980 /* StatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E32CA807B88458FAED25ED6 /* StatusBadge.swift */; };
 		209B9A40C499167327D250B2 /* WallDisplayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101F632FCD32C5AB7EF9C54B /* WallDisplayView.swift */; };
 		21545D61063712078BE5941F /* FundTradesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13451B774617AE34B59BAD63 /* FundTradesViewModel.swift */; };
+		215FCA38108C3D1EF6F2A97E /* FundCockpitSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82D3E17B53994054F576DFB9 /* FundCockpitSection.swift */; };
 		243D55106B17E4849250CCA5 /* DirectChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D08D7D34A8A9C7A08349196 /* DirectChatViewModel.swift */; };
 		24501CEA7E83F6EE14EACE06 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A28A4672374ACF545BD664A8 /* APIClient.swift */; };
 		26713644C40F552A4331AC34 /* OrcaAPI in Frameworks */ = {isa = PBXBuildFile; productRef = D4D89BDBC1B522061EDE75DB /* OrcaAPI */; };
@@ -60,6 +62,7 @@
 		710AEB8A57C35177AD7DB6F6 /* KnowledgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ECF09C31E0CCB3C58FAA879 /* KnowledgeView.swift */; };
 		7220D0BB4926EC9516B9ADC5 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 308D6AB690E03E31147A14E0 /* OnboardingView.swift */; };
 		75C7A3458E8A5B80918AA5A8 /* BoundedTaskGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64BE9C5283D04F5E1D6FA983 /* BoundedTaskGroup.swift */; };
+		7B8ED8EB260F279322F9DB45 /* FundCockpitViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D2F0C47E86AC0A27E4ADEF /* FundCockpitViewModel.swift */; };
 		7D73F19AA5F1A62E35E17CAC /* SwiftDataModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 652176F506F2AFBA5504A5DB /* SwiftDataModels.swift */; };
 		808D6CB1C446F74B0C367DD3 /* SearchSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 538A3B3487E3FD106CCB6B2F /* SearchSheet.swift */; };
 		81916D9ADC97416E0C579E35 /* CaptainsLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FB9B918F6720B94640FB12E /* CaptainsLogView.swift */; };
@@ -122,6 +125,7 @@
 		E6AAF82F7C5C65A6843220A8 /* SSEClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F46573C102E73A66AA6431C /* SSEClient.swift */; };
 		E706BEAB019F6D58EE34A79D /* FundTradesCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5462C96CBFB408E47AC35C7D /* FundTradesCard.swift */; };
 		E87C2131A6DCF6867F1CB67D /* OrcaDomain in Frameworks */ = {isa = PBXBuildFile; productRef = 20445C422F23F1B2DE7CC9CD /* OrcaDomain */; };
+		E8BF1C1BD76D51DD38863C6E /* FundCockpitRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD42EE12B0073155A736E07F /* FundCockpitRepository.swift */; };
 		EA0C06FDC1442F08A3550A36 /* podApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CC5A89E0995E0ECB8ABF610 /* podApp.swift */; };
 		EC8129D43972E4CE42578BC1 /* PriorityBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A671A61727D2A6622982C99A /* PriorityBadge.swift */; };
 		ED54C833D5942628269A4D00 /* ORCAProjectsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 735FA1C6191ED5B60CF8DC15 /* ORCAProjectsViewModel.swift */; };
@@ -208,6 +212,7 @@
 		64BE9C5283D04F5E1D6FA983 /* BoundedTaskGroup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundedTaskGroup.swift; sourceTree = "<group>"; };
 		652176F506F2AFBA5504A5DB /* SwiftDataModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftDataModels.swift; sourceTree = "<group>"; };
 		663823AE3FAD0B6638F09CEB /* WorkbenchRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkbenchRepository.swift; sourceTree = "<group>"; };
+		66877A90A6809E627B65339D /* FundCockpitDTO.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FundCockpitDTO.swift; sourceTree = "<group>"; };
 		669E5C6A23ECCE8F11F520BF /* AppIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIntents.swift; sourceTree = "<group>"; };
 		6DACC05C307AB5FA9A895001 /* SIWASignInService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SIWASignInService.swift; sourceTree = "<group>"; };
 		6E32CA807B88458FAED25ED6 /* StatusBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBadge.swift; sourceTree = "<group>"; };
@@ -223,6 +228,7 @@
 		7F46573C102E73A66AA6431C /* SSEClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSEClient.swift; sourceTree = "<group>"; };
 		802C03DADDC0952CE2E3ABAC /* ScanSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanSheet.swift; sourceTree = "<group>"; };
 		814BC88E02730877B29A454E /* CaptainsDeskSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptainsDeskSection.swift; sourceTree = "<group>"; };
+		82D3E17B53994054F576DFB9 /* FundCockpitSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FundCockpitSection.swift; sourceTree = "<group>"; };
 		84961F81D6C2F51B1A1EC335 /* AppTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTab.swift; sourceTree = "<group>"; };
 		8974E1454949E877F3566950 /* ShimmerModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShimmerModifier.swift; sourceTree = "<group>"; };
 		8A399F52EB34BACAEEEDF2B0 /* FundTradesDTO.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FundTradesDTO.swift; sourceTree = "<group>"; };
@@ -262,6 +268,7 @@
 		CE5C64116BF8AF83ACAB134E /* OrcaRuntimeContracts */ = {isa = PBXFileReference; lastKnownFileType = folder; name = OrcaRuntimeContracts; path = Packages/OrcaRuntimeContracts; sourceTree = SOURCE_ROOT; };
 		D18D78CE9147C58BF929B8A0 /* AgentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentsView.swift; sourceTree = "<group>"; };
 		D2314FFEFA469FFDCDA8BCB0 /* OfflineQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineQueue.swift; sourceTree = "<group>"; };
+		D4D2F0C47E86AC0A27E4ADEF /* FundCockpitViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FundCockpitViewModel.swift; sourceTree = "<group>"; };
 		DBE261A9A40BC12CBB2C0F78 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		DC9A4A64DB751E8953D363DF /* ChannelRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelRepository.swift; sourceTree = "<group>"; };
 		E0AA356201992C4B685F6B8E /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
@@ -277,6 +284,7 @@
 		FA7D0F4C41C8A9E9599717F0 /* CaptainsChartSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptainsChartSection.swift; sourceTree = "<group>"; };
 		FBC7D0B7FA46F3CE605D98CB /* SpeechRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechRecorder.swift; sourceTree = "<group>"; };
 		FC020A48B04971EAC26F9937 /* Chat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Chat.swift; sourceTree = "<group>"; };
+		FD42EE12B0073155A736E07F /* FundCockpitRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FundCockpitRepository.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -312,6 +320,7 @@
 				A28A4672374ACF545BD664A8 /* APIClient.swift */,
 				6FF5F53FAD59A5AB311C5FAA /* DTOs.swift */,
 				12D22773AD8CA83A56A417C3 /* Endpoints.swift */,
+				66877A90A6809E627B65339D /* FundCockpitDTO.swift */,
 				8A399F52EB34BACAEEEDF2B0 /* FundTradesDTO.swift */,
 				57B9BA1F0478DFCA0910DB54 /* MakerDTO.swift */,
 				154F411D0A93CA50E1AE865E /* ManagementDTOs.swift */,
@@ -528,6 +537,7 @@
 				0C828D5C39A08FAA8E8C6F7E /* AgentRepository.swift */,
 				E253A244EAB68FD7087A05E0 /* BoardRepository.swift */,
 				DC9A4A64DB751E8953D363DF /* ChannelRepository.swift */,
+				FD42EE12B0073155A736E07F /* FundCockpitRepository.swift */,
 				45F28581565C7BE7CD10E1DA /* FundTradesRepository.swift */,
 				928284E5D88714A670BD7542 /* ProjectRepository.swift */,
 				7ED4159151441CB032A8460F /* ResearchRepository.swift */,
@@ -707,6 +717,8 @@
 		CEFC1D1CDAAAE7311D0D8B4D /* Trading */ = {
 			isa = PBXGroup;
 			children = (
+				82D3E17B53994054F576DFB9 /* FundCockpitSection.swift */,
+				D4D2F0C47E86AC0A27E4ADEF /* FundCockpitViewModel.swift */,
 				5462C96CBFB408E47AC35C7D /* FundTradesCard.swift */,
 				13451B774617AE34B59BAD63 /* FundTradesViewModel.swift */,
 				B176EE740BDAAB1D3841B4F7 /* TradingView.swift */,
@@ -905,6 +917,10 @@
 				243D55106B17E4849250CCA5 /* DirectChatViewModel.swift in Sources */,
 				CDB89B8862BF3230B668C3FC /* Endpoints.swift in Sources */,
 				A38EF93421E11165DA34063C /* FlowLayout.swift in Sources */,
+				03B05CA508D2127789657309 /* FundCockpitDTO.swift in Sources */,
+				E8BF1C1BD76D51DD38863C6E /* FundCockpitRepository.swift in Sources */,
+				215FCA38108C3D1EF6F2A97E /* FundCockpitSection.swift in Sources */,
+				7B8ED8EB260F279322F9DB45 /* FundCockpitViewModel.swift in Sources */,
 				E706BEAB019F6D58EE34A79D /* FundTradesCard.swift in Sources */,
 				184A7712F6D30325BFE1B3D2 /* FundTradesDTO.swift in Sources */,
 				B01399BF898AE50C4E5A0226 /* FundTradesRepository.swift in Sources */,
