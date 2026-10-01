@@ -3,6 +3,7 @@ import SwiftUI
 
 struct EngineeringWorkbenchInspectorView: View {
     @Environment(OrcaMacModel.self) private var model
+    @State private var rejectionReason = ""
 
     var body: some View {
         ScrollView {
@@ -60,6 +61,9 @@ struct EngineeringWorkbenchInspectorView: View {
             .padding(16)
         }
         .background(Color(nsColor: .windowBackgroundColor))
+        .onChange(of: model.selectedWorkbenchOperationID) { _, _ in
+            rejectionReason = ""
+        }
     }
 
     private var hostSection: some View {
@@ -169,11 +173,26 @@ struct EngineeringWorkbenchInspectorView: View {
     private func approvalSection(_ operation: OrcaEngineeringOperation) -> some View {
         if operation.requiresApproval {
             InspectorSection(title: "Approval") {
+                InspectorValue(label: "Authority", value: "Tony · Captain")
+                InspectorValue(label: "Approval ID", value: operation.approvalID ?? "Missing")
                 InspectorValue(
                     label: "State",
                     value: operation.approvalStatus ?? "missing"
                 )
-                if operation.approvalStatus == "pending" {
+                if let requestHash = engineeringRequestField(operation, "request_sha256") {
+                    digestValue("Request SHA-256", requestHash)
+                }
+                if let policyHash = engineeringRequestField(operation, "policy_sha256") {
+                    digestValue("Policy SHA-256", policyHash)
+                }
+                Text("Approve queues this exact operation for a bounded host claim. Reject cancels it before host execution.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if operation.approvalStatus == "pending",
+                   operation.status == "waiting_for_human",
+                   operation.approvalID != nil {
                     HStack(spacing: 8) {
                         Button {
                             Task { await model.decideWorkbenchApproval(operation: operation, decision: "approved") }
@@ -182,17 +201,60 @@ struct EngineeringWorkbenchInspectorView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(Color.orcaGreen)
-
-                        Button {
-                            Task { await model.decideWorkbenchApproval(operation: operation, decision: "rejected") }
-                        } label: {
-                            Label("Reject", systemImage: "xmark")
-                        }
-                        .buttonStyle(.bordered)
                     }
                     .disabled(model.isSubmittingWorkbench)
+                    TextField("Rejection reason (required)", text: $rejectionReason)
+                        .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("Workbench rejection reason")
+                    Button {
+                        Task {
+                            await model.decideWorkbenchApproval(
+                                operation: operation,
+                                decision: "rejected",
+                                note: rejectionReason
+                            )
+                        }
+                    } label: {
+                        Label("Reject", systemImage: "xmark")
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(
+                        model.isSubmittingWorkbench ||
+                        !(3...1000).contains(rejectionReason.trimmingCharacters(in: .whitespacesAndNewlines).count)
+                    )
+                } else if operation.approvalStatus == "pending" {
+                    Text("This approval is not decidable here: the exact AgentRun is no longer waiting for Captain review or its approval ID is missing. Refresh Workbench for the current state.")
+                        .font(.caption)
+                        .foregroundStyle(Color.orcaAmber)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text("This approval is no longer pending.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
+        }
+    }
+
+    private func engineeringRequestField(_ operation: OrcaEngineeringOperation, _ key: String) -> String? {
+        guard let artifactsValue = operation.artifacts,
+              case let .object(artifacts) = artifactsValue,
+              let requestValue = artifacts["engineering_request"],
+              case let .object(request) = requestValue,
+              let fieldValue = request[key],
+              case let .string(value) = fieldValue else { return nil }
+        return value
+    }
+
+    private func digestValue(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.caption.monospaced())
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

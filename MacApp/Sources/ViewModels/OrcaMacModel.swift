@@ -886,6 +886,7 @@ final class OrcaMacModel {
     }
 
     func refreshWorkbenchSession(silent: Bool = false) async {
+        workbenchFetchGeneration += 1
         guard let consoleService,
               let ticketID = selectedWorkbenchTicketID,
               workbenchTickets.contains(where: { $0.id == ticketID }) else {
@@ -975,9 +976,22 @@ final class OrcaMacModel {
 
     func decideWorkbenchApproval(
         operation: OrcaEngineeringOperation,
-        decision: String
+        decision: String,
+        note: String? = nil
     ) async {
         guard let consoleService, !isSubmittingWorkbench else { return }
+        workbenchNotice = nil
+        guard operation.approvalStatus == "pending",
+              operation.status == "waiting_for_human",
+              operation.approvalID != nil else {
+            workbenchError = "This exact operation has no pending approval or is no longer waiting for Captain review. Refresh Workbench."
+            return
+        }
+        let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if decision == "rejected" && !(3...1000).contains(trimmedNote.count) {
+            workbenchError = "A rejection reason must be 3 to 1000 characters."
+            return
+        }
         isSubmittingWorkbench = true
         defer { isSubmittingWorkbench = false }
         do {
@@ -985,7 +999,9 @@ final class OrcaMacModel {
                 runID: operation.id,
                 decision: OrcaEngineeringApprovalDecision(
                     decision: decision,
-                    note: "\(decision.capitalized) from ORCA Console for this exact AgentRun."
+                    note: trimmedNote.isEmpty
+                        ? "Approved from ORCA Console for this exact AgentRun."
+                        : trimmedNote
                 )
             )
             selectedWorkbenchOperationID = updated.id
@@ -993,8 +1009,10 @@ final class OrcaMacModel {
             workbenchError = nil
             await refreshWorkbenchSession(silent: true)
         } catch {
-            workbenchError = error.localizedDescription
-            presentedError = error.localizedDescription
+            let message = error.localizedDescription
+            await refreshWorkbenchSession(silent: true)
+            workbenchError = message
+            presentedError = message
         }
     }
 
