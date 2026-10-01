@@ -145,6 +145,11 @@ final class OrcaMacModel {
         agents.first(where: { $0.id == selectedAgentID }) ?? agents[0]
     }
 
+    var conversationAgent: AgentProfile {
+        guard let ownerSlug = activeTicketChat?.ownerSlug else { return selectedAgent }
+        return agents.first(where: { $0.id == ownerSlug }) ?? selectedAgent
+    }
+
     var selectedConversation: ConversationState {
         if let ticketChat = activeTicketChat {
             return conversations[ticketChat.conversationKey]
@@ -484,6 +489,7 @@ final class OrcaMacModel {
 
     func selectAgent(_ id: String) {
         guard agents.contains(where: { $0.id == id }) else { return }
+        activeTicketChat = nil
         selectSection(.conversations, refresh: false)
         selectedAgentID = id
         defaults.set(id, forKey: "orca.mac.selected-agent")
@@ -497,6 +503,9 @@ final class OrcaMacModel {
         sectionFetchGeneration += 1
         isLoadingSection = false
         recordSelectionChanged(to: nil)
+        if section != .conversations {
+            activeTicketChat = nil
+        }
         selectedRecordID = nil
         workMetricFilter = nil
         if section == .waitingOnCaptain {
