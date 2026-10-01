@@ -830,6 +830,41 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertTrue(snapshot.records.last?.ticket?.isProtected == true)
     }
 
+    func testAllAgentsRefreshKeepsCaptainBadgeFreshWithOneTeamRequest() async {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let lock = NSLock()
+        var paths: [String] = []
+        TestURLProtocol.response = { request in
+            let path = request.url?.path ?? ""
+            lock.withLock { paths.append(path) }
+            if path == "/api/v1/control-room/waiting-on-captain" {
+                return (200, Data(Self.captainWorkLensFixtureJSON.utf8))
+            }
+            return (200, Data(#"{"contract_version":"orca.team-work-lens.v1","generated_at":"2026-09-30T18:00:00Z","roster":[],"provisioned_agents":[],"counts":{},"groups":[]}"#.utf8))
+        }
+        defer { TestURLProtocol.response = nil }
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+        let model = makeModel()
+        model.selectedSection = .work
+        model.workMode = .team
+        model.injectServicesForTesting(runtime: nil, console: service)
+
+        await model.refreshCurrentSurface()
+
+        let requestedPaths = lock.withLock { paths }
+        XCTAssertEqual(requestedPaths.filter { $0 == "/api/v1/control-room/team-work" }.count, 1)
+        XCTAssertEqual(requestedPaths.filter { $0 == "/api/v1/control-room/waiting-on-captain" }.count, 1)
+        XCTAssertGreaterThan(model.sectionSnapshots[.waitingOnCaptain]?.badgeCount ?? 0, 0)
+        XCTAssertEqual(model.selectedSnapshot.metrics.first?.value, "0")
+    }
+
     func testChangingFromWaitingOnTonyToAllAgentsClearsOldRowsAndFilter() async throws {
         let model = makeModel()
         model.sectionSnapshots[.work] = try await workSnapshot()
