@@ -794,9 +794,8 @@ final class OrcaMacModel {
         silent: Bool = false,
         automatic: Bool = false
     ) async {
-        let hasOwnWorkProjection = selectedSection == .work
-            && (workMode == .captain || workMode == .team)
-        if !hasOwnWorkProjection,
+        let isCaptainWorkSurface = selectedSection == .work && workMode == .captain
+        if !isCaptainWorkSurface,
            !automatic || Self.shouldRefreshWaitingOnCaptain(
                lastRefreshAt: lastWaitingOnCaptainRefreshAt,
                now: Date()
