@@ -2239,6 +2239,48 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertEqual(model.selectedConversation.conversationID, "direct-channel-maui")
     }
 
+    func testSelectingAgentLeavesTicketChatBeforeRoutingDirectTurn() {
+        let model = makeModel()
+        model.selectedAgentID = "chief"
+        model.selectedSection = .conversations
+        model.activeTicketChat = OrcaMacModel.TicketChatContext(
+            ticketID: "chief-ticket",
+            ownerSlug: "chief",
+            title: "Chief work",
+            channelID: "chief-ticket-channel",
+            returnSection: .work,
+            returnRecordID: nil,
+            returnWorkbenchTicketID: nil
+        )
+        model.conversations["coral"] = ConversationState(conversationID: "coral-direct-channel")
+
+        XCTAssertEqual(model.conversationAgent.id, "chief")
+
+        model.selectAgent("coral")
+
+        XCTAssertNil(model.activeTicketChat)
+        XCTAssertEqual(model.selectedAgentID, "coral")
+        XCTAssertEqual(model.conversationAgent.id, "coral")
+        XCTAssertEqual(model.selectedConversation.conversationID, "coral-direct-channel")
+    }
+
+    func testLeavingConversationsClearsTicketChat() {
+        let model = makeModel()
+        model.activeTicketChat = OrcaMacModel.TicketChatContext(
+            ticketID: "chief-ticket",
+            ownerSlug: "chief",
+            title: "Chief work",
+            channelID: "chief-ticket-channel",
+            returnSection: .work,
+            returnRecordID: nil,
+            returnWorkbenchTicketID: nil
+        )
+
+        model.selectSection(.work, refresh: false)
+
+        XCTAssertNil(model.activeTicketChat)
+    }
+
     func testTicketChatWithoutOwnerMapsToAssignOwnerMessage() async throws {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [TestURLProtocol.self]
