@@ -830,6 +830,34 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertTrue(snapshot.records.last?.ticket?.isProtected == true)
     }
 
+    func testAllAgentsRefreshDoesNotFetchCaptainQueueAsSecondRequest() async {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let lock = NSLock()
+        var paths: [String] = []
+        TestURLProtocol.response = { request in
+            lock.withLock { paths.append(request.url?.path ?? "") }
+            return (200, Data(#"{"contract_version":"orca.team-work-lens.v1","generated_at":"2026-09-30T18:00:00Z","roster":[],"provisioned_agents":[],"counts":{},"groups":[]}"#.utf8))
+        }
+        defer { TestURLProtocol.response = nil }
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+        let model = makeModel()
+        model.selectedSection = .work
+        model.workMode = .team
+        model.injectServicesForTesting(runtime: nil, console: service)
+
+        await model.refreshCurrentSurface()
+
+        XCTAssertEqual(lock.withLock { paths }, ["/api/v1/control-room/team-work"])
+        XCTAssertEqual(model.selectedSnapshot.metrics.first?.value, "0")
+    }
+
     func testChangingFromWaitingOnTonyToAllAgentsClearsOldRowsAndFilter() async throws {
         let model = makeModel()
         model.sectionSnapshots[.work] = try await workSnapshot()
