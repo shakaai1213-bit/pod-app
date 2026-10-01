@@ -561,6 +561,93 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertFalse(snapshot.records[0].fields.contains { $0.label == "Account USD" })
     }
 
+    func testFundSnapshotShowsDeniedWithoutProtectedCockpitRows() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        TestURLProtocol.response = { request in
+            if request.url?.path == "/api/v1/fund/landing" {
+                return (200, Data(#"{"status":"available","source_fresh":true,"headline":"Synthetic Fund"}"#.utf8))
+            }
+            return (403, Data(#"{"detail":"denied"}"#.utf8))
+        }
+        defer { TestURLProtocol.response = nil }
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+
+        let snapshot = try await service.snapshot(for: .fund, workControl: nil)
+
+        XCTAssertEqual(snapshot.metrics.first { $0.id == "fund-cockpit" }?.value, "Denied")
+        XCTAssertEqual(snapshot.records.map(\.id), ["fund-landing"])
+    }
+
+    func testFundRefreshClearsPreviouslyVisibleRowsOnDeniedLanding() async {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        TestURLProtocol.response = { _ in (403, Data(#"{"detail":"denied"}"#.utf8)) }
+        defer { TestURLProtocol.response = nil }
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+        let model = makeModel()
+        model.injectServicesForTesting(runtime: nil, console: service)
+        model.selectSection(.fund, refresh: false)
+        model.sectionSnapshots[.fund] = ConsoleSectionSnapshot(
+            section: .fund,
+            metrics: [],
+            records: [ConsoleRecord(
+                id: "old-protected-row", title: "Old value", subtitle: "old",
+                status: "current", group: "Fund", fields: [], approval: nil
+            )],
+            sources: [],
+            updatedAt: .now
+        )
+        model.selectRecord("old-protected-row")
+
+        await model.refreshSelectedSection()
+
+        XCTAssertTrue(model.sectionSnapshots[.fund]?.records.isEmpty == true)
+        XCTAssertNil(model.selectedRecordID)
+        XCTAssertNotNil(model.sectionError)
+    }
+
+    func testFundSnapshotTreatsMissingProducerSectionsAsPartial() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        TestURLProtocol.response = { request in
+            switch request.url?.path {
+            case "/api/v1/fund/landing":
+                return (200, Data(#"{"status":"available","source_fresh":true,"headline":"Synthetic Fund"}"#.utf8))
+            case "/api/v1/fund/routes/cockpit":
+                return (200, Data(#"{"status":"available","quality":"available","stale":false,"data":{"schema_version":"fund_routes_cockpit/v0","route":"fund.cockpit","payload":{"engines":{"rows":[]},"alerts":[]}}}"#.utf8))
+            default:
+                return (404, Data())
+            }
+        }
+        defer { TestURLProtocol.response = nil }
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+
+        let snapshot = try await service.snapshot(for: .fund, workControl: nil)
+
+        XCTAssertEqual(snapshot.metrics.first { $0.id == "fund-cockpit" }?.value, "Partial")
+        XCTAssertEqual(snapshot.metrics.first { $0.id == "fund-sync" }?.value, "-")
+        XCTAssertEqual(snapshot.metrics.first { $0.id == "fund-engines" }?.value, "0")
+    }
+
     func testFundSnapshotDoesNotRenderStaleCockpitRecords() async throws {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [TestURLProtocol.self]

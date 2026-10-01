@@ -82,6 +82,20 @@ func fundCockpitRouteDecodes() throws {
     #expect(payload.alerts.map(\.name) == ["Synthetic alert"])
 }
 
+@Test("Fund cockpit keeps unknown liveness and uses the post-feed queue")
+func fundCockpitUnknownLivenessAndQueue() throws {
+    let execution = try makeDecoder().decode(
+        FundCockpitExecutionDTO.self,
+        from: Data(#"{"label":"synthetic","alive":null}"#.utf8)
+    )
+    let queue = try makeDecoder().decode(
+        FundCockpitChieffishDTO.self,
+        from: Data(#"{"pending_before":1,"pending_after":2}"#.utf8)
+    )
+    #expect(execution.alive == nil)
+    #expect(queue.pendingAfter == 2)
+}
+
 @Test("Fund predictor decodes skill and random baseline semantics")
 func fundPredictorSkillDecodes() throws {
     let current = try makeDecoder().decode(

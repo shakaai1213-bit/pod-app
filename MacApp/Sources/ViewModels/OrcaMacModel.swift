@@ -562,6 +562,10 @@ final class OrcaMacModel {
                 await refreshBoardPortfolio(silent: true)
             }
         } catch {
+            if section == .fund {
+                sectionSnapshots[section] = .empty(section)
+                selectedRecordID = nil
+            }
             sectionError = error.localizedDescription
             if !silent { presentedError = error.localizedDescription }
         }

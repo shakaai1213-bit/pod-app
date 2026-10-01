@@ -307,7 +307,18 @@ actor OrcaConsoleService {
 
     private func fundSnapshot() async throws -> ConsoleSectionSnapshot {
         let landing = try await get("/api/v1/fund/landing")
-        let cockpit = try? await get("/api/v1/fund/routes/cockpit")
+        let cockpit: ConsoleJSON?
+        let cockpitDenied: Bool
+        do {
+            cockpit = try await get("/api/v1/fund/routes/cockpit")
+            cockpitDenied = false
+        } catch let OrcaConsoleServiceError.httpStatus(code, _) where code == 401 || code == 403 {
+            cockpit = nil
+            cockpitDenied = true
+        } catch {
+            cockpit = nil
+            cockpitDenied = false
+        }
         let envelope = cockpit?.objectValue?["data"]?.objectValue
         let payload = envelope?["payload"]?.objectValue
         let recognized = envelope?["schema_version"]?.displayValue == "fund_routes_cockpit/v0"
@@ -318,16 +329,18 @@ actor OrcaConsoleService {
             && cockpit.flatMap { bool($0, key: "stale") } == false
         let sync = payload?["orca_sync"]?.objectValue
         let problems = sync?["problems"]?.arrayValue ?? []
-        let cockpitStatus = available ? (problems.isEmpty ? "current" : "partial")
-            : (cockpit.flatMap { text($0, key: "quality") } == "stale" ? "stale" : "unavailable")
         let engines = payload?["engines"]?.objectValue?["rows"]?.arrayValue ?? []
+        let cockpitStatus = cockpitDenied ? "denied" : available
+            ? ((sync == nil || engines.isEmpty || !problems.isEmpty) ? "partial" : "current")
+            : (cockpit.flatMap { text($0, key: "quality") } == "stale" ? "stale" : "unavailable")
         let alerts = payload?["alerts"]?.arrayValue ?? []
         let shadows = payload?["shadows"]?.objectValue?["candidates"]?.objectValue
         let predictors = payload?["predictors"]?.objectValue?["predictors"]?.objectValue
         let captures = payload?["run_capture"]?.objectValue?["symbols"]?.objectValue
         let landingAvailable = text(landing, key: "status") == "available"
             && bool(landing, key: "source_fresh") == true
-        let verifiedFinancialData = bool(landing, key: "verified_financial_data_available") == true
+        let verifiedFinancialData = landingAvailable
+            && bool(landing, key: "verified_financial_data_available") == true
 
         let landingKeys: [(String, String)] = [
             ("headline", "Headline"), ("mode", "Mode"), ("readiness", "Readiness"),
@@ -350,6 +363,18 @@ actor OrcaConsoleService {
             fields: fields,
             approval: nil
         )]
+        if let reason = cockpit.flatMap({ text($0, key: "degraded_reason") }),
+           !reason.isEmpty {
+            records.append(ConsoleRecord(
+                id: "fund-cockpit-reason",
+                title: "Fund cockpit needs attention",
+                subtitle: reason,
+                status: cockpitStatus,
+                group: "Fund",
+                fields: [],
+                approval: nil
+            ))
+        }
         if available {
             for (index, value) in engines.prefix(16).enumerated() {
                 let engine = value.objectValue ?? [:]
@@ -394,10 +419,10 @@ actor OrcaConsoleService {
                 ConsoleMetric(id: "fund-source", label: "Fund source", value: landingAvailable ? "Current" : "Check", status: landingAvailable ? "ok" : "attention"),
                 ConsoleMetric(id: "fund-cockpit", label: "Cockpit", value: cockpitStatus.capitalized, status: cockpitStatus),
                 metric("fund-engines", "Engines", available ? engines.count : nil),
-                ConsoleMetric(id: "fund-sync", label: "ORCA sync", value: available ? (sync.map { "\($0["in_sync"]?.displayValue ?? "-")/\($0["total"]?.displayValue ?? "-")" } ?? "-") : "-", status: available ? (problems.isEmpty ? "ok" : "attention") : "attention"),
-                metric("fund-shadows", "Shadows", available ? shadows?.count : nil),
+                ConsoleMetric(id: "fund-sync", label: "ORCA sync", value: available ? (sync.map { "\($0["in_sync"]?.displayValue ?? "-")/\($0["total"]?.displayValue ?? "-")" } ?? "-") : "-", status: cockpitStatus == "current" ? "ok" : "attention"),
+                metric("fund-shadows", "Shadows", available ? shadows?.values.filter { $0.objectValue?["stage"]?.displayValue == "shadow" }.count : nil),
                 metric("fund-predictors", "Predictors", available ? predictors?.count : nil),
-                metric("fund-captures", "Runs captured", available ? captures?.values.filter { $0.objectValue?["run_detected"] == .bool(true) }.count : nil),
+                metric("fund-captures", "Runs detected", available ? captures?.values.filter { $0.objectValue?["run_detected"] == .bool(true) }.count : nil),
                 metric("fund-alerts", "Alerts", available ? alerts.count : nil),
             ],
             records: records,

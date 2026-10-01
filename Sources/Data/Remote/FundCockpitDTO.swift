@@ -60,7 +60,7 @@ struct FundCockpitPayloadDTO: Decodable {
 
 struct FundCockpitExecutionDTO: Decodable, Identifiable {
     let label: String
-    let alive: Bool
+    let alive: Bool?
 
     var id: String { label }
 }
@@ -79,7 +79,6 @@ struct FundCockpitEngineDTO: Decodable, Identifiable {
     let engine: String
     let pillar: String?
     let verdict: String
-    let note: String?
 
     var id: String { engine }
 }
@@ -154,11 +153,11 @@ struct FundCockpitSyncProblemDTO: Decodable, Identifiable {
 
 struct FundCockpitChieffishDTO: Decodable {
     let ok: Bool?
-    let pendingBefore: Int?
+    let pendingAfter: Int?
 
     enum CodingKeys: String, CodingKey {
         case ok
-        case pendingBefore = "pending_before"
+        case pendingAfter = "pending_after"
     }
 }
 

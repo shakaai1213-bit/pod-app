@@ -29,16 +29,16 @@ struct FundCockpitSection: View {
 
             if let payload {
                 HStack(spacing: Theme.md) {
-                    metric("Engines", value: "\(payload.engines.rows.count)")
+                    metric("Engines", value: payload.engines.rows.isEmpty ? "-" : "\(payload.engines.rows.count)")
                     metric("ORCA sync", value: payload.orcaSync.map { "\($0.inSync)/\($0.total)" } ?? "-")
-                    metric("Shadows", value: count(payload.shadows?.candidates.count))
+                    metric("Shadows", value: count(payload.shadows?.candidates.values.filter { $0.stage == "shadow" }.count))
                     metric("Alerts", value: "\(payload.alerts.count)")
                 }
 
                 HStack(spacing: Theme.md) {
                     metric("Predictors", value: count(payload.predictors?.predictors.count))
-                    metric("Research queue", value: payload.chieffish?.pendingBefore.map(String.init) ?? "-")
-                    metric("Runs captured", value: count(payload.runCapture?.symbols.values.filter { $0.runDetected == true }.count))
+                    metric("Research queue", value: payload.chieffish?.pendingAfter.map(String.init) ?? "-")
+                    metric("Runs detected", value: count(payload.runCapture?.symbols.values.filter { $0.runDetected == true }.count))
                 }
 
                 if let problems = payload.orcaSync?.problems, !problems.isEmpty {
@@ -72,7 +72,7 @@ struct FundCockpitSection: View {
                                 .podTextStyle(.body, color: AppColors.textPrimary)
                                 .lineLimit(1)
                             Spacer(minLength: Theme.xs)
-                            Text(row.verdict)
+                            Text(engineVerdictLabel(row.verdict))
                                 .podTextStyle(.label, color: AppColors.textSecondary)
                                 .lineLimit(1)
                         }
@@ -108,14 +108,17 @@ struct FundCockpitSection: View {
                         ForEach(Array(payload.execution.enumerated()), id: \.offset) { _, service in
                             HStack(spacing: Theme.sm) {
                                 Circle()
-                                    .fill(service.alive ? AppColors.accentSuccess : AppColors.accentDanger)
+                                    .fill(service.alive == true ? AppColors.accentSuccess :
+                                        service.alive == false ? AppColors.accentDanger : AppColors.textTertiary)
                                     .frame(width: 7, height: 7)
                                 Text(service.label)
                                     .podTextStyle(.caption, color: AppColors.textSecondary)
                                 Spacer(minLength: 0)
-                                Text(service.alive ? "running" : "offline")
-                                    .podTextStyle(.label, color: service.alive
-                                        ? AppColors.accentSuccess : AppColors.accentDanger)
+                                Text(service.alive == true ? "running" :
+                                    service.alive == false ? "offline" : "unknown")
+                                    .podTextStyle(.label, color: service.alive == true
+                                        ? AppColors.accentSuccess :
+                                        service.alive == false ? AppColors.accentDanger : AppColors.textTertiary)
                             }
                         }
                     }
@@ -131,7 +134,8 @@ struct FundCockpitSection: View {
                                     .podTextStyle(.caption, color: AppColors.textSecondary)
                                 Spacer(minLength: Theme.xs)
                                 Text(alert.severity.uppercased())
-                                    .podTextStyle(.label, color: AppColors.accentWarning)
+                                    .podTextStyle(.label, color: alert.severity.lowercased() == "red"
+                                        ? AppColors.accentDanger : AppColors.accentWarning)
                             }
                         }
                     }
@@ -165,12 +169,29 @@ struct FundCockpitSection: View {
     }
 
     private var feedLabel: String {
+        if viewModel.isDenied { return "DENIED" }
         guard viewModel.feed?.isAvailable == true else { return "CHECK FEED" }
-        return payload?.orcaSync?.problems.isEmpty == false ? "PARTIAL" : "CURRENT"
+        guard let payload, let sync = payload.orcaSync,
+              !payload.engines.rows.isEmpty else { return "PARTIAL" }
+        return sync.problems.isEmpty ? "CURRENT" : "PARTIAL"
     }
 
     private func count(_ value: Int?) -> String {
         value.map(String.init) ?? "-"
+    }
+
+    private func engineVerdictLabel(_ verdict: String) -> String {
+        let meanings = [
+            "🟢": "earning keep",
+            "🟡": "unproven",
+            "🟠": "weak",
+            "🔴": "underperforming",
+            "⚫": "retired by design",
+        ]
+        for (symbol, meaning) in meanings where verdict.contains(symbol) {
+            return "\(symbol) \(meaning)"
+        }
+        return verdict
     }
 
     private func predictorRead(_ predictor: FundCockpitPredictorDTO) -> String {
