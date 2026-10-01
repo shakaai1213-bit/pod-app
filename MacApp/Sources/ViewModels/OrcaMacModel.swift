@@ -622,7 +622,7 @@ final class OrcaMacModel {
                   section == selectedSection,
                   mode == workMode,
                   agentID == selectedAgentID else { return }
-            if section == .fund {
+            if section == .fund || section == .work && mode == .team {
                 sectionSnapshots[section] = .empty(section)
                 selectedRecordID = nil
             }

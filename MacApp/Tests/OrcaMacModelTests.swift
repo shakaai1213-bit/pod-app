@@ -879,6 +879,41 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertNil(model.workMetricFilter)
     }
 
+    func testAllAgentsRefreshClearsPreviouslyVisibleRowsWhenAccessIsDenied() async {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        TestURLProtocol.response = { _ in (403, Data(#"{"detail":"denied"}"#.utf8)) }
+        defer { TestURLProtocol.response = nil }
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+        let model = makeModel()
+        model.selectedSection = .work
+        model.workMode = .team
+        model.injectServicesForTesting(runtime: nil, console: service)
+        model.sectionSnapshots[.work] = ConsoleSectionSnapshot(
+            section: .work,
+            metrics: [],
+            records: [ConsoleRecord(
+                id: "old-team-row", title: "Previously visible work", subtitle: nil,
+                status: "open", group: "Ready Now", fields: [], approval: nil
+            )],
+            sources: [],
+            updatedAt: .now
+        )
+        model.selectRecord("old-team-row")
+
+        await model.refreshSelectedSection()
+
+        XCTAssertTrue(model.selectedSnapshot.records.isEmpty)
+        XCTAssertNil(model.selectedRecordID)
+        XCTAssertNotNil(model.sectionError)
+    }
+
     func testWorkbenchPaneBarFitsTheMinimumContentColumn() {
         let panes = WorkbenchPane.allCases
 
