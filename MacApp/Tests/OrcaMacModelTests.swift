@@ -34,6 +34,25 @@ private actor TestRuntimeTokenStore: RuntimeTokenStoring {
     func setCredential(_ credential: RuntimeCredential?) { self.credential = credential }
 }
 
+private actor TestAsyncGate {
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        if isOpen { return }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    func open() {
+        isOpen = true
+        let pending = waiters
+        waiters.removeAll()
+        pending.forEach { $0.resume() }
+    }
+}
+
 private final class TestURLProtocol: URLProtocol {
     static var response: ((URLRequest) throws -> (Int, Data))?
 
@@ -360,6 +379,51 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertTrue(snapshot.records.isEmpty)
     }
 
+    func testOverviewIsStatusOnlyAndAttentionMatchesCaptainLensCount() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        TestURLProtocol.response = { request in
+            XCTAssertEqual(request.httpMethod, "GET")
+            switch request.url?.path {
+            case "/api/v1/control-room/waiting-on-captain":
+                return (200, Data(Self.captainWorkLensFixtureJSON.utf8))
+            case "/api/v1/control-room/central-agent-health":
+                return (200, Data(#"{"status":"healthy"}"#.utf8))
+            case "/api/v1/boards":
+                return (200, Data(#"{"total":4}"#.utf8))
+            case "/api/v1/tickets":
+                return (200, Data(#"[{"id":"ticket-1"},{"id":"ticket-2"}]"#.utf8))
+            case "/api/v1/agents":
+                return (200, Data(#"{"total":7}"#.utf8))
+            case "/api/v1/startup/status":
+                return (200, Data(#"{"ok":true}"#.utf8))
+            default:
+                XCTFail("Unexpected Overview request: \(request.url?.path ?? "nil")")
+                return (404, Data())
+            }
+        }
+        defer { TestURLProtocol.response = nil }
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+
+        let snapshot = try await service.snapshot(for: .overview, workControl: nil)
+
+        XCTAssertEqual(snapshot.section, .overview)
+        XCTAssertTrue(snapshot.records.isEmpty)
+        XCTAssertEqual(snapshot.metrics.map(\.id), ["attention", "boards", "tickets", "agents", "agent-health", "startup"])
+        XCTAssertEqual(snapshot.metrics.first { $0.id == "attention" }?.value, "3")
+        XCTAssertEqual(snapshot.metrics.first { $0.id == "boards" }?.value, "4")
+        XCTAssertEqual(snapshot.metrics.first { $0.id == "tickets" }?.value, "2")
+        XCTAssertEqual(snapshot.metrics.first { $0.id == "agents" }?.value, "7")
+        XCTAssertTrue(snapshot.sources.contains("orca.captain-work-lens.v1"))
+        XCTAssertFalse(snapshot.sources.contains("/api/v1/control-room/captain-inbox"))
+    }
+
     func testCaptainLensGroupedContractDecodesIntoWorkSnapshot() throws {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -443,7 +507,251 @@ final class OrcaMacModelTests: XCTestCase {
 
         model.selectSection(.waitingOnCaptain, refresh: false)
 
-        XCTAssertEqual(model.selectedSection, .waitingOnCaptain)
+        XCTAssertEqual(model.selectedSection, .work)
+        XCTAssertEqual(model.workMode, .captain)
+        XCTAssertNil(model.workMetricFilter)
+    }
+
+    func testSelectingWaitingOnCaptainPersistsAcrossRelaunch() {
+        let suiteName = "OrcaMacModelTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let firstModel = OrcaMacModel(
+            tokenStore: TestRuntimeTokenStore(token: nil),
+            defaults: defaults
+        )
+
+        firstModel.selectSection(.waitingOnCaptain, refresh: false)
+
+        let relaunchedModel = OrcaMacModel(
+            tokenStore: TestRuntimeTokenStore(token: nil),
+            defaults: defaults
+        )
+        XCTAssertEqual(relaunchedModel.selectedSection, .work)
+        XCTAssertEqual(relaunchedModel.workMode, .captain)
+    }
+
+    func testSwitchingWorkModeRefreshesEachModesRecords() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        TestURLProtocol.response = { request in
+            XCTAssertEqual(request.url?.path, "/api/v1/control-room/waiting-on-captain")
+            return (200, Data(Self.captainWorkLensFixtureJSON.utf8))
+        }
+        defer { TestURLProtocol.response = nil }
+        let consoleService = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+        let runtimeService = StubRuntimeService(workControlBundle: Self.workControlBundle)
+        let model = makeModel()
+        model.selectSection(.work, refresh: false)
+        model.injectServicesForTesting(runtime: runtimeService, console: consoleService)
+
+        model.selectWorkMode(.captain)
+        try await waitForWorkSource(
+            "/api/v1/control-room/waiting-on-captain",
+            model: model
+        )
+        XCTAssertEqual(
+            Set(model.selectedSnapshot.records.map(\.id)),
+            Set(["approval:approval-1", "ticket:ticket-1", "delegation:req-1"])
+        )
+
+        model.selectWorkMode(.agentWork)
+        try await waitForWorkSource(
+            "/api/v1/chat-runtime/v1/agents/coral/work-control",
+            model: model
+        )
+        XCTAssertFalse(model.selectedSnapshot.records.contains { $0.id == "ticket:ticket-1" })
+        XCTAssertTrue(model.selectedSnapshot.records.contains { $0.title == "Prove Work Control" })
+
+        model.selectWorkMode(.captain)
+        try await waitForWorkSource(
+            "/api/v1/control-room/waiting-on-captain",
+            model: model
+        )
+        XCTAssertEqual(
+            Set(model.selectedSnapshot.records.map(\.id)),
+            Set(["approval:approval-1", "ticket:ticket-1", "delegation:req-1"])
+        )
+        XCTAssertFalse(model.selectedSnapshot.records.contains { $0.title == "Prove Work Control" })
+    }
+
+    func testStaleCaptainRefreshDoesNotOverwriteAgentWorkMode() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let gate = TestAsyncGate()
+        let lock = NSLock()
+        var captainRequestCount = 0
+        TestURLProtocol.response = { request in
+            XCTAssertEqual(request.url?.path, "/api/v1/control-room/waiting-on-captain")
+            lock.withLock { captainRequestCount += 1 }
+            let semaphore = DispatchSemaphore(value: 0)
+            Task { await gate.wait(); semaphore.signal() }
+            semaphore.wait()
+            return (200, Data(Self.captainWorkLensFixtureJSON.utf8))
+        }
+        defer { TestURLProtocol.response = nil }
+        let consoleService = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+        let runtimeService = StubRuntimeService(workControlBundle: Self.workControlBundle)
+        let model = makeModel()
+        model.selectSection(.work, refresh: false)
+        model.injectServicesForTesting(runtime: runtimeService, console: consoleService)
+
+        model.selectWorkMode(.captain)
+        for _ in 0..<200 {
+            if lock.withLock({ captainRequestCount }) == 1 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(lock.withLock { captainRequestCount }, 1, "Captain request never started")
+        model.selectWorkMode(.agentWork)
+        try await waitForWorkSource(
+            "/api/v1/chat-runtime/v1/agents/coral/work-control",
+            model: model
+        )
+        let agentWorkRecords = model.sectionSnapshots[.work]?.records
+        let cachedCaptainBefore = model.sectionSnapshots[.waitingOnCaptain]
+
+        await gate.open()
+        try await Task.sleep(for: .milliseconds(200))
+
+        XCTAssertEqual(model.workMode, .agentWork)
+        XCTAssertEqual(
+            model.sectionSnapshots[.work]?.records,
+            agentWorkRecords,
+            "stale Captain response must not overwrite the Agent Work snapshot"
+        )
+        XCTAssertTrue(model.selectedSnapshot.records.contains { $0.title == "Prove Work Control" })
+        XCTAssertFalse(model.selectedSnapshot.records.contains { $0.id == "ticket:ticket-1" })
+        XCTAssertEqual(
+            model.sectionSnapshots[.waitingOnCaptain]?.records,
+            cachedCaptainBefore?.records,
+            "stale Captain response must not write the Captain cache"
+        )
+    }
+
+    func testStaleAgentWorkRefreshDoesNotOverwriteCaptainMode() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        TestURLProtocol.response = { request in
+            XCTAssertEqual(request.url?.path, "/api/v1/control-room/waiting-on-captain")
+            return (200, Data(Self.captainWorkLensFixtureJSON.utf8))
+        }
+        defer { TestURLProtocol.response = nil }
+        let consoleService = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+        let gate = TestAsyncGate()
+        let runtimeService = StubRuntimeService(
+            workControlBundle: Self.workControlBundle,
+            workControlGate: gate
+        )
+        let model = makeModel()
+        model.selectSection(.work, refresh: false)
+        model.injectServicesForTesting(runtime: runtimeService, console: consoleService)
+
+        model.selectWorkMode(.agentWork)
+        try await runtimeService.waitUntilWorkControlRequested()
+        model.selectWorkMode(.captain)
+        try await waitForWorkSource(
+            "/api/v1/control-room/waiting-on-captain",
+            model: model
+        )
+        let captainRecords = model.sectionSnapshots[.waitingOnCaptain]?.records
+        XCTAssertEqual(
+            Set(captainRecords?.map(\.id) ?? []),
+            Set(["approval:approval-1", "ticket:ticket-1", "delegation:req-1"])
+        )
+        XCTAssertNil(model.workControl, "gated Agent Work fetch must not have completed yet")
+
+        await gate.open()
+        try await Task.sleep(for: .milliseconds(200))
+
+        XCTAssertEqual(model.workMode, .captain)
+        XCTAssertEqual(
+            model.sectionSnapshots[.work]?.records.map(\.id),
+            captainRecords?.map(\.id),
+            "stale Agent Work response must not overwrite the Work snapshot"
+        )
+        XCTAssertTrue(model.selectedSnapshot.records.contains { $0.id == "ticket:ticket-1" })
+        XCTAssertFalse(model.selectedSnapshot.records.contains { $0.title == "Prove Work Control" })
+        XCTAssertEqual(
+            model.sectionSnapshots[.waitingOnCaptain]?.records.map(\.id),
+            captainRecords?.map(\.id),
+            "stale Agent Work response must not poison the Captain cache"
+        )
+        XCTAssertNil(model.workControl)
+    }
+
+    func testStaleSectionFailureIsNotSurfaced() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let gate = TestAsyncGate()
+        let lock = NSLock()
+        var captainRequestCount = 0
+        TestURLProtocol.response = { request in
+            XCTAssertEqual(request.url?.path, "/api/v1/control-room/waiting-on-captain")
+            lock.withLock { captainRequestCount += 1 }
+            let semaphore = DispatchSemaphore(value: 0)
+            Task { await gate.wait(); semaphore.signal() }
+            semaphore.wait()
+            return (500, Data(#"{"detail":"boom"}"#.utf8))
+        }
+        defer { TestURLProtocol.response = nil }
+        let consoleService = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+        let runtimeService = StubRuntimeService(workControlBundle: Self.workControlBundle)
+        let model = makeModel()
+        model.selectSection(.work, refresh: false)
+        model.injectServicesForTesting(runtime: runtimeService, console: consoleService)
+
+        model.selectWorkMode(.captain)
+        for _ in 0..<200 {
+            if lock.withLock({ captainRequestCount }) == 1 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(lock.withLock { captainRequestCount }, 1, "Captain request never started")
+        model.selectWorkMode(.agentWork)
+        try await waitForWorkSource(
+            "/api/v1/chat-runtime/v1/agents/coral/work-control",
+            model: model
+        )
+
+        await gate.open()
+        try await Task.sleep(for: .milliseconds(200))
+
+        XCTAssertEqual(model.workMode, .agentWork)
+        XCTAssertNil(model.sectionError, "stale failure must not set sectionError")
+        XCTAssertNil(model.presentedError, "stale failure must not set presentedError")
+        XCTAssertTrue(model.selectedSnapshot.records.contains { $0.title == "Prove Work Control" })
+    }
+
+    func testOverviewAttentionCardLandsOnWorkInCaptainMode() {
+        let model = makeModel()
+        model.selectSection(.overview, refresh: false)
+
+        model.activateConsoleMetric("attention", refresh: false)
+
+        XCTAssertEqual(model.selectedSection, .work)
         XCTAssertEqual(model.workMode, .captain)
         XCTAssertNil(model.workMetricFilter)
     }
@@ -457,7 +765,7 @@ final class OrcaMacModelTests: XCTestCase {
         )
         let snapshot = ConsoleSectionSnapshot.captainWorkLens(response)
         let model = makeModel()
-        model.sectionSnapshots[.waitingOnCaptain] = snapshot
+        model.sectionSnapshots[.work] = snapshot
         model.selectSection(.waitingOnCaptain, refresh: false)
 
         XCTAssertEqual(model.workMode, .captain)
@@ -1656,6 +1964,17 @@ final class OrcaMacModelTests: XCTestCase {
         )
     }
 
+    private func waitForWorkSource(
+        _ source: String,
+        model: OrcaMacModel
+    ) async throws {
+        for _ in 0..<100 {
+            if model.selectedSnapshot.sources.contains(source) { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTFail("Timed out waiting for Work source \(source)")
+    }
+
     private func workSnapshot() async throws -> ConsoleSectionSnapshot {
         let service = OrcaConsoleService(
             serverURL: URL(string: "http://127.0.0.1:8000")!,
@@ -2344,10 +2663,28 @@ private actor StubRuntimeService: OrcaRuntimeServing {
     var lastRequest: OrcaRuntimeDirectTurnRequest?
     let replyContent: String
     let replyLane: String
+    private var workControlRequestContinuations: [CheckedContinuation<Void, Never>] = []
+    private var workControlRequested = false
+    private let workControlBundle: Components.Schemas.ChatRuntimeWorkControlBundleRead?
+    private let workControlGate: TestAsyncGate?
 
-    init(replyContent: String = "", replyLane: String = "agent_inbox") {
+    init(
+        replyContent: String = "",
+        replyLane: String = "agent_inbox",
+        workControlBundle: Components.Schemas.ChatRuntimeWorkControlBundleRead? = nil,
+        workControlGate: TestAsyncGate? = nil
+    ) {
         self.replyContent = replyContent
         self.replyLane = replyLane
+        self.workControlBundle = workControlBundle
+        self.workControlGate = workControlGate
+    }
+
+    func waitUntilWorkControlRequested() async {
+        if workControlRequested { return }
+        await withCheckedContinuation { continuation in
+            workControlRequestContinuations.append(continuation)
+        }
     }
 
     func verifyCompatibility() async throws -> OrcaRuntimeCompatibility {
@@ -2360,6 +2697,12 @@ private actor StubRuntimeService: OrcaRuntimeServing {
         throw OrcaRuntimeClientError.invalidResponse("unused")
     }
     func workControl(agentKey: String) async throws -> Components.Schemas.ChatRuntimeWorkControlBundleRead {
+        workControlRequested = true
+        let continuations = workControlRequestContinuations
+        workControlRequestContinuations.removeAll()
+        continuations.forEach { $0.resume() }
+        if let workControlGate { await workControlGate.wait() }
+        if let workControlBundle { return workControlBundle }
         throw OrcaRuntimeClientError.invalidResponse("unused")
     }
     func providerControl() async throws -> Components.Schemas.ChatRuntimeProviderControlBundleRead {

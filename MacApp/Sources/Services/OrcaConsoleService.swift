@@ -114,29 +114,32 @@ actor OrcaConsoleService {
     }
 
     private func captainWorkLensSnapshot() async throws -> ConsoleSectionSnapshot {
+        .captainWorkLens(try await captainWorkLensResponse())
+    }
+
+    private func captainWorkLensResponse() async throws -> WaitingOnCaptainResponse {
         do {
-            let response: WaitingOnCaptainResponse = try await requestJSON(
+            return try await requestJSON(
                 method: "GET",
                 path: "/api/v1/control-room/waiting-on-captain"
             )
-            return .captainWorkLens(response)
         } catch let error as OrcaConsoleServiceError {
             guard case .httpStatus(404, _) = error else { throw error }
-            return .captainWorkLens(.zero())
+            return .zero()
         }
     }
 
     private func overviewSnapshot() async throws -> ConsoleSectionSnapshot {
-        async let inbox = get("/api/v1/control-room/captain-inbox")
+        async let attention = captainWorkLensResponse()
         async let health = get("/api/v1/control-room/central-agent-health")
         async let boards = get("/api/v1/boards")
         async let tickets = get("/api/v1/tickets")
         async let agents = get("/api/v1/agents")
         async let startup = get("/api/v1/startup/status")
-        let values = try await (inbox, health, boards, tickets, agents, startup)
+        let values = try await (attention, health, boards, tickets, agents, startup)
 
         let metrics = [
-            metric("attention", "Attention", integer(values.0, key: "count")),
+            metric("attention", "Attention", values.0.counts.badgeCount),
             metric("boards", "Boards", integer(values.2, key: "total")),
             metric("tickets", "Loaded Tickets", rootCount(values.3)),
             metric("agents", "Agents", integer(values.4, key: "total")),
@@ -156,18 +159,14 @@ actor OrcaConsoleService {
         return ConsoleSectionSnapshot(
             section: .overview,
             metrics: metrics,
-            records: records(
-                from: values.0,
-                collectionKeys: ["items"],
-                group: "Attention",
-                titleKeys: ["title", "summary"],
-                subtitleKeys: ["summary", "source"],
-                statusKeys: ["severity", "status"],
-                limit: 40
-            ),
+            records: [],
             sources: [
-                "/api/v1/control-room/captain-inbox",
+                "/api/v1/control-room/waiting-on-captain",
+                values.0.contractVersion ?? values.0.source,
                 "/api/v1/control-room/central-agent-health",
+                "/api/v1/boards",
+                "/api/v1/tickets",
+                "/api/v1/agents",
                 "/api/v1/startup/status",
             ],
             updatedAt: Date()

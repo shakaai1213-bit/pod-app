@@ -93,6 +93,7 @@ final class OrcaMacModel {
     }
 
     @ObservationIgnored private var workbenchFetchGeneration = 0
+    @ObservationIgnored private var sectionFetchGeneration = 0
 
     @ObservationIgnored private let tokenStore: any RuntimeTokenStoring
     @ObservationIgnored private let defaults: UserDefaults
@@ -124,9 +125,20 @@ final class OrcaMacModel {
         selectedAgentID = AgentProfile.fallbackRoster.contains(where: { $0.id == storedAgent })
             ? storedAgent
             : "coral"
-        selectedSection = ConsoleSection(
+        workMode = ConsoleWorkMode(
+            rawValue: defaults.string(forKey: "orca.mac.work-mode") ?? ""
+        ) ?? .portfolio
+        let storedSection = ConsoleSection(
             rawValue: defaults.string(forKey: "orca.mac.selected-section") ?? "overview"
         ) ?? .overview
+        if storedSection == .waitingOnCaptain {
+            selectedSection = .work
+            workMode = .captain
+            defaults.set(ConsoleSection.work.rawValue, forKey: "orca.mac.selected-section")
+            defaults.set(ConsoleWorkMode.captain.rawValue, forKey: "orca.mac.work-mode")
+        } else {
+            selectedSection = storedSection
+        }
     }
 
     var selectedAgent: AgentProfile {
@@ -238,6 +250,14 @@ final class OrcaMacModel {
         workMetricFilter = workMetricFilter == filter ? nil : filter
         clearStaleApprovalOutcome()
         reconcileRecordSelectionWithFilter()
+    }
+
+    func activateConsoleMetric(_ metricID: String, refresh: Bool = true) {
+        if selectedSection == .overview, metricID == "attention" {
+            selectSection(.waitingOnCaptain, refresh: refresh)
+            return
+        }
+        toggleWorkMetricFilter(metricID)
     }
 
     private func reconcileRecordSelectionWithFilter() {
@@ -475,15 +495,19 @@ final class OrcaMacModel {
 
     func selectSection(_ section: ConsoleSection, refresh: Bool = true) {
         recordSelectionChanged(to: nil)
-        selectedSection = section
         selectedRecordID = nil
         workMetricFilter = nil
         if section == .waitingOnCaptain {
+            selectedSection = .work
             workMode = .captain
-        } else if section == .work, workMode == .captain {
-            workMode = .portfolio
+        } else {
+            selectedSection = section
+            if section == .work, workMode == .captain {
+                workMode = .portfolio
+            }
         }
-        defaults.set(section.rawValue, forKey: "orca.mac.selected-section")
+        defaults.set(selectedSection.rawValue, forKey: "orca.mac.selected-section")
+        defaults.set(workMode.rawValue, forKey: "orca.mac.work-mode")
         if refreshTask != nil {
             beginRefreshLoop()
         }
@@ -505,9 +529,8 @@ final class OrcaMacModel {
         recordSelectionChanged(to: nil)
         workMode = mode
         selectedRecordID = nil
-        if mode == .portfolio, boardPlan == nil {
-            Task { await refreshBoardPortfolio(silent: true) }
-        }
+        defaults.set(mode.rawValue, forKey: "orca.mac.work-mode")
+        Task { await refreshSelectedSection(silent: true) }
     }
 
     func selectBoard(_ id: UUID) {
@@ -535,20 +558,37 @@ final class OrcaMacModel {
         guard selectedSection != .conversations,
               selectedSection != .workbench,
               let consoleService else { return }
+        sectionFetchGeneration += 1
+        let generation = sectionFetchGeneration
         let section = selectedSection
+        let mode = workMode
+        let agentID = selectedAgentID
         isLoadingSection = true
+        defer {
+            if generation == sectionFetchGeneration { isLoadingSection = false }
+        }
         do {
             let bundle: Components.Schemas.ChatRuntimeWorkControlBundleRead?
-            if section == .work, workMode == .agentWork {
+            if section == .work, mode == .agentWork {
                 guard let service else { throw OrcaConsoleServiceError.invalidResponse }
-                bundle = try await service.workControl(agentKey: selectedAgentID)
+                bundle = try await service.workControl(agentKey: agentID)
+                guard generation == sectionFetchGeneration,
+                      section == selectedSection,
+                      mode == workMode,
+                      agentID == selectedAgentID else { return }
                 workControl = bundle.map(OrcaWorkControlProjection.init)
             } else {
                 bundle = nil
             }
             let snapshot = try await consoleService.snapshot(for: section, workControl: bundle)
+            guard generation == sectionFetchGeneration,
+                  section == selectedSection,
+                  mode == workMode,
+                  agentID == selectedAgentID else { return }
             sectionSnapshots[section] = snapshot
-            if section == .waitingOnCaptain {
+            if section == .waitingOnCaptain
+                || section == .work && mode == .captain {
+                sectionSnapshots[.waitingOnCaptain] = snapshot
                 lastWaitingOnCaptainRefreshAt = Date()
             }
             sectionError = nil
@@ -558,14 +598,17 @@ final class OrcaMacModel {
                 recordSelectionChanged(to: nil)
                 self.selectedRecordID = nil
             }
-            if section == .work, refreshPortfolio, workMode == .portfolio {
+            if section == .work, refreshPortfolio, mode == .portfolio {
                 await refreshBoardPortfolio(silent: true)
             }
         } catch {
+            guard generation == sectionFetchGeneration,
+                  section == selectedSection,
+                  mode == workMode,
+                  agentID == selectedAgentID else { return }
             sectionError = error.localizedDescription
             if !silent { presentedError = error.localizedDescription }
         }
-        isLoadingSection = false
     }
 
     func refreshBoardPortfolio(silent: Bool = false) async {
@@ -731,7 +774,8 @@ final class OrcaMacModel {
         silent: Bool = false,
         automatic: Bool = false
     ) async {
-        if selectedSection != .waitingOnCaptain,
+        let isCaptainWorkSurface = selectedSection == .work && workMode == .captain
+        if !isCaptainWorkSurface,
            !automatic || Self.shouldRefreshWaitingOnCaptain(
                lastRefreshAt: lastWaitingOnCaptainRefreshAt,
                now: Date()
