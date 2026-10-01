@@ -1640,6 +1640,49 @@ final class OrcaMacModelTests: XCTestCase {
         }
     }
 
+    func testLegacyBackendConnectsAndUnknownBackendIsIncompatible() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { TestURLProtocol.response = nil; session.invalidateAndCancel() }
+        for digest in ["33cd117fe92dca4544c835ffb838eb1f7ce34be381c1c897fee1d4c4f94fbc12", String(repeating: "0", count: 64)] {
+            TestURLProtocol.response = { request in
+                switch request.url?.path {
+                case "/api/v1/chat-runtime/v1/contract":
+                    return (200, Data(#"{"transports":[],"resources":[],"adapter":{},"turn":{"progress_states":[],"terminal_states":[]},"invariants":[],"compatibility_routes":[],"contract_version":"orca.chat-runtime.v1"}"#.utf8))
+                case "/api/v1/chat-runtime/v1/schema-bundle":
+                    return (200, Data("{\"contract_version\":\"orca.chat-runtime.v1\",\"schema_sha256\":\"\(digest)\",\"schemas\":{}}".utf8))
+                case "/api/v1/chat-runtime/v1/agent-packs":
+                    return (200, try JSONEncoder().encode(canonicalAgentPackBundle()))
+                case "/api/v1/chat/channels": return (200, Data("[]".utf8))
+                default: return (404, Data("{}".utf8))
+                }
+            }
+            let suiteName = "LegacyConnect.\(UUID().uuidString)"
+            let defaults = UserDefaults(suiteName: suiteName)!
+            defer { defaults.removePersistentDomain(forName: suiteName) }
+            let signingKey = Curve25519.Signing.PrivateKey()
+            let deviceID = OrcaDeviceIdentity.deviceID(signingKey)
+            let tokenStore = TestRuntimeTokenStore(credential: RuntimeCredential(
+                accessToken: "e30.eyJqdGkiOiJ0ZXN0LWp0aSJ9.test-signature", refreshToken: "test-refresh", expiresAt: Date().addingTimeInterval(3_600),
+                clientID: OrcaNativeAuthService.clientID, deviceID: deviceID,
+                serverOrigin: "http://127.0.0.1:8000", organizationID: "test-organization"
+            ))
+            let model = OrcaMacModel(tokenStore: tokenStore, defaults: defaults, connectionSession: session, connectionSigningKey: signingKey, deviceIDProvider: { deviceID })
+            model.serverAddress = "http://127.0.0.1:8000"
+            await model.connect()
+            if digest.hasPrefix("33cd") {
+                XCTAssertEqual(model.connectionState, .ready)
+                XCTAssertEqual(model.compatibilityMode, .legacy("release-a-fa74b098"))
+            } else {
+                guard case .incompatible = model.connectionState else { return XCTFail("Unknown digest must fail closed: \(model.connectionState)") }
+                XCTAssertNil(model.compatibilityMode)
+            }
+            await tokenStore.setCredential(nil)
+            await model.connect()
+        }
+    }
+
     func testRuntimeContractProbeSeparatesUpgradeFromCredentialGate() async {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [TestURLProtocol.self]
@@ -3214,6 +3257,7 @@ private actor StubRuntimeService: OrcaRuntimeServing {
             traceID: request.traceID,
             source: "console",
             lane: replyLane,
+            terminalKind: OrcaRuntimeTerminalKind(lane: replyLane),
             deliveryMode: nil,
             provenance: nil,
             responseState: nil,
@@ -3228,4 +3272,64 @@ private actor StubRuntimeService: OrcaRuntimeServing {
     func messages(conversationID: String, offset: Int, limit: Int) async throws -> [OrcaRuntimeConversationMessage] {
         []
     }
+}
+
+private func canonicalAgentPack(
+    _ agentKey: String
+) -> Components.Schemas.ChatRuntimeAgentPackRead {
+    .init(
+        activationContextRef: "/api/v1/agents/\(agentKey)/activation-context",
+        agentKey: agentKey,
+        allowedRuntimeHosts: [.orcaMini, .shakaMac],
+        authorityOwner: .orca,
+        capabilityAttestationRequired: true,
+        capabilityRef: "/api/v1/chat-runtime/v1/agents/\(agentKey)/capabilities",
+        checkpointRef: "orca://agent-packs/\(agentKey)/checkpoint",
+        contractVersion: .orca_agentPack_v1,
+        controllerHost: .orcaMini,
+        escalationRef: "orca://agent-packs/\(agentKey)/escalation",
+        homeCapabilityHost: .shakaMac,
+        identityRef: "orca://agent-packs/\(agentKey)/identity",
+        ingressSubject: "agents.\(agentKey).inbox",
+        lifecycleOwner: .schoolhouse,
+        lockerRef: "orca://agent-packs/\(agentKey)/locker",
+        memoryContract: .orcaManaged,
+        memoryRef: "orca://agent-packs/\(agentKey)/memory",
+        payloadSha256: String(repeating: "a", count: 64),
+        primaryAdapterId: .openclawHarness,
+        releaseSignatureRequired: true,
+        rosterLane: .activeMain,
+        routerOwner: .cascade,
+        runtimePosture: "local-compute-first",
+        sourceRefs: [
+            "app/registries/agent-runtime-manifest.json",
+            "app/registries/agent-responsibility-registry.yaml",
+            "app/services/agent_roster_policy.py",
+        ],
+        supportedAdapterIds: ["openclaw_harness"],
+        terminalReplyOwner: .schoolhouseWake,
+        title: agentKey.capitalized,
+        voiceContract: .orca_namedAgentVoice_v1,
+        workControlRef: "/api/v1/chat-runtime/v1/agents/\(agentKey)/work-control"
+    )
+}
+
+private func canonicalAgentPackBundle() -> Components.Schemas.ChatRuntimeAgentPackBundleRead {
+    .init(
+        bundleSha256: String(repeating: "b", count: 64),
+        configurationOnly: true,
+        contractVersion: .orca_agentPackBundle_v1,
+        packs: ["aloha", "chief", "coral", "maui", "reef", "rooster", "shaka"]
+            .map(canonicalAgentPack),
+        runtimeAttestationRequired: true,
+        runtimeManifestRevision: "2026-08-17.1",
+        sourceSha256: .init(
+            additionalProperties: [
+                "app/registries/agent-runtime-manifest.json": String(
+                    repeating: "c",
+                    count: 64
+                ),
+            ]
+        )
+    )
 }

@@ -1,0 +1,19 @@
+{
+  "turn_id": "10000000-0000-4000-8000-000000000001",
+  "conversation_id": "10000000-0000-4000-8000-000000000001",
+  "message_id": "10000000-0000-4000-8000-000000000001",
+  "agent_id": "10000000-0000-4000-8000-000000000001",
+  "state": "accepted",
+  "idempotency_key": "fixture",
+  "resources": {},
+  "client_provenance": {
+    "source_surface": "pod"
+  },
+  "ordering": {},
+  "recovery": {
+    "status": "healthy",
+    "is_stuck": false,
+    "observed_at": "2026-10-01T00:00:00Z",
+    "last_progress_at": "2026-10-01T00:00:00Z"
+  }
+}

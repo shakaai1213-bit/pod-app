@@ -17,6 +17,11 @@ struct RuntimeInspectorView: View {
                     )
                 }
 
+                if case let .legacy(identity) = model.compatibilityMode {
+                    Text("legacy contract: \(identity)")
+                        .font(.caption.monospaced())
+                }
+
                 InspectorSection(title: "Conversation") {
                     InspectorValue(label: "Agent", value: model.conversationAgent.name)
                     InspectorValue(label: "Lane", value: model.conversationAgent.lane.rawValue)
@@ -45,6 +50,8 @@ struct RuntimeInspectorView: View {
 
                 if let turn = model.selectedRuntimeTurn {
                     InspectorSection(title: "Flight Recorder") {
+                        InspectorValue(label: "Terminal kind", value: turn.terminalOutcome?.terminalKind?.rawValue ?? "not provided")
+                        InspectorValue(label: "Turn route", value: turn.turnRoute?.rawValue ?? "not provided")
                         InspectorValue(label: "State", value: turn.state.rawValue)
                         InspectorValue(
                             label: "Source",

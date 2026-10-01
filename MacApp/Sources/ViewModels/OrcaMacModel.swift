@@ -28,6 +28,7 @@ final class OrcaMacModel {
     var isLoadingSection = false
     var connectionState: RuntimeConnectionState = .idle
     var contractVersion: String?
+    var compatibilityMode: OrcaRuntimeCompatibilityMode?
     var schemaSHA256: String?
     var conversations: [String: ConversationState] = [:]
     var runtimeTurns: [String: Components.Schemas.ChatRuntimeTurnRead] = [:]
@@ -110,11 +111,18 @@ final class OrcaMacModel {
     @ObservationIgnored private var runtimeReconciliationTasks: [String: Task<Void, Never>] = [:]
     @ObservationIgnored private var runtimeReconciliationTurnIDs: [String: String] = [:]
 
+    @ObservationIgnored private let connectionSession: URLSession?
+    @ObservationIgnored private let connectionSigningKey: Curve25519.Signing.PrivateKey?
+
     init(
         tokenStore: any RuntimeTokenStoring = RuntimeTokenStore(),
         defaults: UserDefaults = .standard,
+        connectionSession: URLSession? = nil,
+        connectionSigningKey: Curve25519.Signing.PrivateKey? = nil,
         deviceIDProvider: @escaping () -> String = { OrcaDeviceIdentity.current() }
     ) {
+        self.connectionSigningKey = connectionSigningKey
+        self.connectionSession = connectionSession
         self.tokenStore = tokenStore
         self.defaults = defaults
         self.deviceIDProvider = deviceIDProvider
@@ -342,6 +350,9 @@ final class OrcaMacModel {
     }
 
     private func performConnect() async {
+        compatibilityMode = nil
+        contractVersion = nil
+        schemaSHA256 = nil
         refreshTask?.cancel()
         providerRefreshTask?.cancel()
         stopRuntimeReconciliation()
@@ -360,7 +371,7 @@ final class OrcaMacModel {
                 consoleService = nil
                 authService = nil
                 deactivateConversationScope()
-                switch await OrcaRuntimeService.probeContract(at: endpoint) {
+                switch await OrcaRuntimeService.probeContract(at: endpoint, session: connectionSession) {
                 case .available:
                     connectionState = .credentialsRequired
                 case .upgradeRequired:
@@ -376,7 +387,9 @@ final class OrcaMacModel {
             connectionState = .connecting
             let nextAuthService = try OrcaNativeAuthService(
                 serverURL: endpoint,
-                tokenStore: tokenStore
+                tokenStore: tokenStore,
+                session: connectionSession,
+                signingKey: connectionSigningKey
             )
             _ = try await nextAuthService.validAccessToken()
             guard let boundCredential = try await tokenStore.loadCredential(for: origin),
@@ -387,7 +400,7 @@ final class OrcaMacModel {
                 origin: origin,
                 organizationID: boundCredential.organizationID
             )
-            let nextService = OrcaRuntimeService(serverURL: endpoint, authService: nextAuthService)
+            let nextService = OrcaRuntimeService(serverURL: endpoint, authService: nextAuthService, session: connectionSession)
             let compatibility = try await nextService.verifyCompatibility()
             authService = nextAuthService
             service = nextService
@@ -395,7 +408,8 @@ final class OrcaMacModel {
                 serverURL: endpoint,
                 tokenStore: tokenStore,
                 authService: nextAuthService,
-                deviceID: await nextAuthService.boundDeviceID()
+                deviceID: await nextAuthService.boundDeviceID(),
+                session: connectionSession
             )
             consoleService = nextConsoleService
             let runtimeAgents = try OrcaRuntimeProjection.profiles(
@@ -413,6 +427,7 @@ final class OrcaMacModel {
             hydrateCanonicalConversationIDs(channelIDs)
             contractVersion = compatibility.contractVersion
             schemaSHA256 = compatibility.schemaSHA256
+            compatibilityMode = compatibility.mode
             connectionState = .ready
             await refreshProviderControl(silent: true)
             await refreshCurrentSurface(silent: true)
