@@ -47,7 +47,7 @@ struct ConsoleSectionView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
-                .frame(width: 270)
+                .frame(width: 350)
                 if model.workMode == .agentWork {
                     Picker("Agent", selection: workControlAgentSelection) {
                         ForEach(model.agents) { agent in
@@ -57,6 +57,14 @@ struct ConsoleSectionView: View {
                     .labelsHidden()
                     .frame(width: 130)
                     .help("Choose named agent work control")
+                } else if model.workMode == .team {
+                    Picker("Agent", selection: .constant("all_agents")) {
+                        Text("All Agents").tag("all_agents")
+                    }
+                    .labelsHidden()
+                    .frame(width: 130)
+                    .disabled(true)
+                    .help("Showing all seven named agents")
                 }
             }
             if model.isLoadingSection {
@@ -119,7 +127,7 @@ struct ConsoleSectionView: View {
 
     private var isWorkFilterableView: Bool {
         guard section == .work || section == .waitingOnCaptain else { return false }
-        return model.workMode == .agentWork || model.workMode == .captain
+        return model.workMode == .agentWork || model.workMode == .captain || model.workMode == .team
     }
 
     private var metrics: some View {

@@ -245,7 +245,7 @@ final class OrcaMacModel {
 
     func toggleWorkMetricFilter(_ metricID: String) {
         guard selectedSection == .work || selectedSection == .waitingOnCaptain,
-              workMode == .agentWork || workMode == .captain else { return }
+              workMode == .agentWork || workMode == .captain || workMode == .team else { return }
         guard let filter = ConsoleWorkMetricFilter.filter(forMetricID: metricID) else { return }
         workMetricFilter = workMetricFilter == filter ? nil : filter
         clearStaleApprovalOutcome()
@@ -494,6 +494,8 @@ final class OrcaMacModel {
     }
 
     func selectSection(_ section: ConsoleSection, refresh: Bool = true) {
+        sectionFetchGeneration += 1
+        isLoadingSection = false
         recordSelectionChanged(to: nil)
         selectedRecordID = nil
         workMetricFilter = nil
@@ -517,6 +519,8 @@ final class OrcaMacModel {
 
     func selectWorkControlAgent(_ id: String) {
         guard agents.contains(where: { $0.id == id }) else { return }
+        sectionFetchGeneration += 1
+        isLoadingSection = false
         recordSelectionChanged(to: nil)
         selectedAgentID = id
         selectedRecordID = nil
@@ -526,10 +530,19 @@ final class OrcaMacModel {
     }
 
     func selectWorkMode(_ mode: ConsoleWorkMode) {
+        if selectedSection != .work {
+            selectSection(.work, refresh: false)
+        }
+        sectionFetchGeneration += 1
+        isLoadingSection = false
         recordSelectionChanged(to: nil)
         workMode = mode
         selectedRecordID = nil
         defaults.set(mode.rawValue, forKey: "orca.mac.work-mode")
+        workMetricFilter = nil
+        workControl = nil
+        sectionSnapshots[.work] = .empty(.work)
+        sectionError = nil
         Task { await refreshSelectedSection(silent: true) }
     }
 
@@ -572,19 +585,22 @@ final class OrcaMacModel {
             if section == .work, mode == .agentWork {
                 guard let service else { throw OrcaConsoleServiceError.invalidResponse }
                 bundle = try await service.workControl(agentKey: agentID)
-                guard generation == sectionFetchGeneration,
-                      section == selectedSection,
-                      mode == workMode,
-                      agentID == selectedAgentID else { return }
-                workControl = bundle.map(OrcaWorkControlProjection.init)
             } else {
                 bundle = nil
             }
-            let snapshot = try await consoleService.snapshot(for: section, workControl: bundle)
+            let snapshot: ConsoleSectionSnapshot
+            if section == .work, mode == .team {
+                snapshot = try await consoleService.teamWorkLensSnapshot()
+            } else {
+                snapshot = try await consoleService.snapshot(for: section, workControl: bundle)
+            }
             guard generation == sectionFetchGeneration,
                   section == selectedSection,
                   mode == workMode,
                   agentID == selectedAgentID else { return }
+            if section == .work {
+                workControl = bundle.map(OrcaWorkControlProjection.init)
+            }
             sectionSnapshots[section] = snapshot
             if section == .waitingOnCaptain
                 || section == .work && mode == .captain {

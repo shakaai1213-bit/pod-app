@@ -113,6 +113,13 @@ actor OrcaConsoleService {
         }
     }
 
+    func teamWorkLensSnapshot() async throws -> ConsoleSectionSnapshot {
+        let response: TeamWorkLensResponse = try await requestJSON(
+            method: "GET", path: "/api/v1/control-room/team-work"
+        )
+        return .teamWorkLens(response)
+    }
+
     private func captainWorkLensSnapshot() async throws -> ConsoleSectionSnapshot {
         .captainWorkLens(try await captainWorkLensResponse())
     }
