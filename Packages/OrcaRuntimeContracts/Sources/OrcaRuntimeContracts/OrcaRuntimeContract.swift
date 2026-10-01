@@ -6,6 +6,12 @@ public enum OrcaRuntimeContract: Sendable {
     public static let version = "orca.chat-runtime.v1"
     public static let schemaSHA256 = "33bed4cd0cd25c51056a650cfbfc27447a4f52790724d8544e165b2e92f183ad"
 
+    // Release A source contract fa74b098; live image 5b62621e, Coral finding
+    // 2026-10-01. Exact optional-field delta: contract-delta.json test fixture.
+    public static let legacySchemas = [
+        "33cd117fe92dca4544c835ffb838eb1f7ce34be381c1c897fee1d4c4f94fbc12": "release-a-fa74b098"
+    ]
+
     public static func makeClient(
         serverURL: URL,
         middlewares: [any ClientMiddleware] = [],

@@ -1,0 +1,84 @@
+[
+  {
+    "path": "/components/schemas/ChatMessageRead/properties/terminal_kind",
+    "added": {
+      "enum": [
+        "held",
+        "held_for_explicit_escalation",
+        "route_unavailable",
+        "provider_failure"
+      ],
+      "title": "Terminal Kind",
+      "type": "string"
+    }
+  },
+  {
+    "path": "/components/schemas/ChatRuntimeTerminalOutcomeRead/properties/terminal_kind",
+    "added": {
+      "enum": [
+        "held",
+        "held_for_explicit_escalation",
+        "route_unavailable",
+        "provider_failure"
+      ],
+      "title": "Terminal Kind",
+      "type": "string"
+    }
+  },
+  {
+    "path": "/components/schemas/ChatRuntimeTurnRead/properties/turn_route",
+    "added": {
+      "$ref": "#/components/schemas/TurnRoute"
+    }
+  },
+  {
+    "path": "/components/schemas/ChatRuntimeTurnSubmissionRead/properties/terminal_kind",
+    "added": {
+      "enum": [
+        "held",
+        "held_for_explicit_escalation",
+        "route_unavailable",
+        "provider_failure"
+      ],
+      "title": "Terminal Kind",
+      "type": "string"
+    }
+  },
+  {
+    "path": "/components/schemas/ChatRuntimeTurnSubmissionRead/properties/turn_route",
+    "added": {
+      "$ref": "#/components/schemas/TurnRoute"
+    }
+  },
+  {
+    "path": "/components/schemas/DirectAgentChatMetadata/properties/terminal_kind",
+    "added": {
+      "enum": [
+        "held",
+        "held_for_explicit_escalation",
+        "route_unavailable",
+        "provider_failure"
+      ],
+      "title": "Terminal Kind",
+      "type": "string"
+    }
+  },
+  {
+    "path": "/components/schemas/TurnRoute",
+    "added": {
+      "enum": [
+        "kimi_required",
+        "held_for_explicit_escalation",
+        "held",
+        "frontier_required"
+      ],
+      "title": "TurnRoute",
+      "type": "string"
+    }
+  },
+  {
+    "path": "/x-orca-schema-sha256",
+    "before": "33cd117fe92dca4544c835ffb838eb1f7ce34be381c1c897fee1d4c4f94fbc12",
+    "after": "33bed4cd0cd25c51056a650cfbfc27447a4f52790724d8544e165b2e92f183ad"
+  }
+]

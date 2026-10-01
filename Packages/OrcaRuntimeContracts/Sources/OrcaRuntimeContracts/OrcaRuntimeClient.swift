@@ -59,7 +59,13 @@ struct OrcaRuntimeTurnErrorMiddleware: ClientMiddleware {
     }
 }
 
+public enum OrcaRuntimeCompatibilityMode: Equatable, Sendable {
+    case canonical
+    case legacy(String)
+}
+
 public struct OrcaRuntimeCompatibility: Equatable, Sendable {
+    public let mode: OrcaRuntimeCompatibilityMode
     public let contractVersion: String
     public let schemaSHA256: String
 
@@ -70,7 +76,11 @@ public struct OrcaRuntimeCompatibility: Equatable, Sendable {
                 actual: contractVersion
             )
         }
-        guard schemaSHA256 == OrcaRuntimeContract.schemaSHA256 else {
+        if schemaSHA256 == OrcaRuntimeContract.schemaSHA256 {
+            mode = .canonical
+        } else if let identity = OrcaRuntimeContract.legacySchemas[schemaSHA256] {
+            mode = .legacy(identity)
+        } else {
             throw OrcaRuntimeClientError.incompatibleSchema(
                 expected: OrcaRuntimeContract.schemaSHA256,
                 actual: schemaSHA256
@@ -279,7 +289,7 @@ public struct OrcaRuntimeDirectTurnResponse: Equatable, Sendable {
         self.traceID = traceID
         self.source = source
         self.lane = lane
-        self.terminalKind = terminalKind ?? OrcaRuntimeTerminalKind(lane: lane)
+        self.terminalKind = terminalKind
         self.turnRoute = turnRoute
         self.deliveryMode = deliveryMode
         self.provenance = provenance
@@ -1446,7 +1456,7 @@ public actor OrcaRuntimeClient {
             source: response.replySource,
             lane: response.replyLane,
             terminalKind: OrcaRuntimeTerminalKind(
-                rawValue: response.terminalKind?.rawValue ?? response.replyLane
+                rawValue: response.terminalKind?.rawValue ?? ""
             ),
             turnRoute: response.turnRoute.flatMap { OrcaRuntimeTurnRoute(rawValue: $0.rawValue) },
             deliveryMode: response.deliveryMode?.rawValue,
@@ -1491,7 +1501,7 @@ public actor OrcaRuntimeClient {
                 traceID: $0.traceId,
                 source: $0.source,
                 lane: $0.lane,
-                terminalKind: OrcaRuntimeTerminalKind(rawValue: $0.terminalKind?.rawValue ?? $0.lane ?? ""),
+                terminalKind: OrcaRuntimeTerminalKind(rawValue: $0.terminalKind?.rawValue ?? ""),
                 responseState: $0.responseState,
                 deliveryState: $0.deliveryState,
                 createdAt: $0.createdAt,

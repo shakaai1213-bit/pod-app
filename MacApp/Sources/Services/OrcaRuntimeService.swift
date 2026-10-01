@@ -36,7 +36,7 @@ protocol OrcaRuntimeServing: Sendable {
 actor OrcaRuntimeService: OrcaRuntimeServing {
     private let client: OrcaRuntimeClient
 
-    init(serverURL: URL, authService: OrcaNativeAuthService) {
+    init(serverURL: URL, authService: OrcaNativeAuthService, session: URLSession? = nil) {
         client = OrcaRuntimeClient(
             serverURL: serverURL,
             tokenProvider: { try? await authService.validAccessToken() },
@@ -48,7 +48,8 @@ actor OrcaRuntimeService: OrcaRuntimeServing {
                     body: body,
                     token: token
                 )
-            }
+            },
+            session: session ?? OrcaSecureURLSession.make()
         )
     }
 
