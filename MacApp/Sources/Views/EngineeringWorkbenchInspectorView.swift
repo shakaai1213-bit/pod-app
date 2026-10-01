@@ -218,7 +218,10 @@ struct EngineeringWorkbenchInspectorView: View {
                         Label("Reject", systemImage: "xmark")
                     }
                     .buttonStyle(.bordered)
-                    .disabled(model.isSubmittingWorkbench || rejectionReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(
+                        model.isSubmittingWorkbench ||
+                        !(3...1000).contains(rejectionReason.trimmingCharacters(in: .whitespacesAndNewlines).count)
+                    )
                 } else if operation.approvalStatus == "pending" {
                     Text("This approval is not decidable here: the exact AgentRun is no longer waiting for Captain review or its approval ID is missing. Refresh Workbench for the current state.")
                         .font(.caption)

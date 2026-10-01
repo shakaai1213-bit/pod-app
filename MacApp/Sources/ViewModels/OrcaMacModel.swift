@@ -842,6 +842,7 @@ final class OrcaMacModel {
     }
 
     func refreshWorkbenchSession(silent: Bool = false) async {
+        workbenchFetchGeneration += 1
         guard let consoleService,
               let ticketID = selectedWorkbenchTicketID,
               workbenchTickets.contains(where: { $0.id == ticketID }) else {
@@ -935,15 +936,16 @@ final class OrcaMacModel {
         note: String? = nil
     ) async {
         guard let consoleService, !isSubmittingWorkbench else { return }
+        workbenchNotice = nil
         guard operation.approvalStatus == "pending",
               operation.status == "waiting_for_human",
               operation.approvalID != nil else {
-            workbenchError = "This exact operation is no longer waiting for approval. Refresh Workbench."
+            workbenchError = "This exact operation has no pending approval or is no longer waiting for Captain review. Refresh Workbench."
             return
         }
         let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if decision == "rejected" && trimmedNote.isEmpty {
-            workbenchError = "A reason is required to reject this operation."
+        if decision == "rejected" && !(3...1000).contains(trimmedNote.count) {
+            workbenchError = "A rejection reason must be 3 to 1000 characters."
             return
         }
         isSubmittingWorkbench = true

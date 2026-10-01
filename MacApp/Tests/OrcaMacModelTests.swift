@@ -1193,6 +1193,37 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertEqual(approval.resolvedTicketID, "ticket-1")
     }
 
+    func testWorkbenchRejectRequiresBackendLengthBeforeAnyRequest() async throws {
+        let pendingJSON = Self.workbenchOperationJSON
+            .replacingOccurrences(of: #""status":"queued""#, with: #""status":"waiting_for_human""#)
+            .replacingOccurrences(of: #""requires_approval":false"#, with: #""requires_approval":true"#)
+            .replacingOccurrences(of: #""approval_id":null"#, with: #""approval_id":"approval-c9""#)
+            .replacingOccurrences(of: #""approval_status":null"#, with: #""approval_status":"pending""#)
+        let operation = try JSONDecoder().decode(OrcaEngineeringOperation.self, from: Data(pendingJSON.utf8))
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        var requestCount = 0
+        TestURLProtocol.response = { _ in
+            requestCount += 1
+            return (500, Data())
+        }
+        defer { TestURLProtocol.response = nil }
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+        let model = makeModel()
+        model.injectServicesForTesting(runtime: nil, console: service)
+
+        await model.decideWorkbenchApproval(operation: operation, decision: "rejected", note: "no")
+
+        XCTAssertEqual(requestCount, 0)
+        XCTAssertEqual(model.workbenchError, "A rejection reason must be 3 to 1000 characters.")
+    }
+
     func testEachGuardConditionBlocksWithSpecificReason() {
         let cases: [(ConsoleApprovalRecord, ConsoleApprovalBlockReason)] = [
             (Self.eligibleApproval(status: "approved"), .notPending),
