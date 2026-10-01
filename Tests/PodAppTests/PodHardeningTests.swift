@@ -1,5 +1,6 @@
 import Foundation
 import OrcaDomain
+import OrcaRuntimeContracts
 import XCTest
 @testable import pod
 
@@ -66,6 +67,73 @@ final class PodHardeningTests: XCTestCase {
                 content: "Waiting for the named agent."
             )
         )
+    }
+
+    @MainActor
+    func testTypedTerminalPrecedesLiveAckAndOrdinaryRepliesRemainContent() {
+        let terminal = OrcaRuntimeTerminalKind(lane: "held")
+        XCTAssertNotNil(terminal)
+        XCTAssertEqual(
+            DirectChatViewModel.streamDisposition(
+                terminalKind: terminal,
+                requestedMode: .liveInbox,
+                responseMode: .liveInbox,
+                provenance: .liveInbox,
+                state: .waitingForLiveAgent
+            ),
+            .terminal
+        )
+        XCTAssertEqual(
+            DirectChatViewModel.streamDisposition(
+                terminalKind: nil,
+                requestedMode: .liveInbox,
+                responseMode: .liveInbox,
+                provenance: .liveInbox,
+                state: .waitingForLiveAgent
+            ),
+            .liveInboxAck
+        )
+        XCTAssertEqual(
+            DirectChatViewModel.streamDisposition(
+                terminalKind: nil,
+                requestedMode: .compute,
+                responseMode: .compute,
+                provenance: .compute,
+                state: .responseReceived
+            ),
+            .content
+        )
+    }
+
+    @MainActor
+    func testFallbackRouteDeniesKimiHeldMissingAndUnreadableRoutes() async {
+        for route in [
+            OrcaRuntimeTurnRoute.kimiRequired,
+            .heldForExplicitEscalation,
+            .held,
+            .frontierRequired,
+        ] {
+            let decision = await DirectChatViewModel.fallbackRouteDecision { route }
+            XCTAssertEqual(decision, .forbidden, route.rawValue)
+        }
+        let missing = await DirectChatViewModel.fallbackRouteDecision { nil }
+        XCTAssertEqual(missing, .missing)
+        let unreadable = await DirectChatViewModel.fallbackRouteDecision {
+            throw NSError(domain: "route-read", code: 1)
+        }
+        XCTAssertEqual(unreadable, .unreadable)
+    }
+
+    @MainActor
+    func testTerminalBubbleLabelsDoNotClaimAgentReply() {
+        let held = DMBubble.terminalPresentation(lane: "held")
+        XCTAssertEqual(held?.label, "Paused by ORCA")
+        XCTAssertEqual(held?.icon, "pause.circle")
+
+        let failure = DMBubble.terminalPresentation(lane: "provider_failure")
+        XCTAssertEqual(failure?.label, "Could not answer")
+        XCTAssertEqual(failure?.icon, "exclamationmark.circle")
+        XCTAssertNil(DMBubble.terminalPresentation(lane: "direct_agent_inbox"))
     }
 
     func testKnowledgePacketUsesCanonicalAccessLaneAndRedactionState() throws {
