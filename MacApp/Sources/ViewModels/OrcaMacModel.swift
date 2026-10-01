@@ -476,6 +476,7 @@ final class OrcaMacModel {
 
     func selectSection(_ section: ConsoleSection, refresh: Bool = true) {
         workSnapshotGeneration += 1
+        isLoadingSection = false
         recordSelectionChanged(to: nil)
         selectedSection = section
         selectedRecordID = nil
@@ -496,6 +497,7 @@ final class OrcaMacModel {
     func selectWorkControlAgent(_ id: String) {
         guard agents.contains(where: { $0.id == id }) else { return }
         workSnapshotGeneration += 1
+        isLoadingSection = false
         recordSelectionChanged(to: nil)
         selectedAgentID = id
         selectedRecordID = nil
@@ -509,6 +511,7 @@ final class OrcaMacModel {
             selectSection(.work, refresh: false)
         }
         workSnapshotGeneration += 1
+        isLoadingSection = false
         recordSelectionChanged(to: nil)
         workMode = mode
         selectedRecordID = nil
