@@ -878,6 +878,18 @@ final class OrcaMacModel {
         selectedWorkbenchOperationID = id
     }
 
+    private func clearWorkbenchAfterAuthorizationDenial(_ error: Error) {
+        guard let serviceError = error as? OrcaConsoleServiceError,
+              case let .httpStatus(code, _) = serviceError,
+              code == 401 || code == 403 else { return }
+        workbenchTickets = []
+        workbenchContract = nil
+        workbenchSession = nil
+        selectedWorkbenchTicketID = nil
+        selectedWorkbenchOperationID = nil
+        workbenchNotice = nil
+    }
+
     func refreshWorkbench(silent: Bool = false) async {
         guard let consoleService else { return }
         workbenchFetchGeneration += 1
@@ -909,6 +921,7 @@ final class OrcaMacModel {
         } catch {
             guard generation == workbenchFetchGeneration, selectedAgentID == agentID else { return }
             workbenchSession = nil
+            clearWorkbenchAfterAuthorizationDenial(error)
             workbenchError = error.localizedDescription
             if !silent { presentedError = error.localizedDescription }
         }
@@ -945,6 +958,7 @@ final class OrcaMacModel {
             guard generation == workbenchFetchGeneration,
                   selectedAgentID == agentID,
                   selectedWorkbenchTicketID == ticketID else { return }
+            clearWorkbenchAfterAuthorizationDenial(error)
             workbenchError = error.localizedDescription
             if !silent { presentedError = error.localizedDescription }
         }

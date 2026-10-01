@@ -1836,6 +1836,96 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertEqual(model.workbenchError, "A rejection reason must be 3 to 1000 characters.")
     }
 
+    func testWorkbenchConflictRefreshesCanonicalRunWithoutFalseSuccess() async throws {
+        try await verifyWorkbenchDecisionRefusal(status: 409, refreshDenied: false)
+    }
+
+    func testWorkbenchDeniedRefreshClearsPreviouslyVisibleOperation() async throws {
+        try await verifyWorkbenchDecisionRefusal(status: 403, refreshDenied: true)
+    }
+
+    private func verifyWorkbenchDecisionRefusal(status: Int, refreshDenied: Bool) async throws {
+        let pendingJSON = Self.workbenchOperationJSON
+            .replacingOccurrences(of: #""status":"queued""#, with: #""status":"waiting_for_human""#)
+            .replacingOccurrences(of: #""requires_approval":false"#, with: #""requires_approval":true"#)
+            .replacingOccurrences(of: #""approval_id":null"#, with: #""approval_id":"approval-c9""#)
+            .replacingOccurrences(of: #""approval_status":null"#, with: #""approval_status":"pending""#)
+        let pending = try JSONDecoder().decode(OrcaEngineeringOperation.self, from: Data(pendingJSON.utf8))
+        let refreshedJSON = pendingJSON
+            .replacingOccurrences(of: #""status":"waiting_for_human""#, with: #""status":"running""#)
+            .replacingOccurrences(of: #""approval_status":"pending""#, with: #""approval_status":"approved""#)
+        let sessionJSON = "{\"schema\":\"orca.engineering-workbench-session.v1\",\"ticket_id\":\"ticket-c9\",\"ticket_title\":\"Desktop Workbench\",\"ticket_status\":\"open\",\"contract\":\(Self.workbenchContractJSON),\"operations\":[\(refreshedJSON)],\"counts\":{\"total\":1},\"sources\":[\"/api/v1/tickets/ticket-c9\"]}"
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        var decisionCount = 0
+        var refreshCount = 0
+        let serverReason = refreshDenied ? "Captain access denied" : "Approval already decided"
+        TestURLProtocol.response = { request in
+            switch (request.httpMethod, request.url?.path) {
+            case ("POST", "/api/v1/engineering-workbench/operations/run-c9/approval"):
+                decisionCount += 1
+                let body = try TestURLProtocol.bodyData(for: request)
+                let object = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+                XCTAssertEqual(object["decision"] as? String, "approved")
+                return (status, Data("{\"detail\":\"\(serverReason)\"}".utf8))
+            case ("GET", "/api/v1/engineering-workbench/tickets/ticket-c9"):
+                refreshCount += 1
+                XCTAssertEqual(request.url?.query, "agent_slug=coral")
+                return refreshDenied
+                    ? (403, Data(#"{"detail":"Captain access denied"}"#.utf8))
+                    : (200, Data(sessionJSON.utf8))
+            default:
+                XCTFail("Unexpected request: \(request.httpMethod ?? "") \(request.url?.path ?? "")")
+                return (500, Data())
+            }
+        }
+        defer { TestURLProtocol.response = nil }
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+        let model = makeModel()
+        model.injectServicesForTesting(runtime: nil, console: service)
+        model.selectedAgentID = "coral"
+        model.workbenchTickets = try JSONDecoder().decode(
+            [WorkbenchTicketSummary].self,
+            from: Data(#"[{"id":"ticket-c9","title":"Desktop Workbench","status":"open"}]"#.utf8)
+        )
+        model.selectedWorkbenchTicketID = "ticket-c9"
+        model.selectedWorkbenchOperationID = "run-c9"
+        model.workbenchSession = try JSONDecoder().decode(
+            OrcaEngineeringWorkbenchSession.self,
+            from: Data(sessionJSON.replacingOccurrences(of: refreshedJSON, with: pendingJSON).utf8)
+        )
+        model.workbenchContract = model.workbenchSession?.contract
+
+        await model.decideWorkbenchApproval(operation: pending, decision: "approved")
+
+        XCTAssertEqual(decisionCount, 1)
+        XCTAssertEqual(refreshCount, 1)
+        XCTAssertFalse(model.isSubmittingWorkbench)
+        XCTAssertNil(model.workbenchNotice)
+        XCTAssertTrue(model.workbenchError?.contains(serverReason) ?? false)
+        XCTAssertEqual(model.presentedError, model.workbenchError)
+        if refreshDenied {
+            XCTAssertNil(model.workbenchSession)
+            XCTAssertNil(model.selectedWorkbenchOperation)
+            XCTAssertNil(model.workbenchContract)
+            XCTAssertTrue(model.workbenchTickets.isEmpty)
+            XCTAssertNil(model.selectedWorkbenchTicketID)
+            XCTAssertNil(model.selectedWorkbenchOperationID)
+        } else {
+            let refreshed = try XCTUnwrap(model.selectedWorkbenchOperation)
+            XCTAssertEqual(refreshed.id, "run-c9")
+            XCTAssertEqual(refreshed.approvalID, "approval-c9")
+            XCTAssertEqual(refreshed.approvalStatus, "approved")
+            XCTAssertEqual(refreshed.status, "running")
+        }
+    }
+
     func testEachGuardConditionBlocksWithSpecificReason() {
         let cases: [(ConsoleApprovalRecord, ConsoleApprovalBlockReason)] = [
             (Self.eligibleApproval(status: "approved"), .notPending),
