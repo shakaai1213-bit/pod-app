@@ -484,9 +484,10 @@ final class OrcaMacModelTests: XCTestCase {
         configuration.protocolClasses = [TestURLProtocol.self]
         let session = URLSession(configuration: configuration)
         var requestCount = 0
+        var requestedPath: String?
         TestURLProtocol.response = { request in
             requestCount += 1
-            XCTAssertEqual(request.url?.path, "/api/v1/control-room/team-work")
+            requestedPath = request.url?.path
             return (200, Data(#"""
             {
               "contract_version": "orca.team-work-lens.v1",
@@ -506,16 +507,33 @@ final class OrcaMacModelTests: XCTestCase {
         let service = OrcaConsoleService(
             serverURL: URL(string: "http://127.0.0.1:8000")!,
             tokenStore: TestRuntimeTokenStore(token: "test-token"),
+            deviceID: "test-device-id-0123456789",
             session: session
         )
         let snapshot = try await service.teamWorkLensSnapshot()
         XCTAssertEqual(requestCount, 1)
+        XCTAssertEqual(requestedPath, "/api/v1/control-room/team-work")
         XCTAssertEqual(snapshot.records.count, 3)
         XCTAssertEqual(snapshot.metrics.first(where: { $0.id == "approvals" })?.value, "1")
         XCTAssertEqual(snapshot.records.first?.subtitle, "coral · ready")
         XCTAssertTrue(snapshot.records.first?.fields.contains(where: { $0.label == "Age" && $0.value == "12h" }) ?? false)
         XCTAssertTrue(snapshot.records.allSatisfy { $0.approval == nil })
         XCTAssertNil(snapshot.records.last?.desiredOutcome)
+        XCTAssertTrue(snapshot.records.last?.ticket?.isProtected == true)
+    }
+
+    func testChangingFromWaitingOnTonyToAllAgentsClearsOldRowsAndFilter() async throws {
+        let model = makeModel()
+        model.sectionSnapshots[.work] = try await workSnapshot()
+        model.selectSection(.waitingOnCaptain, refresh: false)
+        model.toggleWorkMetricFilter("needsScope")
+
+        model.selectWorkMode(.team)
+
+        XCTAssertEqual(model.selectedSection, .work)
+        XCTAssertEqual(model.workMode, .team)
+        XCTAssertTrue(model.selectedSnapshot.records.isEmpty)
+        XCTAssertNil(model.workMetricFilter)
     }
 
     func testWorkbenchPaneBarFitsTheMinimumContentColumn() {
@@ -765,9 +783,9 @@ final class OrcaMacModelTests: XCTestCase {
     func testMetricCardFilterNarrowsRecordsToMatchingBucket() async throws {
         let snapshot = try await workSnapshot()
         let model = makeModel()
-        model.sectionSnapshots[.work] = snapshot
         model.selectSection(.work, refresh: false)
         model.selectWorkMode(.agentWork)
+        model.sectionSnapshots[.work] = snapshot
 
         model.toggleWorkMetricFilter("ready")
 
@@ -780,9 +798,9 @@ final class OrcaMacModelTests: XCTestCase {
     func testTappingActiveMetricCardClearsFilter() async throws {
         let snapshot = try await workSnapshot()
         let model = makeModel()
-        model.sectionSnapshots[.work] = snapshot
         model.selectSection(.work, refresh: false)
         model.selectWorkMode(.agentWork)
+        model.sectionSnapshots[.work] = snapshot
 
         model.toggleWorkMetricFilter("approvals")
         XCTAssertEqual(model.workMetricFilter, .approvals)
@@ -795,9 +813,9 @@ final class OrcaMacModelTests: XCTestCase {
     func testOnlyOneMetricFilterIsActiveAtATime() async throws {
         let snapshot = try await workSnapshot()
         let model = makeModel()
-        model.sectionSnapshots[.work] = snapshot
         model.selectSection(.work, refresh: false)
         model.selectWorkMode(.agentWork)
+        model.sectionSnapshots[.work] = snapshot
 
         model.toggleWorkMetricFilter("ready")
         model.toggleWorkMetricFilter("assigned")
@@ -809,9 +827,9 @@ final class OrcaMacModelTests: XCTestCase {
     func testApprovalsFilterIncludesDecisionQueueAndApprovalAttention() async throws {
         let snapshot = try await workSnapshot()
         let model = makeModel()
-        model.sectionSnapshots[.work] = snapshot
         model.selectSection(.work, refresh: false)
         model.selectWorkMode(.agentWork)
+        model.sectionSnapshots[.work] = snapshot
 
         model.toggleWorkMetricFilter("approvals")
 
@@ -828,9 +846,9 @@ final class OrcaMacModelTests: XCTestCase {
     func testFilterWithNoMatchingRecordsYieldsExplicitEmptyState() async throws {
         let snapshot = try await workSnapshot()
         let model = makeModel()
-        model.sectionSnapshots[.work] = snapshot
         model.selectSection(.work, refresh: false)
         model.selectWorkMode(.agentWork)
+        model.sectionSnapshots[.work] = snapshot
 
         model.toggleWorkMetricFilter("waiting")
 
@@ -842,9 +860,9 @@ final class OrcaMacModelTests: XCTestCase {
     func testMetricCardCountsAreUnchangedByActiveFilter() async throws {
         let snapshot = try await workSnapshot()
         let model = makeModel()
-        model.sectionSnapshots[.work] = snapshot
         model.selectSection(.work, refresh: false)
         model.selectWorkMode(.agentWork)
+        model.sectionSnapshots[.work] = snapshot
         let before = model.selectedSnapshot.metrics
 
         model.toggleWorkMetricFilter("approvals")
@@ -857,9 +875,9 @@ final class OrcaMacModelTests: XCTestCase {
     func testFilterSurvivesSnapshotRefreshOfSameView() async throws {
         let snapshot = try await workSnapshot()
         let model = makeModel()
-        model.sectionSnapshots[.work] = snapshot
         model.selectSection(.work, refresh: false)
         model.selectWorkMode(.agentWork)
+        model.sectionSnapshots[.work] = snapshot
         model.toggleWorkMetricFilter("approvals")
 
         model.sectionSnapshots[.work] = try await workSnapshot()
@@ -874,9 +892,9 @@ final class OrcaMacModelTests: XCTestCase {
     func testChangingSelectedAgentResetsFilter() async throws {
         let snapshot = try await workSnapshot()
         let model = makeModel()
-        model.sectionSnapshots[.work] = snapshot
         model.selectSection(.work, refresh: false)
         model.selectWorkMode(.agentWork)
+        model.sectionSnapshots[.work] = snapshot
         model.toggleWorkMetricFilter("approvals")
 
         model.selectWorkControlAgent("maui")
@@ -887,9 +905,9 @@ final class OrcaMacModelTests: XCTestCase {
     func testChangingSectionResetsFilter() async throws {
         let snapshot = try await workSnapshot()
         let model = makeModel()
-        model.sectionSnapshots[.work] = snapshot
         model.selectSection(.work, refresh: false)
         model.selectWorkMode(.agentWork)
+        model.sectionSnapshots[.work] = snapshot
         model.toggleWorkMetricFilter("approvals")
 
         model.selectSection(.overview, refresh: false)
@@ -900,9 +918,9 @@ final class OrcaMacModelTests: XCTestCase {
     func testFilterExcludingSelectedRecordClearsInspectorSelection() async throws {
         let snapshot = try await workSnapshot()
         let model = makeModel()
-        model.sectionSnapshots[.work] = snapshot
         model.selectSection(.work, refresh: false)
         model.selectWorkMode(.agentWork)
+        model.sectionSnapshots[.work] = snapshot
         let readyRecord = try XCTUnwrap(snapshot.records.first { $0.group == "Ready Now" })
         model.selectRecord(readyRecord.id)
 
@@ -915,9 +933,9 @@ final class OrcaMacModelTests: XCTestCase {
     func testFilterIncludingSelectedRecordKeepsInspectorSelection() async throws {
         let snapshot = try await workSnapshot()
         let model = makeModel()
-        model.sectionSnapshots[.work] = snapshot
         model.selectSection(.work, refresh: false)
         model.selectWorkMode(.agentWork)
+        model.sectionSnapshots[.work] = snapshot
         let approvalRecord = try XCTUnwrap(snapshot.records.first { $0.group == "Approval Attention" })
         model.selectRecord(approvalRecord.id)
 
@@ -1601,9 +1619,9 @@ final class OrcaMacModelTests: XCTestCase {
     func testTogglingMetricFilterClearsApprovalError() async throws {
         let snapshot = try await workSnapshot()
         let model = makeModel()
-        model.sectionSnapshots[.work] = snapshot
         model.selectSection(.work, refresh: false)
         model.selectWorkMode(.agentWork)
+        model.sectionSnapshots[.work] = snapshot
         model.approvalError = "ORCA returned HTTP 401."
 
         model.toggleWorkMetricFilter("approvals")

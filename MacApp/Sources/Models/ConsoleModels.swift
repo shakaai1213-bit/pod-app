@@ -139,6 +139,7 @@ struct ConsoleWaitingTicketRecord: Equatable, Sendable {
     let status: String?
     let blockedOn: String?
     let approvalState: String?
+    var isProtected = false
 }
 
 enum ConsoleApprovalBlockReason: Equatable, Sendable {
@@ -589,7 +590,8 @@ struct ConsoleSectionSnapshot: Equatable, Sendable {
                     ConsoleWaitingTicketRecord(
                         id: $0, endpoint: item.endpoint, summary: item.summary,
                         agentSlug: item.agentSlug, status: item.status,
-                        blockedOn: item.blockedOn, approvalState: item.approvalState
+                        blockedOn: item.blockedOn, approvalState: item.approvalState,
+                        isProtected: item.protected
                     )
                 }
                 return ConsoleRecord(
@@ -798,7 +800,8 @@ struct ConsoleSectionSnapshot: Equatable, Sendable {
                 agentSlug: nil,
                 status: item.status,
                 blockedOn: item.blockedOn,
-                approvalState: nil
+                approvalState: nil,
+                isProtected: group == .protected
             )
         } else {
             ticket = nil

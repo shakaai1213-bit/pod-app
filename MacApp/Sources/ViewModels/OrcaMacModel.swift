@@ -47,6 +47,7 @@ final class OrcaMacModel {
     var workControl: OrcaWorkControlProjection?
     var workMode: ConsoleWorkMode = .portfolio
     var workMetricFilter: ConsoleWorkMetricFilter?
+    @ObservationIgnored private var workSnapshotGeneration = 0
     var boards: [OrcaBoardDirectoryItem] = []
     var boardArchitectureProfilesByID: [UUID: OrcaBoardArchitectureProfile] = [:]
     var boardPlansByID: [UUID: OrcaBoardPlan] = [:]
@@ -474,6 +475,7 @@ final class OrcaMacModel {
     }
 
     func selectSection(_ section: ConsoleSection, refresh: Bool = true) {
+        workSnapshotGeneration += 1
         recordSelectionChanged(to: nil)
         selectedSection = section
         selectedRecordID = nil
@@ -493,6 +495,7 @@ final class OrcaMacModel {
 
     func selectWorkControlAgent(_ id: String) {
         guard agents.contains(where: { $0.id == id }) else { return }
+        workSnapshotGeneration += 1
         recordSelectionChanged(to: nil)
         selectedAgentID = id
         selectedRecordID = nil
@@ -502,12 +505,18 @@ final class OrcaMacModel {
     }
 
     func selectWorkMode(_ mode: ConsoleWorkMode) {
+        if selectedSection != .work {
+            selectSection(.work, refresh: false)
+        }
+        workSnapshotGeneration += 1
         recordSelectionChanged(to: nil)
         workMode = mode
         selectedRecordID = nil
-        if mode == .portfolio, boardPlan == nil {
-            Task { await refreshBoardPortfolio(silent: true) }
-        }
+        workMetricFilter = nil
+        workControl = nil
+        sectionSnapshots[.work] = .empty(.work)
+        sectionError = nil
+        Task { await refreshSelectedSection(silent: true) }
     }
 
     func selectBoard(_ id: UUID) {
@@ -536,21 +545,28 @@ final class OrcaMacModel {
               selectedSection != .workbench,
               let consoleService else { return }
         let section = selectedSection
+        let workGeneration = workSnapshotGeneration
+        let requestedWorkMode = workMode
         isLoadingSection = true
         do {
             let bundle: Components.Schemas.ChatRuntimeWorkControlBundleRead?
-            if section == .work, workMode == .agentWork {
+            if section == .work, requestedWorkMode == .agentWork {
                 guard let service else { throw OrcaConsoleServiceError.invalidResponse }
                 bundle = try await service.workControl(agentKey: selectedAgentID)
-                workControl = bundle.map(OrcaWorkControlProjection.init)
             } else {
                 bundle = nil
             }
             let snapshot: ConsoleSectionSnapshot
-            if section == .work, workMode == .team {
+            if section == .work, requestedWorkMode == .team {
                 snapshot = try await consoleService.teamWorkLensSnapshot()
             } else {
                 snapshot = try await consoleService.snapshot(for: section, workControl: bundle)
+            }
+            guard selectedSection == section, workSnapshotGeneration == workGeneration else {
+                return
+            }
+            if section == .work {
+                workControl = bundle.map(OrcaWorkControlProjection.init)
             }
             sectionSnapshots[section] = snapshot
             if section == .waitingOnCaptain {
@@ -563,10 +579,13 @@ final class OrcaMacModel {
                 recordSelectionChanged(to: nil)
                 self.selectedRecordID = nil
             }
-            if section == .work, refreshPortfolio, workMode == .portfolio {
+            if section == .work, refreshPortfolio, requestedWorkMode == .portfolio {
                 await refreshBoardPortfolio(silent: true)
             }
         } catch {
+            guard selectedSection == section, workSnapshotGeneration == workGeneration else {
+                return
+            }
             sectionError = error.localizedDescription
             if !silent { presentedError = error.localizedDescription }
         }
