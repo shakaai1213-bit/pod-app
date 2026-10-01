@@ -70,11 +70,14 @@ struct ConsoleInspectorView: View {
                                 InspectorValue(label: "Endpoint", value: ticket.endpoint)
                             }
                         }
-                        OpenTicketChatHook(
-                            ticketID: ticket.id,
-                            ownerSlug: ticket.agentSlug,
-                            title: ticket.summary
-                        )
+                        if !(model.selectedSection == .work && model.workMode == .team)
+                            && !ticket.isProtected {
+                            OpenTicketChatHook(
+                                ticketID: ticket.id,
+                                ownerSlug: ticket.agentSlug,
+                                title: ticket.summary
+                            )
+                        }
                     }
                 } else {
                     InspectorSection(title: "Section") {

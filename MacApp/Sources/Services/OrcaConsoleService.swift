@@ -113,30 +113,40 @@ actor OrcaConsoleService {
         }
     }
 
+    func teamWorkLensSnapshot() async throws -> ConsoleSectionSnapshot {
+        let response: TeamWorkLensResponse = try await requestJSON(
+            method: "GET", path: "/api/v1/control-room/team-work"
+        )
+        return .teamWorkLens(response)
+    }
+
     private func captainWorkLensSnapshot() async throws -> ConsoleSectionSnapshot {
+        .captainWorkLens(try await captainWorkLensResponse())
+    }
+
+    private func captainWorkLensResponse() async throws -> WaitingOnCaptainResponse {
         do {
-            let response: WaitingOnCaptainResponse = try await requestJSON(
+            return try await requestJSON(
                 method: "GET",
                 path: "/api/v1/control-room/waiting-on-captain"
             )
-            return .captainWorkLens(response)
         } catch let error as OrcaConsoleServiceError {
             guard case .httpStatus(404, _) = error else { throw error }
-            return .captainWorkLens(.zero())
+            return .zero()
         }
     }
 
     private func overviewSnapshot() async throws -> ConsoleSectionSnapshot {
-        async let inbox = get("/api/v1/control-room/captain-inbox")
+        async let attention = captainWorkLensResponse()
         async let health = get("/api/v1/control-room/central-agent-health")
         async let boards = get("/api/v1/boards")
         async let tickets = get("/api/v1/tickets")
         async let agents = get("/api/v1/agents")
         async let startup = get("/api/v1/startup/status")
-        let values = try await (inbox, health, boards, tickets, agents, startup)
+        let values = try await (attention, health, boards, tickets, agents, startup)
 
         let metrics = [
-            metric("attention", "Attention", integer(values.0, key: "count")),
+            metric("attention", "Attention", values.0.counts.badgeCount),
             metric("boards", "Boards", integer(values.2, key: "total")),
             metric("tickets", "Loaded Tickets", rootCount(values.3)),
             metric("agents", "Agents", integer(values.4, key: "total")),
@@ -156,18 +166,14 @@ actor OrcaConsoleService {
         return ConsoleSectionSnapshot(
             section: .overview,
             metrics: metrics,
-            records: records(
-                from: values.0,
-                collectionKeys: ["items"],
-                group: "Attention",
-                titleKeys: ["title", "summary"],
-                subtitleKeys: ["summary", "source"],
-                statusKeys: ["severity", "status"],
-                limit: 40
-            ),
+            records: [],
             sources: [
-                "/api/v1/control-room/captain-inbox",
+                "/api/v1/control-room/waiting-on-captain",
+                values.0.contractVersion ?? values.0.source,
                 "/api/v1/control-room/central-agent-health",
+                "/api/v1/boards",
+                "/api/v1/tickets",
+                "/api/v1/agents",
                 "/api/v1/startup/status",
             ],
             updatedAt: Date()
@@ -306,16 +312,127 @@ actor OrcaConsoleService {
     }
 
     private func fundSnapshot() async throws -> ConsoleSectionSnapshot {
-        let value = try await get("/api/v1/fund/landing")
-        let fields = value.objectValue?.keys.sorted().compactMap { key -> ConsoleField? in
-            guard let display = value.objectValue?[key]?.displayValue else { return nil }
-            return ConsoleField(label: key.replacingOccurrences(of: "_", with: " ").capitalized, value: display)
-        } ?? []
+        let landing = try await get("/api/v1/fund/landing")
+        let cockpit: ConsoleJSON?
+        let cockpitDenied: Bool
+        do {
+            cockpit = try await get("/api/v1/fund/routes/cockpit")
+            cockpitDenied = false
+        } catch let OrcaConsoleServiceError.httpStatus(code, _) where code == 401 || code == 403 {
+            cockpit = nil
+            cockpitDenied = true
+        } catch {
+            cockpit = nil
+            cockpitDenied = false
+        }
+        let envelope = cockpit?.objectValue?["data"]?.objectValue
+        let payload = envelope?["payload"]?.objectValue
+        let recognized = envelope?["schema_version"]?.displayValue == "fund_routes_cockpit/v0"
+            && envelope?["route"]?.displayValue == "fund.cockpit"
+            && payload != nil
+        let available = recognized && cockpit.flatMap { text($0, key: "status") } == "available"
+            && cockpit.flatMap { text($0, key: "quality") } == "available"
+            && cockpit.flatMap { bool($0, key: "stale") } == false
+        let sync = payload?["orca_sync"]?.objectValue
+        let problems = sync?["problems"]?.arrayValue ?? []
+        let engines = payload?["engines"]?.objectValue?["rows"]?.arrayValue ?? []
+        let cockpitStatus = cockpitDenied ? "denied" : available
+            ? ((sync == nil || engines.isEmpty || !problems.isEmpty) ? "partial" : "current")
+            : (cockpit.flatMap { text($0, key: "quality") } == "stale" ? "stale" : "unavailable")
+        let alerts = payload?["alerts"]?.arrayValue ?? []
+        let shadows = payload?["shadows"]?.objectValue?["candidates"]?.objectValue
+        let predictors = payload?["predictors"]?.objectValue?["predictors"]?.objectValue
+        let captures = payload?["run_capture"]?.objectValue?["symbols"]?.objectValue
+        let landingAvailable = text(landing, key: "status") == "available"
+            && bool(landing, key: "source_fresh") == true
+        let verifiedFinancialData = landingAvailable
+            && bool(landing, key: "verified_financial_data_available") == true
+
+        let landingKeys: [(String, String)] = [
+            ("headline", "Headline"), ("mode", "Mode"), ("readiness", "Readiness"),
+            ("generated_at", "As of"), ("kill_switch_status", "Kill switch"),
+        ] + (verifiedFinancialData ? [
+            ("account_usd", "Account USD"),
+            ("net_pnl_usd", "Net P&L USD"), ("closed_trades", "Closed trades"),
+            ("sharpe", "Sharpe"),
+        ] : [])
+        let fields = landingKeys.compactMap { key, label -> ConsoleField? in
+            guard let value = text(landing, key: key) else { return nil }
+            return ConsoleField(label: label, value: value)
+        }
+        var records = [ConsoleRecord(
+            id: "fund-landing",
+            title: "Fund Operating View",
+            subtitle: "ORCA protected read model",
+            status: landingAvailable ? "current" : "check",
+            group: "Fund",
+            fields: fields,
+            approval: nil
+        )]
+        if let reason = cockpit.flatMap({ text($0, key: "degraded_reason") }),
+           !reason.isEmpty {
+            records.append(ConsoleRecord(
+                id: "fund-cockpit-reason",
+                title: "Fund cockpit needs attention",
+                subtitle: reason,
+                status: cockpitStatus,
+                group: "Fund",
+                fields: [],
+                approval: nil
+            ))
+        }
+        if available {
+            for (index, value) in engines.prefix(16).enumerated() {
+                let engine = value.objectValue ?? [:]
+                records.append(ConsoleRecord(
+                    id: "fund-engine-\(index)",
+                    title: engine["engine"]?.displayValue ?? "Unknown engine",
+                    subtitle: engine["pillar"]?.displayValue,
+                    status: engine["verdict"]?.displayValue ?? "unknown",
+                    group: "Engines",
+                    fields: [],
+                    approval: nil
+                ))
+            }
+            for (index, value) in problems.prefix(12).enumerated() {
+                let problem = value.objectValue ?? [:]
+                records.append(ConsoleRecord(
+                    id: "fund-sync-\(index)",
+                    title: problem["surface"]?.displayValue ?? "Unknown route",
+                    subtitle: "ORCA sync needs attention",
+                    status: problem["verdict"]?.displayValue ?? "check",
+                    group: "ORCA Sync",
+                    fields: [],
+                    approval: nil
+                ))
+            }
+            for (index, value) in alerts.prefix(12).enumerated() {
+                let alert = value.objectValue ?? [:]
+                records.append(ConsoleRecord(
+                    id: "fund-alert-\(index)",
+                    title: alert["name"]?.displayValue ?? "Fund alert",
+                    subtitle: nil,
+                    status: alert["severity"]?.displayValue ?? "attention",
+                    group: "Alerts",
+                    fields: [],
+                    approval: nil
+                ))
+            }
+        }
         return ConsoleSectionSnapshot(
             section: .fund,
-            metrics: [],
-            records: [ConsoleRecord(id: "fund-landing", title: "Fund Operating View", subtitle: "ORCA protected read model", status: "protected", group: "Fund", fields: fields, approval: nil)],
-            sources: ["/api/v1/fund/landing"],
+            metrics: [
+                ConsoleMetric(id: "fund-source", label: "Fund source", value: landingAvailable ? "Current" : "Check", status: landingAvailable ? "ok" : "attention"),
+                ConsoleMetric(id: "fund-cockpit", label: "Cockpit", value: cockpitStatus.capitalized, status: cockpitStatus),
+                metric("fund-engines", "Engines", available ? engines.count : nil),
+                ConsoleMetric(id: "fund-sync", label: "ORCA sync", value: available ? (sync.map { "\($0["in_sync"]?.displayValue ?? "-")/\($0["total"]?.displayValue ?? "-")" } ?? "-") : "-", status: cockpitStatus == "current" ? "ok" : "attention"),
+                metric("fund-shadows", "Shadows", available ? shadows?.values.filter { $0.objectValue?["stage"]?.displayValue == "shadow" }.count : nil),
+                metric("fund-predictors", "Predictors", available ? predictors?.count : nil),
+                metric("fund-captures", "Runs detected", available ? captures?.values.filter { $0.objectValue?["run_detected"] == .bool(true) }.count : nil),
+                metric("fund-alerts", "Alerts", available ? alerts.count : nil),
+            ],
+            records: records,
+            sources: ["/api/v1/fund/landing", "/api/v1/fund/routes/cockpit"],
             updatedAt: Date()
         )
     }

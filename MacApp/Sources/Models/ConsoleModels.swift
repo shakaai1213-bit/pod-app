@@ -7,6 +7,7 @@ enum ConsoleWorkMode: String, CaseIterable, Identifiable {
     case portfolio
     case agentWork
     case captain
+    case team
 
     var id: String { rawValue }
     var title: String {
@@ -14,6 +15,7 @@ enum ConsoleWorkMode: String, CaseIterable, Identifiable {
         case .portfolio: "Portfolio"
         case .agentWork: "Agent Work"
         case .captain: "On Tony"
+        case .team: "All Agents"
         }
     }
 }
@@ -137,6 +139,7 @@ struct ConsoleWaitingTicketRecord: Equatable, Sendable {
     let status: String?
     let blockedOn: String?
     let approvalState: String?
+    var isProtected = false
 }
 
 enum ConsoleApprovalBlockReason: Equatable, Sendable {
@@ -458,6 +461,62 @@ struct WaitingOnCaptainItem: Decodable, Equatable, Sendable {
     }
 }
 
+struct TeamWorkLensResponse: Decodable, Equatable, Sendable {
+    let contractVersion: String
+    let generatedAt: Date
+    let roster: [String]
+    let provisionedAgents: [String]
+    let groups: [TeamWorkLensGroup]
+    let counts: [String: Int]
+
+    enum CodingKeys: String, CodingKey {
+        case roster, groups, counts
+        case contractVersion = "contract_version"
+        case generatedAt = "generated_at"
+        case provisionedAgents = "provisioned_agents"
+    }
+}
+
+struct TeamWorkLensGroup: Decodable, Equatable, Sendable {
+    let name: String
+    let items: [TeamWorkLensItem]
+}
+
+struct TeamWorkLensItem: Decodable, Equatable, Sendable {
+    let id: String
+    let kind: String
+    let title: String
+    let summary: String
+    let agentSlug: String?
+    let status: String
+    let priority: String
+    let endpoint: String
+    let protected: Bool
+    let stale: Bool
+    let ageHours: Int?
+    let executionEligible: Bool
+    let approvalState: String?
+    let blockedOn: String?
+    let desiredOutcome: String?
+    let needsScope: Bool
+    let authority: String?
+    let approvalID: String?
+    let linkedTicketIDs: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case id, kind, title, summary, status, priority, endpoint, protected, stale, authority
+        case ageHours = "age_hours"
+        case agentSlug = "agent_slug"
+        case executionEligible = "execution_eligible"
+        case approvalState = "approval_state"
+        case blockedOn = "blocked_on"
+        case desiredOutcome = "desired_outcome"
+        case needsScope = "needs_scope"
+        case approvalID = "approval_id"
+        case linkedTicketIDs = "linked_ticket_ids"
+    }
+}
+
 struct ConsoleSectionSnapshot: Equatable, Sendable {
     static let waitingOnCaptainEmptyTitle = "Nothing is waiting on you."
 
@@ -487,6 +546,68 @@ struct ConsoleSectionSnapshot: Equatable, Sendable {
             .filter { badgeMetricIDs.contains($0.id) }
             .compactMap { Int($0.value) }
             .reduce(0, +)
+    }
+
+    static func teamWorkLens(_ response: TeamWorkLensResponse) -> ConsoleSectionSnapshot {
+        let cards: [(id: String, title: String, groups: [String])] = [
+            ("ready", "Ready Now", ["Ready Now"]),
+            ("assigned", "Assigned", ["Assigned"]),
+            ("waiting", "Waiting", ["Waiting On Others"]),
+            ("approvals", "Approvals", ["Decision Queue", "Approval Attention"]),
+            ("protected", "Protected", ["Protected"]),
+            ("historical", "Historical", ["Historical"]),
+        ]
+        let metrics = cards.map { card in
+            let count = card.groups.reduce(0) { $0 + (response.counts[$1] ?? 0) }
+            return ConsoleMetric(id: card.id, label: card.title, value: "\(count)", status: count > 0 ? "attention" : "ok")
+        }
+        let records = response.groups.flatMap { group in
+            group.items.map { item in
+                let owner = item.agentSlug ?? "Unassigned"
+                var fields = [
+                    ConsoleField(label: "ID", value: item.id),
+                    ConsoleField(label: "Owner", value: owner),
+                    ConsoleField(label: "Kind", value: item.kind.capitalized),
+                    ConsoleField(label: "Summary", value: item.summary),
+                    ConsoleField(label: "Priority", value: item.priority),
+                    ConsoleField(label: "Endpoint", value: item.endpoint),
+                    ConsoleField(label: "Execution", value: item.executionEligible ? "Eligible" : "Held"),
+                ]
+                if let ageHours = item.ageHours {
+                    fields.append(ConsoleField(label: "Age", value: "\(ageHours)h"))
+                }
+                if let authority = item.authority {
+                    fields.append(ConsoleField(label: "Approval Authority", value: authority))
+                }
+                if let blockedOn = item.blockedOn {
+                    fields.append(ConsoleField(label: "Blocked On", value: blockedOn))
+                }
+                if let approvalState = item.approvalState {
+                    fields.append(ConsoleField(label: "Approval State", value: approvalState))
+                }
+                let ticketID = item.kind == "ticket" ? String(item.id.dropFirst("ticket:".count)) : nil
+                let ticket = ticketID.map {
+                    ConsoleWaitingTicketRecord(
+                        id: $0, endpoint: item.endpoint, summary: item.summary,
+                        agentSlug: item.agentSlug, status: item.status,
+                        blockedOn: item.blockedOn, approvalState: item.approvalState,
+                        isProtected: item.protected
+                    )
+                }
+                return ConsoleRecord(
+                    id: item.id, title: item.title,
+                    subtitle: "\(owner) · \(item.summary)",
+                    status: item.stale ? "stale" : item.status,
+                    group: group.name, fields: fields, approval: nil, ticket: ticket,
+                    desiredOutcome: item.desiredOutcome, needsScope: item.needsScope
+                )
+            }
+        }
+        return ConsoleSectionSnapshot(
+            section: .work, metrics: metrics, records: records,
+            sources: ["/api/v1/control-room/team-work", response.contractVersion],
+            updatedAt: response.generatedAt
+        )
     }
 
     static func captainWorkLens(_ response: WaitingOnCaptainResponse) -> ConsoleSectionSnapshot {
@@ -679,7 +800,8 @@ struct ConsoleSectionSnapshot: Equatable, Sendable {
                 agentSlug: nil,
                 status: item.status,
                 blockedOn: item.blockedOn,
-                approvalState: nil
+                approvalState: nil,
+                isProtected: group == .protected
             )
         } else {
             ticket = nil

@@ -40,7 +40,7 @@ struct AgentSidebarView: View {
                         }
                         .buttonStyle(.plain)
                         .listRowBackground(
-                            model.selectedSection == section
+                            isSelected(section)
                                 ? Color.accentColor.opacity(0.12)
                                 : Color.clear
                         )
@@ -92,6 +92,15 @@ struct AgentSidebarView: View {
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
+    private func isSelected(_ section: ConsoleSection) -> Bool {
+        if section == .waitingOnCaptain {
+            return model.selectedSection == .work && model.workMode == .captain
+        }
+        if section == .work {
+            return model.selectedSection == .work && model.workMode != .captain
+        }
+        return model.selectedSection == section
+    }
 }
 
 private struct ConsoleNavigationRow: View {

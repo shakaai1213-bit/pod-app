@@ -47,7 +47,7 @@ struct ConsoleSectionView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
-                .frame(width: 270)
+                .frame(width: 350)
                 if model.workMode == .agentWork {
                     Picker("Agent", selection: workControlAgentSelection) {
                         ForEach(model.agents) { agent in
@@ -57,6 +57,14 @@ struct ConsoleSectionView: View {
                     .labelsHidden()
                     .frame(width: 130)
                     .help("Choose named agent work control")
+                } else if model.workMode == .team {
+                    Picker("Agent", selection: .constant("all_agents")) {
+                        Text("All Agents").tag("all_agents")
+                    }
+                    .labelsHidden()
+                    .frame(width: 130)
+                    .disabled(true)
+                    .help("Showing all seven named agents")
                 }
             }
             if model.isLoadingSection {
@@ -95,6 +103,13 @@ struct ConsoleSectionView: View {
                 description: Text(error)
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if section == .overview {
+            VStack(spacing: 0) {
+                if !model.selectedSnapshot.metrics.isEmpty {
+                    metrics
+                }
+                Spacer(minLength: 0)
+            }
         } else {
             VStack(spacing: 0) {
                 if !model.selectedSnapshot.metrics.isEmpty {
@@ -112,7 +127,7 @@ struct ConsoleSectionView: View {
 
     private var isWorkFilterableView: Bool {
         guard section == .work || section == .waitingOnCaptain else { return false }
-        return model.workMode == .agentWork || model.workMode == .captain
+        return model.workMode == .agentWork || model.workMode == .captain || model.workMode == .team
     }
 
     private var metrics: some View {
@@ -124,8 +139,9 @@ struct ConsoleSectionView: View {
         ) {
             ForEach(model.selectedSnapshot.metrics) { metric in
                 let isActive = isWorkAgentView && model.workMetricFilter?.id == metric.id
+                let opensCaptainWork = section == .overview && metric.id == "attention"
                 Button {
-                    model.toggleWorkMetricFilter(metric.id)
+                    model.activateConsoleMetric(metric.id)
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(metric.label.uppercased())
@@ -153,10 +169,14 @@ struct ConsoleSectionView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .disabled(!isWorkAgentView)
-                .help(isWorkAgentView
-                    ? (isActive ? "Clear the \(metric.label) filter" : "Filter the list to \(metric.label)")
-                    : metric.label)
+                .disabled(!isWorkAgentView && !opensCaptainWork)
+                .help(
+                    opensCaptainWork
+                        ? "Open Work in On Tony mode"
+                        : isWorkAgentView
+                            ? (isActive ? "Clear the \(metric.label) filter" : "Filter the list to \(metric.label)")
+                            : metric.label
+                )
                 .accessibilityAddTraits(isActive ? .isSelected : [])
             }
         }

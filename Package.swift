@@ -27,6 +27,7 @@ let package = Package(
                 "Data/Repositories/BoardRepository.swift",
                 "Data/Repositories/ChannelRepository.swift",
                 "Data/Repositories/FundTradesRepository.swift",
+                "Data/Repositories/FundCockpitRepository.swift",
                 "Data/Repositories/ProjectRepository.swift",
                 "Data/Repositories/ResearchRepository.swift",
                 "Data/Repositories/StandardRepository.swift",
@@ -38,6 +39,7 @@ let package = Package(
             ],
             sources: [
                 "Data/Remote/FundTradesDTO.swift",
+                "Data/Remote/FundCockpitDTO.swift",
                 "Data/Remote/MakerDTO.swift",
                 "Data/Repositories/SystemRepository.swift",
                 "Domain/Entities/Knowledge.swift",
