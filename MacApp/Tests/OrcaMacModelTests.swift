@@ -3158,6 +3158,8 @@ final class OrcaMacModelTests: XCTestCase {
     func testHeldDirectTurnDisplaysAsSystemNotice() async throws {
         let stub = StubRuntimeService(
             replyContent: "This turn is paused pending review.",
+            responseState: "ticket_required",
+            terminalKind: .heldForExplicitEscalation,
             replyLane: "held_for_explicit_escalation"
         )
         let model = makeModel()
@@ -3197,6 +3199,8 @@ private actor StubRuntimeService: OrcaRuntimeServing {
 
     let replyContent: String
     let replyLane: String
+    let responseState: String?
+    let terminalKind: OrcaRuntimeTerminalKind?
     let userMessageID: String
     private var workControlRequestContinuations: [CheckedContinuation<Void, Never>] = []
     private var workControlRequested = false
@@ -3204,12 +3208,16 @@ private actor StubRuntimeService: OrcaRuntimeServing {
     private let workControlGate: TestAsyncGate?
 
     init(
-        replyContent: String = "",
+        replyContent: String = "Sent to coral's live Nerve inbox and recorded in ORCA.",
+        responseState: String? = "waiting_for_live_agent",
+        terminalKind: OrcaRuntimeTerminalKind? = nil,
         replyLane: String = "agent_inbox",
         userMessageID: String = "msg-user-1",
         workControlBundle: Components.Schemas.ChatRuntimeWorkControlBundleRead? = nil,
         workControlGate: TestAsyncGate? = nil
     ) {
+        self.responseState = responseState
+        self.terminalKind = terminalKind
         self.replyContent = replyContent
         self.replyLane = replyLane
         self.userMessageID = userMessageID
@@ -3293,10 +3301,10 @@ private actor StubRuntimeService: OrcaRuntimeServing {
             traceID: request.traceID,
             source: "console",
             lane: replyLane,
-            terminalKind: OrcaRuntimeTerminalKind(lane: replyLane),
+            terminalKind: terminalKind,
             deliveryMode: nil,
             provenance: nil,
-            responseState: nil,
+            responseState: responseState,
             provider: nil,
             model: nil,
             tier: nil,
@@ -3655,31 +3663,37 @@ private final class PollingRequestCounter: @unchecked Sendable {
 
 
 extension OrcaMacModelTests {
-    func testReplyFortySecondsAfterSendWhenReconcileReturns404() async throws {
-        let stub = StubRuntimeService(userMessageID: "user-turn")
-        let clock = PollingTestClock()
-        let model = pollingModel(stub, clock: clock)
-        await stub.configurePolling(error: .httpStatus(404), messages: [pollingMessage("user-turn", user: true)])
-        model.draft = "waiting for a reply"
-        await model.sendDraft()
-        await settlePolling()
-        var visibleAt: Double?
-        var sleeps: [Double] = []
-        model.pollingSleep = { delay in
-            clock.seconds += delay
-            sleeps.append(delay)
-            if clock.seconds > 100 { throw CancellationError() }
-            if clock.seconds >= 40.1 {
-                await stub.configurePolling(error: .httpStatus(404), messages: [pollingMessage("user-turn", user: true), pollingMessage("reply", user: false, at: 40.1)])
+    func testPendingPlaceholderReplyAppearsWithinFourSecondsDespiteReconcileFailure() async throws {
+        for state: String? in ["waiting_for_live_agent", "compute_running", nil] {
+            for error in [OrcaRuntimeClientError.httpStatus(404), .invalidResponse("offline failure")] {
+                let placeholder = state == "compute_running" ? "Recorded in ORCA and queued for compute." : "Sent to coral's live Nerve inbox and recorded in ORCA."
+                let stub = StubRuntimeService(replyContent: placeholder, responseState: state, userMessageID: "user-turn")
+                let clock = PollingTestClock()
+                let model = pollingModel(stub, clock: clock)
+                await stub.configurePolling(error: error, messages: [pollingMessage("user-turn", user: true)])
+                model.draft = "waiting for a reply"
+                await model.sendDraft()
+                await settlePolling()
+                var visibleAt: Double?
+                var sleeps: [Double] = []
+                model.pollingSleep = { delay in
+                    clock.seconds += delay
+                    sleeps.append(delay)
+                    if clock.seconds > 100 { throw CancellationError() }
+                    if clock.seconds >= 40.1 {
+                        await stub.configurePolling(error: error, messages: [pollingMessage("user-turn", user: true), pollingMessage("reply", user: false, at: 40.1)])
+                    }
+                    if model.conversations["coral"]?.messages.contains(where: { $0.id == "reply" }) == true, visibleAt == nil { visibleAt = clock.seconds - delay }
+                }
+                model.beginRefreshLoop()
+                await model.refreshTask?.value
+                let appeared = try XCTUnwrap(visibleAt)
+                XCTAssertEqual(appeared, 44)
+                print("PROBE pending state \(state ?? "nil"), reconcile \(error): poll sleeps \(sleeps), reply visible at \(appeared), late by \(appeared - 40.1)")
+                XCTAssertLessThanOrEqual(appeared - 40.1, 4)
+                model.setConversationsPollingActive(false)
             }
-            if model.conversations["coral"]?.messages.contains(where: { $0.id == "reply" }) == true, visibleAt == nil { visibleAt = clock.seconds - delay }
         }
-        model.beginRefreshLoop()
-        await model.refreshTask?.value
-        let appeared = try XCTUnwrap(visibleAt)
-        print("PROBE model reconcile-404: poll sleeps \(sleeps), reply visible at \(appeared), late by \(appeared - 40.1)")
-        XCTAssertLessThanOrEqual(appeared - 40.1, 4)
-        model.setConversationsPollingActive(false)
     }
 
 }
@@ -3768,7 +3782,7 @@ extension OrcaMacModelTests {
 
     func testSynchronousReplyCostsAtMostTenPollsInThreeHundredSeconds() async throws {
         for reconcile404 in [false, true] {
-            let stub = StubRuntimeService(replyContent: "hello", userMessageID: "user-turn")
+            let stub = StubRuntimeService(replyContent: "hello", responseState: "response_received", userMessageID: "user-turn")
             let clock = PollingTestClock()
             let model = pollingModel(stub, clock: clock)
             let remote = [pollingMessage("user-turn", user: true), pollingMessage("msg-assistant-1", user: false, at: 1)]

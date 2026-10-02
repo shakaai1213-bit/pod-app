@@ -1277,7 +1277,7 @@ final class OrcaMacModel {
                     )
                 )
             }
-            if canonical.contains(where: { $0.role != .user }) {
+            if OrcaConsolePollingPolicy.isReplyInHand(responseState: response.responseState, terminalKind: response.terminalKind) {
                 pollingPolicies[conversationKey, default: .init()].replyInHand()
             }
             resolved.resolvePending(id: pendingID, with: canonical)

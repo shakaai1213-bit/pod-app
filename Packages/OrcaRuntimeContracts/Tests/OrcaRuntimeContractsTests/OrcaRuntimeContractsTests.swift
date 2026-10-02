@@ -1714,3 +1714,18 @@ private actor FailingPollFixture {
         #expect(await recorder.values == [120, 120, 120])
     }
 }
+
+@Test("Send reply-in-hand follows every backend state and terminal kind")
+func sendReplyInHandBackendStateTable() {
+    let pending: [String?] = ["waiting_for_live_agent", "waiting_for_agent", "compute_running",
+        "claimed_by_agent", "working", "delivery_degraded", "delivery_nats_failed",
+        "agent_unresponsive", "recorded", nil, "unknown"]
+    let terminal = ["response_received", "fallback_presented", "ticket_required", "failed"]
+    for state in pending {
+        #expect(!OrcaConsolePollingPolicy.isReplyInHand(responseState: state, terminalKind: nil))
+        #expect(OrcaConsolePollingPolicy.isReplyInHand(responseState: state, terminalKind: .held))
+    }
+    for state in terminal {
+        #expect(OrcaConsolePollingPolicy.isReplyInHand(responseState: state, terminalKind: nil))
+    }
+}

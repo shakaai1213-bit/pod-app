@@ -34,6 +34,24 @@ public struct OrcaConsolePollingPolicy {
         serverDelaySeconds = 2
     }
 
+    /// Backend source of truth: workspace-mission-control/backend/app/schemas/chat.py:71–91
+    /// (OpenClaw-Config 3d20202b): pending states and aliases precede the terminal set.
+    public static func isReplyInHand(responseState: String?, terminalKind: OrcaRuntimeTerminalKind?) -> Bool {
+        if terminalKind != nil { return true }
+        let normalized: String?
+        switch responseState {
+        case "waiting_for_agent": normalized = "waiting_for_live_agent"
+        case "delivery_degraded": normalized = "delivery_nats_failed"
+        default: normalized = responseState
+        }
+        switch normalized {
+        case "response_received", "fallback_presented", "ticket_required", "failed": return true
+        case "waiting_for_live_agent", "compute_running", "claimed_by_agent", "working",
+             "delivery_nats_failed", "agent_unresponsive", "recorded", nil: return false
+        default: return false
+        }
+    }
+
     public mutating func replyInHand() {
         awaitingReply = false
     }
