@@ -1170,7 +1170,7 @@ final class OrcaMacModel {
             pollingPolicies[conversationKey, default: .init()].messagesMerged(
                 changed: changed,
                 replyArrived: OrcaConsolePollingPolicy.hasPolledReply(
-                    awaitedTurnID: pollingPolicies[conversationKey]?.awaitedTurnID, messages: remote, oldIDs: oldIDs
+                    awaitedTurnID: pollingPolicies[conversationKey]?.awaitedTurnID, awaitedTraceID: pollingPolicies[conversationKey]?.awaitedTraceID, messages: remote, oldIDs: oldIDs
                 ),
                 now: pollingNow()
             )
@@ -1198,10 +1198,10 @@ final class OrcaMacModel {
         let agentID = activeTicketChat?.ownerSlug ?? selectedAgentID
         let conversationKey = activeConversationKey
         let ticketChat = activeTicketChat
-        pollingPolicies[conversationKey, default: .init()].sent(now: pollingNow())
+        let traceID = retryIdentity?.traceID ?? "orca-mac-\(UUID().uuidString.lowercased())"
+        pollingPolicies[conversationKey, default: .init()].sent(now: pollingNow(), traceID: traceID)
         stopRuntimeReconciliation(for: conversationKey)
         if refreshTask != nil { beginRefreshLoop() }
-        let traceID = retryIdentity?.traceID ?? "orca-mac-\(UUID().uuidString.lowercased())"
         let idempotencyKey = retryIdentity?.idempotencyKey ?? "orca-mac-turn:\(traceID)"
         let pendingID = "pending:\(traceID)"
         let startedAt = Date()
@@ -1439,7 +1439,7 @@ final class OrcaMacModel {
             state.mergeCanonical(remote.map(Self.transcriptMessage))
             let changed = state.messages.contains { !oldIDs.contains($0.id) }
             let replyArrived = OrcaConsolePollingPolicy.hasPolledReply(
-                awaitedTurnID: pollingPolicies[agentID]?.awaitedTurnID, messages: remote, oldIDs: oldIDs
+                awaitedTurnID: pollingPolicies[agentID]?.awaitedTurnID, awaitedTraceID: pollingPolicies[agentID]?.awaitedTraceID, messages: remote, oldIDs: oldIDs
             )
             if changed || (pollingPolicies[agentID]?.awaitingReply == true && replyArrived) {
                 pollingPolicies[agentID, default: .init()].messagesMerged(

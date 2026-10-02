@@ -3403,8 +3403,8 @@ private func pollingTurn(terminal: Bool = false, stuck: Bool = false, hint: Int?
     return .init(turn: turn, cursor: "cursor", cursorState: .initial, appliedEventIDs: [], rebuilt: false, terminalBecameVisible: terminal, pollAfterSeconds: hint)
 }
 
-private func pollingMessage(_ id: String, user: Bool, at seconds: Double = 0, state: String? = "response_received", system: Bool = false, terminalKind: OrcaRuntimeTerminalKind? = nil) -> OrcaRuntimeConversationMessage {
-    .init(id: id, conversationID: "poll-channel", content: id, messageType: system ? "system" : "text", senderAgentID: user || system ? nil : "coral", traceID: nil, source: nil, lane: nil, terminalKind: terminalKind, responseState: state, deliveryState: nil, createdAt: Date(timeIntervalSince1970: seconds), updatedAt: Date(timeIntervalSince1970: seconds))
+private func pollingMessage(_ id: String, user: Bool, at seconds: Double = 0, state: String? = "response_received", system: Bool = false, terminalKind: OrcaRuntimeTerminalKind? = nil, trace: String? = nil) -> OrcaRuntimeConversationMessage {
+    .init(id: id, conversationID: "poll-channel", content: id, messageType: system ? "system" : "text", senderAgentID: user || system ? nil : "coral", traceID: trace, source: nil, lane: nil, terminalKind: terminalKind, responseState: state, deliveryState: nil, createdAt: Date(timeIntervalSince1970: seconds), updatedAt: Date(timeIntervalSince1970: seconds))
 }
 
 extension OrcaMacModelTests {
@@ -3627,7 +3627,7 @@ extension OrcaMacModelTests {
         model.beginRefreshLoop()
         await model.refreshTask?.value
         XCTAssertEqual(sleeps, [15, 15, 15, 15])
-        XCTAssertGreaterThanOrEqual(counter.value, 4)
+        XCTAssertEqual(counter.value, 4)
         model.refreshTask = nil
         model.selectSection(.work, refresh: false)
         XCTAssertEqual(model.workMode, .portfolio)
@@ -3867,13 +3867,13 @@ extension OrcaMacModelTests {
     }
 
     func testTerminalSystemMessagesEndWait() async throws {
-        for message in [pollingMessage("fallback", user: false, state: "fallback_presented", system: true), pollingMessage("kind", user: false, state: nil, system: true, terminalKind: .held)] {
+        for message in [pollingMessage("fallback", user: false, state: "fallback_presented", system: true, trace: "awaited-notice"), pollingMessage("kind", user: false, state: nil, system: true, terminalKind: .held, trace: "awaited-notice")] {
             let stub = StubRuntimeService(userMessageID: "user-turn")
             let clock = PollingTestClock()
             let model = pollingModel(stub, clock: clock)
             await stub.configurePolling(error: .httpStatus(404), messages: [pollingMessage("user-turn", user: true, state: "waiting_for_live_agent")])
             model.draft = "pending"
-            await model.sendDraft()
+            await model.sendDraft(retryIdentity: TurnRetryIdentity(traceID: "awaited-notice", idempotencyKey: "notice-turn"))
             await settlePolling()
             await stub.configurePolling(error: .httpStatus(404), messages: [pollingMessage("user-turn", user: true, state: "waiting_for_live_agent"), message])
             await model.refreshSelectedConversation(silent: true)
@@ -4098,8 +4098,8 @@ private actor ProdStub: OrcaRuntimeServing {
 
 private enum ProdKind { case user, system, agent }
 
-private func prodMessage(_ id: String, _ kind: ProdKind, state: String? = nil, terminal: OrcaRuntimeTerminalKind? = nil, at seconds: Double = 0) -> OrcaRuntimeConversationMessage {
-    .init(id: id, conversationID: "poll-channel", content: id, messageType: kind == .user ? "user" : (kind == .agent ? "agent" : "system"), senderAgentID: kind == .user ? nil : "coral", traceID: nil, source: nil, lane: nil, terminalKind: terminal, responseState: state, deliveryState: nil, createdAt: Date(timeIntervalSince1970: seconds), updatedAt: Date(timeIntervalSince1970: seconds))
+private func prodMessage(_ id: String, _ kind: ProdKind, state: String? = nil, terminal: OrcaRuntimeTerminalKind? = nil, trace: String? = nil, at seconds: Double = 0) -> OrcaRuntimeConversationMessage {
+    .init(id: id, conversationID: "poll-channel", content: id, messageType: kind == .user ? "user" : (kind == .agent ? "agent" : "system"), senderAgentID: kind == .user ? nil : "coral", traceID: trace, source: nil, lane: nil, terminalKind: terminal, responseState: state, deliveryState: nil, createdAt: Date(timeIntervalSince1970: seconds), updatedAt: Date(timeIntervalSince1970: seconds))
 }
 
 extension OrcaMacModelTests {
@@ -4212,4 +4212,185 @@ extension OrcaMacModelTests {
         }
     }
 
+}
+
+extension OrcaMacModelTests {
+    // The production async flow: placeholder, then a claim at 2 s, working at 5 s, then ONE terminal reply at 40.1 s.
+    private func prodAsyncServer(_ t: Double) -> [OrcaRuntimeConversationMessage] {
+        var userState = "waiting_for_live_agent"
+        var msgs: [OrcaRuntimeConversationMessage] = []
+        if t >= 2 { userState = "claimed_by_agent"; msgs.append(prodMessage("claim", .system, state: "claimed_by_agent", at: 2)) }
+        if t >= 5 { userState = "working"; msgs.append(prodMessage("working", .system, state: "working", at: 5)) }
+        if t >= 40.1 { userState = "response_received"; msgs.append(prodMessage("reply", .agent, state: "response_received", at: 40.1)) }
+        return [prodMessage("user-turn", .user, state: userState)] + msgs
+    }
+
+    func testProdAsyncPlaceholderClaimWorkingThenTerminalReply() async throws {
+        for reconcile404 in [true, false] {
+            let r = try await prodRun(content: "Coral is on it.", state: "waiting_for_live_agent", reconcile404: reconcile404, until: 150, watch: "reply", server: prodAsyncServer)
+            let at = try XCTUnwrap(r.visibleAt, "the terminal reply never became visible")
+            print("PROBE prod async (reconcile \(reconcile404 ? "404" : "healthy")): reply posted 40.1 s, visible at \(at), late by \(at - 40.1)")
+            XCTAssertLessThanOrEqual(at - 40.1, 4, "reconcile \(reconcile404 ? "404" : "healthy"): a claim or working message must not end the fast cadence")
+        }
+    }
+
+    func testProdSendResponseStateDecidesWhetherTheReplyIsInHand() async throws {
+        // the send response carries content; only a TERMINAL state (or a terminal kind) means the reply is in hand
+        let terminal = ["response_received", "fallback_presented", "ticket_required", "failed"]
+        let pending = ["waiting_for_live_agent", "claimed_by_agent", "working", "compute_running", "delivery_nats_failed", "delivery_degraded", "agent_unresponsive", "waiting_for_agent"]
+        for state in terminal {
+            let r = try await prodRun(content: "reply text", state: state, reconcile404: true, server: { _ in [prodMessage("user-turn", .user, state: state)] })
+            print("PROBE prod send state \(state): message polls in 300 s = \(r.polls)")
+            XCTAssertLessThanOrEqual(r.polls, 10, "\(state) is terminal: the wait must end at once")
+        }
+        for state in pending {
+            let r = try await prodRun(content: "queued placeholder", state: state, reconcile404: true, server: { _ in [prodMessage("user-turn", .user, state: state)] })
+            print("PROBE prod send state \(state): message polls in 300 s = \(r.polls)")
+            XCTAssertGreaterThanOrEqual(r.polls, 60, "\(state) is pending: the fast cadence must hold until the 300 s grace")
+        }
+        for state in [nil, "recorded"] as [String?] {
+            let r = try await prodRun(content: "queued placeholder", state: state, reconcile404: true, server: { _ in [prodMessage("user-turn", .user, state: state)] })
+            print("PROBE prod send state \(state ?? "nil"): message polls in 300 s = \(r.polls)")
+            XCTAssertGreaterThanOrEqual(r.polls, 60, "\(state ?? "nil") is not terminal: the 300 s grace applies")
+            XCTAssertLessThanOrEqual(r.polls, 90)
+        }
+        for lane in ["held", "held_for_explicit_escalation", "route_unavailable", "provider_failure"] {
+            let r = try await prodRun(content: "route notice", state: nil, lane: lane, reconcile404: true, server: { _ in [prodMessage("user-turn", .user)] })
+            print("PROBE prod terminal kind \(lane): message polls in 300 s = \(r.polls)")
+            XCTAssertLessThanOrEqual(r.polls, 10, "a terminal kind (\(lane)) ends the wait at once")
+        }
+    }
+
+    func testProdFallbackThenSupersedingReply() async throws {
+        // a timeout fallback is terminal, and a later real reply supersedes it (chat.py _is_supersedable_fallback_reply)
+        let server: (Double) -> [OrcaRuntimeConversationMessage] = { t in
+            var userState = "waiting_for_live_agent"
+            var msgs: [OrcaRuntimeConversationMessage] = []
+            if t >= 90 { userState = "fallback_presented"; msgs.append(prodMessage("fallback", .system, state: "fallback_presented", at: 90)) }
+            if t >= 100 { userState = "response_received"; msgs.append(prodMessage("real", .agent, state: "response_received", at: 100)) }
+            return [prodMessage("user-turn", .user, state: userState)] + msgs
+        }
+        for reconcile404 in [true, false] {
+            let r = try await prodRun(content: "Coral is on it.", state: "waiting_for_live_agent", reconcile404: reconcile404, until: 300, watch: "real", server: server)
+            let at = try XCTUnwrap(r.visibleAt, "the superseding reply never became visible")
+            print("PROBE prod fallback then real reply (reconcile \(reconcile404 ? "404" : "healthy")): real reply posted 100 s, visible at \(at), late by \(at - 100)")
+            XCTAssertLessThanOrEqual(at - 100, 60, "one relaxed interval at most")
+        }
+    }
+
+    func testProdANewSendRearmsTheWait() async throws {
+        let stub = ProdStub(replyContent: "reply text", replyLane: "direct_agent_inbox", userMessageID: "user-turn")
+        await stub.configureSend(state: "response_received")
+        let clock = PollingTestClock()
+        let model = prodModel(stub, clock: clock)
+        await stub.configurePolling(error: .httpStatus(404), messages: [prodMessage("user-turn", .user, state: "response_received")])
+        model.draft = "first"
+        await model.sendDraft()
+        await prodSettle()
+        // a terminal reply: the cadence relaxes while idle
+        var sleeps: [Double] = []
+        model.pollingSleep = { delay in clock.seconds += delay; sleeps.append(delay); if clock.seconds > 120 { throw CancellationError() } }
+        model.beginRefreshLoop()
+        await model.refreshTask?.value
+        let relaxed = sleeps.last ?? 0
+        // a second send with a pending placeholder re-arms the fast cadence
+        await stub.configureSend(state: "waiting_for_live_agent")
+        await stub.configurePolling(error: .httpStatus(404), messages: [prodMessage("user-turn", .user, state: "waiting_for_live_agent")])
+        model.draft = "second"
+        await model.sendDraft()
+        await prodSettle()
+        var after: [Double] = []
+        model.pollingSleep = { delay in clock.seconds += delay; after.append(delay); if after.count > 12 { throw CancellationError() } }
+        model.beginRefreshLoop()
+        await model.refreshTask?.value
+        print("PROBE prod re-arm: idle sleeps ended at \(relaxed) s; after the second send the next sleeps are \(after.prefix(6))")
+        XCTAssertGreaterThan(relaxed, 4)
+        XCTAssertEqual(after.first, 4)
+        model.setConversationsPollingActive(false)
+    }
+}
+
+extension OrcaMacModelTests {
+    /// Turn 1 got a timeout fallback; turn 2 is pending; turn 1's REAL reply then supersedes the fallback (a designed path, chat.py
+    /// _is_supersedable_fallback_reply). That message is terminal but belongs to turn 1.
+    func testProdAnEarlierTurnsSupersedingReplyMustNotEndTheCurrentWait() async throws {
+        let server: (Double) -> [OrcaRuntimeConversationMessage] = { t in
+            var old1: [OrcaRuntimeConversationMessage] = [prodMessage("user-0", .user, state: t >= 10 ? "response_received" : "fallback_presented"), prodMessage("fallback-0", .system, state: "fallback_presented", at: -50)]
+            if t >= 10 { old1.append(prodMessage("real-0", .agent, state: "response_received", trace: "earlier-trace", at: 10)) }
+            var st = "waiting_for_live_agent"
+            var extra: [OrcaRuntimeConversationMessage] = []
+            if t >= 40.1 { st = "response_received"; extra.append(prodMessage("reply-2", .agent, state: "response_received", at: 40.1)) }
+            return old1 + [prodMessage("user-turn", .user, state: st)] + extra
+        }
+        let preload = [prodMessage("user-0", .user, state: "fallback_presented"), prodMessage("fallback-0", .system, state: "fallback_presented", at: -50)]
+        for reconcile404 in [true, false] {
+            let r = try await prodRun(content: "Coral is on it.", state: "waiting_for_live_agent", reconcile404: reconcile404, until: 150, watch: "reply-2", preload: preload, server: server)
+            let at = try XCTUnwrap(r.visibleAt)
+            print("PROBE prod earlier turn's superseding reply at 10 s (reconcile \(reconcile404 ? "404" : "healthy")), current reply posted 40.1 s: visible at \(at), late by \(at - 40.1)")
+            XCTAssertLessThanOrEqual(at - 40.1, 4, "another turn's superseding reply must not end this turn's wait (reconcile \(reconcile404 ? "404" : "healthy"))")
+        }
+    }
+}
+
+// ── Coral's cadence decisions (CAPTAIN-15 effective, other Work 30 s, only Conversations pauses) ──────────────────────
+extension OrcaMacModelTests {
+    func testProdEffectiveRefreshDelays() async throws {
+        let model = makeModel()
+        model.selectedSection = .work
+        for mode in ConsoleWorkMode.allCases {
+            model.workMode = mode
+            let delay = model.automaticRefreshDelaySeconds()
+            print("PROBE prod effective delay, Work mode \(mode): \(delay) s")
+            XCTAssertEqual(delay, mode == .captain ? 15 : 30, "Work/\(mode)")
+        }
+        model.selectSection(.waitingOnCaptain, refresh: false)
+        XCTAssertEqual(model.selectedSection, .work)
+        XCTAssertEqual(model.workMode, .captain)
+        print("PROBE prod effective delay after selecting Waiting on Captain: \(model.automaticRefreshDelaySeconds()) s")
+        XCTAssertEqual(model.automaticRefreshDelaySeconds(), 15)
+        model.setConversationsPollingActive(false)
+        XCTAssertEqual(model.automaticRefreshDelaySeconds(), 15, "an inactive window pauses Conversations only, never the Captain surface")
+        model.selectSection(.conversations, refresh: false)
+        print("PROBE prod effective delay, Conversations with the window inactive: \(model.automaticRefreshDelaySeconds()) s")
+        XCTAssertEqual(model.automaticRefreshDelaySeconds(), 15)
+        model.setConversationsPollingActive(true)
+        XCTAssertEqual(model.automaticRefreshDelaySeconds(), 4)
+        model.setConversationsPollingActive(false)
+    }
+}
+
+extension OrcaMacModelTests {
+    func testEarlierSupersedingReplyDuringSendKeepsCurrentWait() async throws {
+        let stub = ProdStub(replyContent: "fallback", responseState: "fallback_presented", userMessageID: "old-user")
+        let clock = PollingTestClock()
+        let model = prodModel(stub, clock: clock)
+        await stub.configurePolling(error: .httpStatus(404))
+        model.draft = "first"
+        await model.sendDraft()
+        await prodSettle()
+        let oldRequest = await stub.lastRequest
+        let oldTrace = try XCTUnwrap(oldRequest?.traceID)
+        await stub.setUserID("new-user")
+        await stub.configureSend(state: "waiting_for_live_agent")
+        await stub.configureHoldSend(true)
+        model.draft = "second"
+        let sending = Task { await model.sendDraft() }
+        for _ in 0..<400 { if await stub.sendInFlight() { break }; await Task.yield() }
+        let held = await stub.sendInFlight()
+        XCTAssertTrue(held)
+        let newRequest = await stub.lastRequest
+        let newTrace = try XCTUnwrap(newRequest?.traceID)
+        clock.seconds = 4
+        await stub.configurePolling(error: .httpStatus(404), messages: [
+            prodMessage("old-user", .user, state: "response_received", trace: oldTrace),
+            prodMessage("old-live-reply", .agent, state: "response_received", trace: oldTrace, at: 4),
+            prodMessage("new-user", .user, state: "waiting_for_live_agent", trace: newTrace)
+        ])
+        await model.refreshSelectedConversation(silent: true)
+        let waiting = model.pollingPolicies["coral"]!.awaitingReply
+        await stub.releaseSend()
+        await sending.value
+        XCTAssertTrue(waiting, "an earlier trace cannot end the current wait while send is in flight")
+        model.setConversationsPollingActive(false)
+    }
 }

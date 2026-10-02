@@ -7,6 +7,7 @@ public struct OrcaConsolePollingPolicy {
     /// Message responsiveness survives reconcile errors, but is bounded from the send.
     public private(set) var awaitingReply = false
     public private(set) var awaitedTurnID: String?
+    public private(set) var awaitedTraceID: String?
     private var sentAt: Date?
     private let replyGraceSeconds: TimeInterval
     private var lastMemoryAt: Date?
@@ -26,10 +27,11 @@ public struct OrcaConsolePollingPolicy {
         memoryDirty = true
     }
 
-    public mutating func sent(now: Date = Date()) {
+    public mutating func sent(now: Date = Date(), traceID: String? = nil) {
         selected()
         awaitingReply = true
         awaitedTurnID = nil
+        awaitedTraceID = traceID
         sentAt = now
         failureDelay = 30
         retryAt = nil
@@ -60,13 +62,16 @@ public struct OrcaConsolePollingPolicy {
     }
 
     /// Inspect server truth before the transcript projection drops response metadata.
-    public static func hasPolledReply(awaitedTurnID: String?, messages: [OrcaRuntimeConversationMessage], oldIDs: Set<String>) -> Bool {
+    /// System notices inherit the user trace (backend app/api/chat.py timeout/notice paths,
+    /// OpenClaw-Config 3d20202b). Agent replies with other traces still update the awaited user.
+    public static func hasPolledReply(awaitedTurnID: String?, awaitedTraceID: String? = nil, messages: [OrcaRuntimeConversationMessage], oldIDs: Set<String>) -> Bool {
         messages.contains { message in
             if message.id == awaitedTurnID,
                isReplyInHand(responseState: message.responseState, terminalKind: nil) { return true }
             let nonUser = message.messageType.lowercased() == "system"
                 || message.senderAgentID != nil || message.terminalKind != nil
             return !oldIDs.contains(message.id) && nonUser
+                && awaitedTraceID != nil && message.traceID == awaitedTraceID
                 && isReplyInHand(responseState: message.responseState, terminalKind: message.terminalKind)
         }
     }
