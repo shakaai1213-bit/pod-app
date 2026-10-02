@@ -29,6 +29,7 @@ public struct OrcaConsolePollingPolicy {
     public mutating func sent(now: Date = Date()) {
         selected()
         awaitingReply = true
+        awaitedTurnID = nil
         sentAt = now
         failureDelay = 30
         retryAt = nil

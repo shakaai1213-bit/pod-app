@@ -3929,3 +3929,287 @@ extension OrcaMacModelTests {
         model.setConversationsPollingActive(false)
     }
 }
+
+private actor ProdStub: OrcaRuntimeServing {
+    func configureSend(state: String?) { responseState = state }
+    func setUserID(_ id: String) { userMessageID = id }
+    var holdSend = false
+    private var sendWaiters: [CheckedContinuation<Void, Never>] = []
+    func configureHoldSend(_ v: Bool) { holdSend = v }
+    func sendInFlight() -> Bool { !sendWaiters.isEmpty }
+    func releaseSend() { holdSend = false; let w = sendWaiters; sendWaiters.removeAll(); w.forEach { $0.resume() } }
+    var lastRequest: OrcaRuntimeDirectTurnRequest?
+    var messageCount = 0
+    var memoryCount = 0
+    var reconcileCount = 0
+    var update: OrcaRuntimeReconciliationUpdate?
+    var reconciliationError: OrcaRuntimeClientError?
+    var remoteMessages: [OrcaRuntimeConversationMessage] = []
+    func configurePolling(update: OrcaRuntimeReconciliationUpdate? = nil, error: OrcaRuntimeClientError? = nil, messages: [OrcaRuntimeConversationMessage] = []) {
+        self.update = update
+        reconciliationError = error
+        remoteMessages = messages
+    }
+    var holdOpen = false
+    var terminationCount = 0
+    func configureHoldOpen(_ value: Bool) { holdOpen = value }
+    func noteTermination() { terminationCount += 1 }
+    func terminations() -> Int { terminationCount }
+    func counts() -> [Int] { [messageCount, memoryCount, reconcileCount] }
+
+    let replyContent: String
+    let replyLane: String
+    var responseState: String?
+    let terminalKind: OrcaRuntimeTerminalKind?
+    var userMessageID: String
+    func configureUserMessageID(_ id: String) { userMessageID = id }
+    private var workControlRequestContinuations: [CheckedContinuation<Void, Never>] = []
+    private var workControlRequested = false
+    private let workControlBundle: Components.Schemas.ChatRuntimeWorkControlBundleRead?
+    private let workControlGate: TestAsyncGate?
+
+    init(
+        replyContent: String = "Sent to coral's live Nerve inbox and recorded in ORCA.",
+        responseState: String? = "waiting_for_live_agent",
+        terminalKind: OrcaRuntimeTerminalKind? = nil,
+        replyLane: String = "agent_inbox",
+        userMessageID: String = "msg-user-1",
+        workControlBundle: Components.Schemas.ChatRuntimeWorkControlBundleRead? = nil,
+        workControlGate: TestAsyncGate? = nil
+    ) {
+        self.responseState = responseState
+        self.terminalKind = terminalKind
+        self.replyContent = replyContent
+        self.replyLane = replyLane
+        self.userMessageID = userMessageID
+        self.workControlBundle = workControlBundle
+        self.workControlGate = workControlGate
+    }
+
+    func waitUntilWorkControlRequested() async {
+        if workControlRequested { return }
+        await withCheckedContinuation { continuation in
+            workControlRequestContinuations.append(continuation)
+        }
+    }
+
+    func verifyCompatibility() async throws -> OrcaRuntimeCompatibility {
+        try OrcaRuntimeCompatibility(contractVersion: "v1", schemaSHA256: String(repeating: "a", count: 64))
+    }
+    func agentPacks() async throws -> Components.Schemas.ChatRuntimeAgentPackBundleRead {
+        throw OrcaRuntimeClientError.invalidResponse("unused")
+    }
+    func capabilities(agentKey: String) async throws -> Components.Schemas.ChatRuntimeCapabilityBundleRead {
+        throw OrcaRuntimeClientError.invalidResponse("unused")
+    }
+    func workControl(agentKey: String) async throws -> Components.Schemas.ChatRuntimeWorkControlBundleRead {
+        workControlRequested = true
+        let continuations = workControlRequestContinuations
+        workControlRequestContinuations.removeAll()
+        continuations.forEach { $0.resume() }
+        if let workControlGate { await workControlGate.wait() }
+        if let workControlBundle { return workControlBundle }
+        throw OrcaRuntimeClientError.invalidResponse("unused")
+    }
+    func providerControl() async throws -> Components.Schemas.ChatRuntimeProviderControlBundleRead {
+        throw OrcaRuntimeClientError.invalidResponse("unused")
+    }
+    func runtimeTurn(turnID: String) async throws -> Components.Schemas.ChatRuntimeTurnRead {
+        throw OrcaRuntimeClientError.httpStatus(404)
+    }
+    func runtimeUpdates(
+        turnID: String,
+        persistedCursor: String?,
+        persistCursor: @escaping @Sendable (String) -> Void
+    ) -> AsyncThrowingStream<OrcaRuntimeReconciliationUpdate, Error> {
+        reconcileCount += 1
+        let hold = holdOpen
+        return AsyncThrowingStream { continuation in
+            if let update { continuation.yield(update) }
+            if hold {
+                continuation.onTermination = { [weak self] _ in Task { await self?.noteTermination() } }
+                return
+            }
+            if let reconciliationError { continuation.finish(throwing: reconciliationError) }
+            else { continuation.finish() }
+        }
+    }
+    func conversationMemory(conversationID: String) async throws -> Components.Schemas.ConversationMemoryRead {
+        memoryCount += 1
+        throw OrcaRuntimeClientError.invalidResponse("unused")
+    }
+    func proposeConversationMemory(
+        conversationID: String,
+        proposal: Components.Schemas.ConversationMemoryProposalCreate
+    ) async throws -> Components.Schemas.ConversationMemoryProposalRead {
+        throw OrcaRuntimeClientError.invalidResponse("unused")
+    }
+    func applyConversationMemoryProposal(
+        conversationID: String,
+        proposalID: String,
+        reason: String?
+    ) async throws -> Components.Schemas.ConversationMemoryRead {
+        throw OrcaRuntimeClientError.invalidResponse("unused")
+    }
+    func send(_ request: OrcaRuntimeDirectTurnRequest) async throws -> OrcaRuntimeDirectTurnResponse {
+        lastRequest = request
+        if holdSend { await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in sendWaiters.append(c) } }
+        return OrcaRuntimeDirectTurnResponse(
+            conversationID: request.conversationID ?? "resolved-channel",
+            userMessageID: userMessageID,
+            assistantMessageID: "msg-assistant-1",
+            content: replyContent,
+            agentSlug: request.agentSlug,
+            traceID: request.traceID,
+            source: "console",
+            lane: replyLane,
+            terminalKind: terminalKind ?? OrcaRuntimeTerminalKind(lane: replyLane),
+            deliveryMode: nil,
+            provenance: nil,
+            responseState: responseState,
+            provider: nil,
+            model: nil,
+            tier: nil,
+            tokenCount: nil,
+            triageID: nil,
+            computeRunID: nil
+        )
+    }
+    var beforeMessages: (@Sendable () async -> Void)?
+    func configureBeforeMessages(_ action: @escaping @Sendable () async -> Void) { beforeMessages = action }
+
+    func messages(conversationID: String, offset: Int, limit: Int) async throws -> [OrcaRuntimeConversationMessage] {
+        messageCount += 1
+        await beforeMessages?()
+        return remoteMessages
+    }
+}
+
+// Rooster production-shaped probes for PR 54 (RO-999, FIX4 + FIX5). Appended to MacTests/OrcaMacModelTests.swift by
+// scripts/pr54_run_probes.py, after a ProdStub generated from the head's own StubRuntimeService (same file, so the file-private
+// helpers are visible). The shapes come from chat.py at OpenClaw-Config main 3d20202b, not from the PR's fake:
+//  - send_direct_agent_chat, async agent_inbox: the send response ALWAYS carries a system placeholder, response_state
+//    waiting_for_live_agent, lane direct_agent_inbox, no terminal kind
+//  - append_direct_agent_claim: a system message with response_state claimed_by_agent or working while the turn is pending
+//  - append_direct_agent_response: ONE terminal reply per user message, which sets the user message to response_received;
+//    only a timeout fallback (fallback_presented) can be superseded by a later real reply
+// Terminal response states: response_received, fallback_presented, ticket_required, failed. Pending: waiting_for_live_agent,
+// claimed_by_agent, working, compute_running, delivery_nats_failed (alias delivery_degraded), agent_unresponsive.
+
+private enum ProdKind { case user, system, agent }
+
+private func prodMessage(_ id: String, _ kind: ProdKind, state: String? = nil, terminal: OrcaRuntimeTerminalKind? = nil, at seconds: Double = 0) -> OrcaRuntimeConversationMessage {
+    .init(id: id, conversationID: "poll-channel", content: id, messageType: kind == .user ? "user" : (kind == .agent ? "agent" : "system"), senderAgentID: kind == .user ? nil : "coral", traceID: nil, source: nil, lane: nil, terminalKind: terminal, responseState: state, deliveryState: nil, createdAt: Date(timeIntervalSince1970: seconds), updatedAt: Date(timeIntervalSince1970: seconds))
+}
+
+extension OrcaMacModelTests {
+    private func prodModel(_ stub: ProdStub, clock: PollingTestClock) -> OrcaMacModel {
+        let model = makeModel()
+        model.injectServicesForTesting(runtime: stub, console: nil)
+        model.connectionState = .ready
+        model.selectedAgentID = "coral"
+        model.selectedSection = .conversations
+        model.conversations["coral"] = ConversationState(conversationID: "poll-channel", messages: [TranscriptMessage(id: "user-turn", role: .user, content: "hello", createdAt: clock.now, deliveryState: .persisted, retryIdentity: nil)])
+        model.pollingNow = { clock.now }
+        return model
+    }
+
+    private func prodSettle() async { for _ in 0..<30 { await Task.yield() } }
+
+    private func prodConfigure(_ stub: ProdStub, reconcile404: Bool, terminalTurn: Bool = false, _ messages: [OrcaRuntimeConversationMessage]) async throws {
+        if reconcile404 { await stub.configurePolling(error: .httpStatus(404), messages: messages) }
+        else { await stub.configurePolling(update: try pollingTurn(terminal: terminalTurn), messages: messages) }
+    }
+
+    /// Send once with the given send-response shape, then run the refresh loop on a virtual clock until `until` seconds.
+    /// `server(t)` returns what the messages poll returns at virtual time t. Returns when `watch` first appeared in the transcript
+    /// (the time of the poll that found it) and how many message polls the loop made after the send.
+    private func prodRun(content: String, state: String?, lane: String = "direct_agent_inbox", reconcile404: Bool, until: Double = 300, watch: String? = nil, preload: [OrcaRuntimeConversationMessage] = [], server: @escaping (Double) -> [OrcaRuntimeConversationMessage]) async throws -> (visibleAt: Double?, polls: Int) {
+        let stub = ProdStub(replyContent: content, replyLane: lane, userMessageID: "user-turn")
+        await stub.configureSend(state: state)
+        let clock = PollingTestClock()
+        let model = prodModel(stub, clock: clock)
+        if !preload.isEmpty {
+            // messages of EARLIER turns are already in the transcript when this send happens: merge them through the model first
+            await stub.configurePolling(error: .httpStatus(404), messages: preload)
+            await model.refreshSelectedConversation(silent: true)
+            await prodSettle()
+        }
+        if reconcile404 { await stub.configurePolling(error: .httpStatus(404), messages: server(0)) }
+        else { await stub.configurePolling(update: try pollingTurn(terminal: false), messages: server(0)) }
+        model.draft = "waiting for a reply"
+        await model.sendDraft()
+        await prodSettle()
+        let before = await stub.counts()[0]
+        var visibleAt: Double?
+        model.pollingSleep = { delay in
+            clock.seconds += delay
+            if clock.seconds > until { throw CancellationError() }
+            if reconcile404 { await stub.configurePolling(error: .httpStatus(404), messages: server(clock.seconds)) }
+            else { await stub.configurePolling(update: try pollingTurn(terminal: false), messages: server(clock.seconds)) }
+            if let watch, visibleAt == nil, model.conversations["coral"]?.messages.contains(where: { $0.id == watch }) == true { visibleAt = clock.seconds - delay }
+        }
+        model.beginRefreshLoop()
+        await model.refreshTask?.value
+        let after = await stub.counts()[0]
+        model.setConversationsPollingActive(false)
+        return (visibleAt, after - before)
+    }
+
+}
+
+extension OrcaMacModelTests {
+    func testProdStaleAwaitedIDMustNotClearTheNextSendsWait() async throws {
+        for reconcile404 in [true, false] {
+        for turn1State in ["response_received", "fallback_presented"] {
+            let stub = ProdStub(replyContent: "reply one", replyLane: "direct_agent_inbox", userMessageID: "user-1")
+            await stub.configureSend(state: turn1State)
+            let clock = PollingTestClock()
+            let model = prodModel(stub, clock: clock)
+            let turn1: [OrcaRuntimeConversationMessage] = [prodMessage("user-1", .user, state: turn1State), prodMessage("reply-1", .agent, state: turn1State, at: 1)]
+            try await prodConfigure(stub, reconcile404: reconcile404, terminalTurn: true, turn1)
+            model.draft = "first"
+            await model.sendDraft()
+            await prodSettle()
+            await stub.setUserID("user-2")
+            await stub.configureSend(state: "waiting_for_live_agent")
+            await stub.configureHoldSend(true)
+            model.draft = "second"
+            let send2 = Task { await model.sendDraft() }
+            for _ in 0..<400 { if await stub.sendInFlight() { break }; try await Task.sleep(for: .milliseconds(5)) }
+            let inFlight = await stub.sendInFlight()
+            XCTAssertTrue(inFlight, "the second send must be held in flight")
+            clock.seconds += 4
+            try await prodConfigure(stub, reconcile404: reconcile404, turn1 + [prodMessage("user-2", .user, state: "waiting_for_live_agent", at: 2)])
+            await model.refreshSelectedConversation(silent: true)       // the loop tick that lands inside the window
+            clock.seconds += 2
+            await stub.releaseSend()
+            await send2.value
+            await prodSettle()
+            let t0 = 0.0
+            let server: (Double) -> [OrcaRuntimeConversationMessage] = { t in
+                var st = "waiting_for_live_agent"
+                var extra: [OrcaRuntimeConversationMessage] = []
+                if t >= t0 + 2 { st = "claimed_by_agent"; extra.append(prodMessage("claim-2", .system, state: "claimed_by_agent", at: 2)) }
+                if t >= t0 + 40.1 { st = "response_received"; extra.append(prodMessage("reply-2", .agent, state: "response_received", at: 40.1)) }
+                return turn1 + [prodMessage("user-2", .user, state: st, at: 2)] + extra
+            }
+            try await prodConfigure(stub, reconcile404: reconcile404, server(t0))
+            var visibleAt: Double?
+            model.pollingSleep = { delay in
+                clock.seconds += delay
+                if clock.seconds > t0 + 150 { throw CancellationError() }
+                try await self.prodConfigure(stub, reconcile404: reconcile404, server(clock.seconds))
+                if visibleAt == nil, model.conversations["coral"]?.messages.contains(where: { $0.id == "reply-2" }) == true { visibleAt = clock.seconds - delay }
+            }
+            model.beginRefreshLoop()
+            await model.refreshTask?.value
+            model.setConversationsPollingActive(false)
+            let at = try XCTUnwrap(visibleAt, "turn 2's reply never became visible")
+            print("PROBE prod stale awaited id (turn 1 \(turn1State), reconcile \(reconcile404 ? "404" : "healthy")): turn 2 reply posted at +40.1 s, visible at +\(at - t0), late by \(at - t0 - 40.1)")
+            XCTAssertLessThanOrEqual(at - t0 - 40.1, 4, "a poll tick during the second send must not end the second send's wait (turn 1 \(turn1State), reconcile \(reconcile404 ? "404" : "healthy"))")
+        }
+        }
+    }
+
+}
