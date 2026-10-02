@@ -3502,7 +3502,7 @@ extension OrcaMacModelTests {
         XCTAssertEqual(model.automaticRefreshDelaySeconds(), 15)
         model.selectedSection = .work
         model.workMode = .captain
-        XCTAssertEqual(model.automaticRefreshDelaySeconds(), 15)
+        XCTAssertEqual(model.automaticRefreshDelaySeconds(), 30)
         model.selectedSection = .overview
         XCTAssertEqual(model.automaticRefreshDelaySeconds(), 30)
         model.selectedSection = .conversations
@@ -3554,7 +3554,7 @@ extension OrcaMacModelTests {
         XCTAssertLessThanOrEqual(results[1][2], 40)
     }
 
-    func testCaptainRequestsContinueEveryFifteenSecondsWhileInactive() async throws {
+    func testWorkCaptainRequestsContinueEveryThirtySecondsWhileInactive() async throws {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [TestURLProtocol.self]
         let session = URLSession(configuration: configuration)
@@ -3568,6 +3568,36 @@ extension OrcaMacModelTests {
         let model = makeModel()
         model.injectServicesForTesting(runtime: nil, console: console)
         model.selectedSection = .work
+        model.workMode = .captain
+        model.setConversationsPollingActive(false)
+        let clock = PollingTestClock()
+        model.pollingNow = { clock.now }
+        var sleeps: [TimeInterval] = []
+        model.pollingSleep = { delay in
+            clock.seconds += delay
+            if clock.seconds > 60 { throw CancellationError() }
+            sleeps.append(delay)
+        }
+        model.beginRefreshLoop()
+        await model.refreshTask?.value
+        XCTAssertEqual(sleeps, [30, 30])
+        XCTAssertGreaterThanOrEqual(counter.value, 2)
+    }
+
+    func testCaptainRequestsContinueEveryFifteenSecondsWhileInactive() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let counter = PollingRequestCounter()
+        TestURLProtocol.response = { _ in
+            counter.increment()
+            return (200, Data(#"{"items":[],"proposals":[],"pending":[]}"#.utf8))
+        }
+        defer { TestURLProtocol.response = nil }
+        let console = OrcaConsoleService(serverURL: URL(string: "http://127.0.0.1:8000")!, tokenStore: TestRuntimeTokenStore(token: "offline-token"), deviceID: "test-device-id-0123456789", session: session)
+        let model = makeModel()
+        model.injectServicesForTesting(runtime: nil, console: console)
+        model.selectedSection = .waitingOnCaptain
         model.workMode = .captain
         model.setConversationsPollingActive(false)
         let clock = PollingTestClock()

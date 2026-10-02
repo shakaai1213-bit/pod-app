@@ -1486,7 +1486,7 @@ func reconciliationDriverClampsHintsAtSleep(_ hint: Int?) async throws {
     let terminal = reconciliationEnvelope(turn: complete, cursor: reconciliationCursor(for: complete, digestCharacter: "5"), requestedCursor: cursor, state: .advanced, eventsAfterCursor: Array((complete.events ?? []).suffix(2)))
     let fixture = ReconciliationDriverFixture(initial: initial, terminal: terminal)
     let recorder = PollingSleepRecorder()
-    let driver = OrcaRuntimeReconciliationDriver(turnID: active.turnId,
+    let driver = OrcaRuntimeReconciliationDriver(turnID: active.turnId, policy: .console,
         poll: { await fixture.poll(turnID: $0, afterCursor: $1) },
         stream: { await fixture.disconnectedStream(turnID: $0, afterCursor: $1) },
         sleep: { await recorder.record($0) })
@@ -1586,7 +1586,7 @@ func stuckReconciliationWithLegacyOrMissingHintSleepsThirtySeconds(_ hint: Int?)
     let terminal = reconciliationEnvelope(turn: complete, cursor: reconciliationCursor(for: complete, digestCharacter: "5"), requestedCursor: cursor, state: .advanced, eventsAfterCursor: Array((complete.events ?? []).suffix(2)))
     let fixture = ReconciliationDriverFixture(initial: initial, terminal: terminal)
     let recorder = PollingSleepRecorder()
-    let driver = OrcaRuntimeReconciliationDriver(turnID: active.turnId,
+    let driver = OrcaRuntimeReconciliationDriver(turnID: active.turnId, policy: .console,
         poll: { await fixture.poll(turnID: $0, afterCursor: $1) },
         stream: { await fixture.disconnectedStream(turnID: $0, afterCursor: $1) },
         sleep: { await recorder.record($0) })
@@ -1623,7 +1623,7 @@ func stuckDriverTwentyMinuteRESTLoadBound(_ hint: Int) async throws {
     var envelope = reconciliationEnvelope(turn: turn, cursor: reconciliationCursor(for: turn, digestCharacter: "4"), requestedCursor: nil, state: .initial, eventsAfterCursor: turn.events ?? [])
     envelope.pollAfterSeconds = hint
     let fixture = StuckDriverLoadFixture(initial: envelope)
-    let driver = OrcaRuntimeReconciliationDriver(turnID: turn.turnId,
+    let driver = OrcaRuntimeReconciliationDriver(turnID: turn.turnId, policy: .console,
         poll: { _, cursor in await fixture.poll(cursor: cursor) },
         stream: { _, _ in AsyncThrowingStream { $0.finish() } },
         sleep: { try await fixture.sleep($0) })
@@ -1646,4 +1646,71 @@ func stuckDriverTwentyMinuteRESTLoadBound(_ hint: Int) async throws {
     policy.sent()
     let reset = policy.shouldReconcile(turn: "turn", now: now)
     #expect(reset)
+}
+
+@Test(arguments: [nil, 0, -5, 61, 86400] as [Int?])
+func activeHintValidationIsScopedToConsole(_ hint: Int?) throws {
+    let turn = try activeTurn()
+    var envelope = reconciliationEnvelope(turn: turn, cursor: reconciliationCursor(for: turn, digestCharacter: "4"), requestedCursor: nil, state: .initial, eventsAfterCursor: turn.events ?? [])
+    envelope.pollAfterSeconds = hint
+    var legacy = OrcaRuntimeTurnReconciler(turnID: turn.turnId)
+    #expect(throws: OrcaRuntimeTimelineError.self) { try legacy.apply(envelope) }
+    var console = OrcaRuntimeTurnReconciler(turnID: turn.turnId, policy: .console)
+    _ = try console.apply(envelope)
+}
+
+@Test func legacyPolicyPreservesHintsAndErrorBackoff() {
+    let policy = OrcaRuntimeReconciliationPolicy.legacy
+    #expect(policy.pollDelay(1, previous: 2, stuck: true) == 1)
+    #expect(policy.pollDelay(nil, previous: 60, stuck: true) == 60)
+    #expect(policy.failureDelay(30) == 8)
+    #expect(policy.failureDelay(1) == 2)
+    #expect(policy.failureDelay(2) == 4)
+    #expect(OrcaRuntimeReconciliationPolicy.console.failureDelay(30) == 30)
+}
+
+private actor FailingPollFixture {
+    let initial: Components.Schemas.ChatRuntimeTurnReconciliationRead
+    var first = true
+    init(initial: Components.Schemas.ChatRuntimeTurnReconciliationRead) { self.initial = initial }
+    func poll() throws -> Components.Schemas.ChatRuntimeTurnReconciliationRead {
+        if first { first = false; return initial }
+        throw OrcaRuntimeClientError.httpStatus(503)
+    }
+}
+
+@Test func defaultDriverRetainsLegacyFailureBackoff() async throws {
+    let turn = try activeTurn()
+    var initial = reconciliationEnvelope(turn: turn, cursor: reconciliationCursor(for: turn, digestCharacter: "4"), requestedCursor: nil, state: .initial, eventsAfterCursor: turn.events ?? [])
+    initial.pollAfterSeconds = 30
+    let fixture = FailingPollFixture(initial: initial)
+    let recorder = PollingSleepRecorder()
+    let driver = OrcaRuntimeReconciliationDriver(turnID: turn.turnId,
+        poll: { _, _ in try await fixture.poll() },
+        stream: { _, _ in AsyncThrowingStream { $0.finish() } },
+        sleep: { await recorder.record($0) })
+    do {
+        for try await _ in driver.updates() {}
+        Issue.record("three failed polls must end the driver")
+    } catch {
+        #expect(await recorder.values == [30, 8, 8])
+    }
+}
+
+@Test func consoleDriverFailuresNeverShortenServerDeadline() async throws {
+    let turn = try activeTurn()
+    var initial = reconciliationEnvelope(turn: turn, cursor: reconciliationCursor(for: turn, digestCharacter: "4"), requestedCursor: nil, state: .initial, eventsAfterCursor: turn.events ?? [])
+    initial.pollAfterSeconds = 120
+    let fixture = FailingPollFixture(initial: initial)
+    let recorder = PollingSleepRecorder()
+    let driver = OrcaRuntimeReconciliationDriver(turnID: turn.turnId, policy: .console,
+        poll: { _, _ in try await fixture.poll() },
+        stream: { _, _ in AsyncThrowingStream { $0.finish() } },
+        sleep: { await recorder.record($0) })
+    do {
+        for try await _ in driver.updates() {}
+        Issue.record("three failed polls must end the driver")
+    } catch {
+        #expect(await recorder.values == [120, 120, 120])
+    }
 }

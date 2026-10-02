@@ -1329,7 +1329,7 @@ final class OrcaMacModel {
         if selectedSection == .conversations {
             return conversationsPollingActive ? (pollingPolicies[activeConversationKey]?.messageInterval ?? 4) : 15
         }
-        return selectedSection == .work && workMode == .captain ? 15 : Self.automaticRefreshIntervalSeconds(for: selectedSection)
+        return Self.automaticRefreshIntervalSeconds(for: selectedSection)
     }
 
     func beginRefreshLoop() {

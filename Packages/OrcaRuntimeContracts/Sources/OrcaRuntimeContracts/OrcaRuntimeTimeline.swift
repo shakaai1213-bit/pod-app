@@ -220,9 +220,11 @@ public struct OrcaRuntimeTurnReconciler: Sendable {
     public private(set) var reconciliationCursor: String?
     public private(set) var timeline = OrcaRuntimeTimelineReducer()
 
+    private let policy: OrcaRuntimeReconciliationPolicy
     private var terminalWasDelivered = false
 
-    public init(turnID: String, persistedCursor: String? = nil) {
+    public init(turnID: String, persistedCursor: String? = nil, policy: OrcaRuntimeReconciliationPolicy = .legacy) {
+        self.policy = policy
         self.turnID = turnID
         reconciliationCursor = persistedCursor
     }
@@ -359,8 +361,13 @@ public struct OrcaRuntimeTurnReconciler: Sendable {
         if isTerminal {
             try Self.require(envelope.pollAfterSeconds == nil, "terminal turn requested another poll")
         }
-        // Poll hints are advisory. The driver defaults missing hints and clamps
-        // untrusted values before sleeping; they do not invalidate turn truth.
+        if !isTerminal, case .legacy = policy {
+            try Self.require(
+                envelope.pollAfterSeconds.map { (1...60).contains($0) } == true,
+                "active turn omitted its bounded poll interval"
+            )
+        }
+        // Console hints are advisory and bounded by the driver before sleeping.
 
         switch envelope.cursorState {
         case .initial:
