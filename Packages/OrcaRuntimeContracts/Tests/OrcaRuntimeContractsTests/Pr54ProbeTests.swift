@@ -6,7 +6,7 @@ import Testing
 
 /// The owner condition says a reply that arrives 40.1 s after sending is shown within 4 s. The PR's own test proves it for a healthy
 /// outstanding turn. Here the reconcile call fails once right after the send (a 404 or a network error).
-@Test func probeReplyAtFortySecondsAfterReconcileFailure() {
+@Test func testReplyAtFortySecondsAfterReconcileFailure() {
     var policy = OrcaConsolePollingPolicy()
     policy.sent()
     policy.failed(now: Date(timeIntervalSince1970: 0))
@@ -24,7 +24,7 @@ import Testing
 
 /// The same scenario when the message poll itself keeps succeeding and only the reconcile call failed, but the failure is NOT allowed to
 /// demote message polling (the behaviour I would expect): expressed as the property "a failed reconcile does not change messageInterval".
-@Test func probeReconcileFailureDoesNotChangeMessageInterval() {
+@Test func testReconcileFailureDoesNotChangeMessageInterval() {
     var policy = OrcaConsolePollingPolicy()
     policy.sent()
     let before = policy.messageInterval
@@ -35,7 +35,7 @@ import Testing
 }
 
 /// Terminal-turn list bound (64): the PR does not test it.
-@Test func probeTerminalTurnListIsBounded() {
+@Test func testTerminalTurnListIsBounded() {
     var policy = OrcaConsolePollingPolicy()
     let now = Date(timeIntervalSince1970: 0)
     for i in 0..<65 { policy.updated(turn: "t\(i)", terminal: true, stuck: false, hint: nil, now: now) }

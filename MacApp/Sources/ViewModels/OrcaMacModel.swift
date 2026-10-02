@@ -1277,6 +1277,9 @@ final class OrcaMacModel {
                     )
                 )
             }
+            if canonical.contains(where: { $0.role != .user }) {
+                pollingPolicies[conversationKey, default: .init()].replyInHand()
+            }
             resolved.resolvePending(id: pendingID, with: canonical)
             resolved.latestReceipt = RuntimeReceipt(
                 turnID: response.userMessageID,
@@ -1329,7 +1332,7 @@ final class OrcaMacModel {
         if selectedSection == .conversations {
             return conversationsPollingActive ? (pollingPolicies[activeConversationKey]?.messageInterval ?? 4) : 15
         }
-        return Self.automaticRefreshIntervalSeconds(for: selectedSection)
+        return selectedSection == .work && workMode == .captain ? 15 : Self.automaticRefreshIntervalSeconds(for: selectedSection)
     }
 
     func beginRefreshLoop() {

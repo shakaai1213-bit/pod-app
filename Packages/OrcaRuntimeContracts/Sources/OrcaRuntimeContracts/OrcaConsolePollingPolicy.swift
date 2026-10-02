@@ -27,7 +27,6 @@ public struct OrcaConsolePollingPolicy {
 
     public mutating func sent(now: Date = Date()) {
         selected()
-        healthyTurnOutstanding = true
         awaitingReply = true
         sentAt = now
         failureDelay = 30
@@ -35,12 +34,16 @@ public struct OrcaConsolePollingPolicy {
         serverDelaySeconds = 2
     }
 
+    public mutating func replyInHand() {
+        awaitingReply = false
+    }
+
     public mutating func messagesMerged(changed: Bool, agentMessageMerged: Bool = false, now: Date = Date()) {
         if agentMessageMerged || sentAt.map({ now.timeIntervalSince($0) >= replyGraceSeconds }) == true {
             awaitingReply = false
         }
         if changed { memoryDirty = true }
-        messageInterval = changed || awaitingReply ? 4 : min(60, messageInterval * 2)
+        messageInterval = changed || awaitingReply || healthyTurnOutstanding ? 4 : min(60, messageInterval * 2)
     }
 
     public mutating func messagesFailed() {
