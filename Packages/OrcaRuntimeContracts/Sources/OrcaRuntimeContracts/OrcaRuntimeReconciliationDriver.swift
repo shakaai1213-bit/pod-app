@@ -62,7 +62,7 @@ public struct OrcaRuntimeReconciliationDriver: Sendable {
                         continuation.finish()
                         return
                     }
-                    pollAfterSeconds = initial.pollAfterSeconds ?? pollAfterSeconds
+                    pollAfterSeconds = OrcaConsolePollingPolicy.pollDelay(initial.pollAfterSeconds, stuck: initial.turn.recovery.isStuck)
 
                     while !Task.isCancelled {
                         do {
@@ -75,7 +75,7 @@ public struct OrcaRuntimeReconciliationDriver: Sendable {
                                 let update = try reconciler.apply(envelope)
                                 persistCursor(update.cursor)
                                 continuation.yield(update)
-                                pollAfterSeconds = update.pollAfterSeconds ?? pollAfterSeconds
+                                pollAfterSeconds = OrcaConsolePollingPolicy.pollDelay(update.pollAfterSeconds ?? pollAfterSeconds, stuck: update.turn.recovery.isStuck)
                                 if update.turn.terminalOutcome != nil {
                                     continuation.finish()
                                     return
@@ -102,7 +102,7 @@ public struct OrcaRuntimeReconciliationDriver: Sendable {
                             let update = try reconciler.apply(envelope)
                             persistCursor(update.cursor)
                             continuation.yield(update)
-                            pollAfterSeconds = update.pollAfterSeconds ?? pollAfterSeconds
+                            pollAfterSeconds = OrcaConsolePollingPolicy.pollDelay(update.pollAfterSeconds ?? pollAfterSeconds, stuck: update.turn.recovery.isStuck)
                             consecutivePollFailures = 0
                             if update.turn.terminalOutcome != nil {
                                 continuation.finish()
@@ -113,7 +113,7 @@ public struct OrcaRuntimeReconciliationDriver: Sendable {
                         } catch {
                             consecutivePollFailures += 1
                             guard consecutivePollFailures < 3 else { throw error }
-                            pollAfterSeconds = min(8, max(2, pollAfterSeconds * 2))
+                            pollAfterSeconds = min(120, max(pollAfterSeconds, min(8, pollAfterSeconds * 2)))
                         }
                     }
                     continuation.finish()

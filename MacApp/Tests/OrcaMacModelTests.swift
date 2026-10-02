@@ -1,7 +1,7 @@
 import CryptoKit
 import XCTest
 import OrcaAPI
-import OrcaRuntimeContracts
+@testable import OrcaRuntimeContracts
 @testable import ORCA
 
 private actor TestRuntimeTokenStore: RuntimeTokenStoring {
@@ -133,6 +133,12 @@ final class OrcaMacModelTests: XCTestCase {
     }
 
     func testAutomaticRefreshKeepsChatResponsiveWithoutHammeringWorkSurfaces() {
+        // Four seconds remains the active-chat baseline; idle conversations now adapt.
+        let model = makeModel()
+        model.selectedSection = .conversations
+        model.selectedAgentID = "coral"
+        model.pollingPolicies["coral", default: .init()].messagesMerged(changed: false)
+        XCTAssertEqual(model.automaticRefreshDelaySeconds(), 8)
         XCTAssertEqual(
             OrcaMacModel.automaticRefreshIntervalSeconds(for: .conversations),
             4
@@ -3171,8 +3177,22 @@ final class OrcaMacModelTests: XCTestCase {
 
 private actor StubRuntimeService: OrcaRuntimeServing {
     var lastRequest: OrcaRuntimeDirectTurnRequest?
+    var messageCount = 0
+    var memoryCount = 0
+    var reconcileCount = 0
+    var update: OrcaRuntimeReconciliationUpdate?
+    var reconciliationError: OrcaRuntimeClientError?
+    var remoteMessages: [OrcaRuntimeConversationMessage] = []
+    func configurePolling(update: OrcaRuntimeReconciliationUpdate? = nil, error: OrcaRuntimeClientError? = nil, messages: [OrcaRuntimeConversationMessage] = []) {
+        self.update = update
+        reconciliationError = error
+        remoteMessages = messages
+    }
+    func counts() -> [Int] { [messageCount, memoryCount, reconcileCount] }
+
     let replyContent: String
     let replyLane: String
+    let userMessageID: String
     private var workControlRequestContinuations: [CheckedContinuation<Void, Never>] = []
     private var workControlRequested = false
     private let workControlBundle: Components.Schemas.ChatRuntimeWorkControlBundleRead?
@@ -3181,11 +3201,13 @@ private actor StubRuntimeService: OrcaRuntimeServing {
     init(
         replyContent: String = "",
         replyLane: String = "agent_inbox",
+        userMessageID: String = "msg-user-1",
         workControlBundle: Components.Schemas.ChatRuntimeWorkControlBundleRead? = nil,
         workControlGate: TestAsyncGate? = nil
     ) {
         self.replyContent = replyContent
         self.replyLane = replyLane
+        self.userMessageID = userMessageID
         self.workControlBundle = workControlBundle
         self.workControlGate = workControlGate
     }
@@ -3226,11 +3248,15 @@ private actor StubRuntimeService: OrcaRuntimeServing {
         persistedCursor: String?,
         persistCursor: @escaping @Sendable (String) -> Void
     ) -> AsyncThrowingStream<OrcaRuntimeReconciliationUpdate, Error> {
-        AsyncThrowingStream { continuation in
-            continuation.finish()
+        reconcileCount += 1
+        return AsyncThrowingStream { continuation in
+            if let update { continuation.yield(update) }
+            if let reconciliationError { continuation.finish(throwing: reconciliationError) }
+            else { continuation.finish() }
         }
     }
     func conversationMemory(conversationID: String) async throws -> Components.Schemas.ConversationMemoryRead {
+        memoryCount += 1
         throw OrcaRuntimeClientError.invalidResponse("unused")
     }
     func proposeConversationMemory(
@@ -3250,7 +3276,7 @@ private actor StubRuntimeService: OrcaRuntimeServing {
         lastRequest = request
         return OrcaRuntimeDirectTurnResponse(
             conversationID: request.conversationID ?? "resolved-channel",
-            userMessageID: "msg-user-1",
+            userMessageID: userMessageID,
             assistantMessageID: "msg-assistant-1",
             content: replyContent,
             agentSlug: request.agentSlug,
@@ -3270,7 +3296,8 @@ private actor StubRuntimeService: OrcaRuntimeServing {
         )
     }
     func messages(conversationID: String, offset: Int, limit: Int) async throws -> [OrcaRuntimeConversationMessage] {
-        []
+        messageCount += 1
+        return remoteMessages
     }
 }
 
@@ -3332,4 +3359,249 @@ private func canonicalAgentPackBundle() -> Components.Schemas.ChatRuntimeAgentPa
             ]
         )
     )
+}
+
+@MainActor
+private final class PollingTestClock {
+    var seconds: TimeInterval = 0
+    var now: Date { Date(timeIntervalSince1970: seconds) }
+}
+
+private func pollingTurn(terminal: Bool = false, stuck: Bool = false, hint: Int? = 2) throws -> OrcaRuntimeReconciliationUpdate {
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    var turn = try decoder.decode(Components.Schemas.ChatRuntimeTurnRead.self, from: Data(#"{"turn_id":"30000000-0000-4000-8000-000000000001","conversation_id":"10000000-0000-4000-8000-000000000001","message_id":"20000000-0000-4000-8000-000000000001","agent_id":"40000000-0000-4000-8000-000000000001","state":"completed","idempotency_key":"orca-chat-runtime-conformance-v1","client_provenance":{"source_surface":"pod","client_version":"1.0.0","client_build":"100","client_instance_id":"conformance-device","device_registration_ref":"orca://devices/conformance-device","ingress_event_id":"70000000-0000-4000-8000-000000000001","received_at":"2026-08-09T12:00:00Z"},"ordering":{"authority":"orca","sequence_source":"work_events.seq","fallback_order":"occurred_at_event_id","clock_skew_tolerant":true},"recovery":{"status":"terminal","is_stuck":false,"observed_at":"2026-08-09T12:00:01Z","last_progress_at":"2026-08-09T12:00:00Z","reason":"turn is terminal"},"resources":{"allowed_tool_ids":["conformance.read"],"allowed_root_refs":["orca://conformance"],"provider_rungs":["local","frontier"],"approval_rule_ids":["conformance.no-protected-mutation"],"compute_budget_units":1,"max_concurrent_workers":1,"deadline_at":null,"network_access":"denied"},"latest_cursor":"conformance-turn:4","work_runs":[],"work_runs_truncated":false,"work_runs_limit":100,"terminal_outcome":{"state":"completed","summary":"Provider-neutral conformance turn completed.","error_code":null,"evidence_refs":["orca://evidence/conformance-v1"],"completed_at":"2026-08-09T12:00:00Z"}}"#.utf8))
+    turn.turnId = "user-turn"
+    turn.messageId = "user-turn"
+    turn.state = terminal ? .completed : .working
+    if !terminal { turn.terminalOutcome = nil }
+    turn.recovery.isStuck = stuck
+    turn.recovery.status = terminal ? .terminal : (stuck ? .stuck : .healthy)
+    return .init(turn: turn, cursor: "cursor", cursorState: .initial, appliedEventIDs: [], rebuilt: false, terminalBecameVisible: terminal, pollAfterSeconds: hint)
+}
+
+private func pollingMessage(_ id: String, user: Bool, at seconds: Double = 0) -> OrcaRuntimeConversationMessage {
+    .init(id: id, conversationID: "poll-channel", content: id, messageType: user ? "user" : "agent", senderAgentID: user ? nil : "coral", traceID: nil, source: nil, lane: nil, terminalKind: nil, responseState: nil, deliveryState: nil, createdAt: Date(timeIntervalSince1970: seconds), updatedAt: Date(timeIntervalSince1970: seconds))
+}
+
+extension OrcaMacModelTests {
+    private func pollingModel(_ stub: StubRuntimeService, clock: PollingTestClock) -> OrcaMacModel {
+        let model = makeModel()
+        model.injectServicesForTesting(runtime: stub, console: nil)
+        model.connectionState = .ready
+        model.selectedAgentID = "coral"
+        model.selectedSection = .conversations
+        model.conversations["coral"] = ConversationState(conversationID: "poll-channel", messages: [TranscriptMessage(id: "user-turn", role: .user, content: "hello", createdAt: clock.now, deliveryState: .persisted, retryIdentity: nil)])
+        model.pollingNow = { clock.now }
+        return model
+    }
+
+    private func settlePolling() async { for _ in 0..<30 { await Task.yield() } }
+
+    func testTerminalReconciliationSurvivesClearingRuntimeProjection() async throws {
+        let stub = StubRuntimeService()
+        await stub.configurePolling(update: try pollingTurn(terminal: true))
+        let clock = PollingTestClock()
+        let model = pollingModel(stub, clock: clock)
+        await model.refreshSelectedConversation(silent: true)
+        await settlePolling()
+        XCTAssertNotNil(model.runtimeTurns["coral"])
+        model.runtimeTurns.removeAll()
+        model.runtimeReconciliations.removeAll()
+        for _ in 0..<10 {
+            clock.seconds += 60
+            await model.refreshSelectedConversation(silent: true)
+            await settlePolling()
+        }
+        let counts = await stub.counts()
+        XCTAssertEqual(counts[2], 1)
+    }
+
+    func testDriverErrorsAnd404UseExponentialDeadlinesAndSendReset() async throws {
+        for error in [OrcaRuntimeClientError.httpStatus(404), .invalidResponse("offline failure")] {
+            let stub = StubRuntimeService()
+            await stub.configurePolling(error: error)
+            let clock = PollingTestClock()
+            let model = pollingModel(stub, clock: clock)
+            await model.refreshSelectedConversation(silent: true)
+            await settlePolling()
+            var expected = 1
+            for delay in [30.0, 60, 120, 240, 300, 300] {
+                clock.seconds += delay - 1
+                await model.refreshSelectedConversation(silent: true)
+                await settlePolling()
+                var counts = await stub.counts()
+                XCTAssertEqual(counts[2], expected)
+                clock.seconds += 1
+                await model.refreshSelectedConversation(silent: true)
+                await settlePolling()
+                expected += 1
+                counts = await stub.counts()
+                XCTAssertEqual(counts[2], expected)
+            }
+            model.draft = "new send"
+            await model.sendDraft()
+            await settlePolling()
+            let counts = await stub.counts()
+            XCTAssertEqual(counts[2], expected + 1)
+            model.setConversationsPollingActive(false)
+        }
+    }
+
+    func testMemorySelectionSendNewMessagesAndSixtySecondFallback() async throws {
+        let stub = StubRuntimeService()
+        let clock = PollingTestClock()
+        let model = pollingModel(stub, clock: clock)
+        await stub.configurePolling(messages: [pollingMessage("user-turn", user: true)])
+        await model.refreshSelectedConversation(silent: true)
+        for seconds in [4.0, 8, 16, 32, 59] {
+            clock.seconds = seconds
+            await model.refreshSelectedConversation(silent: true)
+        }
+        var counts = await stub.counts()
+        XCTAssertEqual(counts[1], 1)
+        clock.seconds = 60
+        await model.refreshSelectedConversation(silent: true)
+        counts = await stub.counts()
+        XCTAssertEqual(counts[1], 2)
+        await stub.configurePolling(messages: [pollingMessage("user-turn", user: true), pollingMessage("reply", user: false, at: 61)])
+        clock.seconds = 61
+        await model.refreshSelectedConversation(silent: true)
+        counts = await stub.counts()
+        XCTAssertEqual(counts[1], 3)
+        model.selectAgent("coral")
+        await settlePolling()
+        counts = await stub.counts()
+        XCTAssertEqual(counts[1], 4)
+        model.draft = "next"
+        await model.sendDraft()
+        counts = await stub.counts()
+        XCTAssertEqual(counts[1], 5)
+        model.setConversationsPollingActive(false)
+    }
+
+    func testInactiveConversationsPauseAndResumeImmediatelyWithoutPausingCaptain() async throws {
+        let stub = StubRuntimeService()
+        let clock = PollingTestClock()
+        let model = pollingModel(stub, clock: clock)
+        model.setConversationsPollingActive(false)
+        for _ in 0..<4 { await model.refreshCurrentSurface(silent: true, automatic: true) }
+        var counts = await stub.counts()
+        XCTAssertEqual(counts, [0, 0, 0])
+        model.selectedSection = .waitingOnCaptain
+        XCTAssertEqual(model.automaticRefreshDelaySeconds(), 15)
+        model.selectedSection = .work
+        model.workMode = .captain
+        XCTAssertEqual(model.automaticRefreshDelaySeconds(), 15)
+        model.selectedSection = .overview
+        XCTAssertEqual(model.automaticRefreshDelaySeconds(), 30)
+        model.selectedSection = .conversations
+        model.setConversationsPollingActive(true)
+        await settlePolling()
+        counts = await stub.counts()
+        XCTAssertEqual(counts[0], 1)
+        XCTAssertEqual(counts[1], 1)
+        XCTAssertEqual(counts[2], 1)
+        model.setConversationsPollingActive(false)
+    }
+
+    func testUnpersistedUserTurnDoesNotReconcileWhileSendIsOutstanding() async throws {
+        let stub = StubRuntimeService()
+        let clock = PollingTestClock()
+        let model = pollingModel(stub, clock: clock)
+        model.conversations["coral"] = ConversationState(conversationID: "poll-channel", messages: [TranscriptMessage(id: "pending:test", role: .user, content: "sending", createdAt: clock.now, deliveryState: .persisted, retryIdentity: nil)])
+        model.pollingPolicies["coral", default: .init()].sent()
+        for _ in 0..<12 {
+            await model.refreshSelectedConversation(silent: true)
+            clock.seconds += 4
+            XCTAssertEqual(model.automaticRefreshDelaySeconds(), 4)
+        }
+        let counts = await stub.counts()
+        XCTAssertEqual(counts[2], 0)
+    }
+
+    func testTwentyMinuteStuckLoadComparedWithLegacyScheduling() async throws {
+        var results: [[Int]] = []
+        for legacy in [true, false] {
+            let stub = StubRuntimeService()
+            await stub.configurePolling(update: try pollingTurn(stuck: true, hint: 30), messages: [pollingMessage("user-turn", user: true)])
+            let clock = PollingTestClock()
+            let model = pollingModel(stub, clock: clock)
+            while clock.seconds < 1200 {
+                // Reproduce the former per-tick memory/reconciliation behavior with the same fake client.
+                if legacy { model.pollingPolicies.removeAll() }
+                await model.refreshSelectedConversation(silent: true)
+                await settlePolling()
+                clock.seconds += legacy ? 4 : model.automaticRefreshDelaySeconds()
+            }
+            results.append(await stub.counts())
+            model.setConversationsPollingActive(false)
+        }
+        print("MODEL LOAD before=\(results[0]) after=\(results[1])")
+        XCTAssertEqual(results[0], [300, 300, 300])
+        XCTAssertLessThanOrEqual(results[1][0], 30)
+        XCTAssertLessThanOrEqual(results[1][1], 20)
+        XCTAssertLessThanOrEqual(results[1][2], 40)
+    }
+
+    func testCaptainRequestsContinueEveryFifteenSecondsWhileInactive() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let counter = PollingRequestCounter()
+        TestURLProtocol.response = { _ in
+            counter.increment()
+            return (200, Data(#"{"items":[],"proposals":[],"pending":[]}"#.utf8))
+        }
+        defer { TestURLProtocol.response = nil }
+        let console = OrcaConsoleService(serverURL: URL(string: "http://127.0.0.1:8000")!, tokenStore: TestRuntimeTokenStore(token: "offline-token"), deviceID: "test-device-id-0123456789", session: session)
+        let model = makeModel()
+        model.injectServicesForTesting(runtime: nil, console: console)
+        model.selectedSection = .work
+        model.workMode = .captain
+        model.setConversationsPollingActive(false)
+        let clock = PollingTestClock()
+        model.pollingNow = { clock.now }
+        var sleeps: [TimeInterval] = []
+        model.pollingSleep = { delay in
+            clock.seconds += delay
+            if clock.seconds > 60 { throw CancellationError() }
+            sleeps.append(delay)
+        }
+        model.beginRefreshLoop()
+        await model.refreshTask?.value
+        XCTAssertEqual(sleeps, [15, 15, 15, 15])
+        XCTAssertGreaterThanOrEqual(counter.value, 4)
+    }
+
+    func testHealthyReplyFortySecondsAfterSendAppearsWithinFourSeconds() async throws {
+        let stub = StubRuntimeService(userMessageID: "user-turn")
+        let clock = PollingTestClock()
+        let model = pollingModel(stub, clock: clock)
+        await stub.configurePolling(update: try pollingTurn(), messages: [pollingMessage("user-turn", user: true)])
+        model.draft = "waiting for a reply"
+        await model.sendDraft()
+        await settlePolling()
+        var visibleAt: Double?
+        model.pollingSleep = { delay in
+            clock.seconds += delay
+            if clock.seconds > 80 { throw CancellationError() }
+            if clock.seconds >= 40.1 {
+                await stub.configurePolling(update: try pollingTurn(), messages: [pollingMessage("user-turn", user: true), pollingMessage("reply", user: false, at: 40.1)])
+            }
+            if model.conversations["coral"]?.messages.contains(where: { $0.id == "reply" }) == true, visibleAt == nil { visibleAt = clock.seconds - delay }
+        }
+        model.beginRefreshLoop()
+        await model.refreshTask?.value
+        let appeared = try XCTUnwrap(visibleAt)
+        XCTAssertLessThanOrEqual(appeared - 40.1, 4)
+        model.setConversationsPollingActive(false)
+    }
+}
+
+private final class PollingRequestCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    func increment() { lock.lock(); defer { lock.unlock() }; count += 1 }
+    var value: Int { lock.lock(); defer { lock.unlock() }; return count }
 }

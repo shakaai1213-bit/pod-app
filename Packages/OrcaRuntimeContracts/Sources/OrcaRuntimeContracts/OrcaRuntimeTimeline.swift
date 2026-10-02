@@ -358,12 +358,9 @@ public struct OrcaRuntimeTurnReconciler: Sendable {
         )
         if isTerminal {
             try Self.require(envelope.pollAfterSeconds == nil, "terminal turn requested another poll")
-        } else {
-            try Self.require(
-                envelope.pollAfterSeconds.map { (1...60).contains($0) } == true,
-                "active turn omitted its bounded poll interval"
-            )
         }
+        // Poll hints are advisory. The driver defaults missing hints and clamps
+        // untrusted values before sleeping; they do not invalidate turn truth.
 
         switch envelope.cursorState {
         case .initial:

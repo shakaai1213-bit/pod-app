@@ -44,15 +44,49 @@ struct OrcaMacRootView: View {
         } message: {
             Text(model.presentedError ?? "Unknown error")
         }
+        .background(ConsoleWindowPollingObserver(model: model))
         .onChange(of: scenePhase) { _, next in
             guard next == .active else { return }
             Task {
                 if model.connectionState.isReady {
-                    await model.refreshCurrentSurface(silent: true)
+                    if model.selectedSection != .conversations { await model.refreshCurrentSurface(silent: true) }
                 } else {
                     await model.connect()
                 }
             }
         }
+    }
+}
+
+/// Observe this Console window rather than Settings or another application's windows.
+private struct ConsoleWindowPollingObserver: NSViewRepresentable {
+    let model: OrcaMacModel
+    func makeNSView(context: Context) -> ObserverView { ObserverView(model: model) }
+    func updateNSView(_ view: ObserverView, context: Context) {}
+
+    final class ObserverView: NSView {
+        let model: OrcaMacModel
+        var tokens: [NSObjectProtocol] = []
+        init(model: OrcaMacModel) { self.model = model; super.init(frame: .zero) }
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            tokens.forEach(NotificationCenter.default.removeObserver)
+            tokens.removeAll()
+            guard let window else { return }
+            model.setConversationsPollingActive(NSApp.isActive && window.isVisible && !window.isMiniaturized && window.occlusionState.contains(.visible))
+            for name in [NSWindow.didMiniaturizeNotification, NSWindow.didDeminiaturizeNotification,
+                         NSWindow.didChangeOcclusionStateNotification, NSWindow.willCloseNotification,
+                         NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification] {
+                tokens.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self, weak window] notification in
+                    MainActor.assumeIsolated {
+                        guard let self, let window else { return }
+                        let closing = notification.name == NSWindow.willCloseNotification && (notification.object as? NSWindow) === window
+                        self.model.setConversationsPollingActive(!closing && NSApp.isActive && window.isVisible && !window.isMiniaturized && window.occlusionState.contains(.visible))
+                    }
+                })
+            }
+        }
+        deinit { tokens.forEach(NotificationCenter.default.removeObserver) }
     }
 }

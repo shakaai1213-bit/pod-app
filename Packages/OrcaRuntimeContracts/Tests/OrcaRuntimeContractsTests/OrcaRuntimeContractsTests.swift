@@ -1470,3 +1470,180 @@ func credentialRedirectsAreNeverFollowed(status: Int) throws {
     #expect(reducer.terminal?.errorCode == "provider_unavailable")
     #expect(reducer.events.count == 1)
 }
+
+private actor PollingSleepRecorder {
+    var values: [Int] = []
+    func record(_ seconds: Int) { values.append(seconds) }
+}
+
+@Test(arguments: [nil, 0, -5, 1, 30, 86400] as [Int?])
+func reconciliationDriverClampsHintsAtSleep(_ hint: Int?) async throws {
+    let active = try activeTurn()
+    let cursor = reconciliationCursor(for: active, digestCharacter: "4")
+    var initial = reconciliationEnvelope(turn: active, cursor: cursor, requestedCursor: nil, state: .initial, eventsAfterCursor: active.events ?? [])
+    initial.pollAfterSeconds = hint
+    let complete = try canonicalTurn()
+    let terminal = reconciliationEnvelope(turn: complete, cursor: reconciliationCursor(for: complete, digestCharacter: "5"), requestedCursor: cursor, state: .advanced, eventsAfterCursor: Array((complete.events ?? []).suffix(2)))
+    let fixture = ReconciliationDriverFixture(initial: initial, terminal: terminal)
+    let recorder = PollingSleepRecorder()
+    let driver = OrcaRuntimeReconciliationDriver(turnID: active.turnId,
+        poll: { await fixture.poll(turnID: $0, afterCursor: $1) },
+        stream: { await fixture.disconnectedStream(turnID: $0, afterCursor: $1) },
+        sleep: { await recorder.record($0) })
+    for try await _ in driver.updates() {}
+    #expect(await recorder.values == [min(120, max(2, hint ?? 2))])
+}
+
+@Test func pollingPolicyMemoryAndIdleIntervals() {
+    var policy = OrcaConsolePollingPolicy()
+    let start = Date(timeIntervalSince1970: 0)
+    #expect(policy.shouldFetchMemory(now: start) == true)
+    #expect(policy.shouldFetchMemory(now: start.addingTimeInterval(59)) == false)
+    #expect(policy.shouldFetchMemory(now: start.addingTimeInterval(60)) == true)
+    for interval in [8.0, 16, 32, 60, 60] {
+        policy.messagesMerged(changed: false)
+        #expect(policy.messageInterval == interval)
+    }
+    policy.messagesMerged(changed: true)
+    #expect(policy.messageInterval == 4)
+    #expect(policy.shouldFetchMemory(now: start.addingTimeInterval(61)) == true)
+    policy.selected()
+    #expect(policy.shouldFetchMemory(now: start.addingTimeInterval(62)) == true)
+    policy.sent()
+    #expect(policy.shouldFetchMemory(now: start.addingTimeInterval(63)) == true)
+}
+
+@Test func pollingPolicyRetryDeadlinesAndTerminalRetention() {
+    var policy = OrcaConsolePollingPolicy()
+    var now = Date(timeIntervalSince1970: 0)
+    #expect(policy.shouldReconcile(turn: "turn", now: now) == true)
+    for delay in [30.0, 60, 120, 240, 300, 300] {
+        policy.failed(now: now)
+        #expect(policy.shouldReconcile(turn: "turn", now: now.addingTimeInterval(delay - 1)) == false)
+        now = now.addingTimeInterval(delay)
+        #expect(policy.shouldReconcile(turn: "turn", now: now) == true)
+    }
+    policy.failed(now: now)
+    policy.sent()
+    #expect(policy.shouldReconcile(turn: "turn", now: now) == true)
+    policy.failed(now: now)
+    #expect(policy.shouldReconcile(turn: "new-turn", now: now) == true)
+    policy.updated(turn: "new-turn", terminal: true, stuck: false, hint: nil, now: now)
+    #expect(policy.shouldReconcile(turn: "new-turn", now: now.addingTimeInterval(1000)) == false)
+    policy.updated(turn: "stuck", terminal: false, stuck: true, hint: 30, now: now)
+    #expect(policy.shouldReconcile(turn: "stuck", now: now) == true) // new turn resets stale deadlines
+    policy.updated(turn: "stuck", terminal: false, stuck: true, hint: 30, now: now)
+    #expect(policy.shouldReconcile(turn: "stuck", now: now.addingTimeInterval(29)) == false)
+    #expect(policy.shouldReconcile(turn: "stuck", now: now.addingTimeInterval(30)) == true)
+}
+
+@Test func healthyOutstandingReplyAtFortySecondsRemainsResponsive() {
+    var policy = OrcaConsolePollingPolicy()
+    policy.sent()
+    var nextPoll = 4.0
+    let arrival = 40.1
+    while nextPoll < arrival {
+        policy.messagesMerged(changed: false)
+        nextPoll += policy.messageInterval
+    }
+    #expect(nextPoll - arrival <= 4)
+    policy.messagesMerged(changed: true)
+    #expect(policy.messageInterval == 4)
+    policy.messagesFailed()
+    #expect(policy.messageInterval == 8)
+}
+
+@Test func twentyMinuteIdleStuckLoadBound() {
+    var policy = OrcaConsolePollingPolicy()
+    var messages = 0, memory = 0, reconcile = 0
+    var seconds = 0.0
+    while seconds < 1200 {
+        let now = Date(timeIntervalSince1970: seconds)
+        messages += 1
+        if policy.shouldFetchMemory(now: now) { memory += 1 }
+        if policy.shouldReconcile(turn: "stuck", now: now) {
+            reconcile += 1
+            policy.updated(turn: "stuck", terminal: false, stuck: true, hint: 30, now: now)
+        }
+        policy.messagesMerged(changed: false)
+        seconds += policy.messageInterval
+    }
+    print("LOAD before=300/300/300 after=\(messages)/\(memory)/\(reconcile)")
+    #expect(messages <= 30)
+    #expect(memory <= 20)
+    #expect(reconcile <= 40)
+}
+
+@Test(arguments: [nil, 2] as [Int?])
+func stuckReconciliationWithLegacyOrMissingHintSleepsThirtySeconds(_ hint: Int?) async throws {
+    var active = try activeTurn()
+    active.recovery.isStuck = true
+    active.recovery.status = .stuck
+    let cursor = reconciliationCursor(for: active, digestCharacter: "4")
+    var initial = reconciliationEnvelope(turn: active, cursor: cursor, requestedCursor: nil, state: .initial, eventsAfterCursor: active.events ?? [])
+    initial.pollAfterSeconds = hint
+    let complete = try canonicalTurn()
+    let terminal = reconciliationEnvelope(turn: complete, cursor: reconciliationCursor(for: complete, digestCharacter: "5"), requestedCursor: cursor, state: .advanced, eventsAfterCursor: Array((complete.events ?? []).suffix(2)))
+    let fixture = ReconciliationDriverFixture(initial: initial, terminal: terminal)
+    let recorder = PollingSleepRecorder()
+    let driver = OrcaRuntimeReconciliationDriver(turnID: active.turnId,
+        poll: { await fixture.poll(turnID: $0, afterCursor: $1) },
+        stream: { await fixture.disconnectedStream(turnID: $0, afterCursor: $1) },
+        sleep: { await recorder.record($0) })
+    for try await _ in driver.updates() {}
+    #expect(await recorder.values == [30])
+}
+
+private actor StuckDriverLoadFixture {
+    let initial: Components.Schemas.ChatRuntimeTurnReconciliationRead
+    var polls = 0
+    var seconds = 0
+    init(initial: Components.Schemas.ChatRuntimeTurnReconciliationRead) { self.initial = initial }
+    func poll(cursor: String?) -> Components.Schemas.ChatRuntimeTurnReconciliationRead {
+        polls += 1
+        if cursor == nil { return initial }
+        var envelope = initial
+        envelope.changed = false
+        envelope.cursorState = .current
+        envelope.requestedCursor = cursor
+        envelope.eventsAfterCursor = []
+        return envelope
+    }
+    func sleep(_ interval: Int) throws {
+        seconds += interval
+        if seconds >= 1200 { throw CancellationError() }
+    }
+}
+
+@Test(arguments: [2, 30])
+func stuckDriverTwentyMinuteRESTLoadBound(_ hint: Int) async throws {
+    var turn = try activeTurn()
+    turn.recovery.isStuck = true
+    turn.recovery.status = .stuck
+    var envelope = reconciliationEnvelope(turn: turn, cursor: reconciliationCursor(for: turn, digestCharacter: "4"), requestedCursor: nil, state: .initial, eventsAfterCursor: turn.events ?? [])
+    envelope.pollAfterSeconds = hint
+    let fixture = StuckDriverLoadFixture(initial: envelope)
+    let driver = OrcaRuntimeReconciliationDriver(turnID: turn.turnId,
+        poll: { _, cursor in await fixture.poll(cursor: cursor) },
+        stream: { _, _ in AsyncThrowingStream { $0.finish() } },
+        sleep: { try await fixture.sleep($0) })
+    for try await _ in driver.updates() {}
+    #expect(await fixture.polls == 40)
+}
+
+@Test func serverDeadlineSurvivesMissingHintAndSubsequentDriverError() {
+    var policy = OrcaConsolePollingPolicy()
+    let now = Date(timeIntervalSince1970: 0)
+    let first = policy.shouldReconcile(turn: "turn", now: now)
+    #expect(first)
+    policy.updated(turn: "turn", terminal: false, stuck: false, hint: 120, now: now)
+    policy.updated(turn: "turn", terminal: false, stuck: false, hint: nil, now: now)
+    policy.failed(now: now)
+    let early = policy.shouldReconcile(turn: "turn", now: now.addingTimeInterval(119))
+    let due = policy.shouldReconcile(turn: "turn", now: now.addingTimeInterval(120))
+    #expect(!early)
+    #expect(due)
+    policy.sent()
+    let reset = policy.shouldReconcile(turn: "turn", now: now)
+    #expect(reset)
+}
