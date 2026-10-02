@@ -6,6 +6,7 @@ public struct OrcaConsolePollingPolicy {
     public private(set) var healthyTurnOutstanding = false
     /// Message responsiveness survives reconcile errors, but is bounded from the send.
     public private(set) var awaitingReply = false
+    public private(set) var awaitedTurnID: String?
     private var sentAt: Date?
     private let replyGraceSeconds: TimeInterval
     private var lastMemoryAt: Date?
@@ -52,12 +53,29 @@ public struct OrcaConsolePollingPolicy {
         }
     }
 
+    /// The latest successful send replaces the turn whose server state we await.
+    public mutating func recordAwaitedTurn(_ id: String) {
+        awaitedTurnID = id
+    }
+
+    /// Inspect server truth before the transcript projection drops response metadata.
+    public static func hasPolledReply(awaitedTurnID: String?, messages: [OrcaRuntimeConversationMessage], oldIDs: Set<String>) -> Bool {
+        messages.contains { message in
+            if message.id == awaitedTurnID,
+               isReplyInHand(responseState: message.responseState, terminalKind: nil) { return true }
+            let nonUser = message.messageType.lowercased() == "system"
+                || message.senderAgentID != nil || message.terminalKind != nil
+            return !oldIDs.contains(message.id) && nonUser
+                && isReplyInHand(responseState: message.responseState, terminalKind: message.terminalKind)
+        }
+    }
+
     public mutating func replyInHand() {
         awaitingReply = false
     }
 
-    public mutating func messagesMerged(changed: Bool, agentMessageMerged: Bool = false, now: Date = Date()) {
-        if agentMessageMerged || sentAt.map({ now.timeIntervalSince($0) >= replyGraceSeconds }) == true {
+    public mutating func messagesMerged(changed: Bool, replyArrived: Bool = false, now: Date = Date()) {
+        if replyArrived || sentAt.map({ now.timeIntervalSince($0) >= replyGraceSeconds }) == true {
             awaitingReply = false
         }
         if changed { memoryDirty = true }

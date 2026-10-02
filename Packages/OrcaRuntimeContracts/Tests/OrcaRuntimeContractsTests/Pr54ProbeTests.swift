@@ -70,7 +70,7 @@ import Testing
         policy.failed(now: now)
         #expect(policy.awaitingReply)
         switch reason {
-        case 0: policy.messagesMerged(changed: true, agentMessageMerged: true, now: now)
+        case 0: policy.messagesMerged(changed: true, replyArrived: true, now: now)
         case 1: policy.updated(turn: "turn", terminal: true, stuck: false, hint: nil, now: now)
         case 2: policy.updated(turn: "turn", terminal: false, stuck: true, hint: nil, now: now)
         default: policy.messagesFailed()

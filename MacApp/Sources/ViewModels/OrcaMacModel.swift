@@ -1169,7 +1169,9 @@ final class OrcaMacModel {
             let changed = state.messages.last?.id != oldNewest || state.messages.contains { !oldIDs.contains($0.id) }
             pollingPolicies[conversationKey, default: .init()].messagesMerged(
                 changed: changed,
-                agentMessageMerged: state.messages.contains { !oldIDs.contains($0.id) && $0.role != .user },
+                replyArrived: OrcaConsolePollingPolicy.hasPolledReply(
+                    awaitedTurnID: pollingPolicies[conversationKey]?.awaitedTurnID, messages: remote, oldIDs: oldIDs
+                ),
                 now: pollingNow()
             )
             conversations[conversationKey] = state
@@ -1277,6 +1279,7 @@ final class OrcaMacModel {
                     )
                 )
             }
+            pollingPolicies[conversationKey, default: .init()].recordAwaitedTurn(response.userMessageID)
             if OrcaConsolePollingPolicy.isReplyInHand(responseState: response.responseState, terminalKind: response.terminalKind) {
                 pollingPolicies[conversationKey, default: .init()].replyInHand()
             }
@@ -1434,10 +1437,14 @@ final class OrcaMacModel {
             state.conversationID = conversationID
             let oldIDs = Set(state.messages.map(\.id))
             state.mergeCanonical(remote.map(Self.transcriptMessage))
-            if state.messages.contains(where: { !oldIDs.contains($0.id) }) {
+            let changed = state.messages.contains { !oldIDs.contains($0.id) }
+            let replyArrived = OrcaConsolePollingPolicy.hasPolledReply(
+                awaitedTurnID: pollingPolicies[agentID]?.awaitedTurnID, messages: remote, oldIDs: oldIDs
+            )
+            if changed || (pollingPolicies[agentID]?.awaitingReply == true && replyArrived) {
                 pollingPolicies[agentID, default: .init()].messagesMerged(
-                    changed: true,
-                    agentMessageMerged: state.messages.contains { !oldIDs.contains($0.id) && $0.role != .user },
+                    changed: changed,
+                    replyArrived: replyArrived,
                     now: pollingNow()
                 )
             }

@@ -21,7 +21,7 @@ import Testing
         let fresh = arrivals.filter { $0.1 <= now && !seen.contains($0.0) }
         fresh.forEach { seen.insert($0.0) }
         if fresh.contains(where: { $0.0 == "final" }) { finalVisibleAt = now }
-        policy.messagesMerged(changed: !fresh.isEmpty, agentMessageMerged: !fresh.isEmpty, now: t0.addingTimeInterval(now))
+        policy.messagesMerged(changed: !fresh.isEmpty, replyArrived: !fresh.isEmpty, now: t0.addingTimeInterval(now))
         now += policy.messageInterval
     }
     let late = (finalVisibleAt ?? 999) - 40.1
