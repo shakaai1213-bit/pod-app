@@ -3,6 +3,7 @@ import CryptoKit
 import Foundation
 import Observation
 import OrcaAPI
+import OrcaDomain
 import OrcaRuntime
 import OrcaRuntimeContracts
 
@@ -80,6 +81,8 @@ final class OrcaMacModel {
     var approvalError: String?
     var activeTicketChat: TicketChatContext?
     var isOpeningTicketChat = false
+    var ticketRecipients: [OrcaTicketRecipient] = []
+    var canonicalTicketTimelines: [String: OrcaTicketTimelinePage] = [:]
 
     struct TicketChatContext: Equatable, Sendable {
         let ticketID: String
@@ -586,6 +589,23 @@ final class OrcaMacModel {
     func selectRecord(_ id: String?) {
         recordSelectionChanged(to: id)
         selectedRecordID = id
+    }
+
+    func loadTicketTimeline(ticketID: String, cursor: OrcaTicketTimelineCursor? = nil) async throws -> OrcaTicketTimelinePage {
+        guard let consoleService else { throw OrcaConsoleServiceError.missingCredential }
+        if ticketRecipients.isEmpty { ticketRecipients = (try? await consoleService.ticketRecipients()) ?? [] }
+        let page = try await consoleService.ticketTimeline(ticketID: ticketID, cursor: cursor)
+        canonicalTicketTimelines[ticketID] = page
+        return page
+    }
+    func writeTicketEntry(ticketID: String, input: OrcaTicketEntryInput) async throws {
+        guard let consoleService else { throw OrcaConsoleServiceError.missingCredential }
+        try await consoleService.writeTicketEntry(ticketID: ticketID, input: input)
+    }
+    func canonicalTicketOwner(ticketID: String, fallback: String?) -> String? {
+        guard let page = canonicalTicketTimelines[ticketID] else { return nil }
+        guard let id = page.ownership.ownerAgentID else { return nil }
+        return ticketRecipients.first { $0.id.uuidString.lowercased() == id.lowercased() }?.name.lowercased()
     }
 
     func refreshSelectedSection(

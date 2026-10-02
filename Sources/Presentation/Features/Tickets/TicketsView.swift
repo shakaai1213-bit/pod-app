@@ -1,4 +1,6 @@
 import SwiftUI
+import OrcaDomain
+import OrcaDesign
 
 private extension Date {
     var relativeTimeString: String {
@@ -2554,7 +2556,7 @@ struct TicketDetailSheet: View {
             .confirmationDialog("Change Status", isPresented: $showingStatusPicker, titleVisibility: .visible) {
                 ForEach(TicketStatus.allCases, id: \.self) { status in
                     Button {
-                        editedStatus = status
+                        if viewModel.canonicalTicketTimelines[ticket.id] == nil { editedStatus = status }
                     } label: {
                         Label(status.label, systemImage: status.icon)
                     }
@@ -2972,11 +2974,13 @@ struct TicketDetailSheet: View {
                 .background(AppColors.backgroundPrimary)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
 
+            if viewModel.canonicalTicketTimelines[ticket.id] == nil {
             VStack(spacing: 8) {
                 ticketInlineTextField("Approval state", text: $editedApprovalState)
                 ticketInlineTextField("Autonomy level", text: $editedAutonomyLevel)
                 ticketInlineTextField("Worker lane", text: $editedWorkerLane)
                 ticketInlineTextField("Tool policy", text: $editedToolPolicy)
+            }
             }
         }
     }
@@ -3003,6 +3007,10 @@ struct TicketDetailSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             ticketDetailSectionHeader("Lifecycle", icon: "arrow.triangle.branch")
 
+            if viewModel.canonicalTicketTimelines[ticket.id] != nil {
+                Text("Use the ticket history actions to update status or hand off ownership.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
             Picker("Agent", selection: $lifecycleAgentId) {
                 ForEach(lifecycleAgents) { agent in
                     Text(agent.name.capitalized).tag(agent.id)
@@ -3023,6 +3031,8 @@ struct TicketDetailSheet: View {
                 lifecycleButton("Close", icon: "checkmark.circle.fill", enabled: canCloseTicket, dismissOnCompletion: false) {
                     pendingAction = .close
                 }
+            }
+
             }
 
             if let message = closeGateMessage {
@@ -3812,7 +3822,7 @@ struct TicketDetailSheet: View {
                         .foregroundColor(ticket.status == .closed || ticket.status == .cancelled ? AppColors.textTertiary : AppColors.accentDanger)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
-                .disabled(ticket.status == .closed || ticket.status == .cancelled)
+                .disabled(viewModel.canonicalTicketTimelines[ticket.id] != nil || ticket.status == .closed || ticket.status == .cancelled)
             }
 
             Button {
@@ -4325,7 +4335,14 @@ struct TicketDetailSheet: View {
 
             switch evidenceLens {
             case .timeline:
-                timelineSection
+                OrcaTicketTimelinePanel(ticketID: ticket.id, recipients: agents.compactMap { agent in
+                    UUID(uuidString: agent.id).map { OrcaTicketRecipient(id: $0, name: agent.name.capitalized) }
+                }, load: { cursor in try await viewModel.loadCanonicalTicketTimeline(ticketId: ticket.id, cursor: cursor) },
+                write: { input in try await viewModel.writeCanonicalTicketEntry(ticketId: ticket.id, input: input) })
+                    .id(ticket.id)
+                if viewModel.canonicalTicketTimelines[ticket.id] == nil {
+                    timelineSection
+                }
             case .runs:
                 agentRunsSection
             case .evidence:
@@ -6042,7 +6059,7 @@ struct TicketDetailSheet: View {
         }
 
         // Update status if changed
-        if editedStatus != ticket.status {
+        if viewModel.canonicalTicketTimelines[ticket.id] == nil && editedStatus != ticket.status {
             if editedStatus.isTerminal {
                 if editedStatus == .closed {
                     if canCloseTicket {

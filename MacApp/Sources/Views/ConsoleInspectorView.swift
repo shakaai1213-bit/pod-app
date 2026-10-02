@@ -1,4 +1,5 @@
 import SwiftUI
+import OrcaDesign
 
 struct ConsoleInspectorView: View {
     @Environment(OrcaMacModel.self) private var model
@@ -72,9 +73,13 @@ struct ConsoleInspectorView: View {
                         }
                         if !(model.selectedSection == .work && model.workMode == .team)
                             && !ticket.isProtected {
-                            OpenTicketChatHook(
+                            OrcaTicketTimelinePanel(ticketID: ticket.id, recipients: model.ticketRecipients,
+                            load: { cursor in try await model.loadTicketTimeline(ticketID: ticket.id, cursor: cursor) },
+                            write: { input in try await model.writeTicketEntry(ticketID: ticket.id, input: input) })
+                            .id(ticket.id)
+                        OpenTicketChatHook(
                                 ticketID: ticket.id,
-                                ownerSlug: ticket.agentSlug,
+                                ownerSlug: model.canonicalTicketOwner(ticketID: ticket.id, fallback: ticket.agentSlug),
                                 title: ticket.summary
                             )
                         }
