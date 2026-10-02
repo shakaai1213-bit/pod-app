@@ -51,6 +51,11 @@ struct RuntimeInspectorView: View {
                 if let turn = model.selectedRuntimeTurn {
                     InspectorSection(title: "Flight Recorder") {
                         InspectorValue(label: "Terminal kind", value: turn.terminalOutcome?.terminalKind?.rawValue ?? "not provided")
+                        InspectorValue(
+                            label: "Terminal reason",
+                            value: OrcaRuntimeTerminalReason(errorCode: turn.terminalOutcome?.errorCode)?.title
+                                ?? "not provided"
+                        )
                         InspectorValue(label: "Turn route", value: turn.turnRoute?.rawValue ?? "not provided")
                         InspectorValue(label: "State", value: turn.state.rawValue)
                         InspectorValue(

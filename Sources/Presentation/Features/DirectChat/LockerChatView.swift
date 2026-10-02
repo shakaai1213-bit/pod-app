@@ -3669,6 +3669,9 @@ struct SonarComputeRunDTO: Decodable {
 
 struct DMBubble: View {
     static func terminalPresentation(lane: String?) -> (label: String, icon: String)? {
+        if OrcaRuntimeTerminalReason.isReplyBlocked(lane: lane) {
+            return ("Reply blocked by ORCA", "hand.raised.circle")
+        }
         guard let terminalKind = OrcaRuntimeTerminalKind(lane: lane) else { return nil }
         return terminalKind.isHold
             ? ("Paused by ORCA", "pause.circle")
