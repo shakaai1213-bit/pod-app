@@ -4,6 +4,10 @@ import Foundation
 public struct OrcaConsolePollingPolicy {
     public private(set) var messageInterval: TimeInterval = 4
     public private(set) var healthyTurnOutstanding = false
+    /// Message responsiveness survives reconcile errors, but is bounded from the send.
+    public private(set) var awaitingReply = false
+    private var sentAt: Date?
+    private let replyGraceSeconds: TimeInterval
     private var lastMemoryAt: Date?
     private var memoryDirty = true
     private var turnID: String?
@@ -12,27 +16,35 @@ public struct OrcaConsolePollingPolicy {
     private var serverDelaySeconds = 2
     private var terminalTurns: [String] = []
 
-    public init() {}
+    public init(replyGraceSeconds: TimeInterval = 300) {
+        self.replyGraceSeconds = replyGraceSeconds
+    }
 
     public mutating func selected() {
         messageInterval = 4
         memoryDirty = true
     }
 
-    public mutating func sent() {
+    public mutating func sent(now: Date = Date()) {
         selected()
         healthyTurnOutstanding = true
+        awaitingReply = true
+        sentAt = now
         failureDelay = 30
         retryAt = nil
         serverDelaySeconds = 2
     }
 
-    public mutating func messagesMerged(changed: Bool) {
+    public mutating func messagesMerged(changed: Bool, agentMessageMerged: Bool = false, now: Date = Date()) {
+        if agentMessageMerged || sentAt.map({ now.timeIntervalSince($0) >= replyGraceSeconds }) == true {
+            awaitingReply = false
+        }
         if changed { memoryDirty = true }
-        messageInterval = changed || healthyTurnOutstanding ? 4 : min(60, messageInterval * 2)
+        messageInterval = changed || awaitingReply ? 4 : min(60, messageInterval * 2)
     }
 
     public mutating func messagesFailed() {
+        awaitingReply = false
         healthyTurnOutstanding = false
         messagesMerged(changed: false)
     }
@@ -65,6 +77,7 @@ public struct OrcaConsolePollingPolicy {
             if !terminalTurns.contains(turn) { terminalTurns.append(turn) }
             if terminalTurns.count > 64 { terminalTurns.removeFirst() }
         }
+        if terminal || stuck { awaitingReply = false }
         healthyTurnOutstanding = !terminal && !stuck
         if !terminal {
             serverDelaySeconds = Self.pollDelay(hint ?? serverDelaySeconds, stuck: stuck)

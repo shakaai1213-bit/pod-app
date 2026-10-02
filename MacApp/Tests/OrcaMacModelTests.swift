@@ -3188,6 +3188,11 @@ private actor StubRuntimeService: OrcaRuntimeServing {
         reconciliationError = error
         remoteMessages = messages
     }
+    var holdOpen = false
+    var terminationCount = 0
+    func configureHoldOpen(_ value: Bool) { holdOpen = value }
+    func noteTermination() { terminationCount += 1 }
+    func terminations() -> Int { terminationCount }
     func counts() -> [Int] { [messageCount, memoryCount, reconcileCount] }
 
     let replyContent: String
@@ -3249,8 +3254,13 @@ private actor StubRuntimeService: OrcaRuntimeServing {
         persistCursor: @escaping @Sendable (String) -> Void
     ) -> AsyncThrowingStream<OrcaRuntimeReconciliationUpdate, Error> {
         reconcileCount += 1
+        let hold = holdOpen
         return AsyncThrowingStream { continuation in
             if let update { continuation.yield(update) }
+            if hold {
+                continuation.onTermination = { [weak self] _ in Task { await self?.noteTermination() } }
+                return
+            }
             if let reconciliationError { continuation.finish(throwing: reconciliationError) }
             else { continuation.finish() }
         }
@@ -3604,4 +3614,88 @@ private final class PollingRequestCounter: @unchecked Sendable {
     private var count = 0
     func increment() { lock.lock(); defer { lock.unlock() }; count += 1 }
     var value: Int { lock.lock(); defer { lock.unlock() }; return count }
+}
+
+
+extension OrcaMacModelTests {
+    func testProbeReplyFortySecondsAfterSendWhenReconcileReturns404() async throws {
+        let stub = StubRuntimeService(userMessageID: "user-turn")
+        let clock = PollingTestClock()
+        let model = pollingModel(stub, clock: clock)
+        await stub.configurePolling(error: .httpStatus(404), messages: [pollingMessage("user-turn", user: true)])
+        model.draft = "waiting for a reply"
+        await model.sendDraft()
+        await settlePolling()
+        var visibleAt: Double?
+        var sleeps: [Double] = []
+        model.pollingSleep = { delay in
+            clock.seconds += delay
+            sleeps.append(delay)
+            if clock.seconds > 100 { throw CancellationError() }
+            if clock.seconds >= 40.1 {
+                await stub.configurePolling(error: .httpStatus(404), messages: [pollingMessage("user-turn", user: true), pollingMessage("reply", user: false, at: 40.1)])
+            }
+            if model.conversations["coral"]?.messages.contains(where: { $0.id == "reply" }) == true, visibleAt == nil { visibleAt = clock.seconds - delay }
+        }
+        model.beginRefreshLoop()
+        await model.refreshTask?.value
+        let appeared = try XCTUnwrap(visibleAt)
+        print("PROBE model reconcile-404: poll sleeps \(sleeps), reply visible at \(appeared), late by \(appeared - 40.1)")
+        XCTAssertLessThanOrEqual(appeared - 40.1, 4)
+        model.setConversationsPollingActive(false)
+    }
+
+}
+
+
+extension OrcaMacModelTests {
+    func testProbeReplyFortySecondsAfterSendWhenReconcileReturnsGenericError() async throws {
+        let stub = StubRuntimeService(userMessageID: "user-turn")
+        let clock = PollingTestClock()
+        let model = pollingModel(stub, clock: clock)
+        await stub.configurePolling(error: .invalidResponse("offline failure"), messages: [pollingMessage("user-turn", user: true)])
+        model.draft = "waiting for a reply"
+        await model.sendDraft()
+        await settlePolling()
+        var visibleAt: Double?
+        var sleeps: [Double] = []
+        model.pollingSleep = { delay in
+            clock.seconds += delay
+            sleeps.append(delay)
+            if clock.seconds > 100 { throw CancellationError() }
+            if clock.seconds >= 40.1 {
+                await stub.configurePolling(error: .invalidResponse("offline failure"), messages: [pollingMessage("user-turn", user: true), pollingMessage("reply", user: false, at: 40.1)])
+            }
+            if model.conversations["coral"]?.messages.contains(where: { $0.id == "reply" }) == true, visibleAt == nil { visibleAt = clock.seconds - delay }
+        }
+        model.beginRefreshLoop()
+        await model.refreshTask?.value
+        let appeared = try XCTUnwrap(visibleAt)
+        print("PROBE model reconcile-404: poll sleeps \(sleeps), reply visible at \(appeared), late by \(appeared - 40.1)")
+        XCTAssertLessThanOrEqual(appeared - 40.1, 4)
+        model.setConversationsPollingActive(false)
+    }
+
+}
+
+
+extension OrcaMacModelTests {
+    func testProbePauseCancelsALiveReconciliation() async throws {
+        let stub = StubRuntimeService()
+        await stub.configureHoldOpen(true)
+        await stub.configurePolling(update: try pollingTurn(), messages: [pollingMessage("user-turn", user: true)])
+        let clock = PollingTestClock()
+        let model = pollingModel(stub, clock: clock)
+        await model.refreshSelectedConversation(silent: true)
+        await settlePolling()
+        let opened = await stub.counts()[2]
+        XCTAssertEqual(opened, 1, "a reconcile stream should be open")
+        let before = await stub.terminations()
+        XCTAssertEqual(before, 0)
+        model.setConversationsPollingActive(false)       // the Console window is hidden
+        await settlePolling()
+        let after = await stub.terminations()
+        print("PROBE live-stream pause: open streams=\(opened), terminated after pause=\(after)")
+        XCTAssertEqual(after, 1, "pausing must cancel the live reconcile stream")
+    }
 }

@@ -1167,7 +1167,11 @@ final class OrcaMacModel {
             let oldNewest = state.messages.last?.id
             state.mergeCanonical(remote.map(Self.transcriptMessage))
             let changed = state.messages.last?.id != oldNewest || state.messages.contains { !oldIDs.contains($0.id) }
-            pollingPolicies[conversationKey, default: .init()].messagesMerged(changed: changed)
+            pollingPolicies[conversationKey, default: .init()].messagesMerged(
+                changed: changed,
+                agentMessageMerged: state.messages.contains { !oldIDs.contains($0.id) && $0.role != .user },
+                now: pollingNow()
+            )
             conversations[conversationKey] = state
             lastUpdatedAt = Date()
             guard conversationsPollingActive else { return }
@@ -1192,7 +1196,7 @@ final class OrcaMacModel {
         let agentID = activeTicketChat?.ownerSlug ?? selectedAgentID
         let conversationKey = activeConversationKey
         let ticketChat = activeTicketChat
-        pollingPolicies[conversationKey, default: .init()].sent()
+        pollingPolicies[conversationKey, default: .init()].sent(now: pollingNow())
         stopRuntimeReconciliation(for: conversationKey)
         if refreshTask != nil { beginRefreshLoop() }
         let traceID = retryIdentity?.traceID ?? "orca-mac-\(UUID().uuidString.lowercased())"
@@ -1428,7 +1432,11 @@ final class OrcaMacModel {
             let oldIDs = Set(state.messages.map(\.id))
             state.mergeCanonical(remote.map(Self.transcriptMessage))
             if state.messages.contains(where: { !oldIDs.contains($0.id) }) {
-                pollingPolicies[agentID, default: .init()].messagesMerged(changed: true)
+                pollingPolicies[agentID, default: .init()].messagesMerged(
+                    changed: true,
+                    agentMessageMerged: state.messages.contains { !oldIDs.contains($0.id) && $0.role != .user },
+                    now: pollingNow()
+                )
             }
             conversations[agentID] = state
             lastUpdatedAt = Date()
