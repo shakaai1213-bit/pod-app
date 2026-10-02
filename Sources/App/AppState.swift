@@ -119,6 +119,32 @@ final class AppState: ObservableObject {
 
     // MARK: - Authentication
 
+    func signInWithApple() async {
+        guard !isLoading else { return }
+        isLoading = true
+        loadingMessage = "Signing in…"
+        errorMessage = nil
+        errorDetails = nil
+        showError = false
+        defer { isLoading = false; loadingMessage = nil }
+        do {
+            let service = SIWASignInService(tokenManager: TokenManager(), apiClient: APIClient.shared)
+            _ = try await service.signIn()
+            // Keep the returned device-bound access and refresh pair; do not
+            // pass it through the legacy raw-token path, which drops refresh.
+            await attemptAutoLogin()
+            if !isAuthenticated {
+                errorMessage = "Sign-in could not be verified. Try again."
+                showError = true
+            }
+        } catch SIWASignInError.userCancelled {
+            return
+        } catch {
+            errorMessage = "Could not sign in to ORCA. Check the connection and try again."
+            showError = true
+        }
+    }
+
     func authenticate(token: String) async {
         print("[AppState] authenticate() called")
         authDiagnostics.removeAll()
@@ -217,7 +243,7 @@ final class AppState: ObservableObject {
             isLoading = false
             loadingMessage = nil
             errorMessage = "Invalid token"
-            errorDetails = "Token rejected. Make sure you're using the exact token from the ORCA MC .env file.\n\nDiagnostics:\n\(authDiagnostics.joined(separator: "\n"))"
+            errorDetails = "Sign-in was rejected. Use Sign in with Apple to reconnect your device.\n\nDiagnostics:\n\(authDiagnostics.joined(separator: "\n"))"
             showError = true
             UserDefaults.standard.removeObject(forKey: "orca_auth_token")
             print("[AppState] performAuth: invalid token, error shown")

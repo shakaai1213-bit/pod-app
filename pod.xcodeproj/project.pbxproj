@@ -1134,6 +1134,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.orcamc.pod;
+				CODE_SIGN_ENTITLEMENTS = Sources/App/pod.entitlements;
 				PRODUCT_NAME = pod;
 				SDKROOT = iphoneos;
 				SWIFT_STRICT_CONCURRENCY = minimal;
@@ -1246,6 +1247,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.orcamc.pod;
+				CODE_SIGN_ENTITLEMENTS = Sources/App/pod.entitlements;
 				PRODUCT_NAME = pod;
 				SDKROOT = iphoneos;
 				SWIFT_STRICT_CONCURRENCY = minimal;

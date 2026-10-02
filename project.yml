@@ -61,6 +61,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.orcamc.pod
         PRODUCT_NAME: "pod"
+        CODE_SIGN_ENTITLEMENTS: Sources/App/pod.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: "5H23S6WPV2"

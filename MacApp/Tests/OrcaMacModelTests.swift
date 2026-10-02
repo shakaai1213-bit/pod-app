@@ -2424,6 +2424,47 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertEqual(result.status, "approved")
     }
 
+    func testOpenCaptainDecisionRefreshesOnceAndSelectsCanonicalApproval() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let approvalID = "4a9e889d-1111-4000-8000-000000000001"
+        var requestCount = 0
+        TestURLProtocol.response = { request in
+            requestCount += 1
+            XCTAssertEqual(request.httpMethod, "GET")
+            XCTAssertEqual(request.url?.path, "/api/v1/control-room/waiting-on-captain")
+            return (200, Data(Self.captainWorkLensFixtureJSON.replacingOccurrences(of: "approval-1", with: approvalID).utf8))
+        }
+        defer { TestURLProtocol.response = nil }
+        let console = OrcaConsoleService(serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "test-token"),
+            deviceID: "test-device-id-0123456789", session: session)
+        let model = makeModel()
+        model.injectServicesForTesting(runtime: StubRuntimeService(workControlBundle: Self.workControlBundle), console: console)
+        await model.openCaptainDecision(approvalID: approvalID)
+        XCTAssertEqual(requestCount, 1)
+        XCTAssertEqual(model.workMode, .captain)
+        XCTAssertEqual(model.selectedRecordID, "approval:\(approvalID)")
+        XCTAssertNotNil(model.selectedRecord?.approval)
+    }
+
+    func testOpenCaptainDecisionDoesNotInventMissingApproval() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        TestURLProtocol.response = { _ in (200, Data(Self.captainWorkLensFixtureJSON.utf8)) }
+        defer { TestURLProtocol.response = nil }
+        let console = OrcaConsoleService(serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "test-token"),
+            deviceID: "test-device-id-0123456789", session: session)
+        let model = makeModel()
+        model.injectServicesForTesting(runtime: StubRuntimeService(workControlBundle: Self.workControlBundle), console: console)
+        await model.openCaptainDecision(approvalID: "4a9e889d-1111-4000-8000-000000000001")
+        XCTAssertNil(model.selectedRecordID)
+        XCTAssertEqual(model.approvalNotice, "This approval is no longer in the current Captain queue.")
+    }
+
     private func makeModel() -> OrcaMacModel {
         OrcaMacModel(
             tokenStore: TestRuntimeTokenStore(token: nil),

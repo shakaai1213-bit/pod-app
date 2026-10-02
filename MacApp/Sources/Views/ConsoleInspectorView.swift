@@ -44,6 +44,22 @@ struct ConsoleInspectorView: View {
                         }
                     }
 
+                    if record.approval == nil,
+                       let authority = record.fields.first(where: { $0.label == "Approval Authority" })?.value,
+                       let approvalID = record.fields.first(where: { $0.label == "Approval ID" })?.value {
+                        InspectorSection(title: "Decision authority") {
+                            Text("Waiting on \(authority)")
+                                .font(.caption).foregroundStyle(.secondary)
+                            if authority.lowercased() == "tony" {
+                                Button("Open Captain decision") {
+                                    Task { await model.openCaptainDecision(approvalID: approvalID) }
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(!model.connectionState.isReady || model.isLoadingSection)
+                            }
+                        }
+                    }
+
                     if let approval = record.approval {
                         ApprovalWhySection(approval: approval)
                         ApprovalDecisionSection(recordID: record.id, approval: approval)

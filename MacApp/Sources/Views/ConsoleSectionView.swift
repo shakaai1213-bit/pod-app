@@ -4,11 +4,24 @@ import OrcaAPI
 struct ConsoleSectionView: View {
     @Environment(OrcaMacModel.self) private var model
     let section: ConsoleSection
+    @State private var recordQuery = ""
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider()
+            if section != .overview && !(section == .work && model.workMode == .portfolio) {
+                HStack {
+                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                    TextField("Search loaded records by title, ticket or approval ID", text: $recordQuery)
+                        .textFieldStyle(.plain)
+                    if !recordQuery.isEmpty {
+                        Button("Clear") { recordQuery = "" }.buttonStyle(.borderless)
+                    }
+                    Text("\(displayedRecords.count)").font(.caption).foregroundStyle(.secondary)
+                }.padding(.horizontal, 16).padding(.vertical, 9)
+                Divider()
+            }
             content
         }
         .background(Color(nsColor: .textBackgroundColor))
@@ -207,7 +220,7 @@ struct ConsoleSectionView: View {
     }
 
     private var displayedRecords: [ConsoleRecord] {
-        model.displayedWorkRecords
+        model.displayedWorkRecords.filter { $0.matchesSearch(recordQuery) }
     }
 
     private var records: some View {
@@ -224,7 +237,10 @@ struct ConsoleSectionView: View {
         .listStyle(.inset)
         .overlay {
             if displayedRecords.isEmpty && !model.isLoadingSection {
-                if let filter = model.workMetricFilter {
+                if !recordQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    ContentUnavailableView("No matching loaded records", systemImage: "magnifyingglass",
+                        description: Text("Clear search or change the current work scope."))
+                } else if let filter = model.workMetricFilter {
                     ContentUnavailableView(
                         filter.emptyTitle,
                         systemImage: "line.3.horizontal.decrease.circle",

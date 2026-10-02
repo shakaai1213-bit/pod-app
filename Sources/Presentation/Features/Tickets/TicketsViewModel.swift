@@ -1476,6 +1476,7 @@ final class TicketsViewModel {
     var errorMessage: String?
     var selectedStatus: TicketStatus? = nil  // nil = show all
     var selectedSavedView: TicketSavedView?
+    var searchQuery = ""
     var showCreateSheet = false
     var groomingSummary: BacklogGroomingSummary?
     var backlogReprocessDryRun: BacklogGroomingSummary?
@@ -1607,7 +1608,17 @@ final class TicketsViewModel {
         if let selectedSavedView {
             result = result.filter { matches($0, savedView: selectedSavedView) }
         }
-        return result
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return result }
+        let matchedTickets = result.filter { OrcaRecordSearch.matches(query, values: [$0.id, $0.title]) }
+        // Include the root of a matching subtask so the existing tree can display it.
+        var visible = Set(matchedTickets.map(\.id))
+        let byID = Dictionary(tickets.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        for match in matchedTickets {
+            var parent = match.parentTicketId
+            while let id = parent, visible.insert(id).inserted { parent = byID[id]?.parentTicketId }
+        }
+        return tickets.filter { visible.contains($0.id) }
     }
 
     var statusFilteredTickets: [Ticket] {
@@ -1620,6 +1631,7 @@ final class TicketsViewModel {
     }
 
     var emptyStateTitle: String {
+        if !searchQuery.isEmpty { return "No matching loaded tickets" }
         if let selectedSavedView, let selectedStatus {
             return "No \(selectedStatus.label.lowercased()) \(selectedSavedView.label.lowercased()) tickets"
         }
@@ -1633,6 +1645,7 @@ final class TicketsViewModel {
     }
 
     var emptyStateSubtitle: String {
+        if !searchQuery.isEmpty { return "Search by title or short ticket ID, or adjust the current filters." }
         if selectedSavedView != nil || selectedStatus != nil {
             return "Adjust filters or create a ticket to assign work to an agent."
         }

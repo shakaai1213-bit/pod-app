@@ -173,6 +173,7 @@ struct TicketsView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(AppColors.backgroundPrimary)
+            .searchable(text: $viewModel.searchQuery, prompt: "Search loaded tickets by title or ID")
             .navigationTitle("Tickets")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

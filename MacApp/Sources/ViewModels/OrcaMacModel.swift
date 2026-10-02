@@ -556,7 +556,7 @@ final class OrcaMacModel {
         Task { await refreshSelectedSection(silent: true) }
     }
 
-    func selectWorkMode(_ mode: ConsoleWorkMode) {
+    func selectWorkMode(_ mode: ConsoleWorkMode, refresh: Bool = true) {
         if selectedSection != .work {
             selectSection(.work, refresh: false)
         }
@@ -570,7 +570,20 @@ final class OrcaMacModel {
         workControl = nil
         sectionSnapshots[.work] = .empty(.work)
         sectionError = nil
-        Task { await refreshSelectedSection(silent: true) }
+        if refresh { Task { await refreshSelectedSection(silent: true) } }
+    }
+
+    func openCaptainDecision(approvalID: String) async {
+        guard UUID(uuidString: approvalID) != nil else { return }
+        selectWorkMode(.captain, refresh: false)
+        await refreshSelectedSection()
+        guard selectedSection == .work, workMode == .captain else { return }
+        let id = "approval:\(approvalID)"
+        if selectedSnapshot.records.contains(where: { $0.id == id && $0.approval != nil }) {
+            selectRecord(id)
+        } else {
+            approvalNotice = "This approval is no longer in the current Captain queue."
+        }
     }
 
     func selectBoard(_ id: UUID) {
