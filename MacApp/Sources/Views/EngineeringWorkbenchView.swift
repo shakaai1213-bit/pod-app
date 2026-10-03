@@ -110,6 +110,16 @@ struct EngineeringWorkbenchView: View {
             TextField("Search title or ticket ID", text: $ticketQuery)
                 .textFieldStyle(.roundedBorder)
                 .accessibilityLabel("Search Workbench tickets")
+            if model.selectedWorkbenchTicketID != nil {
+                Button {
+                    model.selectWorkbenchTicket(nil)
+                    showingTicketSearch = false
+                } label: {
+                    Label("Clear ticket selection", systemImage: "xmark.circle")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear Workbench ticket selection")
+            }
             Divider()
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 4) {
