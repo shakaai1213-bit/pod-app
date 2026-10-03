@@ -85,6 +85,7 @@ enum ConsoleWorkMetricFilter: String, CaseIterable, Identifiable, Sendable {
 
     func matches(_ record: ConsoleRecord) -> Bool {
         if self == .needsScope { return record.needsScope }
+        if self == .approvals && record.id.hasPrefix("approval:") && record.status == "pending" { return true }
         return groups.contains(record.group)
     }
 }
@@ -568,7 +569,9 @@ struct ConsoleSectionSnapshot: Equatable, Sendable {
             ("historical", "Historical", ["Historical"]),
         ]
         let metrics = cards.map { card in
-            let count = card.groups.reduce(0) { $0 + (response.counts[$1] ?? 0) }
+            let count = card.id == "approvals"
+                ? Set(response.groups.flatMap(\.items).filter { $0.kind == "approval" && $0.status == "pending" }.map(\.id)).count
+                : card.groups.reduce(0) { $0 + (response.counts[$1] ?? 0) }
             return ConsoleMetric(id: card.id, label: card.title, value: "\(count)", status: count > 0 ? "attention" : "ok")
         }
         let records = response.groups.flatMap { group in

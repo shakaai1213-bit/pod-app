@@ -806,7 +806,7 @@ final class OrcaMacModelTests: XCTestCase {
               "groups": [
                 {"name": "Ready Now", "items": [{"id":"ticket:t1","kind":"ticket","title":"Fix Console","summary":"ready","agent_slug":"coral","status":"open","priority":"high","endpoint":"/api/v1/tickets/t1","protected":false,"stale":false,"age_hours":12,"execution_eligible":true,"approval_state":"not_required","blocked_on":null,"desired_outcome":"Works","needs_scope":false,"authority":null,"approval_id":null,"linked_ticket_ids":[]}]},
                 {"name": "Decision Queue", "items": [{"id":"approval:a1","kind":"approval","title":"Review approval","summary":"waiting for maui","agent_slug":"maui","status":"pending","priority":"high","endpoint":"/api/v1/approvals/a1","protected":false,"stale":false,"execution_eligible":false,"approval_state":"pending","blocked_on":null,"desired_outcome":null,"needs_scope":false,"authority":"maui","approval_id":"a1","linked_ticket_ids":["t1"]}]},
-                {"name": "Protected", "items": [{"id":"ticket:t2","kind":"ticket","title":"t2","summary":"Protected work pointer","agent_slug":"coral","status":"open","priority":"high","endpoint":"/api/v1/tickets/t2","protected":true,"stale":false,"execution_eligible":false,"approval_state":null,"blocked_on":null,"desired_outcome":null,"needs_scope":false,"authority":null,"approval_id":null,"linked_ticket_ids":[]}]}
+                {"name": "Protected", "items": [{"id":"ticket:t2","kind":"ticket","title":"t2","summary":"Protected work pointer","agent_slug":"coral","status":"open","priority":"high","endpoint":"/api/v1/tickets/t2","protected":true,"stale":false,"execution_eligible":false,"approval_state":null,"blocked_on":null,"desired_outcome":null,"needs_scope":false,"authority":null,"approval_id":null,"linked_ticket_ids":[]},{"id":"approval:a2","kind":"approval","title":"Native device recovery","summary":"Protected work pointer","agent_slug":"coral","status":"pending","priority":"high","endpoint":"/api/v1/approvals/a2","protected":true,"stale":false,"execution_eligible":false,"approval_state":"pending","blocked_on":null,"desired_outcome":null,"needs_scope":false,"authority":"tony","approval_id":"a2","linked_ticket_ids":["t2"]}]}
               ]
             }
             """#.utf8))
@@ -821,13 +821,21 @@ final class OrcaMacModelTests: XCTestCase {
         let snapshot = try await service.teamWorkLensSnapshot()
         XCTAssertEqual(requestCount, 1)
         XCTAssertEqual(requestedPath, "/api/v1/control-room/team-work")
-        XCTAssertEqual(snapshot.records.count, 3)
-        XCTAssertEqual(snapshot.metrics.first(where: { $0.id == "approvals" })?.value, "1")
+        XCTAssertEqual(snapshot.records.count, 4)
+        XCTAssertEqual(snapshot.metrics.first(where: { $0.id == "approvals" })?.value, "2")
         XCTAssertEqual(snapshot.records.first?.subtitle, "coral · ready")
         XCTAssertTrue(snapshot.records.first?.fields.contains(where: { $0.label == "Age" && $0.value == "12h" }) ?? false)
         XCTAssertTrue(snapshot.records.allSatisfy { $0.approval == nil })
         XCTAssertNil(snapshot.records.last?.desiredOutcome)
-        XCTAssertTrue(snapshot.records.last?.ticket?.isProtected == true)
+        XCTAssertTrue(snapshot.records.first(where: { $0.id == "ticket:t2" })?.ticket?.isProtected == true)
+        let approvals = snapshot.records(matching: .approvals)
+        XCTAssertEqual(Set(approvals.map(\.id)), ["approval:a1", "approval:a2"])
+        let protectedApproval = try XCTUnwrap(approvals.first(where: { $0.id == "approval:a2" }))
+        XCTAssertEqual(protectedApproval.group, "Protected")
+        XCTAssertEqual(protectedApproval.subtitle, "Approval · Waiting on tony")
+        XCTAssertTrue(protectedApproval.matchesSearch("a2"))
+        XCTAssertTrue(protectedApproval.fields.contains { $0.label == "Approval Authority" && $0.value == "tony" })
+        XCTAssertNil(protectedApproval.approval)
     }
 
     func testAllAgentsRefreshKeepsCaptainBadgeFreshWithOneTeamRequest() async {
