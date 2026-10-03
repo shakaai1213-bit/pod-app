@@ -800,9 +800,9 @@ final class LoopAtlasViewModel {
         }
     }
 
-    private func shouldRetry(_ error: Error) -> Bool {
+    func shouldRetry(_ error: Error) -> Bool {
         guard let apiError = error as? APIError else { return true }
-        return apiError.code == 0 || (500...599).contains(apiError.code)
+        return apiError.code == 0 || apiError.code == APIError.transportError.code || (500...599).contains(apiError.code)
     }
 }
 

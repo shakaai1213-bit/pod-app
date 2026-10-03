@@ -153,6 +153,39 @@ final class PodHardeningTests: XCTestCase {
     }
 
     @MainActor
+    func testDirectChatFailuresStayOnNotSentPath() {
+        let failures: [APIError] = [
+            .transportError, .decodingError, .refusedRedirect,
+            .unauthorized, APIError(code: 503, message: "Service unavailable"),
+        ]
+        for failure in failures {
+            XCTAssertTrue(DirectChatViewModel.isNetworkOrHTTPFailure(failure))
+        }
+        XCTAssertFalse(DirectChatViewModel.isNetworkOrHTTPFailure(
+            APIError(code: 404, message: "Not found")))
+        XCTAssertFalse(DirectChatViewModel.isNetworkOrHTTPFailure(
+            APIError(code: 422, message: "Invalid")))
+    }
+
+    @MainActor
+    func testDirectChatFailureReasonsKeepNewAPIErrorMessages() {
+        for failure in [APIError.transportError, .decodingError, .refusedRedirect] {
+            XCTAssertEqual(DirectChatViewModel.sendFailureReason(failure), failure.message)
+        }
+    }
+
+    @MainActor
+    func testLoopAtlasRetriesTransportButNotDecodeOrRedirect() {
+        let model = LoopAtlasViewModel(retryDelayNanoseconds: 0)
+        XCTAssertTrue(model.shouldRetry(APIError.transportError))
+        XCTAssertTrue(model.shouldRetry(APIError(code: 0, message: "Old transport")))
+        XCTAssertTrue(model.shouldRetry(APIError(code: 503, message: "Service unavailable")))
+        XCTAssertFalse(model.shouldRetry(APIError.decodingError))
+        XCTAssertFalse(model.shouldRetry(APIError.refusedRedirect))
+        XCTAssertFalse(model.shouldRetry(APIError(code: 404, message: "Not found")))
+    }
+
+    @MainActor
     func testAppleExchangeStoresDecodedPairAfterChallengeAndCallback() async throws {
         MockURLProtocol.handler = { request in
             XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))

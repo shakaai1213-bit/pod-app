@@ -4001,20 +4001,20 @@ final class DirectChatViewModel {
         return apiError.code == 401
     }
 
-    private static func isNetworkOrHTTPFailure(_ error: Error) -> Bool {
+    static func isNetworkOrHTTPFailure(_ error: Error) -> Bool {
         if error is URLError { return true }
         guard let apiError = error as? APIError else { return false }
-        return apiError.code == 0 || apiError.code == 401 || apiError.code >= 500
+        return apiError.code <= 0 || apiError.code == 401 || apiError.code >= 500
     }
 
-    private static func sendFailureReason(_ error: Error) -> String {
+    static func sendFailureReason(_ error: Error) -> String {
         if let apiError = error as? APIError {
             switch apiError.code {
             case 401:
                 return "authorization failed; sign in again"
             case 500...599:
                 return "ORCA server returned \(apiError.code)"
-            case 0:
+            case Int.min...0:
                 return apiError.message
             default:
                 return "ORCA returned \(apiError.code): \(apiError.message)"
