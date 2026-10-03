@@ -8,7 +8,7 @@
 //  FLOW:
 //    1. User taps SignInWithAppleButton in OnboardingView
 //    2. ASAuthorizationAppleIDProvider returns identity token + authorization code
-//    3. POST identity_token to /api/v1/auth/siwa/exchange (backend verifies w/ Apple, returns JWT)
+//    3. POST identity_token to /api/v1/auth/apple/callback (backend verifies w/ Apple, returns JWT)
 //    4. Store JWT + user profile in AuthManager (Keychain)
 //    5. Subsequent APIClient calls use Bearer JWT automatically
 //
@@ -30,18 +30,20 @@ enum SIWASignInError: Error, LocalizedError {
     case userCancelled
     case appleAuthFailed(Error)
     case noIdentityToken
-    case backendExchangeFailed(statusCode: Int, message: String)
-    case malformedJWTResponse
-    case keychainStoreFailed(Error)
+    case backendExchangeFailed(statusCode: Int)
+    case responseUnreadable
+    case connectionFailed
+    case keychainStoreFailed
 
     var errorDescription: String? {
         switch self {
         case .userCancelled:                          return "Sign in cancelled."
         case .appleAuthFailed(let e):                 return "Apple sign-in failed: \(e.localizedDescription)"
         case .noIdentityToken:                        return "No identity token from Apple."
-        case .backendExchangeFailed(let code, let m): return "Auth exchange failed (\(code)): \(m)"
-        case .malformedJWTResponse:                   return "Auth response missing JWT."
-        case .keychainStoreFailed(let e):             return "Keychain store failed: \(e.localizedDescription)"
+        case .backendExchangeFailed(let code):        return "ORCA rejected sign-in (HTTP \(code))."
+        case .responseUnreadable:                     return "Pod could not read ORCA's sign-in reply."
+        case .connectionFailed:                       return "Pod could not reach ORCA after Apple sign-in."
+        case .keychainStoreFailed:                    return "Pod could not save sign-in on this device."
         }
     }
 }
@@ -52,9 +54,8 @@ enum SIWASignInError: Error, LocalizedError {
 // (app/api/auth.py and app/services/apple_auth.py). Snake_case field
 // names match backend pydantic models exactly.
 
-// Property names use Swift camelCase; APIClient's encoder/decoder
-// handles snake_case conversion automatically (.convertToSnakeCase /
-// .convertFromSnakeCase). Backend pydantic models match snake_case.
+// APIClient encodes request keys as snake_case. Its response decoder uses
+// Swift's default key strategy, so the token response maps keys explicitly.
 private struct AppleCallbackRequest: Codable {
     let identityToken: String           // Apple JWS → identity_token
     let appleUserId: String             // Apple's stable sub → apple_user_id
@@ -65,12 +66,20 @@ private struct AppleCallbackRequest: Codable {
     let deviceSignature: String
 }
 
-private struct AppleCallbackResponse: Codable {
+struct AppleCallbackResponse: Codable {
     let accessToken: String             // ORCA JWT, 1h TTL ← access_token
     let refreshToken: String            // 30d TTL, rotated ← refresh_token
     let tokenType: String               // "bearer" ← token_type
     let expiresIn: Int                  // Seconds ← expires_in
     let organizationId: String
+
+    enum CodingKeys: String, CodingKey {
+        case accessToken = "access_token"
+        case refreshToken = "refresh_token"
+        case tokenType = "token_type"
+        case expiresIn = "expires_in"
+        case organizationId = "organization_id"
+    }
 }
 
 private struct NativeChallengeRequest: Codable {
@@ -87,7 +96,7 @@ private struct NativeChallengeResponse: Codable { let nonce: String }
 @MainActor
 final class SIWASignInService: NSObject {
     private static let clientID = "com.orcamc.pod"
-    private let tokenManager: TokenManager
+    private let tokenManager: any TokenManaging
     private let apiClient: APIClient
 
     /// Backend endpoint that verifies Apple's identity_token + returns ORCA JWT pair.
@@ -97,7 +106,7 @@ final class SIWASignInService: NSObject {
     /// Active continuation for the in-flight Apple sign-in.
     private var continuation: CheckedContinuation<ASAuthorizationAppleIDCredential, Error>?
 
-    init(tokenManager: TokenManager, apiClient: APIClient) {
+    init(tokenManager: any TokenManaging, apiClient: APIClient) {
         self.tokenManager = tokenManager
         self.apiClient = apiClient
         super.init()
@@ -123,9 +132,18 @@ final class SIWASignInService: NSObject {
         //    audit recommends capturing for first-sign-in name backfill.)
         _ = authCode
         _ = credential.fullName
+        return try await completeSignIn(
+            identityToken: identityToken,
+            appleUserId: credential.user
+        )
+    }
+
+    /// The production path after Apple's sheet returns. Tests call this with
+    /// synthetic Apple claims to exercise the backend exchange and token store.
+    func completeSignIn(identityToken: String, appleUserId: String) async throws -> StoredToken {
         let response = try await exchangeWithBackend(
             identityToken: identityToken,
-            appleUserId: credential.user,
+            appleUserId: appleUserId,
             deviceId: OrcaDeviceIdentity.current()
         )
 
@@ -134,7 +152,7 @@ final class SIWASignInService: NSObject {
         //    `sub` claim or call /auth/validate to resolve. For now use a
         //    deterministic UUID-from-apple-sub until Sprint C settles this.
         let now = Date()
-        let userId = userIdFromAppleSub(credential.user)
+        let userId = userIdFromAppleSub(appleUserId)
         let token = StoredToken(
             userId: userId,
             accessToken: response.accessToken,
@@ -146,7 +164,7 @@ final class SIWASignInService: NSObject {
             try await tokenManager.storeToken(token, for: userId)
             await tokenManager.setActiveUser(userId)
         } catch {
-            throw SIWASignInError.keychainStoreFailed(error)
+            throw SIWASignInError.keychainStoreFailed
         }
 
         return token
@@ -187,15 +205,20 @@ final class SIWASignInService: NSObject {
         appleUserId: String,
         deviceId: String
     ) async throws -> AppleCallbackResponse {
-        let challenge: NativeChallengeResponse = try await apiClient.unauthenticatedPost(
-            path: "/api/v1/auth/native/challenge",
-            body: NativeChallengeRequest(
-                clientId: Self.clientID,
-                deviceId: deviceId,
-                devicePublicKey: OrcaDeviceIdentity.publicKey(),
-                operation: "apple_callback"
+        let challenge: NativeChallengeResponse
+        do {
+            challenge = try await apiClient.unauthenticatedPost(
+                path: "/api/v1/auth/native/challenge",
+                body: NativeChallengeRequest(
+                    clientId: Self.clientID,
+                    deviceId: deviceId,
+                    devicePublicKey: OrcaDeviceIdentity.publicKey(),
+                    operation: "apple_callback"
+                )
             )
-        )
+        } catch {
+            throw Self.mapExchangeError(error)
+        }
         let body = AppleCallbackRequest(
             identityToken: identityToken,
             appleUserId: appleUserId,
@@ -215,11 +238,16 @@ final class SIWASignInService: NSObject {
         do {
             return try await apiClient.unauthenticatedPost(path: exchangeEndpoint, body: body)
         } catch {
-            throw SIWASignInError.backendExchangeFailed(
-                statusCode: -1,
-                message: "Until APIClient.unauthenticatedPost exists: \(error.localizedDescription)"
-            )
+            throw Self.mapExchangeError(error)
         }
+    }
+
+    private static func mapExchangeError(_ error: Error) -> SIWASignInError {
+        if error is APIClientResponseError { return .responseUnreadable }
+        if let apiError = error as? APIError {
+            return .backendExchangeFailed(statusCode: apiError.code)
+        }
+        return .connectionFailed
     }
 }
 

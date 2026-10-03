@@ -25,6 +25,101 @@ final class PodHardeningTests: XCTestCase {
         XCTAssertFalse(request.allHTTPHeaderFields?.values.contains("plaintext-token") ?? false)
     }
 
+    func testAppleCallbackDecodesSnakeCaseTokenResponseWithoutSendingBearer() async throws {
+        MockURLProtocol.handler = { request in
+            XCTAssertEqual(request.url?.path, "/api/v1/auth/apple/callback")
+            XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let body = #"{"access_token":"test-access","refresh_token":"test-refresh","token_type":"bearer","expires_in":3600,"organization_id":"00000000-0000-4000-8000-000000000001"}"#
+            return (response, Data(body.utf8))
+        }
+        let client = makeClient(keychainToken: "must-not-be-sent")
+
+        let token: AppleCallbackResponse = try await client.unauthenticatedPost(
+            path: "/api/v1/auth/apple/callback",
+            body: ["client_id": "com.orcamc.pod"]
+        )
+
+        XCTAssertEqual(token.accessToken, "test-access")
+        XCTAssertEqual(token.refreshToken, "test-refresh")
+        XCTAssertEqual(token.tokenType, "bearer")
+        XCTAssertEqual(token.expiresIn, 3600)
+        XCTAssertEqual(token.organizationId, "00000000-0000-4000-8000-000000000001")
+    }
+
+    @MainActor
+    func testAppleExchangeStoresDecodedPairAfterChallengeAndCallback() async throws {
+        MockURLProtocol.handler = { request in
+            XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200,
+                                           httpVersion: nil, headerFields: nil)!
+            switch request.url?.path {
+            case "/api/v1/auth/native/challenge":
+                return (response, Data(#"{"nonce":"synthetic-challenge"}"#.utf8))
+            case "/api/v1/auth/apple/callback":
+                let body = #"{"access_token":"test-access","refresh_token":"test-refresh","token_type":"bearer","expires_in":3600,"organization_id":"00000000-0000-4000-8000-000000000001"}"#
+                return (response, Data(body.utf8))
+            default:
+                XCTFail("Unexpected authentication route")
+                return (response, Data())
+            }
+        }
+        let store = MemoryTokenManager(tokens: [:], active: nil)
+        let service = SIWASignInService(
+            tokenManager: store,
+            apiClient: makeClient(keychainToken: "must-not-be-sent")
+        )
+
+        let token = try await service.completeSignIn(
+            identityToken: "synthetic-apple-identity-token",
+            appleUserId: "synthetic-apple-user"
+        )
+        let active = try await store.getActiveToken()
+
+        XCTAssertEqual(token.accessToken, "test-access")
+        XCTAssertEqual(token.refreshToken, "test-refresh")
+        XCTAssertEqual(active?.token.accessToken, "test-access")
+        XCTAssertEqual(active?.token.refreshToken, "test-refresh")
+    }
+
+    @MainActor
+    func testAppleExchangeMissingRefreshTokenReportsUnreadableResponseAndStoresNothing() async throws {
+        MockURLProtocol.handler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200,
+                                           httpVersion: nil, headerFields: nil)!
+            switch request.url?.path {
+            case "/api/v1/auth/native/challenge":
+                return (response, Data(#"{"nonce":"synthetic-challenge"}"#.utf8))
+            case "/api/v1/auth/apple/callback":
+                let body = #"{"access_token":"sensitive-test-token","token_type":"bearer","expires_in":3600,"organization_id":"00000000-0000-4000-8000-000000000001"}"#
+                return (response, Data(body.utf8))
+            default:
+                XCTFail("Unexpected authentication route")
+                return (response, Data())
+            }
+        }
+        let store = MemoryTokenManager(tokens: [:], active: nil)
+        let service = SIWASignInService(
+            tokenManager: store,
+            apiClient: makeClient(keychainToken: "must-not-be-sent")
+        )
+
+        do {
+            _ = try await service.completeSignIn(
+                identityToken: "synthetic-apple-identity-token",
+                appleUserId: "synthetic-apple-user"
+            )
+            XCTFail("Expected unreadable response")
+        } catch SIWASignInError.responseUnreadable {
+            XCTAssertFalse(SIWASignInError.responseUnreadable.errorDescription?.contains("sensitive-test-token") ?? true)
+        }
+        let active = try await store.getActiveToken()
+        XCTAssertNil(active)
+    }
+
     func testPhysicalPodUsesCanonicalORCAMiniBackend() {
         XCTAssertEqual(AppConfig.canonicalBackendURL, "http://100.104.72.62:8000")
         XCTAssertNotEqual(AppConfig.canonicalBackendURL, "http://100.76.196.40:8000")
