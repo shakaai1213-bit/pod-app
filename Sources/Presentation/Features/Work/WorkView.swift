@@ -1978,6 +1978,21 @@ struct WorkView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
 
+            if model.protectedTicketCount > 0 {
+                Text("\(model.protectedTicketCount) protected tickets are not shown here.")
+                    .font(.system(size: 11))
+                    .foregroundColor(AppColors.textSecondary)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 8)
+            }
+            if model.quarantinedTicketCount > 0 {
+                Text("\(model.quarantinedTicketCount) ticket rows could not be read.")
+                    .font(.system(size: 11))
+                    .foregroundColor(AppColors.textSecondary)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 8)
+            }
+
             // Card
             VStack(spacing: 0) {
                 // Filter bar (sticky inside card)
@@ -4127,6 +4142,8 @@ final class WorkViewModel {
     // MARK: Tickets
     var tickets: [WorkTicketRow] = []
     var activeTicketCount = 0
+    var protectedTicketCount = 0
+    var quarantinedTicketCount = 0
     var isLoadingTickets = false
     var ticketsError: String?
     var activeFilter: TicketFilter = .all
@@ -5306,12 +5323,14 @@ final class WorkViewModel {
             }
             // Per ticket 7d4c89a7 (UUID→name resolution): fetch tickets AND agents in parallel,
             // resolve assigneeAgentId UUIDs to names client-side.
-            async let ticketsAsync: WorkListResponse<TicketListItem> = APIClient.shared.get(path: "/api/v1/tickets?limit=1000")
+            async let ticketsAsync: TicketRows<TicketListItem> = APIClient.shared.get(path: "/api/v1/tickets?limit=1000")
             async let agentsAsync: WorkListResponse<AgentNameOnly> = APIClient.shared.get(path: "/api/v1/agents?limit=200")
 
             let ticketResponse = try await ticketsAsync
             let agentResponse = try? await agentsAsync
             let raw = ticketResponse.items
+            protectedTicketCount = ticketResponse.protectedCount
+            quarantinedTicketCount = ticketResponse.quarantinedCount
             let agentList = agentResponse?.items ?? []
             let agentNames: [String: String] = Dictionary(uniqueKeysWithValues: agentList.map { ($0.id, $0.name) })
 
@@ -5341,6 +5360,8 @@ final class WorkViewModel {
                     )
                 }
         } catch {
+            protectedTicketCount = 0
+            quarantinedTicketCount = 0
             ticketsError = "Tickets unavailable"
         }
     }

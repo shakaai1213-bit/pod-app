@@ -60,6 +60,8 @@ final class DirectChatViewModel {
     var isCreatingTicket: Bool = false
     var pendingTicketDraft: DirectChatTicketDraft?
     var attachableTickets: [DirectChatAttachableTicket] = []
+    var protectedAttachableTicketCount = 0
+    var quarantinedAttachableTicketCount = 0
     var isLoadingAttachableTickets: Bool = false
     var attachTicketError: String?
     var activeTicketId: String?
@@ -3024,7 +3026,17 @@ final class DirectChatViewModel {
                     handoffSubject: draft.handoffSubject,
                     handoffPacket: draft.handoffPacket
                 )
-                let ticket: DirectChatTicketDTO = try await api.post(path: "/api/v1/tickets", body: body)
+                let response: TicketListRow<TicketMutationAck> = try await api.post(path: "/api/v1/tickets", body: body)
+                guard case .full(let acknowledgement) = response else {
+                    // The write succeeded, but this caller has no ticket detail
+                    // authority. Never attach to or act on the pointer-only row.
+                    let message = "Created a protected ORCA ticket. Its details require an authorized view."
+                    ticketActionMessage = message
+                    appendLocalAssistantMessage(message, for: agent)
+                    pendingTicketDraft = nil
+                    return
+                }
+                let ticket = DirectChatTicketDTO(id: acknowledgement.id, title: draft.title)
                 let traceId = draft.triageTraceId ?? Self.makeTraceId(prefix: "pod-chat-ticket")
                 activeTicketId = ticket.id
                 activeTicketTitle = ticket.title
@@ -3060,18 +3072,24 @@ final class DirectChatViewModel {
         isLoadingAttachableTickets = true
         attachTicketError = nil
         do {
-            let tickets: [DirectChatAttachableTicketDTO] = try await api.get(path: "/api/v1/tickets")
+            let response: TicketRows<DirectChatAttachableTicketDTO> = try await api.get(path: "/api/v1/tickets")
             let activeStatuses = Set(["open", "triaged", "planned", "approved", "assigned", "claimed", "in_progress", "blocked", "ready_for_review"])
-            attachableTickets = tickets
+            attachableTickets = response.items
                 .filter { activeStatuses.contains($0.status.lowercased()) }
                 .sorted { $0.updatedAt > $1.updatedAt }
                 .prefix(120)
                 .map { $0.toAttachableTicket() }
+            protectedAttachableTicketCount = response.protectedCount
+            quarantinedAttachableTicketCount = response.quarantinedCount
         } catch let apiError as APIError {
             attachableTickets = []
+            protectedAttachableTicketCount = 0
+            quarantinedAttachableTicketCount = 0
             attachTicketError = apiError.message
         } catch {
             attachableTickets = []
+            protectedAttachableTicketCount = 0
+            quarantinedAttachableTicketCount = 0
             attachTicketError = "ORCA tickets are unavailable."
         }
         isLoadingAttachableTickets = false
@@ -3098,7 +3116,7 @@ final class DirectChatViewModel {
     private func linkORCAChatThread(ticketId: String, channelId: String) async {
         do {
             let body = DirectChatPatchTicketBody(chatThreadId: channelId)
-            let _: DirectChatTicketDTO = try await api.patch(path: "/api/v1/tickets/\(ticketId)", body: body)
+            let _: TicketListRow<TicketMutationAck> = try await api.patch(path: "/api/v1/tickets/\(ticketId)", body: body)
         } catch {
             if activeTicketId == ticketId {
                 ticketActionMessage = "Attached locally. ORCA thread link will retry when ticket sync is available."

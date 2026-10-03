@@ -158,6 +158,20 @@ struct TicketsView: View {
                 statusFilterBar
                 savedViewsBar
                 liveStatusBar
+                if viewModel.protectedTicketCount > 0 {
+                    Text("\(viewModel.protectedTicketCount) protected tickets are not shown here; their details require an authorized view.")
+                        .font(.caption2)
+                        .foregroundColor(AppColors.textSecondary)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 8)
+                }
+                if viewModel.quarantinedTicketCount > 0 {
+                    Text("\(viewModel.quarantinedTicketCount) ticket rows could not be read.")
+                        .font(.caption2)
+                        .foregroundColor(AppColors.textSecondary)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 8)
+                }
                 groomingSummaryBar
 
                 Divider().background(AppColors.border)

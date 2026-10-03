@@ -215,6 +215,8 @@ struct LockerChatView: View {
         .sheet(isPresented: $showingAttachTicketSheet) {
             AttachTicketSheet(
                 tickets: viewModel.attachableTickets,
+                protectedCount: viewModel.protectedAttachableTicketCount,
+                quarantinedCount: viewModel.quarantinedAttachableTicketCount,
                 isLoading: viewModel.isLoadingAttachableTickets,
                 errorMessage: viewModel.attachTicketError,
                 onRefresh: { Task { await viewModel.loadAttachableTickets() } },
