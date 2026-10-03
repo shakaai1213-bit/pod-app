@@ -154,9 +154,7 @@ struct TicketsView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Status filter bar
-                statusFilterBar
-                savedViewsBar
+                ticketFilterBar
                 liveStatusBar
                 if viewModel.protectedTicketCount > 0 {
                     Text("\(viewModel.protectedTicketCount) protected tickets are not shown here; their details require an authorized view.")
@@ -288,75 +286,81 @@ struct TicketsView: View {
         await viewModel.loadAgentRunReviewQueue()
     }
 
-    // MARK: - Status Filter Bar
-
-    private var statusFilterBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                filterChip(label: "All", status: nil)
-                filterChip(label: "Open", status: .open)
-                filterChip(label: "Claimed", status: .claimed)
-                filterChip(label: "In Progress", status: .inProgress)
-                filterChip(label: "Blocked", status: .blocked)
-                filterChip(label: "Closed", status: .closed)
-                filterChip(label: "Cancelled", status: .cancelled)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-        }
-        .background(AppColors.backgroundSecondary)
-    }
-
-    private func filterChip(label: String, status: TicketStatus?) -> some View {
-        let isSelected = viewModel.selectedStatus == status
-        return Button {
-            withAnimation(.easeInOut(duration: 0.15)) {
-                viewModel.selectedStatus = status
-            }
-        } label: {
-            Text(label)
-                .font(.caption)
-                .fontWeight(isSelected ? .semibold : .regular)
-                .foregroundColor(isSelected ? .white : AppColors.textSecondary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(isSelected ? AppColors.accentElectric : AppColors.backgroundTertiary)
-                .clipShape(Capsule())
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var savedViewsBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                savedViewChip(label: "Ops", view: nil, count: viewModel.tickets.count)
-                ForEach(TicketSavedView.allCases, id: \.self) { view in
-                    savedViewChip(label: view.label, view: view, count: viewModel.count(for: view))
+    // Keep all existing predicates; the compact controls only change how they are chosen.
+    private var ticketFilterBar: some View {
+        HStack(spacing: 10) {
+            Menu {
+                Button {
+                    viewModel.selectedSavedView = nil
+                } label: {
+                    Label("Ops · \(viewModel.tickets.count)", systemImage: viewModel.selectedSavedView == nil ? "checkmark" : "circle")
                 }
+                Divider()
+                ForEach(TicketSavedView.allCases, id: \.self) { view in
+                    Button {
+                        viewModel.selectedSavedView = view
+                    } label: {
+                        Label("\(view.label) · \(viewModel.count(for: view))", systemImage: viewModel.selectedSavedView == view ? "checkmark" : "circle")
+                    }
+                }
+            } label: {
+                ticketFilterSelector(title: "View", value: viewModel.selectedSavedView?.label ?? "Ops")
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 8)
+            .accessibilityLabel("Ticket view: \(viewModel.selectedSavedView?.label ?? "Ops")")
+
+            Menu {
+                Button {
+                    viewModel.selectedStatus = nil
+                } label: {
+                    Label("All statuses", systemImage: viewModel.selectedStatus == nil ? "checkmark" : "circle")
+                }
+                Divider()
+                ForEach(TicketStatus.allCases, id: \.self) { status in
+                    Button {
+                        viewModel.selectedStatus = status
+                    } label: {
+                        Label(status.label, systemImage: viewModel.selectedStatus == status ? "checkmark" : "circle")
+                    }
+                }
+            } label: {
+                ticketFilterSelector(title: "Status", value: viewModel.selectedStatus?.label ?? "All")
+            }
+            .accessibilityLabel("Ticket status: \(viewModel.selectedStatus?.label ?? "All")")
+
+            if viewModel.selectedSavedView != nil || viewModel.selectedStatus != nil {
+                Button("Clear") {
+                    viewModel.selectedSavedView = nil
+                    viewModel.selectedStatus = nil
+                }
+                .font(.caption.weight(.semibold))
+                .accessibilityLabel("Clear ticket filters")
+            }
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
         .background(AppColors.backgroundSecondary)
     }
 
-    private func savedViewChip(label: String, view: TicketSavedView?, count: Int) -> some View {
-        let isSelected = viewModel.selectedSavedView == view
-        return Button {
-            withAnimation(.easeInOut(duration: 0.15)) {
-                viewModel.selectedSavedView = view
+    private func ticketFilterSelector(title: String, value: String) -> some View {
+        HStack(spacing: 5) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title.uppercased())
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(AppColors.textTertiary)
+                Text(value)
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(AppColors.textPrimary)
+                    .lineLimit(1)
             }
-        } label: {
-            Text("\(label) \(count)")
-                .font(.caption)
-                .fontWeight(isSelected ? .semibold : .regular)
-                .foregroundColor(isSelected ? .white : AppColors.textSecondary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(isSelected ? AppColors.accentAgent : AppColors.backgroundTertiary)
-                .clipShape(Capsule())
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(AppColors.textSecondary)
         }
-        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(AppColors.backgroundTertiary, in: RoundedRectangle(cornerRadius: 9))
     }
 
     private var liveStatusBar: some View {

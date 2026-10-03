@@ -2047,38 +2047,35 @@ struct WorkView: View {
     }
 
     private var ticketFilterBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+        HStack(spacing: 10) {
+            Menu {
                 ForEach(WorkViewModel.TicketFilter.allCases, id: \.self) { filter in
-                    filterChip(filter)
+                    Button {
+                        model.activeFilter = filter
+                    } label: {
+                        Label(filter.label, systemImage: model.activeFilter == filter ? "checkmark" : "circle")
+                    }
                 }
+            } label: {
+                HStack(spacing: 7) {
+                    Text("View: \(model.activeFilter.label)")
+                        .font(.system(size: 13, weight: .semibold))
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                .foregroundColor(AppColors.textPrimary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(AppColors.backgroundTertiary, in: RoundedRectangle(cornerRadius: 9))
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .accessibilityLabel("Work ticket view: \(model.activeFilter.label)")
+            Spacer()
+            Text("\(model.filteredTickets.count) shown")
+                .font(.caption)
+                .foregroundColor(AppColors.textSecondary)
         }
-    }
-
-    private func filterChip(_ filter: WorkViewModel.TicketFilter) -> some View {
-        let isOn = model.activeFilter == filter
-        return Button {
-            withAnimation(.easeInOut(duration: 0.15)) {
-                model.activeFilter = filter
-            }
-        } label: {
-            Text(filter.label)
-                .font(.system(size: 13, weight: isOn ? .semibold : .regular))
-                .foregroundColor(isOn ? Color.black : AppColors.textSecondary)
-                .padding(.horizontal, 13)
-                .padding(.vertical, 7)
-                .background(isOn ? AppColors.textPrimary : Color.clear)
-                .clipShape(Capsule())
-                .overlay(
-                    Capsule()
-                        .strokeBorder(isOn ? Color.clear : AppColors.border, lineWidth: 1)
-                )
-        }
-        .buttonStyle(.plain)
-        .frame(minHeight: 30)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 
     private var flowFilterBar: some View {

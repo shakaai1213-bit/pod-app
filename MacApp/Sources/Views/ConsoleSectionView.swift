@@ -55,30 +55,23 @@ struct ConsoleSectionView: View {
             Spacer()
             if section == .work || section == .waitingOnCaptain {
                 Picker("Work view", selection: workModeSelection) {
-                    ForEach(ConsoleWorkMode.allCases) { mode in
+                    ForEach(ConsoleWorkMode.allCases.filter { $0 != .team }) { mode in
                         Text(mode.title).tag(mode)
                     }
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
-                .frame(width: 350)
-                if model.workMode == .agentWork {
-                    Picker("Agent", selection: workControlAgentSelection) {
+                .frame(width: 280)
+                if model.workMode == .agentWork || model.workMode == .team {
+                    Picker("Agent", selection: workAgentSelection) {
+                        Text("All Agents").tag("all_agents")
                         ForEach(model.agents) { agent in
                             Text(agent.name).tag(agent.id)
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 130)
-                    .help("Choose named agent work control")
-                } else if model.workMode == .team {
-                    Picker("Agent", selection: .constant("all_agents")) {
-                        Text("All Agents").tag("all_agents")
-                    }
-                    .labelsHidden()
-                    .frame(width: 130)
-                    .disabled(true)
-                    .help("Showing all seven named agents")
+                    .frame(width: 150)
+                    .help("Choose one agent or the read-only All Agents view")
                 }
             }
             if model.isLoadingSection {
@@ -118,12 +111,7 @@ struct ConsoleSectionView: View {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if section == .overview {
-            VStack(spacing: 0) {
-                if !model.selectedSnapshot.metrics.isEmpty {
-                    metrics
-                }
-                Spacer(minLength: 0)
-            }
+            overviewHome
         } else {
             VStack(spacing: 0) {
                 if !model.selectedSnapshot.metrics.isEmpty {
@@ -142,6 +130,113 @@ struct ConsoleSectionView: View {
     private var isWorkFilterableView: Bool {
         guard section == .work || section == .waitingOnCaptain else { return false }
         return model.workMode == .agentWork || model.workMode == .captain || model.workMode == .team
+    }
+
+    private var overviewHome: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Your ORCA day")
+                        .font(.title2.weight(.semibold))
+                    Text("Your team, work, and system at a glance.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 14)], spacing: 14) {
+                    overviewCard(
+                        title: "Captain's Desk",
+                        symbol: "checkmark.seal",
+                        metricIDs: ["attention"],
+                        detail: "Decisions and work waiting on you",
+                        action: { model.selectWorkMode(.captain) }
+                    )
+                    overviewCard(
+                        title: "Crew",
+                        symbol: "person.3",
+                        metricIDs: ["agents", "agent-health"],
+                        detail: "Named agents and their current health",
+                        action: { model.selectSection(.crew) }
+                    )
+                    overviewCard(
+                        title: "Current Work",
+                        symbol: "square.grid.2x2",
+                        metricIDs: ["boards", "tickets"],
+                        detail: "Boards and loaded tickets",
+                        action: { model.selectWorkMode(.portfolio) }
+                    )
+                    overviewCard(
+                        title: "Fund",
+                        symbol: "chart.line.uptrend.xyaxis",
+                        metricIDs: [],
+                        detail: "Open the protected Fund cockpit",
+                        action: { model.selectSection(.fund) }
+                    )
+                    overviewCard(
+                        title: "Conversations",
+                        symbol: "bubble.left.and.bubble.right",
+                        metricIDs: [],
+                        detail: "Continue a named agent conversation",
+                        action: { model.selectSection(.conversations) }
+                    )
+                    overviewCard(
+                        title: "Platform",
+                        symbol: "server.rack",
+                        metricIDs: ["startup"],
+                        detail: "ORCA startup and runtime status",
+                        action: { model.selectSection(.runtime) }
+                    )
+                }
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func overviewCard(
+        title: String,
+        symbol: String,
+        metricIDs: [String],
+        detail: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        let cardMetrics = metricIDs.compactMap { id in
+            model.selectedSnapshot.metrics.first(where: { $0.id == id })
+        }
+        return Button(action: action) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 9) {
+                    Image(systemName: symbol)
+                        .foregroundStyle(OrcaPalette.accentElectric)
+                    Text(title)
+                        .font(.headline)
+                    Spacer()
+                    Image(systemName: "arrow.up.right")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                ForEach(cardMetrics) { metric in
+                    HStack {
+                        Text(metric.label)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(metric.value)
+                            .fontWeight(.semibold)
+                    }
+                    .font(.subheadline)
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
+            .padding(16)
+            .background(OrcaPalette.backgroundSecondary, in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(OrcaPalette.border))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(title), \(detail)")
     }
 
     private var metrics: some View {
@@ -266,16 +361,25 @@ struct ConsoleSectionView: View {
         )
     }
 
-    private var workControlAgentSelection: Binding<String> {
+    private var workAgentSelection: Binding<String> {
         Binding(
-            get: { model.selectedAgentID },
-            set: { model.selectWorkControlAgent($0) }
+            get: { model.workMode == .team ? "all_agents" : model.selectedAgentID },
+            set: { selection in
+                if selection == "all_agents" {
+                    model.selectWorkMode(.team)
+                } else {
+                    if model.workMode == .team {
+                        model.selectWorkMode(.agentWork, refresh: false)
+                    }
+                    model.selectWorkControlAgent(selection)
+                }
+            }
         )
     }
 
     private var workModeSelection: Binding<ConsoleWorkMode> {
         Binding(
-            get: { model.workMode },
+            get: { model.workMode == .team ? .agentWork : model.workMode },
             set: { model.selectWorkMode($0) }
         )
     }

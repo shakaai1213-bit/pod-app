@@ -4,6 +4,8 @@ import OrcaDesign
 
 struct EngineeringWorkbenchView: View {
     @Environment(OrcaMacModel.self) private var model
+    @State private var ticketQuery = ""
+    @State private var showingTicketSearch = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -35,24 +37,41 @@ struct EngineeringWorkbenchView: View {
 
             Spacer(minLength: 12)
 
-            Picker("Agent", selection: agentSelection) {
-                ForEach(model.agents) { agent in
-                    Text(agent.name).tag(agent.id)
+            HStack(spacing: 5) {
+                Text("Agent")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Picker("Agent", selection: agentSelection) {
+                    Text("All Agents · Work view").tag("all_agents")
+                    Divider()
+                    ForEach(model.agents) { agent in
+                        Text(agent.name).tag(agent.id)
+                    }
                 }
+                .labelsHidden()
+                .frame(width: 140)
             }
-            .labelsHidden()
-            .frame(width: 105)
-            .help("Named agent")
+            .help("Workbench actions use one agent. All Agents opens the read-only Work view.")
 
-            Picker("Ticket", selection: ticketSelection) {
-                Text("Select ticket").tag(String?.none)
-                ForEach(model.workbenchTickets) { ticket in
-                    Text(ticket.title).tag(Optional(ticket.id))
+            Button {
+                ticketQuery = ""
+                showingTicketSearch = true
+            } label: {
+                HStack(spacing: 7) {
+                    Image(systemName: "magnifyingglass")
+                    Text(model.selectedWorkbenchTicket?.title ?? "Find ticket")
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.down")
+                        .font(.caption2)
                 }
+                .frame(minWidth: 190, idealWidth: 250, maxWidth: 320)
             }
-            .labelsHidden()
-            .frame(minWidth: 190, idealWidth: 250, maxWidth: 320)
-            .help("ORCA ticket")
+            .buttonStyle(.bordered)
+            .help("Search this agent's loaded tickets by title or ID")
+            .popover(isPresented: $showingTicketSearch, arrowEdge: .bottom) {
+                ticketSearchPopover
+            }
 
             hostIndicator
 
@@ -73,6 +92,70 @@ struct EngineeringWorkbenchView: View {
         .padding(.horizontal, 16)
         .frame(height: 58)
         .background(OrcaPalette.backgroundSecondary)
+    }
+
+    private var matchingWorkbenchTickets: [WorkbenchTicketSummary] {
+        let query = ticketQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return model.workbenchTickets }
+        return model.workbenchTickets.filter { ticket in
+            ticket.title.localizedCaseInsensitiveContains(query)
+                || ticket.id.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    private var ticketSearchPopover: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Find a ticket")
+                .font(.headline)
+            TextField("Search title or ticket ID", text: $ticketQuery)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityLabel("Search Workbench tickets")
+            if model.selectedWorkbenchTicketID != nil {
+                Button {
+                    model.selectWorkbenchTicket(nil)
+                    showingTicketSearch = false
+                } label: {
+                    Label("Clear ticket selection", systemImage: "xmark.circle")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear Workbench ticket selection")
+            }
+            Divider()
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 4) {
+                    if matchingWorkbenchTickets.isEmpty {
+                        Text(model.workbenchTickets.isEmpty ? "No tickets loaded for this agent." : "No matching tickets.")
+                            .foregroundStyle(.secondary)
+                            .padding(8)
+                    } else {
+                        ForEach(matchingWorkbenchTickets) { ticket in
+                            Button {
+                                model.selectWorkbenchTicket(ticket.id)
+                                showingTicketSearch = false
+                            } label: {
+                                HStack(alignment: .top, spacing: 10) {
+                                    Image(systemName: model.selectedWorkbenchTicketID == ticket.id ? "checkmark.circle.fill" : "circle")
+                                        .foregroundStyle(OrcaPalette.accentElectric)
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(ticket.title)
+                                            .font(.subheadline.weight(.medium))
+                                        Text("\(String(ticket.id.prefix(8))) · \(ticket.status.replacingOccurrences(of: "_", with: " "))")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer(minLength: 0)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(8)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .frame(width: 420, height: 380)
     }
 
     private var paneBar: some View {
@@ -294,14 +377,15 @@ struct EngineeringWorkbenchView: View {
     private var agentSelection: Binding<String> {
         Binding(
             get: { model.selectedAgentID },
-            set: { model.selectWorkbenchAgent($0) }
-        )
-    }
-
-    private var ticketSelection: Binding<String?> {
-        Binding(
-            get: { model.selectedWorkbenchTicketID },
-            set: { model.selectWorkbenchTicket($0) }
+            set: { selection in
+                if selection == "all_agents" {
+                    model.selectWorkMode(.team)
+                } else {
+                    model.selectWorkbenchAgent(selection)
+                    showingTicketSearch = false
+                    ticketQuery = ""
+                }
+            }
         )
     }
 
