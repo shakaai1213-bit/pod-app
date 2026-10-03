@@ -327,6 +327,8 @@ struct CaptainWorkLensGroup: Decodable, Equatable, Sendable {
 }
 
 struct WaitingOnCaptainResponse: Decodable, Equatable, Sendable {
+    static let unavailableSource = "orca.waiting-on-captain.unavailable"
+
     let generatedAt: Date
     let source: String
     let counts: WaitingOnCaptainCounts
@@ -386,7 +388,7 @@ struct WaitingOnCaptainResponse: Decodable, Equatable, Sendable {
     static func zero(at date: Date = Date()) -> WaitingOnCaptainResponse {
         WaitingOnCaptainResponse(
             generatedAt: date,
-            source: "orca.waiting-on-captain.v1",
+            source: unavailableSource,
             counts: .zero,
             items: []
         )

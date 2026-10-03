@@ -145,9 +145,14 @@ actor OrcaConsoleService {
         async let agents = get("/api/v1/agents")
         async let startup = get("/api/v1/startup/status")
         let values = try await (attention, health, boards, tickets, agents, startup)
+        let attentionAvailable = values.0.source != WaitingOnCaptainResponse.unavailableSource
 
         let metrics = [
-            metric("attention", "Attention", values.0.counts.badgeCount),
+            metric(
+                "attention", "Attention",
+                attentionAvailable ? values.0.counts.badgeCount : nil,
+                status: attentionAvailable ? nil : "unavailable"
+            ),
             metric("boards", "Boards", integer(values.2, key: "total")),
             metric("tickets", "Loaded Tickets", rootCount(values.3)),
             metric("agents", "Agents", integer(values.4, key: "total")),
