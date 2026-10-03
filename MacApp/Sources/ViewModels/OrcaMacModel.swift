@@ -706,8 +706,18 @@ final class OrcaMacModel {
                 sectionSnapshots[section] = .empty(section)
                 selectedRecordID = nil
             }
-            sectionError = error.localizedDescription
-            if !silent { presentedError = error.localizedDescription }
+            let missingTeamWorkRoute: Bool
+            if section == .work, mode == .team,
+               let serviceError = error as? OrcaConsoleServiceError,
+               case .httpStatus(404, _) = serviceError {
+                missingTeamWorkRoute = true
+            } else {
+                missingTeamWorkRoute = false
+            }
+            sectionError = missingTeamWorkRoute
+                ? "All Agents needs the next ORCA backend update. Choose a named agent to keep working."
+                : error.localizedDescription
+            if !silent { presentedError = sectionError }
         }
     }
 

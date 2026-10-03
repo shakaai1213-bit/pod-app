@@ -928,6 +928,40 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertNotNil(model.sectionError)
     }
 
+    func testAllAgentsMissingBackendRouteShowsHonestUnavailableState() async {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        TestURLProtocol.response = { _ in (404, Data(#"{"detail":"Not Found"}"#.utf8)) }
+        defer { TestURLProtocol.response = nil }
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+        let model = makeModel()
+        model.selectedSection = .work
+        model.workMode = .team
+        model.injectServicesForTesting(runtime: nil, console: service)
+        model.sectionSnapshots[.work] = ConsoleSectionSnapshot(
+            section: .work, metrics: [],
+            records: [ConsoleRecord(id: "stale", title: "Stale", subtitle: nil,
+                                    status: "open", group: "Ready Now", fields: [], approval: nil)],
+            sources: [], updatedAt: .now
+        )
+        model.selectRecord("stale")
+
+        await model.refreshSelectedSection()
+
+        XCTAssertTrue(model.selectedSnapshot.records.isEmpty)
+        XCTAssertNil(model.selectedRecordID)
+        XCTAssertEqual(
+            model.sectionError,
+            "All Agents needs the next ORCA backend update. Choose a named agent to keep working."
+        )
+    }
+
     func testWorkbenchPaneBarFitsTheMinimumContentColumn() {
         let panes = WorkbenchPane.allCases
 
