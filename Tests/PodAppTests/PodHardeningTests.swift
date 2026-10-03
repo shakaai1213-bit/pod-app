@@ -136,6 +136,16 @@ final class PodHardeningTests: XCTestCase {
         XCTAssertNil(DMBubble.terminalPresentation(lane: "direct_agent_inbox"))
     }
 
+    @MainActor
+    func testReplyBlockedLaneIsLabeledAsBlockedNotUnreachable() {
+        let blocked = DMBubble.terminalPresentation(lane: "reply_blocked")
+        XCTAssertEqual(blocked?.label, "Reply blocked by ORCA")
+        XCTAssertEqual(blocked?.icon, "hand.raised.circle")
+        // The legacy frontier notice and an ordinary live reply keep their existing chrome.
+        XCTAssertNil(DMBubble.terminalPresentation(lane: "frontier_unavailable"))
+        XCTAssertNil(DMBubble.terminalPresentation(lane: "direct_agent_inbox"))
+    }
+
     func testKnowledgePacketUsesCanonicalAccessLaneAndRedactionState() throws {
         let privilegedPayload = #"""
         {
