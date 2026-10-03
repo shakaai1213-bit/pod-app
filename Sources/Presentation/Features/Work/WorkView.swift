@@ -269,10 +269,10 @@ struct WorkView: View {
 
     private var pageHeader: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Workbench")
+            Text("Work")
                 .font(.system(size: 28, weight: .bold))
                 .foregroundColor(AppColors.textPrimary)
-            Text("Pod Chat, approvals, tasks, projects, and tickets.")
+            Text("Products, conversations, approvals, tasks, projects, and tickets.")
                 .font(.system(size: 14))
                 .foregroundColor(AppColors.textSecondary)
         }
