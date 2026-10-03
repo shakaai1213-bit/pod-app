@@ -105,7 +105,8 @@ struct ConsoleSectionView: View {
             WorkPortfolioView()
         } else if let error = model.sectionError, model.selectedSnapshot.records.isEmpty {
             ContentUnavailableView(
-                "ORCA Data Unavailable",
+                section == .work && model.workMode == .team
+                    ? "All Agents Unavailable" : "ORCA Data Unavailable",
                 systemImage: "exclamationmark.triangle",
                 description: Text(error)
             )
