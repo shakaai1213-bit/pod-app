@@ -122,11 +122,16 @@ struct EngineeringWorkbenchView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 4) {
                     if matchingWorkbenchTickets.isEmpty {
-                        Text(model.workbenchTickets.isEmpty
-                             ? "No Workbench tickets loaded for \(selectedAgentName)."
-                             : "No matching tickets for \(selectedAgentName).")
-                            .foregroundStyle(.secondary)
-                            .padding(8)
+                        if model.isLoadingWorkbench {
+                            ProgressView("Loading \(selectedAgentName)'s tickets…")
+                                .padding(8)
+                        } else {
+                            Text(model.workbenchTickets.isEmpty
+                                 ? "No Workbench tickets loaded for \(selectedAgentName)."
+                                 : "No matching tickets for \(selectedAgentName).")
+                                .foregroundStyle(.secondary)
+                                .padding(8)
+                        }
                     } else {
                         ForEach(matchingWorkbenchTickets) { ticket in
                             Button {
@@ -253,7 +258,7 @@ struct EngineeringWorkbenchView: View {
             }
 
             if let root = model.selectedWorkbenchRoot {
-                Text("Project folder: \(root.description) Tickets are selected separately above.")
+                Text("Project folder: \(root.description)\nTicket search is independent of this folder.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)

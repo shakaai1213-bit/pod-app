@@ -200,9 +200,12 @@ struct ConsoleSectionView: View {
     }
 
     private var homeFocusPanel: some View {
-        let attention = model.selectedSnapshot.metrics.first(where: { $0.id == "attention" })?.value ?? "—"
+        let attention = model.selectedSnapshot.metrics.first(where: { $0.id == "attention" })
         let health = model.selectedSnapshot.metrics.first(where: { $0.id == "agent-health" })?.value ?? "Unknown"
         let platform = model.selectedSnapshot.metrics.first(where: { $0.id == "startup" })?.value ?? "Unknown"
+        let captainStatus = attention?.status == "unavailable"
+            ? "Captain list unavailable"
+            : attention.map { "\($0.value) waiting on you" } ?? "Checking Captain list…"
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Label("Today's focus", systemImage: "sparkle")
@@ -211,10 +214,18 @@ struct ConsoleSectionView: View {
                 Button("Open Waiting on Tony") { model.selectWorkMode(.captain) }
                     .buttonStyle(.borderless)
             }
-            HStack(spacing: 16) {
-                Label("\(attention) waiting on you", systemImage: "checkmark.seal")
-                Label("Crew: \(health)", systemImage: "person.3")
-                Label("Platform: \(platform)", systemImage: "server.rack")
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 16) {
+                    Label(captainStatus, systemImage: "checkmark.seal")
+                    Label("Crew: \(health)", systemImage: "person.3")
+                    Label("Platform: \(platform)", systemImage: "server.rack")
+                }
+                .fixedSize(horizontal: true, vertical: false)
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(captainStatus, systemImage: "checkmark.seal")
+                    Label("Crew: \(health)", systemImage: "person.3")
+                    Label("Platform: \(platform)", systemImage: "server.rack")
+                }
             }
             .font(.subheadline)
             .foregroundStyle(.secondary)

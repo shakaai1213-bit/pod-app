@@ -430,6 +430,44 @@ final class OrcaMacModelTests: XCTestCase {
         XCTAssertFalse(snapshot.sources.contains("/api/v1/control-room/captain-inbox"))
     }
 
+    func testHomeDoesNotReportZeroAttentionWhenCaptainRouteIsUnavailable() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        TestURLProtocol.response = { request in
+            switch request.url?.path {
+            case "/api/v1/control-room/waiting-on-captain":
+                return (404, Data())
+            case "/api/v1/control-room/central-agent-health":
+                return (200, Data(#"{"status":"healthy"}"#.utf8))
+            case "/api/v1/boards":
+                return (200, Data(#"{"total":4}"#.utf8))
+            case "/api/v1/tickets":
+                return (200, Data(#"[]"#.utf8))
+            case "/api/v1/agents":
+                return (200, Data(#"{"total":7}"#.utf8))
+            case "/api/v1/startup/status":
+                return (200, Data(#"{"ok":true}"#.utf8))
+            default:
+                XCTFail("Unexpected Home request: \(request.url?.path ?? "nil")")
+                return (404, Data())
+            }
+        }
+        defer { TestURLProtocol.response = nil }
+        let service = OrcaConsoleService(
+            serverURL: URL(string: "http://127.0.0.1:8000")!,
+            tokenStore: TestRuntimeTokenStore(token: "console-token"),
+            deviceID: "test-device-id-0123456789",
+            session: session
+        )
+
+        let snapshot = try await service.snapshot(for: .overview, workControl: nil)
+        let attention = try XCTUnwrap(snapshot.metrics.first { $0.id == "attention" })
+        XCTAssertEqual(attention.value, "-")
+        XCTAssertEqual(attention.status, "unavailable")
+        XCTAssertTrue(snapshot.records.isEmpty)
+    }
+
     func testCaptainLensGroupedContractDecodesIntoWorkSnapshot() throws {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
