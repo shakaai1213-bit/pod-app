@@ -139,6 +139,9 @@ final class AppState: ObservableObject {
             }
         } catch SIWASignInError.userCancelled {
             return
+        } catch let error as SIWASignInError {
+            errorMessage = error.errorDescription
+            showError = true
         } catch {
             errorMessage = "Could not sign in to ORCA. Check the connection and try again."
             showError = true

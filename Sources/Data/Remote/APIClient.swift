@@ -29,6 +29,10 @@ struct APIError: Error {
     }
 }
 
+enum APIClientResponseError: Error {
+    case unreadableAuthenticationResponse
+}
+
 struct EmptyResponse: Codable {}
 
 // MARK: - API Client
@@ -305,6 +309,11 @@ actor APIClient {
         do {
             return try decoder.decode(T.self, from: data)
         } catch {
+            // Authentication responses contain live access and refresh tokens.
+            // Never embed any part of their body in a decoding error.
+            if request.url?.path.hasPrefix("/api/v1/auth/") == true {
+                throw APIClientResponseError.unreadableAuthenticationResponse
+            }
             let body = String(data: data.prefix(500), encoding: .utf8) ?? "<\(data.count) bytes>"
             throw APIError(code: 0, message: "Decoding failed: \(error) | Response: \(body)")
         }
