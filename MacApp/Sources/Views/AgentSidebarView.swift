@@ -10,7 +10,11 @@ struct AgentSidebarView: View {
         .overview, .work, .fund, .crew, .knowledge, .lab, .runtime, .maker
     ]
 
-    private let toolSections: [ConsoleSection] = [.waitingOnCaptain, .workbench]
+    private var toolSections: [ConsoleSection] {
+        ConsoleSection.allCases.filter {
+            $0 != .waitingOnCaptain && $0 != .conversations && !podSections.contains($0)
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,6 +37,10 @@ struct AgentSidebarView: View {
             Divider()
 
             List {
+                Section("ATTENTION") {
+                    navigationButton(for: .waitingOnCaptain)
+                }
+
                 Section("MAIN") {
                     ForEach(podSections) { section in
                         navigationButton(for: section)
@@ -50,13 +58,17 @@ struct AgentSidebarView: View {
                         Button {
                             model.selectAgent(agent.id)
                         } label: {
-                            AgentRow(agent: agent)
+                            AgentRow(
+                                agent: agent,
+                                isSelected: model.selectedSection == .conversations
+                                    && model.selectedAgentID == agent.id
+                            )
                         }
                         .buttonStyle(.plain)
-                        .listRowBackground(
+                        .listRowBackground(Color.clear)
+                        .accessibilityAddTraits(
                             model.selectedSection == .conversations && model.selectedAgentID == agent.id
-                                ? OrcaPalette.accentElectric.opacity(0.12)
-                                : Color.clear
+                                ? .isSelected : []
                         )
                     }
                 }
@@ -105,6 +117,7 @@ struct AgentSidebarView: View {
         }
         .buttonStyle(.plain)
         .listRowBackground(Color.clear)
+        .accessibilityAddTraits(isSelected(section) ? .isSelected : [])
     }
 
     private func isSelected(_ section: ConsoleSection) -> Bool {
@@ -165,11 +178,12 @@ private struct ConsoleNavigationRow: View {
 
 private struct AgentRow: View {
     let agent: AgentProfile
+    let isSelected: Bool
 
     var body: some View {
         HStack(spacing: 10) {
             ZStack {
-                RoundedRectangle(cornerRadius: 6)
+                RoundedRectangle(cornerRadius: 10)
                     .fill(agent.accent.color.opacity(0.16))
                 Image(systemName: agent.symbol)
                     .font(.system(size: 13, weight: .semibold))
@@ -181,6 +195,7 @@ private struct AgentRow: View {
                 HStack(spacing: 5) {
                     Text(agent.name)
                         .font(.body.weight(.medium))
+                        .foregroundStyle(OrcaPalette.textPrimary)
                     if agent.lane == .protected {
                         Image(systemName: "lock.fill")
                             .font(.system(size: 9))
@@ -189,11 +204,16 @@ private struct AgentRow: View {
                 }
                 Text(agent.role)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(OrcaPalette.textSecondary)
                     .lineLimit(1)
             }
         }
+        .padding(.horizontal, 10)
         .frame(height: 38)
+        .background(
+            isSelected ? OrcaPalette.accentElectric.opacity(0.12) : Color.clear,
+            in: RoundedRectangle(cornerRadius: 10)
+        )
         .contentShape(Rectangle())
     }
 }

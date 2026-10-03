@@ -34,6 +34,7 @@ struct OrcaMacApp: App {
             RuntimeSettingsView()
                 .environment(model)
                 .frame(width: 520)
+                .preferredColorScheme(.dark)
         }
     }
 }
