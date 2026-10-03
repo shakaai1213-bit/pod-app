@@ -1,3 +1,4 @@
+import OrcaDomain
 import OrcaAPI
 import OrcaRuntimeContracts
 import SwiftData
@@ -30,6 +31,7 @@ struct WorkView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var directChatViewModel: DirectChatViewModel
     @State private var model = WorkViewModel()
+    @State private var approvalQuery = ""
     @State private var pushProjects = false
     @State private var pushTickets = false
     @State private var pushAgents = false
@@ -86,6 +88,10 @@ struct WorkView: View {
                         .padding(.bottom, 16)
 
                     AnyView(WorkbenchCalendarCockpitSection(model: model))
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
+
+                    AnyView(pendingApprovalDiscoverySection)
                         .padding(.horizontal, 16)
                         .padding(.bottom, 16)
 
@@ -492,6 +498,66 @@ struct WorkView: View {
     }
 
     // MARK: - Approval Lane
+
+    private var matchingPendingApprovals: [OrcaApprovalDiscovery.Item] {
+        model.pendingApprovalDiscovery.filter {
+            OrcaRecordSearch.matches(approvalQuery, values:
+                [$0.id, $0.approvalID, $0.title, $0.authority]
+                + $0.linkedTicketIDs.map { Optional($0) })
+        }
+    }
+
+    private var pendingApprovalDiscoverySection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("PENDING APPROVALS · ALL AGENTS")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(AppColors.textTertiary)
+                Spacer()
+                Button {
+                    Task { await model.loadPendingApprovalDiscovery() }
+                } label: { Image(systemName: "arrow.clockwise") }
+                .disabled(model.isLoadingApprovalDiscovery)
+                .accessibilityLabel("Refresh pending approvals")
+            }
+            TextField("Search loaded approvals by title or ID", text: $approvalQuery)
+                .textFieldStyle(.roundedBorder)
+            Text("Decision authority is shown on each record. Open its ticket for context.")
+                .font(.caption).foregroundStyle(AppColors.textTertiary)
+            if model.isLoadingApprovalDiscovery {
+                ProgressView()
+            } else if let error = model.approvalDiscoveryError {
+                errorBanner(message: error) { Task { await model.loadPendingApprovalDiscovery() } }
+            } else if matchingPendingApprovals.isEmpty {
+                emptyState(icon: "tray", text: approvalQuery.isEmpty
+                    ? "No pending approvals in the loaded team view."
+                    : "No matching loaded approvals.")
+            } else {
+                ForEach(matchingPendingApprovals) { item in
+                    Button {
+                        if let ticketID = item.linkedTicketIDs.first {
+                            pushTicketId = ticketID
+                            pushTickets = true
+                        }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(item.title).font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(AppColors.textPrimary)
+                            Text("Waiting on \(item.authority ?? "unregistered authority")")
+                                .font(.caption).foregroundStyle(AppColors.accentWarning)
+                            Text("Approval \(String((item.approvalID ?? item.id).prefix(8)))")
+                                .font(.caption.monospaced()).foregroundStyle(AppColors.textTertiary)
+                        }.frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(item.linkedTicketIDs.isEmpty)
+                    .padding(10).background(AppColors.backgroundTertiary)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+            }
+        }.padding(14).background(AppColors.backgroundSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMedium))
+    }
 
     private var approvalLaneSection: some View {
         VStack(spacing: 0) {
@@ -4082,6 +4148,9 @@ final class WorkViewModel {
     var isRunningWorkbenchTool = false
     var approvalAttention: WorkbenchApprovalAttention?
     var approvalAttentionItems: [WorkbenchApprovalAttentionItem] = []
+    var pendingApprovalDiscovery: [OrcaApprovalDiscovery.Item] = []
+    var isLoadingApprovalDiscovery = false
+    var approvalDiscoveryError: String?
     var isLoadingApprovalAttention = false
     var approvalAttentionError: String?
     var actionPreview: WorkbenchPlaygroundPreview?
@@ -4486,6 +4555,7 @@ final class WorkViewModel {
             group.addTask { await self.loadWorkbench() }
             group.addTask { await self.loadToolRuns() }
             group.addTask { await self.loadApprovalAttention() }
+            group.addTask { await self.loadPendingApprovalDiscovery() }
             group.addTask { await self.loadActionPreview() }
             group.addTask { await self.loadProjects() }
             group.addTask { await self.loadTickets() }
@@ -4520,6 +4590,20 @@ final class WorkViewModel {
         } catch {
             runtimeWorkControl = nil
             runtimeWorkControlError = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    func loadPendingApprovalDiscovery() async {
+        isLoadingApprovalDiscovery = true
+        approvalDiscoveryError = nil
+        defer { isLoadingApprovalDiscovery = false }
+        do {
+            let response: OrcaApprovalDiscovery = try await APIClient.shared.get(path: "/api/v1/control-room/team-work")
+            pendingApprovalDiscovery = response.pendingApprovals
+        } catch {
+            pendingApprovalDiscovery = []
+            approvalDiscoveryError = "Pending approval discovery is unavailable."
         }
     }
 

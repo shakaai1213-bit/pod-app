@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import OrcaDomain
 
 // MARK: - Ticket Domain Model
 
@@ -1475,6 +1476,7 @@ final class TicketsViewModel {
     var errorMessage: String?
     var selectedStatus: TicketStatus? = nil  // nil = show all
     var selectedSavedView: TicketSavedView?
+    var searchQuery = ""
     var showCreateSheet = false
     var groomingSummary: BacklogGroomingSummary?
     var backlogReprocessDryRun: BacklogGroomingSummary?
@@ -1530,6 +1532,7 @@ final class TicketsViewModel {
     var isCreating = false
     var isDispatching = false
     var dispatchMessage: String?
+    var canonicalTicketTimelines: [String: OrcaTicketTimelinePage] = [:]
     var ticketCommentsByTicketId: [String: [TicketComment]] = [:]
     var commentErrorsByTicketId: [String: String] = [:]
     var loadingCommentTicketIds: Set<String> = []
@@ -1605,7 +1608,17 @@ final class TicketsViewModel {
         if let selectedSavedView {
             result = result.filter { matches($0, savedView: selectedSavedView) }
         }
-        return result
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return result }
+        let matchedTickets = result.filter { OrcaRecordSearch.matches(query, values: [$0.id, $0.title]) }
+        // Include the root of a matching subtask so the existing tree can display it.
+        var visible = Set(matchedTickets.map(\.id))
+        let byID = Dictionary(tickets.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        for match in matchedTickets {
+            var parent = match.parentTicketId
+            while let id = parent, visible.insert(id).inserted { parent = byID[id]?.parentTicketId }
+        }
+        return tickets.filter { visible.contains($0.id) }
     }
 
     var statusFilteredTickets: [Ticket] {
@@ -1618,6 +1631,7 @@ final class TicketsViewModel {
     }
 
     var emptyStateTitle: String {
+        if !searchQuery.isEmpty { return "No matching loaded tickets" }
         if let selectedSavedView, let selectedStatus {
             return "No \(selectedStatus.label.lowercased()) \(selectedSavedView.label.lowercased()) tickets"
         }
@@ -1631,6 +1645,7 @@ final class TicketsViewModel {
     }
 
     var emptyStateSubtitle: String {
+        if !searchQuery.isEmpty { return "Search by title or short ticket ID, or adjust the current filters." }
         if selectedSavedView != nil || selectedStatus != nil {
             return "Adjust filters or create a ticket to assign work to an agent."
         }
@@ -2373,13 +2388,9 @@ final class TicketsViewModel {
     }
 
     func operatingOwnerLabel(for ticket: Ticket) -> String {
-        guard let flow = ticketFlow(for: ticket) else {
-            let context = actionContext(for: ticket)
-            return "Owner: \(context.owner) (\(context.workerLane))"
-        }
-        let owner = flow.ownerAgent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "unassigned" : flow.ownerAgent
-        let lane = flow.ownerLane ?? flow.supportLane ?? flow.workerLane ?? actionContext(for: ticket).workerLane
-        return "Owner: \(owner) (\(lane))"
+        guard ticket.assigneeAgentId != nil else { return "Owner: unassigned" }
+        let name = ticket.assigneeAgentName ?? "assigned agent"
+        return "Owner: \(name)"
     }
 
     func ticketListSignal(for ticket: Ticket) -> TicketListSignal {
@@ -3435,10 +3446,10 @@ final class TicketsViewModel {
                 title: title.trimmingCharacters(in: .whitespacesAndNewlines),
                 description: description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : description,
                 priority: Self.apiPriority(priority),
-                approvalState: approvalState,
-                autonomyLevel: autonomyLevel,
-                workerLane: workerLane,
-                toolPolicy: toolPolicy,
+                approvalState: canonicalTicketTimelines[ticketId] == nil ? approvalState : nil,
+                autonomyLevel: canonicalTicketTimelines[ticketId] == nil ? autonomyLevel : nil,
+                workerLane: canonicalTicketTimelines[ticketId] == nil ? workerLane : nil,
+                toolPolicy: canonicalTicketTimelines[ticketId] == nil ? toolPolicy : nil,
                 acceptanceCriteria: acceptanceCriteria,
                 desiredOutcome: desiredOutcome
             )
@@ -3996,6 +4007,30 @@ final class TicketsViewModel {
             return traceRuns
         }
         return computeRunsByTraceId[traceId] ?? []
+    }
+
+    @MainActor
+    func loadCanonicalTicketTimeline(ticketId: String, cursor: OrcaTicketTimelineCursor? = nil) async throws -> OrcaTicketTimelinePage {
+        guard let path = OrcaTicketTimelineCursor.path(ticketID: ticketId, cursor: cursor) else { throw APIError.unknown }
+        let page: OrcaTicketTimelinePage
+        do { page = try await api.get(path: path) }
+        catch let error as APIError {
+            if let rejection = OrcaTicketTimelineError.rejection(status: error.code) { throw rejection }; throw error
+        }
+        guard page.belongs(to: ticketId) else { throw APIError.unknown }
+        canonicalTicketTimelines[ticketId] = page
+        return page
+    }
+    @MainActor
+    func writeCanonicalTicketEntry(ticketId: String, input: OrcaTicketEntryInput) async throws {
+        guard UUID(uuidString: ticketId) != nil else { throw APIError.unknown }
+        let response: OrcaTicketEntryWriteResponse
+        do { response = try await api.post(path: "/api/v1/tickets/\(ticketId)/entries", body: input) }
+        catch let error as APIError {
+            if let rejection = OrcaTicketTimelineError.rejection(status: error.code) { throw rejection }; throw error
+        }
+        guard response.entry.ticketID.lowercased() == ticketId.lowercased(), response.ownership.ticketID.lowercased() == ticketId.lowercased() else { throw APIError.unknown }
+        await load()
     }
 
     @MainActor

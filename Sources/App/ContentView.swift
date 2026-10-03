@@ -1928,6 +1928,7 @@ private struct ComputeRouteChip: View {
 struct LoginView: View {
     @EnvironmentObject private var appState: AppState
     @State private var token: String = AppState.localBearerTokenFallback() ?? ""
+    @State private var showTokenSignIn = false
     @State private var networkStatus: String = ""   // live network diagnostic
     @FocusState private var isTokenFocused: Bool
 
@@ -1953,7 +1954,20 @@ struct LoginView: View {
 
             Spacer()
 
-            // Token input
+            Button {
+                Task { await appState.signInWithApple() }
+            } label: {
+                Label("Sign in with Apple", systemImage: "apple.logo")
+                    .font(.body.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .foregroundStyle(.black)
+                    .background(.white, in: RoundedRectangle(cornerRadius: AppTheme.radiusMedium))
+            }
+            .buttonStyle(.plain)
+            .disabled(appState.isLoading)
+            .padding(.horizontal, AppTheme.spacingXL)
+
+            DisclosureGroup("Advanced token sign-in", isExpanded: $showTokenSignIn) {
             VStack(spacing: AppTheme.spacingMD) {
                 VStack(alignment: .leading, spacing: AppTheme.spacingXS) {
                     HStack {
@@ -2043,6 +2057,7 @@ struct LoginView: View {
                 .buttonStyle(.plain)
                 .disabled(appState.isLoading || token.isEmpty)
 
+            }
             }
             .padding(.horizontal, AppTheme.spacingXL)
 

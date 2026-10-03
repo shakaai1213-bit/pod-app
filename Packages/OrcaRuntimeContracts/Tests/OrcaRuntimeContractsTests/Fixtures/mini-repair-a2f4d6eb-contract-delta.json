@@ -1,0 +1,94 @@
+{
+  "old_sha256": "6c21166128704a08d29124f73cef9e2ff9f5f77dcd74456fa20d3db633e6ddfc",
+  "new_sha256": "799c02629796f73e60b992c83719831a0224cc85a062b907343b436f52bc520f",
+  "old_digest": "33bed4cd0cd25c51056a650cfbfc27447a4f52790724d8544e165b2e92f183ad",
+  "new_digest": "e2e4518bed018c52a3caf02f51f472fd6fcad37356311632ad173b437ddb82e7",
+  "delta": [
+    {
+      "path": "/components/schemas/ConversationMemoryPendingCursor",
+      "added": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "created_at",
+          "id"
+        ],
+        "title": "ConversationMemoryPendingCursor",
+        "type": "object"
+      }
+    },
+    {
+      "path": "/components/schemas/ConversationMemoryRead/properties/pending_before",
+      "added": {
+        "$ref": "#/components/schemas/ConversationMemoryPendingCursor"
+      }
+    },
+    {
+      "path": "/components/schemas/ConversationMemoryRead/properties/pending_proposals_total",
+      "added": {
+        "title": "Pending Proposals Total",
+        "type": "integer"
+      }
+    },
+    {
+      "path": "/components/schemas/ConversationMemoryRead/properties/pending_proposals_truncated",
+      "added": {
+        "default": false,
+        "title": "Pending Proposals Truncated",
+        "type": "boolean"
+      }
+    },
+    {
+      "path": "/paths//api/v1/conversations/{conversation_id}/memory/get/parameters",
+      "before": [
+        {
+          "in": "path",
+          "name": "conversation_id",
+          "required": true,
+          "schema": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          }
+        }
+      ],
+      "after": [
+        {
+          "in": "path",
+          "name": "conversation_id",
+          "required": true,
+          "schema": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          }
+        },
+        {
+          "in": "query",
+          "name": "pending_before",
+          "required": false,
+          "schema": {
+            "maxLength": 200,
+            "title": "Pending Before",
+            "type": "string"
+          }
+        }
+      ]
+    },
+    {
+      "path": "/x-orca-schema-sha256",
+      "before": "33bed4cd0cd25c51056a650cfbfc27447a4f52790724d8544e165b2e92f183ad",
+      "after": "e2e4518bed018c52a3caf02f51f472fd6fcad37356311632ad173b437ddb82e7"
+    }
+  ]
+}

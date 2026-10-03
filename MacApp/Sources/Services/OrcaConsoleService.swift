@@ -1,5 +1,6 @@
 import Foundation
 import OrcaAPI
+import OrcaDomain
 import OrcaRuntimeContracts
 
 enum ConsoleTicketApprovalDecision: String, Equatable, Sendable {
@@ -620,6 +621,38 @@ actor OrcaConsoleService {
         } catch let error as OrcaConsoleServiceError {
             guard case .httpStatus(404, _) = error else { throw error }
             return nil
+        }
+    }
+
+    func ticketTimeline(ticketID: String, cursor: OrcaTicketTimelineCursor? = nil) async throws -> OrcaTicketTimelinePage {
+        guard let path = OrcaTicketTimelineCursor.path(ticketID: ticketID, cursor: cursor) else { throw OrcaConsoleServiceError.invalidResponse }
+        let page: OrcaTicketTimelinePage
+        do { page = try await requestJSON(method: "GET", path: path) }
+        catch let OrcaConsoleServiceError.httpStatus(code, _) {
+            if let rejection = OrcaTicketTimelineError.rejection(status: code) { throw rejection }
+            throw OrcaConsoleServiceError.httpStatus(code, nil)
+        }
+        guard page.belongs(to: ticketID) else { throw OrcaConsoleServiceError.invalidResponse }
+        return page
+    }
+
+    func writeTicketEntry(ticketID: String, input: OrcaTicketEntryInput) async throws {
+        guard UUID(uuidString: ticketID) != nil else { throw OrcaConsoleServiceError.invalidResponse }
+        let result: OrcaTicketEntryWriteResponse
+        do { result = try await requestJSON(method: "POST", path: "/api/v1/tickets/\(ticketID)/entries", payload: input) }
+        catch let OrcaConsoleServiceError.httpStatus(code, _) {
+            if let rejection = OrcaTicketTimelineError.rejection(status: code) { throw rejection }
+            throw OrcaConsoleServiceError.httpStatus(code, nil)
+        }
+        guard result.entry.ticketID.lowercased() == ticketID.lowercased(), result.ownership.ticketID.lowercased() == ticketID.lowercased() else { throw OrcaConsoleServiceError.invalidResponse }
+    }
+
+    func ticketRecipients() async throws -> [OrcaTicketRecipient] {
+        let root = try await get("/api/v1/agents?limit=200")
+        return collection(root, keys: ["items", "agents"]).compactMap { value in
+            guard let raw = field(value, keys: ["id"]), let id = UUID(uuidString: raw),
+                let name = field(value, keys: ["name"]), field(value, keys: ["status"]) != "deleting" else { return nil }
+            return OrcaTicketRecipient(id: id, name: name.capitalized)
         }
     }
 

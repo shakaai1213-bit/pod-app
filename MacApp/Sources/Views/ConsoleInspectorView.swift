@@ -1,4 +1,5 @@
 import SwiftUI
+import OrcaDesign
 
 struct ConsoleInspectorView: View {
     @Environment(OrcaMacModel.self) private var model
@@ -43,6 +44,22 @@ struct ConsoleInspectorView: View {
                         }
                     }
 
+                    if record.approval == nil,
+                       let authority = record.fields.first(where: { $0.label == "Approval Authority" })?.value,
+                       let approvalID = record.fields.first(where: { $0.label == "Approval ID" })?.value {
+                        InspectorSection(title: "Decision authority") {
+                            Text("Waiting on \(authority)")
+                                .font(.caption).foregroundStyle(.secondary)
+                            if authority.lowercased() == "tony" {
+                                Button("Open Captain decision") {
+                                    Task { await model.openCaptainDecision(approvalID: approvalID) }
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(!model.connectionState.isReady || model.isLoadingSection)
+                            }
+                        }
+                    }
+
                     if let approval = record.approval {
                         ApprovalWhySection(approval: approval)
                         ApprovalDecisionSection(recordID: record.id, approval: approval)
@@ -72,9 +89,13 @@ struct ConsoleInspectorView: View {
                         }
                         if !(model.selectedSection == .work && model.workMode == .team)
                             && !ticket.isProtected {
-                            OpenTicketChatHook(
+                            OrcaTicketTimelinePanel(ticketID: ticket.id, recipients: model.ticketRecipients,
+                            load: { cursor in try await model.loadTicketTimeline(ticketID: ticket.id, cursor: cursor) },
+                            write: { input in try await model.writeTicketEntry(ticketID: ticket.id, input: input) })
+                            .id(ticket.id)
+                        OpenTicketChatHook(
                                 ticketID: ticket.id,
-                                ownerSlug: ticket.agentSlug,
+                                ownerSlug: model.canonicalTicketOwner(ticketID: ticket.id, fallback: ticket.agentSlug),
                                 title: ticket.summary
                             )
                         }

@@ -1,6 +1,7 @@
 import CoreFoundation
 import Foundation
 import OrcaAPI
+import OrcaDomain
 import OrcaRuntimeContracts
 
 enum ConsoleWorkMode: String, CaseIterable, Identifiable {
@@ -84,6 +85,7 @@ enum ConsoleWorkMetricFilter: String, CaseIterable, Identifiable, Sendable {
 
     func matches(_ record: ConsoleRecord) -> Bool {
         if self == .needsScope { return record.needsScope }
+        if self == .approvals && record.id.hasPrefix("approval:") && record.status == "pending" { return true }
         return groups.contains(record.group)
     }
 }
@@ -128,6 +130,15 @@ struct ConsoleRecord: Identifiable, Equatable, Sendable {
         self.ticket = ticket
         self.desiredOutcome = desiredOutcome
         self.needsScope = needsScope
+    }
+}
+
+extension ConsoleRecord {
+    func matchesSearch(_ query: String) -> Bool {
+        OrcaRecordSearch.matches(query, values:
+            [id, title, subtitle, approval?.id, approval?.targetReference, ticket?.id]
+            + (approval?.linkedTicketIDs ?? []).map { Optional($0) }
+            + fields.filter { $0.label.localizedCaseInsensitiveContains("ID") }.map { Optional($0.value) })
     }
 }
 
@@ -558,7 +569,9 @@ struct ConsoleSectionSnapshot: Equatable, Sendable {
             ("historical", "Historical", ["Historical"]),
         ]
         let metrics = cards.map { card in
-            let count = card.groups.reduce(0) { $0 + (response.counts[$1] ?? 0) }
+            let count = card.id == "approvals"
+                ? Set(response.groups.flatMap(\.items).filter { $0.kind == "approval" && $0.status == "pending" }.map(\.id)).count
+                : card.groups.reduce(0) { $0 + (response.counts[$1] ?? 0) }
             return ConsoleMetric(id: card.id, label: card.title, value: "\(count)", status: count > 0 ? "attention" : "ok")
         }
         let records = response.groups.flatMap { group in
@@ -579,6 +592,12 @@ struct ConsoleSectionSnapshot: Equatable, Sendable {
                 if let authority = item.authority {
                     fields.append(ConsoleField(label: "Approval Authority", value: authority))
                 }
+                if let approvalID = item.approvalID {
+                    fields.append(ConsoleField(label: "Approval ID", value: approvalID))
+                }
+                for ticketID in item.linkedTicketIDs {
+                    fields.append(ConsoleField(label: "Linked Ticket ID", value: ticketID))
+                }
                 if let blockedOn = item.blockedOn {
                     fields.append(ConsoleField(label: "Blocked On", value: blockedOn))
                 }
@@ -596,7 +615,9 @@ struct ConsoleSectionSnapshot: Equatable, Sendable {
                 }
                 return ConsoleRecord(
                     id: item.id, title: item.title,
-                    subtitle: "\(owner) · \(item.summary)",
+                    subtitle: item.kind == "approval"
+                        ? "Approval · Waiting on \(item.authority ?? "unregistered")"
+                        : "\(owner) · \(item.summary)",
                     status: item.stale ? "stale" : item.status,
                     group: group.name, fields: fields, approval: nil, ticket: ticket,
                     desiredOutcome: item.desiredOutcome, needsScope: item.needsScope

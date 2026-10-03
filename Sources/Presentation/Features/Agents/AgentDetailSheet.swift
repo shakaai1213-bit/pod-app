@@ -1178,6 +1178,7 @@ struct AgentDetailSheet: View {
     private func lockerPlannerTab(_ locker: AgentLockerDTO) -> some View {
         VStack(alignment: .leading, spacing: Theme.sm) {
             plannerCreateRow
+            lockerLane("Handed to you", items: locker.planner.lanes.handedToYou, emptyReason: "No handoffs awaiting acknowledgement.")
             lockerLane("Now", items: locker.planner.lanes.now, emptyReason: locker.planner.emptyReasons["now"] ?? nil)
             lockerLane("Next", items: locker.planner.lanes.next, emptyReason: locker.planner.emptyReasons["next"] ?? nil)
             lockerLane("Waiting", items: locker.planner.lanes.waiting, emptyReason: locker.planner.emptyReasons["waiting"] ?? nil)

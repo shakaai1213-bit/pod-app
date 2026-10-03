@@ -3,6 +3,7 @@ import CryptoKit
 import Foundation
 import Observation
 import OrcaAPI
+import OrcaDomain
 import OrcaRuntime
 import OrcaRuntimeContracts
 
@@ -80,6 +81,8 @@ final class OrcaMacModel {
     var approvalError: String?
     var activeTicketChat: TicketChatContext?
     var isOpeningTicketChat = false
+    var ticketRecipients: [OrcaTicketRecipient] = []
+    var canonicalTicketTimelines: [String: OrcaTicketTimelinePage] = [:]
 
     struct TicketChatContext: Equatable, Sendable {
         let ticketID: String
@@ -103,7 +106,22 @@ final class OrcaMacModel {
     @ObservationIgnored private var service: (any OrcaRuntimeServing)?
     @ObservationIgnored private var consoleService: OrcaConsoleService?
     @ObservationIgnored private var authService: OrcaNativeAuthService?
-    @ObservationIgnored private var refreshTask: Task<Void, Never>?
+    @ObservationIgnored var pollingPolicies: [String: OrcaConsolePollingPolicy] = [:]
+    @ObservationIgnored var pollingNow: () -> Date = Date.init
+    var conversationsPollingActive = true
+
+    func setConversationsPollingActive(_ active: Bool) {
+        guard conversationsPollingActive != active else { return }
+        conversationsPollingActive = active
+        if !active { stopRuntimeReconciliation() }
+        if refreshTask != nil { beginRefreshLoop() }
+        if active, selectedSection == .conversations {
+            pollingPolicies[activeConversationKey, default: .init()].selected()
+            Task { await refreshSelectedConversation(silent: true) }
+        }
+    }
+
+    @ObservationIgnored var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var providerRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var connectInFlight: (id: UUID, task: Task<Void, Never>)?
     @ObservationIgnored private var conversationScope: (origin: String, organizationID: String)?
@@ -210,6 +228,8 @@ final class OrcaMacModel {
                 conversations[context.conversationKey]?.conversationID = thread.channelId
             }
             selectedSection = .conversations
+            pollingPolicies[context.conversationKey, default: .init()].selected()
+            if refreshTask != nil { beginRefreshLoop() }
             await refreshSelectedConversation(silent: true)
         } catch let error as OrcaConsoleServiceError {
             if case let .httpStatus(409, detail) = error, detail == "ticket_has_no_owner" {
@@ -226,6 +246,8 @@ final class OrcaMacModel {
         guard let context = activeTicketChat else { return }
         activeTicketChat = nil
         selectedSection = context.returnSection
+        if selectedSection == .conversations { pollingPolicies[activeConversationKey, default: .init()].selected() }
+        if refreshTask != nil { beginRefreshLoop() }
         selectedRecordID = context.returnRecordID
         if context.returnSection == .workbench, let ticketID = context.returnWorkbenchTicketID {
             selectedWorkbenchTicketID = ticketID
@@ -507,6 +529,8 @@ final class OrcaMacModel {
         activeTicketChat = nil
         selectSection(.conversations, refresh: false)
         selectedAgentID = id
+        pollingPolicies[id, default: .init()].selected()
+        if refreshTask != nil { beginRefreshLoop() }
         defaults.set(id, forKey: "orca.mac.selected-agent")
         if conversations[id] == nil {
             conversations[id] = ConversationState(conversationID: storedConversationID(for: id))
@@ -532,6 +556,7 @@ final class OrcaMacModel {
                 workMode = .portfolio
             }
         }
+        if selectedSection == .conversations { pollingPolicies[activeConversationKey, default: .init()].selected() }
         defaults.set(selectedSection.rawValue, forKey: "orca.mac.selected-section")
         defaults.set(workMode.rawValue, forKey: "orca.mac.work-mode")
         if refreshTask != nil {
@@ -553,7 +578,7 @@ final class OrcaMacModel {
         Task { await refreshSelectedSection(silent: true) }
     }
 
-    func selectWorkMode(_ mode: ConsoleWorkMode) {
+    func selectWorkMode(_ mode: ConsoleWorkMode, refresh: Bool = true) {
         if selectedSection != .work {
             selectSection(.work, refresh: false)
         }
@@ -561,13 +586,27 @@ final class OrcaMacModel {
         isLoadingSection = false
         recordSelectionChanged(to: nil)
         workMode = mode
+        if refreshTask != nil { beginRefreshLoop() }
         selectedRecordID = nil
         defaults.set(mode.rawValue, forKey: "orca.mac.work-mode")
         workMetricFilter = nil
         workControl = nil
         sectionSnapshots[.work] = .empty(.work)
         sectionError = nil
-        Task { await refreshSelectedSection(silent: true) }
+        if refresh { Task { await refreshSelectedSection(silent: true) } }
+    }
+
+    func openCaptainDecision(approvalID: String) async {
+        guard UUID(uuidString: approvalID) != nil else { return }
+        selectWorkMode(.captain, refresh: false)
+        await refreshSelectedSection()
+        guard selectedSection == .work, workMode == .captain else { return }
+        let id = "approval:\(approvalID)"
+        if selectedSnapshot.records.contains(where: { $0.id == id && $0.approval != nil }) {
+            selectRecord(id)
+        } else {
+            approvalNotice = "This approval is no longer in the current Captain queue."
+        }
     }
 
     func selectBoard(_ id: UUID) {
@@ -586,6 +625,23 @@ final class OrcaMacModel {
     func selectRecord(_ id: String?) {
         recordSelectionChanged(to: id)
         selectedRecordID = id
+    }
+
+    func loadTicketTimeline(ticketID: String, cursor: OrcaTicketTimelineCursor? = nil) async throws -> OrcaTicketTimelinePage {
+        guard let consoleService else { throw OrcaConsoleServiceError.missingCredential }
+        if ticketRecipients.isEmpty { ticketRecipients = (try? await consoleService.ticketRecipients()) ?? [] }
+        let page = try await consoleService.ticketTimeline(ticketID: ticketID, cursor: cursor)
+        canonicalTicketTimelines[ticketID] = page
+        return page
+    }
+    func writeTicketEntry(ticketID: String, input: OrcaTicketEntryInput) async throws {
+        guard let consoleService else { throw OrcaConsoleServiceError.missingCredential }
+        try await consoleService.writeTicketEntry(ticketID: ticketID, input: input)
+    }
+    func canonicalTicketOwner(ticketID: String, fallback: String?) -> String? {
+        guard let page = canonicalTicketTimelines[ticketID] else { return nil }
+        guard let id = page.ownership.ownerAgentID else { return nil }
+        return ticketRecipients.first { $0.id.uuidString.lowercased() == id.lowercased() }?.name.lowercased()
     }
 
     func refreshSelectedSection(
@@ -1128,7 +1184,7 @@ final class OrcaMacModel {
     }
 
     func refreshSelectedConversation(silent: Bool = false) async {
-        guard let service else { return }
+        guard conversationsPollingActive, let service else { return }
         let conversationKey = activeConversationKey
         guard let conversationID = conversations[conversationKey]?.conversationID
             ?? (activeTicketChat == nil ? storedConversationID(for: conversationKey) : nil) else { return }
@@ -1140,9 +1196,20 @@ final class OrcaMacModel {
                 hasCanonicalMessages: state.messages.contains { $0.deliveryState == .persisted }
             )
             state.conversationID = conversationID
+            let oldIDs = Set(state.messages.map(\.id))
+            let oldNewest = state.messages.last?.id
             state.mergeCanonical(remote.map(Self.transcriptMessage))
+            let changed = state.messages.last?.id != oldNewest || state.messages.contains { !oldIDs.contains($0.id) }
+            pollingPolicies[conversationKey, default: .init()].messagesMerged(
+                changed: changed,
+                replyArrived: OrcaConsolePollingPolicy.hasPolledReply(
+                    awaitedTurnID: pollingPolicies[conversationKey]?.awaitedTurnID, awaitedTraceID: pollingPolicies[conversationKey]?.awaitedTraceID, messages: remote, oldIDs: oldIDs
+                ),
+                now: pollingNow()
+            )
             conversations[conversationKey] = state
             lastUpdatedAt = Date()
+            guard conversationsPollingActive else { return }
             await refreshRuntimeEvidence(
                 agentID: conversationKey,
                 conversationID: conversationID,
@@ -1150,7 +1217,10 @@ final class OrcaMacModel {
                 silent: silent
             )
         } catch {
+            pollingPolicies[conversationKey, default: .init()].messagesFailed()
             if !silent { presentedError = error.localizedDescription }
+            await refreshRuntimeEvidence(agentID: conversationKey, conversationID: conversationID,
+                turnID: conversations[conversationKey]?.messages.last(where: { $0.role == .user })?.id, silent: silent)
         }
     }
 
@@ -1162,6 +1232,9 @@ final class OrcaMacModel {
         let conversationKey = activeConversationKey
         let ticketChat = activeTicketChat
         let traceID = retryIdentity?.traceID ?? "orca-mac-\(UUID().uuidString.lowercased())"
+        pollingPolicies[conversationKey, default: .init()].sent(now: pollingNow(), traceID: traceID)
+        stopRuntimeReconciliation(for: conversationKey)
+        if refreshTask != nil { beginRefreshLoop() }
         let idempotencyKey = retryIdentity?.idempotencyKey ?? "orca-mac-turn:\(traceID)"
         let pendingID = "pending:\(traceID)"
         let startedAt = Date()
@@ -1239,6 +1312,10 @@ final class OrcaMacModel {
                     )
                 )
             }
+            pollingPolicies[conversationKey, default: .init()].recordAwaitedTurn(response.userMessageID)
+            if OrcaConsolePollingPolicy.isReplyInHand(responseState: response.responseState, terminalKind: response.terminalKind) {
+                pollingPolicies[conversationKey, default: .init()].replyInHand()
+            }
             resolved.resolvePending(id: pendingID, with: canonical)
             resolved.latestReceipt = RuntimeReceipt(
                 turnID: response.userMessageID,
@@ -1263,6 +1340,7 @@ final class OrcaMacModel {
             var failed = conversations[conversationKey] ?? state
             failed.failPending(id: pendingID, reason: error.localizedDescription)
             conversations[conversationKey] = failed
+            pollingPolicies[conversationKey, default: .init()].failed(now: pollingNow())
             presentedError = error.localizedDescription
         }
         isSending = false
@@ -1282,13 +1360,24 @@ final class OrcaMacModel {
         OrcaEndpointPolicy.normalizedEndpoint(raw)
     }
 
-    private func beginRefreshLoop() {
+    @ObservationIgnored var pollingSleep: (TimeInterval) async throws -> Void = { seconds in
+        try await Task.sleep(for: .seconds(seconds))
+    }
+
+    func automaticRefreshDelaySeconds() -> TimeInterval {
+        if selectedSection == .conversations {
+            return conversationsPollingActive ? (pollingPolicies[activeConversationKey]?.messageInterval ?? 4) : 15
+        }
+        return selectedSection == .work && workMode == .captain ? 15 : Self.automaticRefreshIntervalSeconds(for: selectedSection)
+    }
+
+    func beginRefreshLoop() {
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
-                let delay = Self.automaticRefreshIntervalSeconds(for: self.selectedSection)
-                try? await Task.sleep(for: .seconds(delay))
+                let delay = self.automaticRefreshDelaySeconds()
+                do { try await self.pollingSleep(delay) } catch { return }
                 guard !Task.isCancelled else { return }
                 await self.refreshCurrentSurface(silent: true, automatic: true)
             }
@@ -1379,7 +1468,19 @@ final class OrcaMacModel {
                 hasCanonicalMessages: state.messages.contains { $0.deliveryState == .persisted }
             )
             state.conversationID = conversationID
+            let oldIDs = Set(state.messages.map(\.id))
             state.mergeCanonical(remote.map(Self.transcriptMessage))
+            let changed = state.messages.contains { !oldIDs.contains($0.id) }
+            let replyArrived = OrcaConsolePollingPolicy.hasPolledReply(
+                awaitedTurnID: pollingPolicies[agentID]?.awaitedTurnID, awaitedTraceID: pollingPolicies[agentID]?.awaitedTraceID, messages: remote, oldIDs: oldIDs
+            )
+            if changed || (pollingPolicies[agentID]?.awaitingReply == true && replyArrived) {
+                pollingPolicies[agentID, default: .init()].messagesMerged(
+                    changed: changed,
+                    replyArrived: replyArrived,
+                    now: pollingNow()
+                )
+            }
             conversations[agentID] = state
             lastUpdatedAt = Date()
             await refreshRuntimeEvidence(
@@ -1389,7 +1490,8 @@ final class OrcaMacModel {
                 silent: true
             )
         } catch {
-            // The immediate persisted response remains visible; polling retries.
+            pollingPolicies[agentID, default: .init()].messagesFailed()
+            await refreshRuntimeEvidence(agentID: agentID, conversationID: conversationID, turnID: turnID, silent: true)
         }
     }
 
@@ -1400,18 +1502,22 @@ final class OrcaMacModel {
         silent: Bool
     ) async {
         guard let service else { return }
+        guard conversationsPollingActive else { return }
         isLoadingRuntimeEvidence = true
         defer { isLoadingRuntimeEvidence = false }
         var errors: [String] = []
 
-        do {
-            conversationMemories[agentID] = try await service.conversationMemory(
-                conversationID: conversationID
-            )
-        } catch {
-            errors.append("Memory: \(error.localizedDescription)")
+        if pollingPolicies[agentID, default: .init()].shouldFetchMemory(now: pollingNow()) {
+            do {
+                conversationMemories[agentID] = try await service.conversationMemory(
+                    conversationID: conversationID
+                )
+            } catch {
+                errors.append("Memory: \(error.localizedDescription)")
+            }
         }
 
+        guard conversationsPollingActive else { return }
         if let turnID, !turnID.isEmpty {
             await startRuntimeReconciliation(
                 agentID: agentID,
@@ -1437,6 +1543,8 @@ final class OrcaMacModel {
         turnID: String,
         service: any OrcaRuntimeServing
     ) async {
+        guard !turnID.hasPrefix("pending:"), conversationsPollingActive,
+              pollingPolicies[agentID, default: .init()].shouldReconcile(turn: turnID, now: pollingNow()) else { return }
         if runtimeReconciliationTurnIDs[agentID] == turnID,
            runtimeReconciliationTasks[agentID] != nil {
             return
@@ -1462,6 +1570,7 @@ final class OrcaMacModel {
                 cursorStore.store(cursor, for: scope)
             }
         )
+        guard conversationsPollingActive, runtimeReconciliationTurnIDs[agentID] == turnID else { return }
         runtimeReconciliationTasks[agentID] = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
@@ -1470,6 +1579,10 @@ final class OrcaMacModel {
                           self.runtimeReconciliationTurnIDs[agentID] == turnID else {
                         return
                     }
+                    self.pollingPolicies[agentID, default: .init()].updated(
+                        turn: turnID, terminal: update.turn.terminalOutcome != nil,
+                        stuck: update.turn.recovery.isStuck, hint: update.pollAfterSeconds, now: self.pollingNow()
+                    )
                     self.runtimeTurns[agentID] = update.turn
                     self.runtimeReconciliations[agentID] = update
                     if agentID == self.selectedAgentID {
@@ -1477,10 +1590,16 @@ final class OrcaMacModel {
                     }
                     self.lastUpdatedAt = Date()
                 }
+            } catch is CancellationError {
+                return
             } catch OrcaRuntimeClientError.httpStatus(404) {
+                guard !Task.isCancelled else { return }
+                self.pollingPolicies[agentID, default: .init()].failed(now: self.pollingNow())
                 self.runtimeTurns.removeValue(forKey: agentID)
                 self.runtimeReconciliations.removeValue(forKey: agentID)
             } catch {
+                guard !Task.isCancelled else { return }
+                self.pollingPolicies[agentID, default: .init()].failed(now: self.pollingNow())
                 if self.runtimeTurns[agentID]?.turnId != turnID {
                     self.runtimeTurns.removeValue(forKey: agentID)
                     self.runtimeReconciliations.removeValue(forKey: agentID)
@@ -1525,6 +1644,7 @@ final class OrcaMacModel {
         if conversationScope?.origin != next.origin
             || conversationScope?.organizationID != next.organizationID {
             stopRuntimeReconciliation()
+            pollingPolicies.removeAll()
             conversations.removeAll()
             runtimeTurns.removeAll()
             runtimeReconciliations.removeAll()
@@ -1562,6 +1682,7 @@ final class OrcaMacModel {
         conversationScope = nil
         activeTicketChat = nil
         conversations.removeAll()
+        pollingPolicies.removeAll()
         runtimeTurns.removeAll()
         runtimeReconciliations.removeAll()
         conversationMemories.removeAll()

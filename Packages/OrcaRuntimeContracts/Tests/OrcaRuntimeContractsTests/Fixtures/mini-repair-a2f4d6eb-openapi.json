@@ -1,0 +1,4720 @@
+{
+  "components": {
+    "schemas": {
+      "ChatMessageRead": {
+        "description": "Read chat message response.",
+        "properties": {
+          "channel_id": {
+            "format": "uuid",
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "delivery_mode": {
+            "title": "Delivery Mode",
+            "type": "string"
+          },
+          "delivery_state": {
+            "default": "delivered",
+            "title": "Delivery State",
+            "type": "string"
+          },
+          "fallback_scheduled_at": {
+            "format": "date-time",
+            "title": "Fallback Scheduled At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_thread_reply": {
+            "default": false,
+            "title": "Is Thread Reply",
+            "type": "boolean"
+          },
+          "lane": {
+            "title": "Lane",
+            "type": "string"
+          },
+          "message_type": {
+            "title": "Message Type",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "provenance": {
+            "title": "Provenance",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "reply_to_id": {
+            "format": "uuid",
+            "title": "Reply To Id",
+            "type": "string"
+          },
+          "response_state": {
+            "title": "Response State",
+            "type": "string"
+          },
+          "sender_agent_id": {
+            "format": "uuid",
+            "title": "Sender Agent Id",
+            "type": "string"
+          },
+          "sender_emoji": {
+            "title": "Sender Emoji",
+            "type": "string"
+          },
+          "sender_name": {
+            "title": "Sender Name",
+            "type": "string"
+          },
+          "sender_type": {
+            "title": "Sender Type",
+            "type": "string"
+          },
+          "sender_user_id": {
+            "format": "uuid",
+            "title": "Sender User Id",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "terminal_kind": {
+            "enum": [
+              "held",
+              "held_for_explicit_escalation",
+              "route_unavailable",
+              "provider_failure"
+            ],
+            "title": "Terminal Kind",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "triage_id": {
+            "title": "Triage Id",
+            "type": "string"
+          },
+          "triage_trace_id": {
+            "title": "Triage Trace Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "channel_id",
+          "content",
+          "message_type",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ChatMessageRead",
+        "type": "object"
+      },
+      "ChatRuntimeActorType": {
+        "enum": [
+          "user",
+          "agent",
+          "system",
+          "adapter",
+          "worker"
+        ],
+        "title": "ChatRuntimeActorType",
+        "type": "string"
+      },
+      "ChatRuntimeAdapterContractRead": {
+        "properties": {
+          "credential_owner": {
+            "const": "central_secret_broker",
+            "default": "central_secret_broker",
+            "title": "Credential Owner",
+            "type": "string"
+          },
+          "identity_owner": {
+            "const": "named_agent",
+            "default": "named_agent",
+            "title": "Identity Owner",
+            "type": "string"
+          },
+          "memory_owner": {
+            "const": "orca",
+            "default": "orca",
+            "title": "Memory Owner",
+            "type": "string"
+          },
+          "provider_identifiers_are_extensible": {
+            "default": true,
+            "title": "Provider Identifiers Are Extensible",
+            "type": "boolean"
+          },
+          "reference_schema": {
+            "default": "ChatRuntimeAdapterRef",
+            "title": "Reference Schema",
+            "type": "string"
+          },
+          "resource_envelope_schema": {
+            "default": "ChatRuntimeResourceEnvelope",
+            "title": "Resource Envelope Schema",
+            "type": "string"
+          },
+          "secrets_allowed_in_payloads": {
+            "default": false,
+            "title": "Secrets Allowed In Payloads",
+            "type": "boolean"
+          },
+          "selection_owner": {
+            "const": "orca",
+            "default": "orca",
+            "title": "Selection Owner",
+            "type": "string"
+          }
+        },
+        "title": "ChatRuntimeAdapterContractRead",
+        "type": "object"
+      },
+      "ChatRuntimeAdapterRef": {
+        "description": "Execution adapter selected for a turn without transferring ORCA ownership.",
+        "properties": {
+          "adapter_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Adapter Id",
+            "type": "string"
+          },
+          "execution_mode": {
+            "enum": [
+              "local",
+              "remote",
+              "hybrid"
+            ],
+            "title": "Execution Mode",
+            "type": "string"
+          },
+          "host_id": {
+            "maxLength": 128,
+            "title": "Host Id",
+            "type": "string"
+          },
+          "model_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Model Id",
+            "type": "string"
+          },
+          "provider_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Provider Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "adapter_id",
+          "provider_id",
+          "model_id",
+          "execution_mode"
+        ],
+        "title": "ChatRuntimeAdapterRef",
+        "type": "object"
+      },
+      "ChatRuntimeAgentPackBundleRead": {
+        "description": "Seven-agent configuration bundle; live health remains separately attested.",
+        "properties": {
+          "bundle_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Bundle Sha256",
+            "type": "string"
+          },
+          "configuration_only": {
+            "const": true,
+            "default": true,
+            "title": "Configuration Only",
+            "type": "boolean"
+          },
+          "contract_version": {
+            "const": "orca.agent-pack-bundle.v1",
+            "default": "orca.agent-pack-bundle.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "frozen": {
+            "const": true,
+            "default": true,
+            "title": "Frozen",
+            "type": "boolean"
+          },
+          "packs": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeAgentPackRead"
+            },
+            "maxItems": 7,
+            "minItems": 7,
+            "title": "Packs",
+            "type": "array"
+          },
+          "runtime_attestation_required": {
+            "const": true,
+            "default": true,
+            "title": "Runtime Attestation Required",
+            "type": "boolean"
+          },
+          "runtime_manifest_revision": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Runtime Manifest Revision",
+            "type": "string"
+          },
+          "source_sha256": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "minProperties": 1,
+            "title": "Source Sha256",
+            "type": "object"
+          }
+        },
+        "required": [
+          "runtime_manifest_revision",
+          "source_sha256",
+          "bundle_sha256",
+          "packs"
+        ],
+        "title": "ChatRuntimeAgentPackBundleRead",
+        "type": "object"
+      },
+      "ChatRuntimeAgentPackRead": {
+        "description": "Digest-bound declarative identity and runtime policy for one named agent.",
+        "properties": {
+          "activation_context_ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Activation Context Ref",
+            "type": "string"
+          },
+          "agent_key": {
+            "pattern": "^[a-z][a-z0-9-]{1,63}$",
+            "title": "Agent Key",
+            "type": "string"
+          },
+          "allowed_runtime_hosts": {
+            "items": {
+              "enum": [
+                "orca-mini",
+                "shaka-mac",
+                "chief-mac"
+              ],
+              "type": "string"
+            },
+            "minItems": 2,
+            "title": "Allowed Runtime Hosts",
+            "type": "array"
+          },
+          "approval_notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Approval Notes",
+            "type": "array"
+          },
+          "authority_owner": {
+            "const": "orca",
+            "default": "orca",
+            "title": "Authority Owner",
+            "type": "string"
+          },
+          "capability_attestation_required": {
+            "const": true,
+            "default": true,
+            "title": "Capability Attestation Required",
+            "type": "boolean"
+          },
+          "capability_ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Capability Ref",
+            "type": "string"
+          },
+          "checkpoint_ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Checkpoint Ref",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "orca.agent-pack.v1",
+            "default": "orca.agent-pack.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "controller_host": {
+            "const": "orca-mini",
+            "default": "orca-mini",
+            "title": "Controller Host",
+            "type": "string"
+          },
+          "escalation_ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Escalation Ref",
+            "type": "string"
+          },
+          "home_capability_host": {
+            "enum": [
+              "shaka-mac",
+              "chief-mac"
+            ],
+            "title": "Home Capability Host",
+            "type": "string"
+          },
+          "identity_ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Identity Ref",
+            "type": "string"
+          },
+          "ingress_subject": {
+            "pattern": "^agents\\.[a-z][a-z0-9-]{1,63}\\.inbox$",
+            "title": "Ingress Subject",
+            "type": "string"
+          },
+          "lifecycle_owner": {
+            "const": "schoolhouse",
+            "default": "schoolhouse",
+            "title": "Lifecycle Owner",
+            "type": "string"
+          },
+          "locker_ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Locker Ref",
+            "type": "string"
+          },
+          "memory_contract": {
+            "const": "orca_managed",
+            "default": "orca_managed",
+            "title": "Memory Contract",
+            "type": "string"
+          },
+          "memory_ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Memory Ref",
+            "type": "string"
+          },
+          "payload_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Payload Sha256",
+            "type": "string"
+          },
+          "primary_adapter_id": {
+            "const": "openclaw_harness",
+            "default": "openclaw_harness",
+            "title": "Primary Adapter Id",
+            "type": "string"
+          },
+          "protected_conditions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Protected Conditions",
+            "type": "array"
+          },
+          "release_signature_required": {
+            "const": true,
+            "default": true,
+            "title": "Release Signature Required",
+            "type": "boolean"
+          },
+          "responsibility_domains": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Responsibility Domains",
+            "type": "array"
+          },
+          "roster_lane": {
+            "enum": [
+              "active_main",
+              "support_runtime"
+            ],
+            "title": "Roster Lane",
+            "type": "string"
+          },
+          "router_owner": {
+            "const": "cascade",
+            "default": "cascade",
+            "title": "Router Owner",
+            "type": "string"
+          },
+          "runtime_posture": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Runtime Posture",
+            "type": "string"
+          },
+          "source_refs": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Source Refs",
+            "type": "array"
+          },
+          "supported_adapter_ids": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Supported Adapter Ids",
+            "type": "array"
+          },
+          "terminal_reply_owner": {
+            "const": "schoolhouse_wake",
+            "default": "schoolhouse_wake",
+            "title": "Terminal Reply Owner",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "voice_contract": {
+            "const": "orca.named-agent-voice.v1",
+            "default": "orca.named-agent-voice.v1",
+            "title": "Voice Contract",
+            "type": "string"
+          },
+          "work_control_ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Work Control Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_key",
+          "title",
+          "roster_lane",
+          "home_capability_host",
+          "allowed_runtime_hosts",
+          "runtime_posture",
+          "supported_adapter_ids",
+          "ingress_subject",
+          "identity_ref",
+          "locker_ref",
+          "activation_context_ref",
+          "work_control_ref",
+          "checkpoint_ref",
+          "capability_ref",
+          "memory_ref",
+          "escalation_ref",
+          "source_refs",
+          "payload_sha256"
+        ],
+        "title": "ChatRuntimeAgentPackRead",
+        "type": "object"
+      },
+      "ChatRuntimeCapabilityAttestationRead": {
+        "description": "Pointer-safe live proof for one configured runtime capability.",
+        "properties": {
+          "actual_route": {
+            "maxLength": 512,
+            "title": "Actual Route",
+            "type": "string"
+          },
+          "attested_execution_host": {
+            "maxLength": 128,
+            "title": "Attested Execution Host",
+            "type": "string"
+          },
+          "configured_status": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Configured Status",
+            "type": "string"
+          },
+          "effective_status": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Effective Status",
+            "type": "string"
+          },
+          "enforced": {
+            "title": "Enforced",
+            "type": "boolean"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "evidence_valid": {
+            "title": "Evidence Valid",
+            "type": "boolean"
+          },
+          "execution_host": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Execution Host",
+            "type": "string"
+          },
+          "expected_route": {
+            "maxLength": 512,
+            "title": "Expected Route",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "missing_checks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Checks",
+            "type": "array"
+          },
+          "mode": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Mode",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "observed_checks": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Observed Checks",
+            "type": "object"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "record_contract_errors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Record Contract Errors",
+            "type": "array"
+          },
+          "record_contract_valid": {
+            "title": "Record Contract Valid",
+            "type": "boolean"
+          },
+          "record_health": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Record Health",
+            "type": "string"
+          },
+          "rejected_evidence_count": {
+            "minimum": 0.0,
+            "title": "Rejected Evidence Count",
+            "type": "integer"
+          },
+          "required_checks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Checks",
+            "type": "array"
+          },
+          "schema": {
+            "const": "orca.runtime-capability-attestation.v1",
+            "title": "Schema",
+            "type": "string"
+          },
+          "source_tag": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Source Tag",
+            "type": "string"
+          },
+          "state": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "State",
+            "type": "string"
+          },
+          "would_block_if_enforced": {
+            "title": "Would Block If Enforced",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "schema",
+          "mode",
+          "enforced",
+          "state",
+          "reason",
+          "configured_status",
+          "effective_status",
+          "would_block_if_enforced",
+          "execution_host",
+          "record_health",
+          "record_contract_valid",
+          "evidence_valid",
+          "rejected_evidence_count",
+          "source_tag"
+        ],
+        "title": "ChatRuntimeCapabilityAttestationRead",
+        "type": "object"
+      },
+      "ChatRuntimeCapabilityBundleRead": {
+        "description": "ORCA-owned capability truth for one exact named-agent configuration.",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "agent_key": {
+            "pattern": "^[a-z][a-z0-9-]{1,63}$",
+            "title": "Agent Key",
+            "type": "string"
+          },
+          "attestation_enforced": {
+            "title": "Attestation Enforced",
+            "type": "boolean"
+          },
+          "authority": {
+            "const": "orca",
+            "default": "orca",
+            "title": "Authority",
+            "type": "string"
+          },
+          "bundle_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Bundle Sha256",
+            "type": "string"
+          },
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeCapabilityRead"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "capability_truth_reply": {
+            "title": "Capability Truth Reply",
+            "type": "string"
+          },
+          "configuration_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Configuration Sha256",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "orca.capability-bundle.v1",
+            "default": "orca.capability-bundle.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "gaps": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Gaps",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "runtime_manifest_revision": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Runtime Manifest Revision",
+            "type": "string"
+          },
+          "source_contract": {
+            "const": "orca.agent-tools.v1",
+            "default": "orca.agent-tools.v1",
+            "title": "Source Contract",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_key",
+          "agent_id",
+          "runtime_manifest_revision",
+          "generated_at",
+          "attestation_enforced",
+          "configuration_sha256",
+          "bundle_sha256",
+          "capability_truth_reply"
+        ],
+        "title": "ChatRuntimeCapabilityBundleRead",
+        "type": "object"
+      },
+      "ChatRuntimeCapabilityRead": {
+        "description": "Typed tool/resource capability without transferring execution authority.",
+        "properties": {
+          "attestation": {
+            "$ref": "#/components/schemas/ChatRuntimeCapabilityAttestationRead"
+          },
+          "blocked_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocked Reasons",
+            "type": "array"
+          },
+          "capability_class": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Capability Class",
+            "type": "string"
+          },
+          "capability_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Capability Id",
+            "type": "string"
+          },
+          "declared_status": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Declared Status",
+            "type": "string"
+          },
+          "endpoints": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Endpoints",
+            "type": "object"
+          },
+          "evidence_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Types",
+            "type": "array"
+          },
+          "execution_allowed_by_current_policy": {
+            "title": "Execution Allowed By Current Policy",
+            "type": "boolean"
+          },
+          "execution_host": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Execution Host",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "mode": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Mode",
+            "type": "string"
+          },
+          "production_ready": {
+            "title": "Production Ready",
+            "type": "boolean"
+          },
+          "requires_approval": {
+            "title": "Requires Approval",
+            "type": "boolean"
+          },
+          "result_schema": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Result Schema",
+            "type": "string"
+          },
+          "risk": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Risk",
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          },
+          "version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capability_id",
+          "version",
+          "label",
+          "capability_class",
+          "declared_status",
+          "mode",
+          "execution_host",
+          "risk",
+          "result_schema",
+          "requires_approval",
+          "execution_allowed_by_current_policy",
+          "production_ready",
+          "attestation"
+        ],
+        "title": "ChatRuntimeCapabilityRead",
+        "type": "object"
+      },
+      "ChatRuntimeClientProvenanceRead": {
+        "description": "Non-secret identity of the client that first admitted the turn.",
+        "properties": {
+          "client_build": {
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+            "title": "Client Build",
+            "type": "string"
+          },
+          "client_instance_id": {
+            "maxLength": 160,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$",
+            "title": "Client Instance Id",
+            "type": "string"
+          },
+          "client_version": {
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+            "title": "Client Version",
+            "type": "string"
+          },
+          "device_registration_ref": {
+            "maxLength": 512,
+            "pattern": "^orca://devices/[A-Za-z0-9][A-Za-z0-9._:-]{0,479}$",
+            "title": "Device Registration Ref",
+            "type": "string"
+          },
+          "ingress_event_id": {
+            "format": "uuid",
+            "title": "Ingress Event Id",
+            "type": "string"
+          },
+          "received_at": {
+            "format": "date-time",
+            "title": "Received At",
+            "type": "string"
+          },
+          "source_surface": {
+            "enum": [
+              "pod",
+              "console",
+              "imessage",
+              "system_adapter"
+            ],
+            "title": "Source Surface",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_surface"
+        ],
+        "title": "ChatRuntimeClientProvenanceRead",
+        "type": "object"
+      },
+      "ChatRuntimeCompatibilityRouteRead": {
+        "properties": {
+          "current_route": {
+            "title": "Current Route",
+            "type": "string"
+          },
+          "runtime_resource": {
+            "title": "Runtime Resource",
+            "type": "string"
+          },
+          "transition": {
+            "enum": [
+              "preserve",
+              "adapt",
+              "replace_after_parity"
+            ],
+            "title": "Transition",
+            "type": "string"
+          }
+        },
+        "required": [
+          "current_route",
+          "runtime_resource",
+          "transition"
+        ],
+        "title": "ChatRuntimeCompatibilityRouteRead",
+        "type": "object"
+      },
+      "ChatRuntimeContractRead": {
+        "description": "Versioned public contract for provider-independent named-agent chat.",
+        "properties": {
+          "adapter": {
+            "$ref": "#/components/schemas/ChatRuntimeAdapterContractRead"
+          },
+          "authority": {
+            "const": "orca",
+            "default": "orca",
+            "title": "Authority",
+            "type": "string"
+          },
+          "compatibility_routes": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeCompatibilityRouteRead"
+            },
+            "title": "Compatibility Routes",
+            "type": "array"
+          },
+          "contract_version": {
+            "const": "orca.chat-runtime.v1",
+            "default": "orca.chat-runtime.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "invariants": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeInvariantRead"
+            },
+            "title": "Invariants",
+            "type": "array"
+          },
+          "lifecycle": {
+            "const": "schoolhouse",
+            "default": "schoolhouse",
+            "title": "Lifecycle",
+            "type": "string"
+          },
+          "maturity": {
+            "const": "foundation",
+            "default": "foundation",
+            "title": "Maturity",
+            "type": "string"
+          },
+          "provider_binding": {
+            "const": "adapter",
+            "default": "adapter",
+            "title": "Provider Binding",
+            "type": "string"
+          },
+          "resources": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Resources",
+            "type": "array"
+          },
+          "router": {
+            "const": "cascade",
+            "default": "cascade",
+            "title": "Router",
+            "type": "string"
+          },
+          "transports": {
+            "items": {
+              "enum": [
+                "rest",
+                "resumable_sse"
+              ],
+              "type": "string"
+            },
+            "title": "Transports",
+            "type": "array"
+          },
+          "turn": {
+            "$ref": "#/components/schemas/ChatRuntimeTurnContractRead"
+          }
+        },
+        "required": [
+          "transports",
+          "resources",
+          "adapter",
+          "turn",
+          "invariants",
+          "compatibility_routes"
+        ],
+        "title": "ChatRuntimeContractRead",
+        "type": "object"
+      },
+      "ChatRuntimeCursorState": {
+        "description": "How ORCA reconciled a client cursor against current turn truth.",
+        "enum": [
+          "initial",
+          "current",
+          "advanced",
+          "reset_required"
+        ],
+        "title": "ChatRuntimeCursorState",
+        "type": "string"
+      },
+      "ChatRuntimeEventType": {
+        "description": "Cross-provider events that form one resumable turn timeline.",
+        "enum": [
+          "message.accepted",
+          "turn.claimed",
+          "turn.progress",
+          "lifecycle.updated",
+          "route.decided",
+          "tool.requested",
+          "tool.completed",
+          "tool.failed",
+          "approval.requested",
+          "approval.decided",
+          "escalation.updated",
+          "worker.updated",
+          "artifact.recorded",
+          "memory.updated",
+          "turn.completed",
+          "turn.failed",
+          "turn.cancelled"
+        ],
+        "title": "ChatRuntimeEventType",
+        "type": "string"
+      },
+      "ChatRuntimeHistoryMessage": {
+        "description": "Bounded prior turn context supplied by a native ORCA client.",
+        "properties": {
+          "content": {
+            "maxLength": 12000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "user",
+              "assistant",
+              "system"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "ChatRuntimeHistoryMessage",
+        "type": "object"
+      },
+      "ChatRuntimeInvariantRead": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "description"
+        ],
+        "title": "ChatRuntimeInvariantRead",
+        "type": "object"
+      },
+      "ChatRuntimeOrderingRead": {
+        "description": "Server ordering contract used across retries, reconnects, and clock skew.",
+        "properties": {
+          "authority": {
+            "const": "orca",
+            "default": "orca",
+            "title": "Authority",
+            "type": "string"
+          },
+          "clock_skew_tolerant": {
+            "default": true,
+            "title": "Clock Skew Tolerant",
+            "type": "boolean"
+          },
+          "fallback_order": {
+            "const": "occurred_at_event_id",
+            "default": "occurred_at_event_id",
+            "title": "Fallback Order",
+            "type": "string"
+          },
+          "sequence_source": {
+            "const": "work_events.seq",
+            "default": "work_events.seq",
+            "title": "Sequence Source",
+            "type": "string"
+          }
+        },
+        "title": "ChatRuntimeOrderingRead",
+        "type": "object"
+      },
+      "ChatRuntimeProgressState": {
+        "description": "Canonical client-visible progress states for one runtime turn.",
+        "enum": [
+          "accepted",
+          "claimed",
+          "working",
+          "blocked",
+          "approval_needed",
+          "completed",
+          "failed",
+          "cancelled"
+        ],
+        "title": "ChatRuntimeProgressState",
+        "type": "string"
+      },
+      "ChatRuntimeProvenanceRead": {
+        "properties": {
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "source_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Source Ref",
+            "type": "string"
+          },
+          "trace_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_ref",
+          "trace_id"
+        ],
+        "title": "ChatRuntimeProvenanceRead",
+        "type": "object"
+      },
+      "ChatRuntimeProviderControlBundleRead": {
+        "description": "Digest-bound provider truth shared by Pod, Console, and Cascade.",
+        "properties": {
+          "authority": {
+            "const": "orca",
+            "default": "orca",
+            "title": "Authority",
+            "type": "string"
+          },
+          "bundle_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Bundle Sha256",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "orca.provider-control-bundle.v1",
+            "default": "orca.provider-control-bundle.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "invalid_record_count": {
+            "minimum": 0.0,
+            "title": "Invalid Record Count",
+            "type": "integer"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeProviderControlRecordRead"
+            },
+            "title": "Records",
+            "type": "array"
+          },
+          "router": {
+            "const": "cascade",
+            "default": "cascade",
+            "title": "Router",
+            "type": "string"
+          }
+        },
+        "required": [
+          "generated_at",
+          "invalid_record_count",
+          "bundle_sha256"
+        ],
+        "title": "ChatRuntimeProviderControlBundleRead",
+        "type": "object"
+      },
+      "ChatRuntimeProviderControlRecordRead": {
+        "additionalProperties": false,
+        "description": "Server-attested provider state; runtime truth is distinct from data quality.",
+        "properties": {
+          "adapter_id": {
+            "pattern": "^[a-z0-9][a-z0-9_.-]{0,127}$",
+            "title": "Adapter Id",
+            "type": "string"
+          },
+          "auth_state": {
+            "enum": [
+              "unknown",
+              "valid",
+              "invalid",
+              "unavailable"
+            ],
+            "title": "Auth State",
+            "type": "string"
+          },
+          "capacity_reset_at": {
+            "format": "date-time",
+            "title": "Capacity Reset At",
+            "type": "string"
+          },
+          "capacity_state": {
+            "enum": [
+              "unknown",
+              "available",
+              "exhausted"
+            ],
+            "title": "Capacity State",
+            "type": "string"
+          },
+          "circuit_state": {
+            "enum": [
+              "closed",
+              "open",
+              "half_open"
+            ],
+            "title": "Circuit State",
+            "type": "string"
+          },
+          "credential_generation": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Credential Generation",
+            "type": "string"
+          },
+          "credential_ref": {
+            "pattern": "^secret-ref://[a-z0-9][a-z0-9_./-]{0,255}$",
+            "title": "Credential Ref",
+            "type": "string"
+          },
+          "evidence_hash": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Evidence Hash",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "execution_allowed": {
+            "title": "Execution Allowed",
+            "type": "boolean"
+          },
+          "execution_host": {
+            "enum": [
+              "shaka-mac",
+              "chief-mac",
+              "orca-mini"
+            ],
+            "title": "Execution Host",
+            "type": "string"
+          },
+          "failure_count": {
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Failure Count",
+            "type": "integer"
+          },
+          "last_delivery_status": {
+            "enum": [
+              "unknown",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Last Delivery Status",
+            "type": "string"
+          },
+          "last_execution_status": {
+            "enum": [
+              "unknown",
+              "succeeded",
+              "failed",
+              "timeout"
+            ],
+            "title": "Last Execution Status",
+            "type": "string"
+          },
+          "next_probe_at": {
+            "format": "date-time",
+            "title": "Next Probe At",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "provider_id": {
+            "pattern": "^[a-z0-9][a-z0-9_.-]{0,127}$",
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "publisher": {
+            "pattern": "^[a-z][a-z0-9-]{1,63}$",
+            "title": "Publisher",
+            "type": "string"
+          },
+          "publisher_generation": {
+            "minimum": 1.0,
+            "title": "Publisher Generation",
+            "type": "integer"
+          },
+          "publisher_version": {
+            "const": "provider-control/1.0",
+            "default": "provider-control/1.0",
+            "title": "Publisher Version",
+            "type": "string"
+          },
+          "reason_code": {
+            "pattern": "^[a-z0-9][a-z0-9_.:-]{0,127}$",
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "schema": {
+            "const": "orca.provider-control-record.v1",
+            "default": "orca.provider-control-record.v1",
+            "title": "Schema",
+            "type": "string"
+          },
+          "source_ref": {
+            "pattern": "^/api/v1/state-registry/[a-z0-9._-]+$",
+            "title": "Source Ref",
+            "type": "string"
+          },
+          "status_reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Status Reason",
+            "type": "string"
+          },
+          "trust_state": {
+            "enum": [
+              "attested",
+              "stale"
+            ],
+            "title": "Trust State",
+            "type": "string"
+          },
+          "ttl_seconds": {
+            "maximum": 300.0,
+            "minimum": 1.0,
+            "title": "Ttl Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "adapter_id",
+          "provider_id",
+          "execution_host",
+          "credential_ref",
+          "credential_generation",
+          "publisher_generation",
+          "auth_state",
+          "capacity_state",
+          "circuit_state",
+          "reason_code",
+          "last_execution_status",
+          "last_delivery_status",
+          "failure_count",
+          "observed_at",
+          "ttl_seconds",
+          "evidence_hash",
+          "trust_state",
+          "execution_allowed",
+          "source_ref",
+          "publisher",
+          "status_reason"
+        ],
+        "title": "ChatRuntimeProviderControlRecordRead",
+        "type": "object"
+      },
+      "ChatRuntimeRecoveryRead": {
+        "description": "Current stale-turn verdict; it recommends recovery but does not mutate.",
+        "properties": {
+          "is_stuck": {
+            "title": "Is Stuck",
+            "type": "boolean"
+          },
+          "last_progress_at": {
+            "format": "date-time",
+            "title": "Last Progress At",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 256,
+            "title": "Reason",
+            "type": "string"
+          },
+          "recommended_action": {
+            "maxLength": 128,
+            "title": "Recommended Action",
+            "type": "string"
+          },
+          "retry_owner": {
+            "maxLength": 128,
+            "title": "Retry Owner",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "healthy",
+              "waiting",
+              "stuck",
+              "terminal"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "threshold_seconds": {
+            "minimum": 1.0,
+            "title": "Threshold Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status",
+          "is_stuck",
+          "observed_at",
+          "last_progress_at"
+        ],
+        "title": "ChatRuntimeRecoveryRead",
+        "type": "object"
+      },
+      "ChatRuntimeResourceEnvelope": {
+        "description": "Governed execution limits passed to any selected provider adapter.",
+        "properties": {
+          "allowed_root_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Root Refs",
+            "type": "array"
+          },
+          "allowed_tool_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Tool Ids",
+            "type": "array"
+          },
+          "approval_rule_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Approval Rule Ids",
+            "type": "array"
+          },
+          "compute_budget_units": {
+            "minimum": 0.0,
+            "title": "Compute Budget Units",
+            "type": "integer"
+          },
+          "deadline_at": {
+            "format": "date-time",
+            "title": "Deadline At",
+            "type": "string"
+          },
+          "max_concurrent_workers": {
+            "default": 1,
+            "maximum": 64.0,
+            "minimum": 1.0,
+            "title": "Max Concurrent Workers",
+            "type": "integer"
+          },
+          "network_access": {
+            "default": "governed",
+            "enum": [
+              "denied",
+              "governed",
+              "allowed"
+            ],
+            "title": "Network Access",
+            "type": "string"
+          },
+          "provider_rungs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Provider Rungs",
+            "type": "array"
+          }
+        },
+        "title": "ChatRuntimeResourceEnvelope",
+        "type": "object"
+      },
+      "ChatRuntimeSchemaBundleRead": {
+        "properties": {
+          "contract_version": {
+            "const": "orca.chat-runtime.v1",
+            "default": "orca.chat-runtime.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "schema_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Schema Sha256",
+            "type": "string"
+          },
+          "schemas": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Schemas",
+            "type": "object"
+          }
+        },
+        "required": [
+          "schema_sha256",
+          "schemas"
+        ],
+        "title": "ChatRuntimeSchemaBundleRead",
+        "type": "object"
+      },
+      "ChatRuntimeTerminalOutcomeRead": {
+        "properties": {
+          "completed_at": {
+            "format": "date-time",
+            "title": "Completed At",
+            "type": "string"
+          },
+          "error_code": {
+            "maxLength": 128,
+            "title": "Error Code",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ChatRuntimeProgressState"
+          },
+          "summary": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "terminal_kind": {
+            "enum": [
+              "held",
+              "held_for_explicit_escalation",
+              "route_unavailable",
+              "provider_failure"
+            ],
+            "title": "Terminal Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "summary",
+          "completed_at"
+        ],
+        "title": "ChatRuntimeTerminalOutcomeRead",
+        "type": "object"
+      },
+      "ChatRuntimeTimelineEventRead": {
+        "description": "Ordered event envelope shared by REST reads and resumable streams.",
+        "properties": {
+          "actor_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Actor Id",
+            "type": "string"
+          },
+          "actor_type": {
+            "$ref": "#/components/schemas/ChatRuntimeActorType"
+          },
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "cursor": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Cursor",
+            "type": "string"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "$ref": "#/components/schemas/ChatRuntimeEventType"
+          },
+          "message_id": {
+            "format": "uuid",
+            "title": "Message Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ChatRuntimeProvenanceRead"
+          },
+          "sequence": {
+            "minimum": 0.0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ChatRuntimeProgressState"
+          },
+          "turn_id": {
+            "format": "uuid",
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "sequence",
+          "cursor",
+          "conversation_id",
+          "turn_id",
+          "agent_id",
+          "event_type",
+          "actor_type",
+          "actor_id",
+          "occurred_at",
+          "provenance"
+        ],
+        "title": "ChatRuntimeTimelineEventRead",
+        "type": "object"
+      },
+      "ChatRuntimeTurnContractRead": {
+        "properties": {
+          "controller_lease_required": {
+            "default": true,
+            "title": "Controller Lease Required",
+            "type": "boolean"
+          },
+          "exactly_one_terminal_outcome": {
+            "default": true,
+            "title": "Exactly One Terminal Outcome",
+            "type": "boolean"
+          },
+          "idempotency_key_required": {
+            "default": true,
+            "title": "Idempotency Key Required",
+            "type": "boolean"
+          },
+          "persist_before_execute": {
+            "default": true,
+            "title": "Persist Before Execute",
+            "type": "boolean"
+          },
+          "progress_states": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeProgressState"
+            },
+            "title": "Progress States",
+            "type": "array"
+          },
+          "resumable_cursor": {
+            "default": true,
+            "title": "Resumable Cursor",
+            "type": "boolean"
+          },
+          "terminal_states": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeProgressState"
+            },
+            "title": "Terminal States",
+            "type": "array"
+          }
+        },
+        "required": [
+          "progress_states",
+          "terminal_states"
+        ],
+        "title": "ChatRuntimeTurnContractRead",
+        "type": "object"
+      },
+      "ChatRuntimeTurnCreate": {
+        "description": "Create one provider-neutral named-agent turn through ORCA.",
+        "properties": {
+          "active_ticket_id": {
+            "format": "uuid",
+            "title": "Active Ticket Id",
+            "type": "string"
+          },
+          "async_response": {
+            "default": false,
+            "title": "Async Response",
+            "type": "boolean"
+          },
+          "client_build": {
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+            "title": "Client Build",
+            "type": "string"
+          },
+          "client_instance_id": {
+            "maxLength": 160,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$",
+            "title": "Client Instance Id",
+            "type": "string"
+          },
+          "client_version": {
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+            "title": "Client Version",
+            "type": "string"
+          },
+          "content": {
+            "maxLength": 12000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "delivery_mode": {
+            "default": "auto",
+            "enum": [
+              "auto",
+              "compute",
+              "agent_inbox"
+            ],
+            "title": "Delivery Mode",
+            "type": "string"
+          },
+          "device_registration_ref": {
+            "maxLength": 512,
+            "pattern": "^orca://devices/[A-Za-z0-9][A-Za-z0-9._:-]{0,479}$",
+            "title": "Device Registration Ref",
+            "type": "string"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeHistoryMessage"
+            },
+            "maxItems": 30,
+            "title": "History",
+            "type": "array"
+          },
+          "idempotency_key": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "identity_attestation": {
+            "maxLength": 4096,
+            "minLength": 32,
+            "title": "Identity Attestation",
+            "type": "string"
+          },
+          "origin_chat_id": {
+            "minimum": 1.0,
+            "title": "Origin Chat Id",
+            "type": "integer"
+          },
+          "origin_request_id": {
+            "maxLength": 160,
+            "title": "Origin Request Id",
+            "type": "string"
+          },
+          "origin_thread_id": {
+            "maxLength": 160,
+            "title": "Origin Thread Id",
+            "type": "string"
+          },
+          "source_surface": {
+            "default": "pod",
+            "enum": [
+              "pod",
+              "console",
+              "imessage"
+            ],
+            "title": "Source Surface",
+            "type": "string"
+          },
+          "thread_scope": {
+            "default": "direct",
+            "enum": [
+              "direct",
+              "ticket"
+            ],
+            "title": "Thread Scope",
+            "type": "string"
+          },
+          "trace_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "triage_id": {
+            "maxLength": 128,
+            "title": "Triage Id",
+            "type": "string"
+          },
+          "triage_trace_id": {
+            "maxLength": 128,
+            "title": "Triage Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content",
+          "idempotency_key",
+          "trace_id"
+        ],
+        "title": "ChatRuntimeTurnCreate",
+        "type": "object"
+      },
+      "ChatRuntimeTurnRead": {
+        "description": "Canonical provider-independent read model for one accepted turn.",
+        "properties": {
+          "adapter": {
+            "$ref": "#/components/schemas/ChatRuntimeAdapterRef"
+          },
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "client_provenance": {
+            "$ref": "#/components/schemas/ChatRuntimeClientProvenanceRead"
+          },
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeTimelineEventRead"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "idempotency_key": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "latest_cursor": {
+            "maxLength": 256,
+            "title": "Latest Cursor",
+            "type": "string"
+          },
+          "message_id": {
+            "format": "uuid",
+            "title": "Message Id",
+            "type": "string"
+          },
+          "ordering": {
+            "$ref": "#/components/schemas/ChatRuntimeOrderingRead"
+          },
+          "recovery": {
+            "$ref": "#/components/schemas/ChatRuntimeRecoveryRead"
+          },
+          "resources": {
+            "$ref": "#/components/schemas/ChatRuntimeResourceEnvelope"
+          },
+          "runtime_session_id": {
+            "format": "uuid",
+            "title": "Runtime Session Id",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ChatRuntimeProgressState"
+          },
+          "terminal_outcome": {
+            "$ref": "#/components/schemas/ChatRuntimeTerminalOutcomeRead"
+          },
+          "turn_id": {
+            "format": "uuid",
+            "title": "Turn Id",
+            "type": "string"
+          },
+          "turn_route": {
+            "$ref": "#/components/schemas/TurnRoute"
+          },
+          "work_runs": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeWorkRunRead"
+            },
+            "title": "Work Runs",
+            "type": "array"
+          },
+          "work_runs_limit": {
+            "default": 100,
+            "minimum": 1.0,
+            "title": "Work Runs Limit",
+            "type": "integer"
+          },
+          "work_runs_truncated": {
+            "default": false,
+            "title": "Work Runs Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "turn_id",
+          "conversation_id",
+          "message_id",
+          "agent_id",
+          "state",
+          "idempotency_key",
+          "resources",
+          "client_provenance",
+          "ordering",
+          "recovery"
+        ],
+        "title": "ChatRuntimeTurnRead",
+        "type": "object"
+      },
+      "ChatRuntimeTurnReconciliationRead": {
+        "description": "Authoritative full snapshot plus the events newer than a client cursor.",
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "contract_version": {
+            "const": "orca.chat-runtime.turn-reconciliation.v1",
+            "default": "orca.chat-runtime.turn-reconciliation.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "cursor_state": {
+            "$ref": "#/components/schemas/ChatRuntimeCursorState"
+          },
+          "events_after_cursor": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeTimelineEventRead"
+            },
+            "title": "Events After Cursor",
+            "type": "array"
+          },
+          "poll_after_seconds": {
+            "maximum": 60.0,
+            "minimum": 1.0,
+            "title": "Poll After Seconds",
+            "type": "integer"
+          },
+          "reconciliation_cursor": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Reconciliation Cursor",
+            "type": "string"
+          },
+          "requested_cursor": {
+            "maxLength": 256,
+            "title": "Requested Cursor",
+            "type": "string"
+          },
+          "terminal": {
+            "title": "Terminal",
+            "type": "boolean"
+          },
+          "turn": {
+            "$ref": "#/components/schemas/ChatRuntimeTurnRead"
+          },
+          "turn_id": {
+            "format": "uuid",
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_id",
+          "reconciliation_cursor",
+          "cursor_state",
+          "changed",
+          "terminal",
+          "turn"
+        ],
+        "title": "ChatRuntimeTurnReconciliationRead",
+        "type": "object"
+      },
+      "ChatRuntimeTurnSubmissionRead": {
+        "description": "Accepted turn plus the immediate durable reply projection for clients.",
+        "properties": {
+          "agent_key": {
+            "pattern": "^[a-z][a-z0-9-]{1,63}$",
+            "title": "Agent Key",
+            "type": "string"
+          },
+          "compute_run_id": {
+            "maxLength": 128,
+            "title": "Compute Run Id",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "orca.chat-runtime.turn-submission.v1",
+            "default": "orca.chat-runtime.turn-submission.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "delivery_mode": {
+            "enum": [
+              "auto",
+              "compute",
+              "agent_inbox"
+            ],
+            "title": "Delivery Mode",
+            "type": "string"
+          },
+          "provenance": {
+            "maxLength": 64,
+            "title": "Provenance",
+            "type": "string"
+          },
+          "reply_content": {
+            "title": "Reply Content",
+            "type": "string"
+          },
+          "reply_lane": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Reply Lane",
+            "type": "string"
+          },
+          "reply_message_id": {
+            "format": "uuid",
+            "title": "Reply Message Id",
+            "type": "string"
+          },
+          "reply_source": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Reply Source",
+            "type": "string"
+          },
+          "reply_state": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Reply State",
+            "type": "string"
+          },
+          "terminal_kind": {
+            "enum": [
+              "held",
+              "held_for_explicit_escalation",
+              "route_unavailable",
+              "provider_failure"
+            ],
+            "title": "Terminal Kind",
+            "type": "string"
+          },
+          "tier": {
+            "maxLength": 128,
+            "title": "Tier",
+            "type": "string"
+          },
+          "token_count": {
+            "minimum": 0.0,
+            "title": "Token Count",
+            "type": "integer"
+          },
+          "trace_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "triage_id": {
+            "maxLength": 128,
+            "title": "Triage Id",
+            "type": "string"
+          },
+          "turn": {
+            "$ref": "#/components/schemas/ChatRuntimeTurnRead"
+          },
+          "turn_route": {
+            "$ref": "#/components/schemas/TurnRoute"
+          }
+        },
+        "required": [
+          "agent_key",
+          "turn",
+          "reply_message_id",
+          "reply_content",
+          "reply_state",
+          "reply_source",
+          "reply_lane",
+          "trace_id"
+        ],
+        "title": "ChatRuntimeTurnSubmissionRead",
+        "type": "object"
+      },
+      "ChatRuntimeWatchdogItemRead": {
+        "description": "Pointer-safe stale turn or nested run surfaced for support review.",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "recovery": {
+            "$ref": "#/components/schemas/ChatRuntimeRecoveryRead"
+          },
+          "source_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Source Ref",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ChatRuntimeProgressState"
+          },
+          "stuck_run_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Stuck Run Ids",
+            "type": "array"
+          },
+          "turn_id": {
+            "format": "uuid",
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_id",
+          "conversation_id",
+          "agent_id",
+          "state",
+          "recovery",
+          "source_ref"
+        ],
+        "title": "ChatRuntimeWatchdogItemRead",
+        "type": "object"
+      },
+      "ChatRuntimeWatchdogRead": {
+        "description": "Bounded read-only scan of recent direct-chat liveness.",
+        "properties": {
+          "authority": {
+            "const": "orca",
+            "default": "orca",
+            "title": "Authority",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "orca.chat-runtime.watchdog.v1",
+            "default": "orca.chat-runtime.watchdog.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeWatchdogItemRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "lookback_hours": {
+            "maximum": 168.0,
+            "minimum": 1.0,
+            "title": "Lookback Hours",
+            "type": "integer"
+          },
+          "mutation_performed": {
+            "const": false,
+            "default": false,
+            "title": "Mutation Performed",
+            "type": "boolean"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "scanned_turns": {
+            "minimum": 0.0,
+            "title": "Scanned Turns",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "warning"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stuck_runs": {
+            "minimum": 0.0,
+            "title": "Stuck Runs",
+            "type": "integer"
+          },
+          "stuck_turns": {
+            "minimum": 0.0,
+            "title": "Stuck Turns",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "observed_at",
+          "lookback_hours",
+          "scanned_turns",
+          "stuck_turns",
+          "stuck_runs",
+          "status"
+        ],
+        "title": "ChatRuntimeWatchdogRead",
+        "type": "object"
+      },
+      "ChatRuntimeWorkApprovalRead": {
+        "description": "One pending first-class approval with canonical registry authority.",
+        "properties": {
+          "action_type": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Action Type",
+            "type": "string"
+          },
+          "approval_gate": {
+            "maxLength": 255,
+            "title": "Approval Gate",
+            "type": "string"
+          },
+          "approval_id": {
+            "format": "uuid",
+            "title": "Approval Id",
+            "type": "string"
+          },
+          "authority": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Authority",
+            "type": "string"
+          },
+          "authorization_reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Authorization Reason",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision_endpoint": {
+            "maxLength": 512,
+            "title": "Decision Endpoint",
+            "type": "string"
+          },
+          "linked_task_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Linked Task Ids",
+            "type": "array"
+          },
+          "linked_ticket_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Linked Ticket Ids",
+            "type": "array"
+          },
+          "no_cascade": {
+            "title": "No Cascade",
+            "type": "boolean"
+          },
+          "reason": {
+            "maxLength": 4000,
+            "title": "Reason",
+            "type": "string"
+          },
+          "requested_by": {
+            "maxLength": 256,
+            "title": "Requested By",
+            "type": "string"
+          },
+          "resolution_enabled": {
+            "title": "Resolution Enabled",
+            "type": "boolean"
+          },
+          "secondary_authority": {
+            "maxLength": 128,
+            "title": "Secondary Authority",
+            "type": "string"
+          },
+          "self_approval_prohibited": {
+            "title": "Self Approval Prohibited",
+            "type": "boolean"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "stale_after_hours": {
+            "minimum": 1.0,
+            "title": "Stale After Hours",
+            "type": "integer"
+          },
+          "status": {
+            "const": "pending",
+            "default": "pending",
+            "title": "Status",
+            "type": "string"
+          },
+          "target_ref": {
+            "maxLength": 256,
+            "title": "Target Ref",
+            "type": "string"
+          },
+          "target_type": {
+            "maxLength": 64,
+            "title": "Target Type",
+            "type": "string"
+          },
+          "ticket_status": {
+            "maxLength": 64,
+            "title": "Ticket Status",
+            "type": "string"
+          },
+          "ticket_title": {
+            "maxLength": 1000,
+            "title": "Ticket Title",
+            "type": "string"
+          },
+          "viewer_authorized": {
+            "title": "Viewer Authorized",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "approval_id",
+          "action_type",
+          "authority",
+          "no_cascade",
+          "viewer_authorized",
+          "authorization_reason",
+          "resolution_enabled",
+          "self_approval_prohibited",
+          "stale",
+          "stale_after_hours",
+          "created_at"
+        ],
+        "title": "ChatRuntimeWorkApprovalRead",
+        "type": "object"
+      },
+      "ChatRuntimeWorkControlBundleRead": {
+        "description": "Digest-bound provider-neutral work projection for one named agent.",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "agent_key": {
+            "pattern": "^[a-z][a-z0-9-]{1,63}$",
+            "title": "Agent Key",
+            "type": "string"
+          },
+          "approval_inventory": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeWorkApprovalRead"
+            },
+            "title": "Approval Inventory",
+            "type": "array"
+          },
+          "approval_queue": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeWorkApprovalRead"
+            },
+            "title": "Approval Queue",
+            "type": "array"
+          },
+          "assigned_work": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeWorkItemRead"
+            },
+            "title": "Assigned Work",
+            "type": "array"
+          },
+          "authority": {
+            "const": "orca",
+            "default": "orca",
+            "title": "Authority",
+            "type": "string"
+          },
+          "bundle_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Bundle Sha256",
+            "type": "string"
+          },
+          "configuration_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Configuration Sha256",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "orca.work-control-bundle.v1",
+            "default": "orca.work-control-bundle.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "historical_work": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeWorkItemRead"
+            },
+            "title": "Historical Work",
+            "type": "array"
+          },
+          "mode": {
+            "const": "read_only",
+            "default": "read_only",
+            "title": "Mode",
+            "type": "string"
+          },
+          "protected_work": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeWorkItemRead"
+            },
+            "title": "Protected Work",
+            "type": "array"
+          },
+          "ready_now": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeWorkItemRead"
+            },
+            "title": "Ready Now",
+            "type": "array"
+          },
+          "resources": {
+            "$ref": "#/components/schemas/ChatRuntimeWorkControlResourcesRead"
+          },
+          "runtime_manifest_revision": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Runtime Manifest Revision",
+            "type": "string"
+          },
+          "source_contract": {
+            "const": "orca.agent-workbench.v1",
+            "default": "orca.agent-workbench.v1",
+            "title": "Source Contract",
+            "type": "string"
+          },
+          "waiting_on_others": {
+            "items": {
+              "$ref": "#/components/schemas/ChatRuntimeWorkItemRead"
+            },
+            "title": "Waiting On Others",
+            "type": "array"
+          }
+        },
+        "required": [
+          "agent_key",
+          "agent_id",
+          "runtime_manifest_revision",
+          "generated_at",
+          "configuration_sha256",
+          "bundle_sha256",
+          "resources"
+        ],
+        "title": "ChatRuntimeWorkControlBundleRead",
+        "type": "object"
+      },
+      "ChatRuntimeWorkControlCountsRead": {
+        "properties": {
+          "active_worker_runs": {
+            "minimum": 0.0,
+            "title": "Active Worker Runs",
+            "type": "integer"
+          },
+          "approval_inventory": {
+            "minimum": 0.0,
+            "title": "Approval Inventory",
+            "type": "integer"
+          },
+          "approval_queue": {
+            "minimum": 0.0,
+            "title": "Approval Queue",
+            "type": "integer"
+          },
+          "assigned_work": {
+            "minimum": 0.0,
+            "title": "Assigned Work",
+            "type": "integer"
+          },
+          "blocking_others": {
+            "minimum": 0.0,
+            "title": "Blocking Others",
+            "type": "integer"
+          },
+          "fish_blocked": {
+            "minimum": 0.0,
+            "title": "Fish Blocked",
+            "type": "integer"
+          },
+          "fish_producing": {
+            "minimum": 0.0,
+            "title": "Fish Producing",
+            "type": "integer"
+          },
+          "historical_work": {
+            "minimum": 0.0,
+            "title": "Historical Work",
+            "type": "integer"
+          },
+          "planner_items": {
+            "minimum": 0.0,
+            "title": "Planner Items",
+            "type": "integer"
+          },
+          "project_tasks": {
+            "minimum": 0.0,
+            "title": "Project Tasks",
+            "type": "integer"
+          },
+          "protected_work": {
+            "minimum": 0.0,
+            "title": "Protected Work",
+            "type": "integer"
+          },
+          "ready_now": {
+            "minimum": 0.0,
+            "title": "Ready Now",
+            "type": "integer"
+          },
+          "research_active_requests": {
+            "minimum": 0.0,
+            "title": "Research Active Requests",
+            "type": "integer"
+          },
+          "research_awaiting_review": {
+            "minimum": 0.0,
+            "title": "Research Awaiting Review",
+            "type": "integer"
+          },
+          "stale_work": {
+            "minimum": 0.0,
+            "title": "Stale Work",
+            "type": "integer"
+          },
+          "tools_declared": {
+            "minimum": 0.0,
+            "title": "Tools Declared",
+            "type": "integer"
+          },
+          "waiting_on_me": {
+            "minimum": 0.0,
+            "title": "Waiting On Me",
+            "type": "integer"
+          },
+          "waiting_on_others": {
+            "minimum": 0.0,
+            "title": "Waiting On Others",
+            "type": "integer"
+          },
+          "worker_review_runs": {
+            "minimum": 0.0,
+            "title": "Worker Review Runs",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "assigned_work",
+          "ready_now",
+          "waiting_on_me",
+          "waiting_on_others",
+          "blocking_others",
+          "approval_queue",
+          "approval_inventory",
+          "protected_work",
+          "historical_work",
+          "stale_work",
+          "planner_items",
+          "project_tasks",
+          "active_worker_runs",
+          "worker_review_runs",
+          "tools_declared",
+          "research_active_requests",
+          "research_awaiting_review",
+          "fish_producing",
+          "fish_blocked"
+        ],
+        "title": "ChatRuntimeWorkControlCountsRead",
+        "type": "object"
+      },
+      "ChatRuntimeWorkControlResourcesRead": {
+        "description": "Counts and canonical routes for supporting execution rails.",
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/ChatRuntimeWorkControlCountsRead"
+          },
+          "endpoints": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Endpoints",
+            "type": "object"
+          }
+        },
+        "required": [
+          "counts"
+        ],
+        "title": "ChatRuntimeWorkControlResourcesRead",
+        "type": "object"
+      },
+      "ChatRuntimeWorkItemRead": {
+        "description": "Pointer-safe work truth adapted from the existing agent Workbench.",
+        "properties": {
+          "approval_state": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Approval State",
+            "type": "string"
+          },
+          "blocked_on": {
+            "maxLength": 1000,
+            "title": "Blocked On",
+            "type": "string"
+          },
+          "bucket_reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Bucket Reason",
+            "type": "string"
+          },
+          "execution_eligible": {
+            "title": "Execution Eligible",
+            "type": "boolean"
+          },
+          "pending_approval_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Pending Approval Ids",
+            "type": "array"
+          },
+          "priority": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Priority",
+            "type": "string"
+          },
+          "safe_title": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Safe Title",
+            "type": "string"
+          },
+          "source_refs": {
+            "additionalProperties": true,
+            "title": "Source Refs",
+            "type": "object"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "status": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "waiting_on": {
+            "maxLength": 256,
+            "title": "Waiting On",
+            "type": "string"
+          },
+          "work_bucket": {
+            "enum": [
+              "current",
+              "protected",
+              "historical"
+            ],
+            "title": "Work Bucket",
+            "type": "string"
+          },
+          "work_id": {
+            "format": "uuid",
+            "title": "Work Id",
+            "type": "string"
+          },
+          "work_kind": {
+            "enum": [
+              "ticket",
+              "task"
+            ],
+            "title": "Work Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "work_kind",
+          "work_id",
+          "safe_title",
+          "status",
+          "priority",
+          "work_bucket",
+          "bucket_reason",
+          "execution_eligible",
+          "approval_state",
+          "stale",
+          "updated_at"
+        ],
+        "title": "ChatRuntimeWorkItemRead",
+        "type": "object"
+      },
+      "ChatRuntimeWorkRunRead": {
+        "description": "Evidence-backed current state for a provider, tool, or bounded worker run.",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "child_run_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Child Run Ids",
+            "type": "array"
+          },
+          "completed_at": {
+            "format": "date-time",
+            "title": "Completed At",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "is_stuck": {
+            "title": "Is Stuck",
+            "type": "boolean"
+          },
+          "is_terminal": {
+            "title": "Is Terminal",
+            "type": "boolean"
+          },
+          "last_activity_at": {
+            "format": "date-time",
+            "title": "Last Activity At",
+            "type": "string"
+          },
+          "parent_run_id": {
+            "format": "uuid",
+            "title": "Parent Run Id",
+            "type": "string"
+          },
+          "recommended_action": {
+            "maxLength": 128,
+            "title": "Recommended Action",
+            "type": "string"
+          },
+          "retry_owner": {
+            "maxLength": 128,
+            "title": "Retry Owner",
+            "type": "string"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "run_type": {
+            "title": "Run Type",
+            "type": "string"
+          },
+          "source_ref": {
+            "title": "Source Ref",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "stuck_reason": {
+            "maxLength": 256,
+            "title": "Stuck Reason",
+            "type": "string"
+          },
+          "tool_policy": {
+            "title": "Tool Policy",
+            "type": "string"
+          },
+          "worker_lane": {
+            "title": "Worker Lane",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "run_type",
+          "status",
+          "source_ref",
+          "last_activity_at",
+          "is_terminal",
+          "is_stuck"
+        ],
+        "title": "ChatRuntimeWorkRunRead",
+        "type": "object"
+      },
+      "ConversationMemoryApplyRequest": {
+        "properties": {
+          "reason": {
+            "maxLength": 2000,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "title": "ConversationMemoryApplyRequest",
+        "type": "object"
+      },
+      "ConversationMemoryFact": {
+        "description": "One bounded fact with explicit evidence and correction lineage.",
+        "properties": {
+          "authority": {
+            "maxLength": 128,
+            "title": "Authority",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "fact_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Fact Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "source_refs": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Source Refs",
+            "type": "array"
+          },
+          "status": {
+            "default": "active",
+            "enum": [
+              "active",
+              "resolved",
+              "corrected"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "supersedes_fact_id": {
+            "maxLength": 128,
+            "title": "Supersedes Fact Id",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fact_id",
+          "text"
+        ],
+        "title": "ConversationMemoryFact",
+        "type": "object"
+      },
+      "ConversationMemoryPendingCursor": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "created_at",
+          "id"
+        ],
+        "title": "ConversationMemoryPendingCursor",
+        "type": "object"
+      },
+      "ConversationMemoryProposalCreate": {
+        "properties": {
+          "auto_apply_requested": {
+            "default": false,
+            "title": "Auto Apply Requested",
+            "type": "boolean"
+          },
+          "expected_revision": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "memory": {
+            "$ref": "#/components/schemas/ConversationMemorySnapshot"
+          },
+          "proposal_kind": {
+            "default": "manual",
+            "enum": [
+              "checkpoint",
+              "sleep_checkpoint",
+              "correction",
+              "promotion",
+              "manual"
+            ],
+            "title": "Proposal Kind",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 2000,
+            "title": "Reason",
+            "type": "string"
+          },
+          "trace_id": {
+            "maxLength": 128,
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "memory"
+        ],
+        "title": "ConversationMemoryProposalCreate",
+        "type": "object"
+      },
+      "ConversationMemoryProposalRead": {
+        "properties": {
+          "auto_apply_eligible": {
+            "default": false,
+            "title": "Auto Apply Eligible",
+            "type": "boolean"
+          },
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "expected_revision": {
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "memory": {
+            "$ref": "#/components/schemas/ConversationMemorySnapshot"
+          },
+          "proposal_id": {
+            "format": "uuid",
+            "title": "Proposal Id",
+            "type": "string"
+          },
+          "proposal_kind": {
+            "enum": [
+              "checkpoint",
+              "sleep_checkpoint",
+              "correction",
+              "promotion",
+              "manual"
+            ],
+            "title": "Proposal Kind",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "review_history": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Review History",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "proposal_id",
+          "conversation_id",
+          "status",
+          "proposal_kind",
+          "expected_revision",
+          "memory",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ConversationMemoryProposalRead",
+        "type": "object"
+      },
+      "ConversationMemoryRead": {
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "content_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Content Sha256",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "orca.conversation-memory.v2",
+            "default": "orca.conversation-memory.v2",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "latest_proposal_id": {
+            "format": "uuid",
+            "title": "Latest Proposal Id",
+            "type": "string"
+          },
+          "memory": {
+            "$ref": "#/components/schemas/ConversationMemorySnapshot"
+          },
+          "organization_id": {
+            "format": "uuid",
+            "title": "Organization Id",
+            "type": "string"
+          },
+          "pending_before": {
+            "$ref": "#/components/schemas/ConversationMemoryPendingCursor"
+          },
+          "pending_proposals": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationMemoryProposalRead"
+            },
+            "title": "Pending Proposals",
+            "type": "array"
+          },
+          "pending_proposals_total": {
+            "title": "Pending Proposals Total",
+            "type": "integer"
+          },
+          "pending_proposals_truncated": {
+            "default": false,
+            "title": "Pending Proposals Truncated",
+            "type": "boolean"
+          },
+          "revision": {
+            "minimum": 0.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "organization_id",
+          "revision",
+          "memory",
+          "content_sha256"
+        ],
+        "title": "ConversationMemoryRead",
+        "type": "object"
+      },
+      "ConversationMemorySnapshot": {
+        "description": "Complete bounded state applied atomically as one memory revision.",
+        "properties": {
+          "active_summary": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Active Summary",
+            "type": "string"
+          },
+          "blockers": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationMemoryFact"
+            },
+            "maxItems": 50,
+            "title": "Blockers",
+            "type": "array"
+          },
+          "commitments": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationMemoryFact"
+            },
+            "maxItems": 50,
+            "title": "Commitments",
+            "type": "array"
+          },
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationMemoryFact"
+            },
+            "maxItems": 50,
+            "title": "Decisions",
+            "type": "array"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "nas_refs": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Nas Refs",
+            "type": "array"
+          },
+          "recent_outcomes": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationMemoryFact"
+            },
+            "maxItems": 50,
+            "title": "Recent Outcomes",
+            "type": "array"
+          },
+          "sensitivity": {
+            "default": "normal",
+            "enum": [
+              "normal",
+              "protected"
+            ],
+            "title": "Sensitivity",
+            "type": "string"
+          },
+          "source_refs": {
+            "additionalProperties": true,
+            "title": "Source Refs",
+            "type": "object"
+          },
+          "visibility": {
+            "default": "conversation",
+            "enum": [
+              "conversation",
+              "agent",
+              "owner_only"
+            ],
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "title": "ConversationMemorySnapshot",
+        "type": "object"
+      },
+      "DirectAgentChatMessage": {
+        "description": "Prior chat turn supplied by a client during local-to-ORCA transition.",
+        "properties": {
+          "content": {
+            "maxLength": 12000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "role": {
+            "pattern": "^(user|assistant|system)$",
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "DirectAgentChatMessage",
+        "type": "object"
+      },
+      "DirectAgentChatMetadata": {
+        "description": "Compute routing metadata for one direct-chat response.",
+        "properties": {
+          "backend": {
+            "title": "Backend",
+            "type": "string"
+          },
+          "compute_run_id": {
+            "maxLength": 128,
+            "title": "Compute Run Id",
+            "type": "string"
+          },
+          "delivery_mode": {
+            "pattern": "^(auto|compute|agent_inbox)$",
+            "title": "Delivery Mode",
+            "type": "string"
+          },
+          "fallback_available_at": {
+            "maxLength": 64,
+            "title": "Fallback Available At",
+            "type": "string"
+          },
+          "identity_classification": {
+            "maxLength": 64,
+            "title": "Identity Classification",
+            "type": "string"
+          },
+          "identity_decision_id": {
+            "format": "uuid",
+            "title": "Identity Decision Id",
+            "type": "string"
+          },
+          "identity_route": {
+            "enum": [
+              "frontier_required",
+              "frontier_required_unavailable"
+            ],
+            "title": "Identity Route",
+            "type": "string"
+          },
+          "lane": {
+            "title": "Lane",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "origin_delivery_receipt": {
+            "additionalProperties": true,
+            "title": "Origin Delivery Receipt",
+            "type": "object"
+          },
+          "provenance": {
+            "pattern": "^(live_inbox|compute|fallback|timeout_fallback|system|ticket|protected)$",
+            "title": "Provenance",
+            "type": "string"
+          },
+          "reply_window_seconds": {
+            "minimum": 0.0,
+            "title": "Reply Window Seconds",
+            "type": "integer"
+          },
+          "response_state": {
+            "maxLength": 64,
+            "title": "Response State",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "terminal_kind": {
+            "enum": [
+              "held",
+              "held_for_explicit_escalation",
+              "route_unavailable",
+              "provider_failure"
+            ],
+            "title": "Terminal Kind",
+            "type": "string"
+          },
+          "tier": {
+            "title": "Tier",
+            "type": "string"
+          },
+          "token_count": {
+            "title": "Token Count",
+            "type": "integer"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "triage_id": {
+            "maxLength": 128,
+            "title": "Triage Id",
+            "type": "string"
+          },
+          "triage_trace_id": {
+            "maxLength": 128,
+            "title": "Triage Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trace_id",
+          "source",
+          "lane"
+        ],
+        "title": "DirectAgentChatMetadata",
+        "type": "object"
+      },
+      "DirectAgentChatRequest": {
+        "description": "Send one named-agent turn through the ORCA direct-chat controller.",
+        "properties": {
+          "active_ticket_id": {
+            "format": "uuid",
+            "title": "Active Ticket Id",
+            "type": "string"
+          },
+          "async_response": {
+            "default": false,
+            "title": "Async Response",
+            "type": "boolean"
+          },
+          "channel_of_origin": {
+            "default": "pod-chat",
+            "pattern": "^(pod-chat|console|imessage)$",
+            "title": "Channel Of Origin",
+            "type": "string"
+          },
+          "chat_thread_id": {
+            "format": "uuid",
+            "title": "Chat Thread Id",
+            "type": "string"
+          },
+          "client_build": {
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+            "title": "Client Build",
+            "type": "string"
+          },
+          "client_instance_id": {
+            "maxLength": 160,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$",
+            "title": "Client Instance Id",
+            "type": "string"
+          },
+          "client_version": {
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+            "title": "Client Version",
+            "type": "string"
+          },
+          "content": {
+            "maxLength": 12000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "delivery_mode": {
+            "default": "auto",
+            "pattern": "^(auto|compute|agent_inbox)$",
+            "title": "Delivery Mode",
+            "type": "string"
+          },
+          "device_registration_ref": {
+            "maxLength": 512,
+            "pattern": "^orca://devices/[A-Za-z0-9][A-Za-z0-9._:-]{0,479}$",
+            "title": "Device Registration Ref",
+            "type": "string"
+          },
+          "fallback_after_seconds": {
+            "maximum": 3600.0,
+            "minimum": 1.0,
+            "title": "Fallback After Seconds",
+            "type": "integer"
+          },
+          "fallback_reason": {
+            "maxLength": 64,
+            "title": "Fallback Reason",
+            "type": "string"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/DirectAgentChatMessage"
+            },
+            "maxItems": 30,
+            "title": "History",
+            "type": "array"
+          },
+          "idempotency_key": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "identity_attestation": {
+            "description": "Opaque, one-use server attestation; never copied into prompts or logs.",
+            "maxLength": 4096,
+            "minLength": 32,
+            "title": "Identity Attestation",
+            "type": "string"
+          },
+          "origin_chat_id": {
+            "minimum": 1.0,
+            "title": "Origin Chat Id",
+            "type": "integer"
+          },
+          "origin_request_id": {
+            "maxLength": 160,
+            "title": "Origin Request Id",
+            "type": "string"
+          },
+          "origin_thread_id": {
+            "maxLength": 160,
+            "title": "Origin Thread Id",
+            "type": "string"
+          },
+          "reply_to_message_id": {
+            "format": "uuid",
+            "title": "Reply To Message Id",
+            "type": "string"
+          },
+          "thread_scope": {
+            "default": "direct",
+            "enum": [
+              "direct",
+              "ticket"
+            ],
+            "title": "Thread Scope",
+            "type": "string"
+          },
+          "trace_id": {
+            "maxLength": 128,
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "triage_id": {
+            "maxLength": 128,
+            "title": "Triage Id",
+            "type": "string"
+          },
+          "triage_trace_id": {
+            "maxLength": 128,
+            "title": "Triage Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "DirectAgentChatRequest",
+        "type": "object"
+      },
+      "DirectAgentChatResponse": {
+        "description": "ORCA-recorded direct chat response.",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "agent_slug": {
+            "title": "Agent Slug",
+            "type": "string"
+          },
+          "assistant_message_id": {
+            "format": "uuid",
+            "title": "Assistant Message Id",
+            "type": "string"
+          },
+          "channel_id": {
+            "format": "uuid",
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/DirectAgentChatMetadata"
+          },
+          "user_message_id": {
+            "format": "uuid",
+            "title": "User Message Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel_id",
+          "user_message_id",
+          "assistant_message_id",
+          "agent_slug",
+          "content",
+          "metadata"
+        ],
+        "title": "DirectAgentChatResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "TicketChatThreadRead": {
+        "description": "Ticket-scoped chat thread binding for the owning agent lane.",
+        "properties": {
+          "channel_id": {
+            "format": "uuid",
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "messages_endpoint": {
+            "title": "Messages Endpoint",
+            "type": "string"
+          },
+          "owner_agent_slug": {
+            "title": "Owner Agent Slug",
+            "type": "string"
+          },
+          "ticket_id": {
+            "format": "uuid",
+            "title": "Ticket Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticket_id",
+          "channel_id",
+          "owner_agent_slug",
+          "created",
+          "messages_endpoint"
+        ],
+        "title": "TicketChatThreadRead",
+        "type": "object"
+      },
+      "TurnRoute": {
+        "enum": [
+          "kimi_required",
+          "held_for_explicit_escalation",
+          "held",
+          "frontier_required"
+        ],
+        "title": "TurnRoute",
+        "type": "string"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "Provider-neutral named-agent runtime contract.",
+    "title": "ORCA Chat Runtime API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/chat-runtime/v1/agent-packs": {
+      "get": {
+        "description": "Returns the digest-bound seven-agent identity and configuration bundle. The bundle is configuration-only; live capability still requires fresh host attestation.",
+        "operationId": "getRuntimeAgentPacks",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatRuntimeAgentPackBundleRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read ORCA Chat Runtime v1 Agent Packs",
+        "tags": [
+          "chat-runtime"
+        ]
+      }
+    },
+    "/api/v1/chat-runtime/v1/agents/{agent_key}/capabilities": {
+      "get": {
+        "description": "Returns the typed ORCA-owned capability projection for one exact named agent. Declared availability and fresh runtime attestation remain separate so clients cannot manufacture a production-ready claim.",
+        "operationId": "getRuntimeAgentCapabilities",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_key",
+            "required": true,
+            "schema": {
+              "title": "Agent Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatRuntimeCapabilityBundleRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read ORCA Chat Runtime v1 Agent Capability Truth",
+        "tags": [
+          "chat-runtime"
+        ]
+      }
+    },
+    "/api/v1/chat-runtime/v1/agents/{agent_key}/turns": {
+      "post": {
+        "description": "Persists one idempotent named-agent turn through the canonical ORCA conversation controller and returns its immediate reply plus the provider-neutral Flight Recorder projection.",
+        "operationId": "createRuntimeTurn",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_key",
+            "required": true,
+            "schema": {
+              "title": "Agent Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRuntimeTurnCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatRuntimeTurnSubmissionRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create one ORCA Chat Runtime v1 turn",
+        "tags": [
+          "chat-runtime"
+        ]
+      }
+    },
+    "/api/v1/chat-runtime/v1/agents/{agent_key}/work-control": {
+      "get": {
+        "description": "Returns the typed, digest-bound adapter over existing ORCA tickets, tasks, approvals, Planner, workers, Research, Fish, and governed tools. The route is read-only and does not create a second work ledger.",
+        "operationId": "getRuntimeAgentWorkControl",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_key",
+            "required": true,
+            "schema": {
+              "title": "Agent Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatRuntimeWorkControlBundleRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read ORCA Chat Runtime v1 Agent Work Control",
+        "tags": [
+          "chat-runtime"
+        ]
+      }
+    },
+    "/api/v1/chat-runtime/v1/conformance/complete-turn": {
+      "get": {
+        "description": "Returns a deterministic provider-neutral accepted-to-terminal turn for generated client decoding, ordering, and replay conformance tests.",
+        "operationId": "getRuntimeConformanceTurn",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatRuntimeTurnRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read ORCA Chat Runtime v1 Complete-Turn Fixture",
+        "tags": [
+          "chat-runtime"
+        ]
+      }
+    },
+    "/api/v1/chat-runtime/v1/contract": {
+      "get": {
+        "description": "Returns the provider-neutral authority, lifecycle, progress, adapter, transport, and compatibility contract for named-agent chat clients.",
+        "operationId": "getRuntimeContract",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatRuntimeContractRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read ORCA Chat Runtime v1 Contract",
+        "tags": [
+          "chat-runtime"
+        ]
+      }
+    },
+    "/api/v1/chat-runtime/v1/provider-control": {
+      "get": {
+        "description": "Returns short-lived, pointer-safe provider adapter truth from authorized runtime hosts. Credential values never enter ORCA.",
+        "operationId": "getRuntimeProviderControl",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatRuntimeProviderControlBundleRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read ORCA Chat Runtime v1 Provider Control",
+        "tags": [
+          "chat-runtime"
+        ]
+      }
+    },
+    "/api/v1/chat-runtime/v1/schema-bundle": {
+      "get": {
+        "description": "Returns deterministic provider-neutral JSON schemas for runtime, event, adapter, resource, and terminal-outcome client generation.",
+        "operationId": "getRuntimeSchemaBundle",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatRuntimeSchemaBundleRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read ORCA Chat Runtime v1 Schema Bundle",
+        "tags": [
+          "chat-runtime"
+        ]
+      }
+    },
+    "/api/v1/chat-runtime/v1/turns/{turn_id}": {
+      "get": {
+        "description": "Projects the persisted inbound message, canonical WorkEvent sequence, provider adapter, resource envelope, and current terminal outcome into one provider-neutral Flight Recorder view.",
+        "operationId": "getRuntimeTurn",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "turn_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Turn Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatRuntimeTurnRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read one live ORCA Chat Runtime turn",
+        "tags": [
+          "chat-runtime"
+        ]
+      }
+    },
+    "/api/v1/chat-runtime/v1/turns/{turn_id}/reconcile": {
+      "get": {
+        "description": "Returns the authoritative turn snapshot and events newer than the provided cursor. Unknown or cross-turn cursors return reset_required with a complete snapshot instead of silently dropping state.",
+        "operationId": "reconcileRuntimeTurn",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "turn_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Turn Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 256,
+              "title": "After Cursor",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatRuntimeTurnReconciliationRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Reconcile one ORCA Chat Runtime turn",
+        "tags": [
+          "chat-runtime"
+        ]
+      }
+    },
+    "/api/v1/chat-runtime/v1/turns/{turn_id}/stream": {
+      "get": {
+        "description": "Streams the same authoritative reconciliation envelope as REST polling. Clients may resume with after_cursor or Last-Event-ID and fall back to the reconcile route without changing cursor semantics.",
+        "operationId": "streamRuntimeTurn",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "turn_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Turn Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 256,
+              "title": "After Cursor",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Last-Event-ID",
+            "required": false,
+            "schema": {
+              "maxLength": 256,
+              "title": "Last-Event-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Stream one ORCA Chat Runtime turn",
+        "tags": [
+          "chat-runtime"
+        ]
+      }
+    },
+    "/api/v1/chat-runtime/v1/watchdog/stale-turns": {
+      "get": {
+        "description": "Performs a bounded, read-only scan for turns or nested AgentRuns that have exceeded the same server thresholds shown to Pod and Console.",
+        "operationId": "getRuntimeStaleTurns",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "lookback_hours",
+            "required": false,
+            "schema": {
+              "default": 24,
+              "maximum": 168,
+              "minimum": 1,
+              "title": "Lookback Hours",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 250,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatRuntimeWatchdogRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Scan recent ORCA Chat Runtime liveness",
+        "tags": [
+          "chat-runtime"
+        ]
+      }
+    },
+    "/api/v1/chat/channels/{channel_id}/messages": {
+      "get": {
+        "description": "List messages in a channel.",
+        "operationId": "listConversationMessages",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "channel_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Channel Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ChatMessageRead"
+                  },
+                  "title": "Response List Messages Api V1 Chat Channels  Channel Id  Messages Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Messages",
+        "tags": [
+          "chat"
+        ],
+        "x-orca-compatibility-adapter": true
+      }
+    },
+    "/api/v1/chat/direct/{agent_slug}/send": {
+      "post": {
+        "description": "Record a direct surface turn in ORCA, then route it through the named agent.",
+        "operationId": "sendDirectAgentTurn",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_slug",
+            "required": true,
+            "schema": {
+              "title": "Agent Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectAgentChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectAgentChatResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Send Direct Agent Chat",
+        "tags": [
+          "chat"
+        ],
+        "x-orca-compatibility-adapter": true
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/memory": {
+      "get": {
+        "description": "Read active reviewed memory and the visible pending proposal queue.",
+        "operationId": "getConversationMemory",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pending_before",
+            "required": false,
+            "schema": {
+              "maxLength": 200,
+              "title": "Pending Before",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationMemoryRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Conversation Memory",
+        "tags": [
+          "conversation-memory"
+        ]
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/memory/proposals": {
+      "post": {
+        "description": "Propose one complete bounded revision without writing hidden memory.",
+        "operationId": "proposeConversationMemory",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationMemoryProposalCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationMemoryProposalRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Propose Conversation Memory",
+        "tags": [
+          "conversation-memory"
+        ]
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/memory/proposals/{proposal_id}/apply": {
+      "post": {
+        "description": "Apply one reviewed proposal with optimistic revision and authority checks.",
+        "operationId": "applyConversationMemoryProposal",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationMemoryApplyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationMemoryRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Apply Conversation Memory Proposal",
+        "tags": [
+          "conversation-memory"
+        ]
+      }
+    },
+    "/api/v1/tickets/{ticket_id}/chat-thread": {
+      "get": {
+        "description": "Read the existing ticket-scoped chat thread, or 404 when none exists.",
+        "operationId": "readTicketChatThread",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ticket_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Ticket Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketChatThreadRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Ticket Chat Thread",
+        "tags": [
+          "tickets"
+        ]
+      },
+      "post": {
+        "description": "Idempotently ensure the ticket-scoped chat thread for the owning agent.",
+        "operationId": "ensureTicketChatThread",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ticket_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Ticket Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketChatThreadRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ensure Ticket Chat Thread",
+        "tags": [
+          "tickets"
+        ]
+      }
+    }
+  },
+  "tags": [
+    {
+      "description": "Provider-neutral ORCA named-agent runtime contract and resources.",
+      "name": "chat-runtime"
+    }
+  ],
+  "x-orca-contract-version": "orca.chat-runtime.v1",
+  "x-orca-schema-sha256": "e2e4518bed018c52a3caf02f51f472fd6fcad37356311632ad173b437ddb82e7"
+}

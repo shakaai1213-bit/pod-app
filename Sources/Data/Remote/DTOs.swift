@@ -890,6 +890,7 @@ struct AgentLockerDTO: Decodable, Hashable {
         }
 
         struct Lanes: Decodable, Hashable {
+            let handedToYou: [WorkItem]
             let now: [WorkItem]
             let next: [WorkItem]
             let blocked: [WorkItem]
@@ -898,7 +899,8 @@ struct AgentLockerDTO: Decodable, Hashable {
             let done: [WorkItem]
             let fyi: [WorkItem]
 
-            init(now: [WorkItem] = [], next: [WorkItem] = [], blocked: [WorkItem] = [], waiting: [WorkItem] = [], review: [WorkItem] = [], done: [WorkItem] = [], fyi: [WorkItem] = []) {
+            init(handedToYou: [WorkItem] = [], now: [WorkItem] = [], next: [WorkItem] = [], blocked: [WorkItem] = [], waiting: [WorkItem] = [], review: [WorkItem] = [], done: [WorkItem] = [], fyi: [WorkItem] = []) {
+                self.handedToYou = handedToYou
                 self.now = now
                 self.next = next
                 self.blocked = blocked
@@ -909,11 +911,13 @@ struct AgentLockerDTO: Decodable, Hashable {
             }
 
             enum CodingKeys: String, CodingKey {
+                case handedToYou = "handed_to_you"
                 case now, next, blocked, waiting, review, done, fyi
             }
 
             init(from decoder: Decoder) throws {
                 let container = try decoder.container(keyedBy: CodingKeys.self)
+                handedToYou = try container.decodeIfPresent([WorkItem].self, forKey: .handedToYou) ?? []
                 now = try container.decodeIfPresent([WorkItem].self, forKey: .now) ?? []
                 next = try container.decodeIfPresent([WorkItem].self, forKey: .next) ?? []
                 blocked = try container.decodeIfPresent([WorkItem].self, forKey: .blocked) ?? []

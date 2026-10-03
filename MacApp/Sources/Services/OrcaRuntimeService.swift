@@ -121,6 +121,7 @@ actor OrcaRuntimeService: OrcaRuntimeServing {
         OrcaRuntimeReconciliationDriver(
             turnID: turnID,
             persistedCursor: persistedCursor,
+            policy: .console,
             poll: { [client] turnID, cursor in
                 try await client.reconcileRuntimeTurn(
                     turnID: turnID,

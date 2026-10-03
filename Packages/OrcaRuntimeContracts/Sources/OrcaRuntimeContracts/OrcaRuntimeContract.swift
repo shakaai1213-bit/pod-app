@@ -9,7 +9,9 @@ public enum OrcaRuntimeContract: Sendable {
     // Release A source contract fa74b098; live image 5b62621e, Coral finding
     // 2026-10-01. Exact optional-field delta: contract-delta.json test fixture.
     public static let legacySchemas = [
-        "33cd117fe92dca4544c835ffb838eb1f7ce34be381c1c897fee1d4c4f94fbc12": "release-a-fa74b098"
+        "33cd117fe92dca4544c835ffb838eb1f7ce34be381c1c897fee1d4c4f94fbc12": "release-a-fa74b098",
+        // Exact reviewed optional memory-pagination delta; generated models stay pinned.
+        "e2e4518bed018c52a3caf02f51f472fd6fcad37356311632ad173b437ddb82e7": "mini-repair-a2f4d6eb"
     ]
 
     public static func makeClient(
