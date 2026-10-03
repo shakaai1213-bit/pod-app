@@ -1,3 +1,4 @@
+import OrcaDesign
 import SwiftUI
 
 struct OrcaMacRootView: View {
@@ -33,6 +34,8 @@ struct OrcaMacRootView: View {
             .navigationSplitViewColumnWidth(min: 230, ideal: 270, max: 330)
         }
         .navigationSplitViewStyle(.balanced)
+        .preferredColorScheme(.dark)
+        .tint(OrcaPalette.accentElectric)
         .alert(
             "ORCA",
             isPresented: Binding(

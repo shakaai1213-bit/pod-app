@@ -9,7 +9,7 @@ struct ConsoleInspectorView: View {
             VStack(alignment: .leading, spacing: 18) {
                 HStack(spacing: 8) {
                     Image(systemName: model.selectedSection.symbol)
-                        .foregroundStyle(Color.orcaCyan)
+                        .foregroundStyle(OrcaPalette.accentElectric)
                     Text("Inspector")
                         .font(.headline)
                     Spacer()
@@ -130,7 +130,7 @@ struct ConsoleInspectorView: View {
             }
             .padding(16)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(OrcaPalette.backgroundSecondary)
     }
 
     private func ticketURL(for endpoint: String) -> URL? {

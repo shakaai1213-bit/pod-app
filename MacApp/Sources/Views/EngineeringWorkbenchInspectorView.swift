@@ -1,5 +1,6 @@
 import OrcaAPI
 import SwiftUI
+import OrcaDesign
 
 struct EngineeringWorkbenchInspectorView: View {
     @Environment(OrcaMacModel.self) private var model
@@ -10,7 +11,7 @@ struct EngineeringWorkbenchInspectorView: View {
             VStack(alignment: .leading, spacing: 18) {
                 HStack(spacing: 8) {
                     Image(systemName: "hammer")
-                        .foregroundStyle(Color.orcaCyan)
+                        .foregroundStyle(OrcaPalette.accentElectric)
                     Text("Workbench")
                         .font(.headline)
                     Spacer()
@@ -60,7 +61,7 @@ struct EngineeringWorkbenchInspectorView: View {
             }
             .padding(16)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(OrcaPalette.backgroundSecondary)
         .onChange(of: model.selectedWorkbenchOperationID) { _, _ in
             rejectionReason = ""
         }

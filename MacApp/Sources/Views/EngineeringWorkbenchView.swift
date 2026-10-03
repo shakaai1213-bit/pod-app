@@ -1,5 +1,6 @@
 import OrcaAPI
 import SwiftUI
+import OrcaDesign
 
 struct EngineeringWorkbenchView: View {
     @Environment(OrcaMacModel.self) private var model
@@ -12,16 +13,16 @@ struct EngineeringWorkbenchView: View {
             Divider()
             content
         }
-        .background(Color(nsColor: .textBackgroundColor))
+        .background(OrcaPalette.backgroundPrimary)
     }
 
     private var header: some View {
         HStack(spacing: 12) {
             Image(systemName: "hammer")
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Color.orcaCyan)
+                .foregroundStyle(OrcaPalette.accentElectric)
                 .frame(width: 34, height: 34)
-                .background(Color.orcaCyan.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                .background(OrcaPalette.accentElectric.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
 
             VStack(alignment: .leading, spacing: 1) {
                 Text("Workbench")
@@ -71,7 +72,7 @@ struct EngineeringWorkbenchView: View {
         }
         .padding(.horizontal, 16)
         .frame(height: 58)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(OrcaPalette.backgroundSecondary)
     }
 
     private var paneBar: some View {
@@ -90,7 +91,7 @@ struct EngineeringWorkbenchView: View {
                         Rectangle()
                             .fill(
                                 model.selectedWorkbenchPane == pane
-                                    ? Color.orcaCyan
+                                    ? OrcaPalette.accentElectric
                                     : Color.clear
                             )
                             .frame(height: 2)
@@ -114,7 +115,7 @@ struct EngineeringWorkbenchView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 50)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(OrcaPalette.backgroundSecondary)
     }
 
     @ViewBuilder
@@ -179,7 +180,7 @@ struct EngineeringWorkbenchView: View {
                     .frame(minHeight: 82, maxHeight: 150)
                     .overlay(
                         RoundedRectangle(cornerRadius: 5)
-                            .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+                            .stroke(OrcaPalette.border, lineWidth: 1)
                     )
                 actionRow(["patch.draft"])
             case .tests:
@@ -195,7 +196,7 @@ struct EngineeringWorkbenchView: View {
             }
         }
         .padding(14)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(OrcaPalette.backgroundSecondary)
     }
 
     private func actionRow(_ actionIDs: [String]) -> some View {

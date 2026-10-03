@@ -5,12 +5,19 @@ struct AgentSidebarView: View {
     @Environment(OrcaMacModel.self) private var model
     @Environment(\.openSettings) private var openSettings
 
+    // Keep the Captain's primary destinations in the same order as Pod.
+    private let podSections: [ConsoleSection] = [
+        .overview, .work, .fund, .crew, .knowledge, .lab, .runtime, .maker
+    ]
+
+    private let toolSections: [ConsoleSection] = [.waitingOnCaptain, .workbench]
+
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Image(systemName: "circle.hexagongrid.fill")
                     .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(Color.orcaCyan)
+                    .foregroundStyle(OrcaPalette.accentElectric)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("ORCA Console")
                         .font(.headline)
@@ -26,24 +33,15 @@ struct AgentSidebarView: View {
             Divider()
 
             List {
-                Section("ORCA") {
-                    ForEach(ConsoleSection.allCases.filter { $0 != .conversations }) { section in
-                        Button {
-                            model.selectSection(section)
-                        } label: {
-                            ConsoleNavigationRow(
-                                section: section,
-                                badgeCount: section == .waitingOnCaptain
-                                    ? model.sectionSnapshots[.waitingOnCaptain]?.badgeCount ?? 0
-                                    : 0
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .listRowBackground(
-                            isSelected(section)
-                                ? Color.accentColor.opacity(0.12)
-                                : Color.clear
-                        )
+                Section("MAIN") {
+                    ForEach(podSections) { section in
+                        navigationButton(for: section)
+                    }
+                }
+
+                Section("OPERATIONS") {
+                    ForEach(toolSections) { section in
+                        navigationButton(for: section)
                     }
                 }
 
@@ -57,13 +55,14 @@ struct AgentSidebarView: View {
                         .buttonStyle(.plain)
                         .listRowBackground(
                             model.selectedSection == .conversations && model.selectedAgentID == agent.id
-                                ? Color.accentColor.opacity(0.12)
+                                ? OrcaPalette.accentElectric.opacity(0.12)
                                 : Color.clear
                         )
                     }
                 }
             }
             .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
 
             Divider()
 
@@ -89,7 +88,23 @@ struct AgentSidebarView: View {
             .padding(.horizontal, 12)
             .frame(height: 52)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(OrcaPalette.backgroundSecondary)
+    }
+
+    private func navigationButton(for section: ConsoleSection) -> some View {
+        Button {
+            model.selectSection(section)
+        } label: {
+            ConsoleNavigationRow(
+                section: section,
+                badgeCount: section == .waitingOnCaptain
+                    ? model.sectionSnapshots[.waitingOnCaptain]?.badgeCount ?? 0
+                    : 0,
+                isSelected: isSelected(section)
+            )
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(Color.clear)
     }
 
     private func isSelected(_ section: ConsoleSection) -> Bool {
@@ -106,28 +121,24 @@ struct AgentSidebarView: View {
 private struct ConsoleNavigationRow: View {
     let section: ConsoleSection
     let badgeCount: Int
+    let isSelected: Bool
 
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: section.symbol)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(section == .fund ? Color.orcaGreen : Color.orcaCyan)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(isSelected ? OrcaPalette.accentElectric : OrcaPalette.textSecondary)
                 .frame(width: 24)
 
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 5) {
-                    Text(section.title)
-                        .font(.body.weight(.medium))
-                    if section.isProtected {
-                        Image(systemName: "lock.fill")
-                            .font(.system(size: 9))
-                            .foregroundStyle(.secondary)
-                    }
+            HStack(spacing: 5) {
+                Text(section.title)
+                    .font(.body.weight(isSelected ? .semibold : .medium))
+                    .foregroundStyle(isSelected ? OrcaPalette.textPrimary : OrcaPalette.textSecondary)
+                if section.isProtected {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 9))
+                        .foregroundStyle(OrcaPalette.textSecondary)
                 }
-                Text(section.subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
             }
 
             Spacer(minLength: 4)
@@ -142,7 +153,12 @@ private struct ConsoleNavigationRow: View {
                     .accessibilityLabel("\(badgeCount) items waiting")
             }
         }
-        .frame(height: 36)
+        .padding(.horizontal, 10)
+        .frame(height: 38)
+        .background(
+            isSelected ? OrcaPalette.accentElectric.opacity(0.12) : Color.clear,
+            in: RoundedRectangle(cornerRadius: 10)
+        )
         .contentShape(Rectangle())
     }
 }
