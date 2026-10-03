@@ -14,7 +14,28 @@ public typealias OrcaRuntimeReconciliationSleeper = @Sendable (
     _ seconds: Int
 ) async throws -> Void
 
+/// Console opts in explicitly; shared clients retain the original runtime contract.
+public enum OrcaRuntimeReconciliationPolicy: Sendable {
+    case legacy
+    case console
+
+    func pollDelay(_ hint: Int?, previous: Int, stuck: Bool) -> Int {
+        switch self {
+        case .legacy: return hint ?? previous
+        case .console: return OrcaConsolePollingPolicy.pollDelay(hint ?? previous, stuck: stuck)
+        }
+    }
+
+    func failureDelay(_ previous: Int) -> Int {
+        switch self {
+        case .legacy: return min(8, max(2, previous * 2))
+        case .console: return min(120, max(previous, min(8, previous * 2)))
+        }
+    }
+}
+
 public struct OrcaRuntimeReconciliationDriver: Sendable {
+    private let policy: OrcaRuntimeReconciliationPolicy
     private let turnID: String
     private let persistedCursor: String?
     private let poll: OrcaRuntimeReconciliationPoller
@@ -25,6 +46,7 @@ public struct OrcaRuntimeReconciliationDriver: Sendable {
     public init(
         turnID: String,
         persistedCursor: String? = nil,
+        policy: OrcaRuntimeReconciliationPolicy = .legacy,
         poll: @escaping OrcaRuntimeReconciliationPoller,
         stream: @escaping OrcaRuntimeReconciliationStreamer,
         persistCursor: @escaping @Sendable (String) -> Void = { _ in },
@@ -32,6 +54,7 @@ public struct OrcaRuntimeReconciliationDriver: Sendable {
             try await Task.sleep(for: .seconds(seconds))
         }
     ) {
+        self.policy = policy
         self.turnID = turnID
         self.persistedCursor = persistedCursor
         self.poll = poll
@@ -46,7 +69,8 @@ public struct OrcaRuntimeReconciliationDriver: Sendable {
                 do {
                     var reconciler = OrcaRuntimeTurnReconciler(
                         turnID: turnID,
-                        persistedCursor: persistedCursor
+                        persistedCursor: persistedCursor,
+                        policy: policy
                     )
                     var pollAfterSeconds = 2
                     var consecutivePollFailures = 0
@@ -62,7 +86,7 @@ public struct OrcaRuntimeReconciliationDriver: Sendable {
                         continuation.finish()
                         return
                     }
-                    pollAfterSeconds = initial.pollAfterSeconds ?? pollAfterSeconds
+                    pollAfterSeconds = policy.pollDelay(initial.pollAfterSeconds, previous: pollAfterSeconds, stuck: initial.turn.recovery.isStuck)
 
                     while !Task.isCancelled {
                         do {
@@ -75,7 +99,7 @@ public struct OrcaRuntimeReconciliationDriver: Sendable {
                                 let update = try reconciler.apply(envelope)
                                 persistCursor(update.cursor)
                                 continuation.yield(update)
-                                pollAfterSeconds = update.pollAfterSeconds ?? pollAfterSeconds
+                                pollAfterSeconds = policy.pollDelay(update.pollAfterSeconds, previous: pollAfterSeconds, stuck: update.turn.recovery.isStuck)
                                 if update.turn.terminalOutcome != nil {
                                     continuation.finish()
                                     return
@@ -102,7 +126,7 @@ public struct OrcaRuntimeReconciliationDriver: Sendable {
                             let update = try reconciler.apply(envelope)
                             persistCursor(update.cursor)
                             continuation.yield(update)
-                            pollAfterSeconds = update.pollAfterSeconds ?? pollAfterSeconds
+                            pollAfterSeconds = policy.pollDelay(update.pollAfterSeconds, previous: pollAfterSeconds, stuck: update.turn.recovery.isStuck)
                             consecutivePollFailures = 0
                             if update.turn.terminalOutcome != nil {
                                 continuation.finish()
@@ -113,7 +137,7 @@ public struct OrcaRuntimeReconciliationDriver: Sendable {
                         } catch {
                             consecutivePollFailures += 1
                             guard consecutivePollFailures < 3 else { throw error }
-                            pollAfterSeconds = min(8, max(2, pollAfterSeconds * 2))
+                            pollAfterSeconds = policy.failureDelay(pollAfterSeconds)
                         }
                     }
                     continuation.finish()
