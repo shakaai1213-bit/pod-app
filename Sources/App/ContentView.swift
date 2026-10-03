@@ -94,7 +94,7 @@ struct ContentView: View {
                 appState.pendingDirectChatAgentId = nil
                 return
             }
-            // Pod Chat lives inside Workbench. Legacy chat links normalize to the
+            // Pod Chat lives inside Work. Legacy chat links normalize to the
             // same operating cockpit instead of opening a second room browser.
             withAnimation(.easeInOut(duration: 0.15)) { appState.navigateTo(.work) }
             if agentInfo.isReachable {
