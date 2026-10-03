@@ -13,7 +13,10 @@ private func object(_ data: Data) throws -> [String: Any] {
 }
 
 @Test func exactCompatibilityIdentities() throws {
-    #expect(OrcaRuntimeContract.legacySchemas == [legacyDigest: "release-a-fa74b098"])
+    #expect(OrcaRuntimeContract.legacySchemas == [
+        legacyDigest: "release-a-fa74b098",
+        "e2e4518bed018c52a3caf02f51f472fd6fcad37356311632ad173b437ddb82e7": "mini-repair-a2f4d6eb"
+    ])
     #expect(try OrcaRuntimeCompatibility(contractVersion: OrcaRuntimeContract.version, schemaSHA256: OrcaRuntimeContract.schemaSHA256).mode == .canonical)
     #expect(try OrcaRuntimeCompatibility(contractVersion: OrcaRuntimeContract.version, schemaSHA256: legacyDigest).mode == .legacy("release-a-fa74b098"))
     for digest in ["40a298668534e87d47abc42279d4777334e1e2c9ae92dc6e291818a8a76cfbeb", "0" + legacyDigest.dropFirst(), ""] {
