@@ -104,7 +104,7 @@ final class WallDisplayViewModel {
     @MainActor
     private func fetchActivities() async {
         do {
-            let response: WallListResponse<WallTicketDTO> = try await APIClient.shared.get(path: "/api/v1/tickets?status=open&limit=12")
+            let response: TicketRows<WallTicketDTO> = try await APIClient.shared.get(path: "/api/v1/tickets?status=open&limit=12")
             activities = response.items
                 .sorted { Self.priorityRank($0.priority) < Self.priorityRank($1.priority) }
                 .map(Self.activity(from:))
@@ -120,7 +120,7 @@ final class WallDisplayViewModel {
     @MainActor
     private func fetchAttentionCount() async {
         do {
-            let response: WallListResponse<WallTicketDTO> = try await APIClient.shared.get(path: "/api/v1/tickets?status=open&limit=200")
+            let response: TicketRows<WallTicketDTO> = try await APIClient.shared.get(path: "/api/v1/tickets?status=open&limit=200")
             attentionCount = response.items.filter { ticket in
                 let priority = ticket.priority.lowercased()
                 let status = ticket.status.lowercased()

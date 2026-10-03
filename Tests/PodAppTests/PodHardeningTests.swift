@@ -50,6 +50,141 @@ final class PodHardeningTests: XCTestCase {
         XCTAssertEqual(token.organizationId, "00000000-0000-4000-8000-000000000001")
     }
 
+    func testTicketListKeepsFullRowsAndOmitsProtectedPointers() async throws {
+        MockURLProtocol.handler = { request in
+            XCTAssertEqual(request.url?.path, "/api/v1/tickets")
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200,
+                                           httpVersion: nil, headerFields: nil)!
+            let body = #"[{"id":"00000000-0000-4000-8000-000000000001","title":"PRIVATE-CANARY","type":"ticket","protected":true,"pointer":"/api/v1/tickets/00000000-0000-4000-8000-000000000001"},{"id":"00000000-0000-4000-8000-000000000002","title":"Visible","status":"open","priority":"high","created_at":"2026-10-03T03:00:00Z","updated_at":"2026-10-03T03:00:00Z"},{"id":"00000000-0000-4000-8000-000000000003","title":"Full protected","type":"ticket","protected":true,"pointer":"/api/v1/tickets/00000000-0000-4000-8000-000000000003","status":"open","priority":"high","created_at":"2026-10-03T03:00:00Z","updated_at":"2026-10-03T03:00:00Z"}]"#
+            return (response, Data(body.utf8))
+        }
+        let client = makeClient(keychainToken: "synthetic-token")
+
+        let rows: TicketRows<TicketDTO> = try await client.get(path: "/api/v1/tickets?limit=1000")
+
+        XCTAssertEqual(rows.items.map(\.title), ["Visible", "Full protected"])
+        XCTAssertEqual(rows.protectedCount, 1)
+        XCTAssertEqual(rows.quarantinedCount, 0)
+        XCTAssertFalse(String(reflecting: rows).contains("PRIVATE-CANARY"))
+    }
+
+    func testMalformedTicketRowIsQuarantinedWithoutHidingHealthyRows() async throws {
+        MockURLProtocol.handler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200,
+                                           httpVersion: nil, headerFields: nil)!
+            let body = #"[{"id":"00000000-0000-4000-8000-000000000001","title":"PRIVATE-MARKER","priority":"high"},{"id":"00000000-0000-4000-8000-000000000002","title":"Visible","status":"open","priority":"high","created_at":"2026-10-03T03:00:00Z","updated_at":"2026-10-03T03:00:00Z"}]"#
+            return (response, Data(body.utf8))
+        }
+        let client = makeClient(keychainToken: "synthetic-token")
+
+        let rows: TicketRows<TicketDTO> = try await client.get(path: "/api/v1/tickets?limit=1000")
+        XCTAssertEqual(rows.items.map(\.title), ["Visible"])
+        XCTAssertEqual(rows.quarantinedCount, 1)
+        XCTAssertEqual(rows.rowIssues.first?.index, 0)
+        XCTAssertEqual(rows.rowIssues.first?.kind, .missingField)
+        XCTAssertFalse(String(reflecting: rows).contains("PRIVATE-MARKER"))
+    }
+
+    func testNearPointerRowsAreQuarantinedNotSilentlyClassified() async throws {
+        MockURLProtocol.handler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200,
+                                           httpVersion: nil, headerFields: nil)!
+            let id = "00000000-0000-4000-8000-000000000001"
+            let body = """
+            [{"id":"\(id)","title":"EXTRA-CANARY","type":"ticket","protected":true,"pointer":"/api/v1/tickets/\(id)","extra":"field"},
+             {"id":"\(id)","title":"STRING-CANARY","type":"ticket","protected":"true","pointer":"/api/v1/tickets/\(id)"},
+             {"id":"\(id)","title":"FALSE-CANARY","type":"ticket","protected":false,"pointer":"/api/v1/tickets/\(id)"}]
+            """
+            return (response, Data(body.utf8))
+        }
+        let rows: TicketRows<TicketDTO> = try await makeClient(keychainToken: "synthetic-token")
+            .get(path: "/api/v1/tickets")
+        XCTAssertEqual(rows.items.count, 0)
+        XCTAssertEqual(rows.protectedCount, 0)
+        XCTAssertEqual(rows.quarantinedCount, 3)
+        XCTAssertFalse(String(reflecting: rows).contains("CANARY"))
+    }
+
+    func testTicketMutationAcknowledgesPointerOnlySuccess() async throws {
+        MockURLProtocol.handler = { request in
+            XCTAssertEqual(request.httpMethod, "POST")
+            let response = HTTPURLResponse(url: request.url!, statusCode: 201,
+                                           httpVersion: nil, headerFields: nil)!
+            let body = #"{"id":"00000000-0000-4000-8000-000000000001","title":"PRIVATE-CANARY","type":"ticket","protected":true,"pointer":"/api/v1/tickets/00000000-0000-4000-8000-000000000001"}"#
+            return (response, Data(body.utf8))
+        }
+        let ack: TicketListRow<TicketMutationAck> = try await makeClient(keychainToken: "synthetic-token")
+            .post(path: "/api/v1/tickets", body: ["title": "Synthetic"])
+        guard case .protectedPointer = ack else {
+            XCTFail("Protected write must acknowledge success without exposing its id")
+            return
+        }
+        XCTAssertFalse(String(reflecting: ack).contains("PRIVATE-CANARY"))
+    }
+
+    func testDecodeErrorDoesNotEchoAnyBody() async throws {
+        MockURLProtocol.handler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200,
+                                           httpVersion: nil, headerFields: nil)!
+            return (response, Data(#"{"title":"PRIVATE-CANARY","description":"PRIVATE-CANARY"}"#.utf8))
+        }
+        do {
+            let _: TicketDTO = try await makeClient(keychainToken: "synthetic-token")
+                .get(path: "/api/v1/tickets/00000000-0000-4000-8000-000000000001")
+            XCTFail("Incomplete detail must fail decoding")
+        } catch let error as APIError {
+            XCTAssertEqual(error.code, -1)
+            XCTAssertFalse(error.message.contains("PRIVATE-CANARY"))
+            XCTAssertFalse(String(describing: error).contains("PRIVATE-CANARY"))
+            XCTAssertFalse(error.localizedDescription.contains("PRIVATE-CANARY"))
+        }
+    }
+
+    func testTicketErrorsDistinguishDecodeRedirectAndTransport() {
+        let messages = [
+            TicketsViewModel.userFacingMessage(for: .decodingError),
+            TicketsViewModel.userFacingMessage(for: .refusedRedirect),
+            TicketsViewModel.userFacingMessage(for: .transportError),
+        ]
+        XCTAssertEqual(Set(messages).count, 3)
+        XCTAssertTrue(messages[0].contains("answered"))
+        XCTAssertTrue(messages[1].contains("redirected"))
+        XCTAssertTrue(messages[2].contains("reach backend"))
+    }
+
+    @MainActor
+    func testDirectChatFailuresStayOnNotSentPath() {
+        let failures: [APIError] = [
+            .transportError, .decodingError, .refusedRedirect,
+            .unauthorized, APIError(code: 503, message: "Service unavailable"),
+        ]
+        for failure in failures {
+            XCTAssertTrue(DirectChatViewModel.isNetworkOrHTTPFailure(failure))
+        }
+        XCTAssertFalse(DirectChatViewModel.isNetworkOrHTTPFailure(
+            APIError(code: 404, message: "Not found")))
+        XCTAssertFalse(DirectChatViewModel.isNetworkOrHTTPFailure(
+            APIError(code: 422, message: "Invalid")))
+    }
+
+    @MainActor
+    func testDirectChatFailureReasonsKeepNewAPIErrorMessages() {
+        for failure in [APIError.transportError, .decodingError, .refusedRedirect] {
+            XCTAssertEqual(DirectChatViewModel.sendFailureReason(failure), failure.message)
+        }
+    }
+
+    @MainActor
+    func testLoopAtlasRetriesTransportButNotDecodeOrRedirect() {
+        let model = LoopAtlasViewModel(retryDelayNanoseconds: 0)
+        XCTAssertTrue(model.shouldRetry(APIError.transportError))
+        XCTAssertTrue(model.shouldRetry(APIError(code: 0, message: "Old transport")))
+        XCTAssertTrue(model.shouldRetry(APIError(code: 503, message: "Service unavailable")))
+        XCTAssertFalse(model.shouldRetry(APIError.decodingError))
+        XCTAssertFalse(model.shouldRetry(APIError.refusedRedirect))
+        XCTAssertFalse(model.shouldRetry(APIError(code: 404, message: "Not found")))
+    }
+
     @MainActor
     func testAppleExchangeStoresDecodedPairAfterChallengeAndCallback() async throws {
         MockURLProtocol.handler = { request in

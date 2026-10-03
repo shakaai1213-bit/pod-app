@@ -214,6 +214,8 @@ struct TicketDraftReviewSheet: View {
 
 struct AttachTicketSheet: View {
     let tickets: [DirectChatAttachableTicket]
+    let protectedCount: Int
+    let quarantinedCount: Int
     let isLoading: Bool
     let errorMessage: String?
     let onRefresh: () -> Void
@@ -243,6 +245,18 @@ struct AttachTicketSheet: View {
     var body: some View {
         NavigationStack {
             List {
+                if protectedCount > 0 || quarantinedCount > 0 {
+                    Section {
+                        if protectedCount > 0 {
+                            Text("\(protectedCount) protected tickets are not shown here.")
+                        }
+                        if quarantinedCount > 0 {
+                            Text("\(quarantinedCount) ticket rows could not be read.")
+                        }
+                    }
+                    .font(.caption)
+                    .foregroundColor(AppColors.textSecondary)
+                }
                 if isLoading && tickets.isEmpty {
                     Section {
                         HStack(spacing: Theme.xs) {

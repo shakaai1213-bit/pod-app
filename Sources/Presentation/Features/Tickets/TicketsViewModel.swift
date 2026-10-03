@@ -1472,6 +1472,8 @@ struct TicketDTO: Codable, Identifiable {
 @Observable
 final class TicketsViewModel {
     var tickets: [Ticket] = []
+    var protectedTicketCount = 0
+    var quarantinedTicketCount = 0
     var isLoading = false
     var errorMessage: String?
     var selectedStatus: TicketStatus? = nil  // nil = show all
@@ -1631,6 +1633,12 @@ final class TicketsViewModel {
     }
 
     var emptyStateTitle: String {
+        if selectedSavedView == .waitingApproval && protectedTicketCount > 0 {
+            return "Protected approvals may be hidden"
+        }
+        if tickets.isEmpty && protectedTicketCount > 0 {
+            return "Some tickets are protected"
+        }
         if !searchQuery.isEmpty { return "No matching loaded tickets" }
         if let selectedSavedView, let selectedStatus {
             return "No \(selectedStatus.label.lowercased()) \(selectedSavedView.label.lowercased()) tickets"
@@ -1645,6 +1653,9 @@ final class TicketsViewModel {
     }
 
     var emptyStateSubtitle: String {
+        if (selectedSavedView == .waitingApproval || tickets.isEmpty) && protectedTicketCount > 0 {
+            return "\(protectedTicketCount) protected tickets are not shown here. Check an authorized view before assuming nothing is pending."
+        }
         if !searchQuery.isEmpty { return "Search by title or short ticket ID, or adjust the current filters." }
         if selectedSavedView != nil || selectedStatus != nil {
             return "Adjust filters or create a ticket to assign work to an agent."
@@ -1902,7 +1913,10 @@ final class TicketsViewModel {
         defer { isLoading = false }
 
         do {
-            let dtos = try await loadTicketDTOs(includeTerminalTickets: true)
+            let rows = try await loadTicketDTOs(includeTerminalTickets: true)
+            let dtos = rows.items
+            protectedTicketCount = rows.protectedCount
+            quarantinedTicketCount = rows.quarantinedCount
 
             // Fetch agent names for tickets with assignee_agent_id
             let agentIds = Set(dtos.compactMap { $0.assigneeAgentId })
@@ -1938,14 +1952,18 @@ final class TicketsViewModel {
         } catch let apiError as APIError {
             // 2026-05-07 plumbing fix: no more silent mock fallback. Surface the real error.
             tickets = []
+            protectedTicketCount = 0
+            quarantinedTicketCount = 0
             errorMessage = Self.userFacingMessage(for: apiError)
         } catch {
             tickets = []
+            protectedTicketCount = 0
+            quarantinedTicketCount = 0
             errorMessage = "Couldn't load tickets. Pull to retry."
         }
     }
 
-    private func loadTicketDTOs(includeTerminalTickets: Bool) async throws -> [TicketDTO] {
+    private func loadTicketDTOs(includeTerminalTickets: Bool) async throws -> TicketRows<TicketDTO> {
         do {
             return try await api.get(path: "/api/v1/tickets?include_closed=\(includeTerminalTickets)&limit=1000")
         } catch {
@@ -2826,7 +2844,7 @@ final class TicketsViewModel {
 
     // MARK: - Error classification
 
-    private static func userFacingMessage(for error: APIError) -> String {
+    static func userFacingMessage(for error: APIError) -> String {
         switch error.code {
         case 401, 403:
             return "Signed out. Sign in to see your tickets."
@@ -2834,7 +2852,11 @@ final class TicketsViewModel {
             return "Tickets endpoint not found. Backend may be out of date."
         case 500...599:
             return "Server returned \(error.code). Engineers notified."
-        case 0:
+        case -1:
+            return "ORCA answered, but Pod could not read the response."
+        case -2:
+            return "ORCA redirected outside its approved address. Connection blocked."
+        case -3:
             return "Can't reach backend. Check your connection."
         default:
             return error.message.isEmpty ? "Couldn't load tickets (\(error.code))." : error.message
@@ -3147,7 +3169,7 @@ final class TicketsViewModel {
         )
 
         do {
-            let _: TicketDTO = try await api.post(path: "/api/v1/tickets", body: body)
+            let _: TicketListRow<TicketMutationAck> = try await api.post(path: "/api/v1/tickets", body: body)
             newTitle = ""
             newDescription = ""
             newAssigneeAgentId = ""
@@ -3360,7 +3382,7 @@ final class TicketsViewModel {
     func updateStatus(ticketId: String, status: TicketStatus) async {
         do {
             let body = UpdateTicketBody(status: status.rawValue)
-            let _: TicketDTO = try await api.patch(path: "/api/v1/tickets/\(ticketId)", body: body)
+            let _: TicketListRow<TicketMutationAck> = try await api.patch(path: "/api/v1/tickets/\(ticketId)", body: body)
             await load()
         } catch let apiError as APIError {
             errorMessage = "Couldn't update status: \(Self.userFacingMessage(for: apiError))"
@@ -3378,7 +3400,7 @@ final class TicketsViewModel {
         tickets[idx] = Self.replacingPriority(original, with: priority)
         do {
             let body = UpdateTicketBody(priority: Self.apiPriority(priority))
-            let _: TicketDTO = try await api.patch(path: "/api/v1/tickets/\(ticketId)", body: body)
+            let _: TicketListRow<TicketMutationAck> = try await api.patch(path: "/api/v1/tickets/\(ticketId)", body: body)
         } catch let apiError as APIError {
             if let restoreIdx = tickets.firstIndex(where: { $0.id == ticketId }) {
                 tickets[restoreIdx] = original
@@ -3453,7 +3475,7 @@ final class TicketsViewModel {
                 acceptanceCriteria: acceptanceCriteria,
                 desiredOutcome: desiredOutcome
             )
-            let _: TicketDTO = try await api.patch(path: "/api/v1/tickets/\(ticketId)", body: body)
+            let _: TicketListRow<TicketMutationAck> = try await api.patch(path: "/api/v1/tickets/\(ticketId)", body: body)
             await load()
         } catch let apiError as APIError {
             errorMessage = "Couldn't save ticket: \(Self.userFacingMessage(for: apiError))"
@@ -3468,7 +3490,7 @@ final class TicketsViewModel {
     func claimTicket(ticketId: String, agentId: String) async {
         do {
             let body = TicketAgentActionBody(agentId: agentId)
-            let _: TicketDTO = try await api.post(path: "/api/v1/tickets/\(ticketId)/claim", body: body)
+            let _: TicketListRow<TicketMutationAck> = try await api.post(path: "/api/v1/tickets/\(ticketId)/claim", body: body)
             await load()
         } catch let apiError as APIError {
             errorMessage = "Couldn't claim ticket: \(Self.userFacingMessage(for: apiError))"
@@ -3481,7 +3503,7 @@ final class TicketsViewModel {
     func startTicket(ticketId: String, agentId: String) async {
         do {
             let body = TicketAgentActionBody(agentId: agentId)
-            let _: TicketDTO = try await api.post(path: "/api/v1/tickets/\(ticketId)/start", body: body)
+            let _: TicketListRow<TicketMutationAck> = try await api.post(path: "/api/v1/tickets/\(ticketId)/start", body: body)
             await load()
         } catch let apiError as APIError {
             errorMessage = "Couldn't start ticket: \(Self.userFacingMessage(for: apiError))"
@@ -3497,7 +3519,7 @@ final class TicketsViewModel {
                 agentId: agentId,
                 resolutionNotes: resolutionNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : resolutionNotes
             )
-            let _: TicketDTO = try await api.post(path: "/api/v1/tickets/\(ticketId)/complete", body: body)
+            let _: TicketListRow<TicketMutationAck> = try await api.post(path: "/api/v1/tickets/\(ticketId)/complete", body: body)
             await load()
         } catch let apiError as APIError {
             errorMessage = "Couldn't close ticket: \(Self.userFacingMessage(for: apiError))"
@@ -3513,7 +3535,7 @@ final class TicketsViewModel {
                 status: TicketStatus.cancelled.rawValue,
                 resolutionNotes: reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Cancelled from Pod" : reason
             )
-            let _: TicketDTO = try await api.patch(path: "/api/v1/tickets/\(ticketId)", body: body)
+            let _: TicketListRow<TicketMutationAck> = try await api.patch(path: "/api/v1/tickets/\(ticketId)", body: body)
             await load()
         } catch let apiError as APIError {
             errorMessage = "Couldn't cancel ticket: \(Self.userFacingMessage(for: apiError))"
@@ -3703,7 +3725,7 @@ final class TicketsViewModel {
     func updateLessonsLearned(ticketId: String, lessonsLearned: String) async {
         do {
             let body = UpdateTicketLessonsBody(lessonsLearned: lessonsLearned)
-            let _: TicketDTO = try await api.patch(path: "/api/v1/tickets/\(ticketId)", body: body)
+            let _: TicketListRow<TicketMutationAck> = try await api.patch(path: "/api/v1/tickets/\(ticketId)", body: body)
             await load()
         } catch let apiError as APIError {
             errorMessage = "Couldn't save lessons: \(Self.userFacingMessage(for: apiError))"

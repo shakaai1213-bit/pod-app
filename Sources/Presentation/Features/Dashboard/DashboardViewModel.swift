@@ -168,9 +168,9 @@ final class DashboardViewModel {
         }
 
         do {
-            let response: [TicketDTO] = try await apiClient.get(path: "/api/v1/tickets")
-            tickets = response
-            attentionItems = response
+            let response: TicketRows<TicketDTO> = try await apiClient.get(path: "/api/v1/tickets")
+            tickets = response.items
+            attentionItems = response.items
                 .filter { ticket in
                     let status = ticket.status.lowercased()
                     let priority = ticket.priority.lowercased()

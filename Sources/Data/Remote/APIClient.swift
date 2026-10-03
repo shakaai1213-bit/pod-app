@@ -22,7 +22,9 @@ struct APIError: Error {
     static let unknown = APIError(code: 0, message: "Unknown error")
     static let unauthorized = APIError(code: 401, message: "Unauthorized")
     static let serverError = APIError(code: 500, message: "Server error")
-    static let decodingError = APIError(code: 0, message: "Decoding error")
+    static let decodingError = APIError(code: -1, message: "ORCA returned an unreadable response.")
+    static let refusedRedirect = APIError(code: -2, message: "ORCA redirected outside its approved address.")
+    static let transportError = APIError(code: -3, message: "Can't reach backend. Check your connection.")
     
     static func message(_ msg: String, code: Int?) -> APIError {
         APIError(code: code ?? 0, message: msg)
@@ -31,6 +33,101 @@ struct APIError: Error {
 
 enum APIClientResponseError: Error {
     case unreadableAuthenticationResponse
+}
+
+/// The tickets endpoint mixes complete tickets with protected, pointer-only rows.
+/// A pointer grants no ticket detail, status, priority, or approval authority.
+private struct TicketRowKey: CodingKey {
+    let stringValue: String
+    let intValue: Int? = nil
+    init(stringValue: String) { self.stringValue = stringValue }
+    init?(intValue: Int) { return nil }
+}
+
+/// Deliberately carries no pointer fields: a protected row cannot be opened,
+/// cached, logged, or used for an action by a list consumer.
+enum TicketListRow<Item: Decodable>: Decodable {
+    case full(Item)
+    case protectedPointer
+
+    init(from decoder: Decoder) throws {
+        let row = try decoder.container(keyedBy: TicketRowKey.self)
+        let keys = Set(row.allKeys.map(\.stringValue))
+        if keys == Set(["id", "title", "type", "protected", "pointer"]),
+           (try? row.decode(Bool.self, forKey: TicketRowKey(stringValue: "protected"))) == true {
+            // Never decode or retain the title, id, or pointer fields.
+            self = .protectedPointer
+            return
+        }
+        self = .full(try Item(from: decoder))
+    }
+}
+
+/// Isolates each row so one malformed ticket does not hide healthy tickets.
+/// Only aggregate counts survive for rows Pod cannot show.
+struct TicketRows<Item: Decodable>: Decodable {
+    let items: [Item]
+    let protectedCount: Int
+    let quarantinedCount: Int
+    let rowIssues: [TicketRowIssue]
+
+    struct TicketRowIssue {
+        enum Kind: String { case missingField, wrongType, invalidValue, unknown }
+        let index: Int
+        let kind: Kind
+
+        init(index: Int, error: Error) {
+            self.index = index
+            switch error {
+            case DecodingError.keyNotFound: kind = .missingField
+            case DecodingError.typeMismatch, DecodingError.valueNotFound: kind = .wrongType
+            case DecodingError.dataCorrupted: kind = .invalidValue
+            default: kind = .unknown
+            }
+        }
+    }
+
+    private enum CodingKeys: String, CodingKey { case items, results, data }
+
+    init(from decoder: Decoder) throws {
+        let listDecoder: Decoder
+        if (try? decoder.unkeyedContainer()) != nil {
+            listDecoder = decoder
+        } else {
+            let envelope = try decoder.container(keyedBy: CodingKeys.self)
+            if envelope.contains(.items) { listDecoder = try envelope.superDecoder(forKey: .items) }
+            else if envelope.contains(.results) { listDecoder = try envelope.superDecoder(forKey: .results) }
+            else { listDecoder = try envelope.superDecoder(forKey: .data) }
+        }
+        var list = try listDecoder.unkeyedContainer()
+        var visible: [Item] = []
+        var protected = 0
+        var quarantined = 0
+        var issues: [TicketRowIssue] = []
+        while !list.isAtEnd {
+            let index = list.currentIndex
+            let rowDecoder = try list.superDecoder()
+            do {
+                switch try TicketListRow<Item>(from: rowDecoder) {
+                case .full(let ticket): visible.append(ticket)
+                case .protectedPointer: protected += 1
+                }
+            } catch {
+                quarantined += 1
+                issues.append(TicketRowIssue(index: index, error: error))
+            }
+        }
+        items = visible
+        protectedCount = protected
+        quarantinedCount = quarantined
+        rowIssues = issues
+    }
+}
+
+/// Ticket mutations may succeed with a pointer-only response. Only an id is
+/// needed to acknowledge the completed write; no protected fields are read.
+struct TicketMutationAck: Decodable {
+    let id: String
 }
 
 struct EmptyResponse: Codable {}
@@ -153,14 +250,12 @@ actor APIClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         try OrcaDeviceIdentity.authorize(&request, token: token)
 
-        let (data, response) = try await session.data(for: request)
-        guard OrcaSecureURLSession.responseStayedOnOrigin(response, requestURL: request.url!) else {
-            throw APIError(code: 0, message: "ORCA redirected outside its approved origin")
-        }
+        let (data, response) = try await performData(request)
         try validateResponse(response, data: data)
 
         self.authToken = token
-        return try decoder.decode(AuthResponse.self, from: data)
+        do { return try decoder.decode(AuthResponse.self, from: data) }
+        catch { throw APIError.decodingError }
     }
 
     // MARK: - Generic Request
@@ -310,20 +405,23 @@ actor APIClient {
             return try decoder.decode(T.self, from: data)
         } catch {
             // Authentication responses contain live access and refresh tokens.
-            // Never embed any part of their body in a decoding error.
+            // Other responses can contain protected ticket content. Never embed
+            // any part of a response body in a decoding error.
             if request.url?.path.hasPrefix("/api/v1/auth/") == true {
                 throw APIClientResponseError.unreadableAuthenticationResponse
             }
-            let body = String(data: data.prefix(500), encoding: .utf8) ?? "<\(data.count) bytes>"
-            throw APIError(code: 0, message: "Decoding failed: \(error) | Response: \(body)")
+            throw APIError.decodingError
         }
     }
 
     func performData(_ request: URLRequest) async throws -> (Data, URLResponse) {
-        let (data, response) = try await session.data(for: request)
+        let data: Data
+        let response: URLResponse
+        do { (data, response) = try await session.data(for: request) }
+        catch is URLError { throw APIError.transportError }
         guard let requestURL = request.url,
               OrcaSecureURLSession.responseStayedOnOrigin(response, requestURL: requestURL) else {
-            throw APIError(code: 0, message: "ORCA redirected outside its approved origin")
+            throw APIError.refusedRedirect
         }
         return (data, response)
     }
