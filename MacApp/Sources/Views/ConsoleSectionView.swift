@@ -1,5 +1,6 @@
 import SwiftUI
 import OrcaAPI
+import OrcaDesign
 
 struct ConsoleSectionView: View {
     @Environment(OrcaMacModel.self) private var model
@@ -24,18 +25,18 @@ struct ConsoleSectionView: View {
             }
             content
         }
-        .background(Color(nsColor: .textBackgroundColor))
+        .background(OrcaPalette.backgroundPrimary)
     }
 
     private var header: some View {
         HStack(spacing: 12) {
             Image(systemName: section.symbol)
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(section == .fund ? Color.orcaGreen : Color.orcaCyan)
+                .foregroundStyle(section == .fund ? OrcaPalette.accentSuccess : OrcaPalette.accentElectric)
                 .frame(width: 34, height: 34)
                 .background(
-                    (section == .fund ? Color.orcaGreen : Color.orcaCyan).opacity(0.12),
-                    in: RoundedRectangle(cornerRadius: 6)
+                    (section == .fund ? OrcaPalette.accentSuccess : OrcaPalette.accentElectric).opacity(0.12),
+                    in: RoundedRectangle(cornerRadius: 12)
                 )
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 6) {
@@ -95,7 +96,7 @@ struct ConsoleSectionView: View {
         }
         .padding(.horizontal, 16)
         .frame(height: 58)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(OrcaPalette.backgroundSecondary)
     }
 
     @ViewBuilder
@@ -172,12 +173,12 @@ struct ConsoleSectionView: View {
                     .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
                     .padding(10)
                     .background(
-                        isActive ? Color.orcaCyan.opacity(0.14) : Color(nsColor: .controlBackgroundColor),
-                        in: RoundedRectangle(cornerRadius: 6)
+                        isActive ? OrcaPalette.accentElectric.opacity(0.14) : OrcaPalette.backgroundTertiary,
+                        in: RoundedRectangle(cornerRadius: 12)
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(isActive ? Color.orcaCyan : Color(nsColor: .separatorColor), lineWidth: isActive ? 2 : 1)
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(isActive ? OrcaPalette.accentElectric : OrcaPalette.border, lineWidth: isActive ? 2 : 1)
                     )
                     .contentShape(Rectangle())
                 }
@@ -194,7 +195,7 @@ struct ConsoleSectionView: View {
             }
         }
         .padding(14)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(OrcaPalette.backgroundSecondary)
     }
 
     private var filterBanner: some View {
@@ -208,7 +209,7 @@ struct ConsoleSectionView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
         .padding(.vertical, 6)
-        .background(Color.orcaCyan.opacity(0.08))
+        .background(OrcaPalette.accentElectric.opacity(0.08))
     }
 
     private var activeFilterLabel: String {
@@ -235,6 +236,8 @@ struct ConsoleSectionView: View {
             }
         }
         .listStyle(.inset)
+        .scrollContentBackground(.hidden)
+        .background(OrcaPalette.backgroundPrimary)
         .overlay {
             if displayedRecords.isEmpty && !model.isLoadingSection {
                 if !recordQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -339,7 +342,7 @@ private struct WorkPortfolioView: View {
                     }
                     .padding(16)
                 }
-                .background(Color(nsColor: .textBackgroundColor))
+                .background(OrcaPalette.backgroundPrimary)
             }
         }
         .sheet(isPresented: $isShowingBoardDirectory) {
@@ -373,7 +376,7 @@ private struct WorkPortfolioView: View {
                         VStack(alignment: .leading, spacing: 9) {
                             HStack(spacing: 8) {
                                 Image(systemName: "shippingbox")
-                                    .foregroundStyle(Color.orcaCyan)
+                                    .foregroundStyle(OrcaPalette.accentElectric)
                                 Text(board.displayName)
                                     .font(.body.weight(.semibold))
                                     .lineLimit(1)
@@ -393,10 +396,10 @@ private struct WorkPortfolioView: View {
                         }
                         .frame(maxWidth: .infinity, minHeight: 66, alignment: .leading)
                         .padding(12)
-                        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
+                        .background(OrcaPalette.backgroundTertiary, in: RoundedRectangle(cornerRadius: 12))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(board.id == model.selectedBoardID ? Color.orcaCyan : Color(nsColor: .separatorColor))
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(board.id == model.selectedBoardID ? OrcaPalette.accentElectric : OrcaPalette.border)
                         )
                     }
                     .buttonStyle(.plain)
@@ -445,8 +448,8 @@ private struct WorkPortfolioView: View {
                     Spacer()
                 }
                 .padding(14)
-                .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor)))
+                .background(OrcaPalette.backgroundTertiary, in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(OrcaPalette.border))
             } else {
                 boardArchitectureStatus
 
@@ -508,8 +511,8 @@ private struct WorkPortfolioView: View {
                 .foregroundStyle(.secondary)
             }
             .padding(12)
-            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor)))
+            .background(OrcaPalette.backgroundTertiary, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(OrcaPalette.border))
         }
     }
 
@@ -619,8 +622,8 @@ private struct WorkPortfolioView: View {
                     }
                 }
             }
-            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor)))
+            .background(OrcaPalette.backgroundTertiary, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(OrcaPalette.border))
         }
     }
 
@@ -717,8 +720,8 @@ private struct WorkPortfolioView: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: 72, alignment: .topLeading)
                     .padding(10)
-                    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor)))
+                    .background(OrcaPalette.backgroundTertiary, in: RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(OrcaPalette.border))
                 }
             }
         }
@@ -792,6 +795,8 @@ private struct ConsoleBoardDirectoryView: View {
                         }
                     }
                     .listStyle(.inset)
+                    .scrollContentBackground(.hidden)
+                    .background(OrcaPalette.backgroundPrimary)
                 }
             }
             .frame(minWidth: 720, minHeight: 560)
@@ -863,7 +868,7 @@ private struct ConsoleBoardDirectoryView: View {
                 .foregroundStyle(Color.orcaGreen)
         }
         .padding(16)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(OrcaPalette.backgroundSecondary)
     }
 
     private func directoryMetric(_ title: String, _ value: Int) -> some View {
@@ -882,11 +887,11 @@ private struct ConsoleBoardDirectoryView: View {
         return HStack(alignment: .top, spacing: 12) {
             Image(systemName: board.isProtected ? "lock.shield.fill" : boardSymbol(board))
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(board.isProtected ? Color.orcaCoral : Color.orcaCyan)
+                .foregroundStyle(board.isProtected ? Color.orcaCoral : OrcaPalette.accentElectric)
                 .frame(width: 30, height: 30)
                 .background(
-                    (board.isProtected ? Color.orcaCoral : Color.orcaCyan).opacity(0.12),
-                    in: RoundedRectangle(cornerRadius: 6)
+                    (board.isProtected ? Color.orcaCoral : OrcaPalette.accentElectric).opacity(0.12),
+                    in: RoundedRectangle(cornerRadius: 12)
                 )
             VStack(alignment: .leading, spacing: 3) {
                 Text(board.displayName)
