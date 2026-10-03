@@ -19,30 +19,46 @@ struct EngineeringWorkbenchView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "hammer")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(OrcaPalette.accentElectric)
-                .frame(width: 34, height: 34)
-                .background(OrcaPalette.accentElectric.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+        VStack(spacing: 6) {
+            HStack(spacing: 12) {
+                Image(systemName: "hammer")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(OrcaPalette.accentElectric)
+                    .frame(width: 34, height: 34)
+                    .background(OrcaPalette.accentElectric.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Workbench")
-                    .font(.headline)
-                Text(model.selectedWorkbenchTicket?.title ?? "Select an ORCA ticket")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Workbench")
+                        .font(.headline)
+                    Text(model.selectedWorkbenchTicket?.title ?? "Choose a ticket for one agent")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 12)
+                hostIndicator
+
+                if model.isLoadingWorkbench || model.isSubmittingWorkbench {
+                    ProgressView().controlSize(.small)
+                }
+
+                Button {
+                    Task { await model.refreshWorkbench() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .disabled(!model.connectionState.isReady || model.isLoadingWorkbench)
+                .help("Refresh Workbench")
             }
 
-            Spacer(minLength: 12)
-
-            HStack(spacing: 5) {
+            HStack(spacing: 10) {
                 Text("Agent")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Picker("Agent", selection: agentSelection) {
-                    Text("All Agents · Work view").tag("all_agents")
+                    Text("View All Agents in Work ↗").tag("all_agents")
                     Divider()
                     ForEach(model.agents) { agent in
                         Text(agent.name).tag(agent.id)
@@ -50,48 +66,30 @@ struct EngineeringWorkbenchView: View {
                 }
                 .labelsHidden()
                 .frame(width: 140)
-            }
-            .help("Workbench actions use one agent. All Agents opens the read-only Work view.")
+                .help("Workbench actions use one agent. All Agents opens the separate read-only Work view.")
 
-            Button {
-                ticketQuery = ""
-                showingTicketSearch = true
-            } label: {
-                HStack(spacing: 7) {
-                    Image(systemName: "magnifyingglass")
-                    Text(model.selectedWorkbenchTicket?.title ?? "Find ticket")
-                        .lineLimit(1)
-                    Spacer(minLength: 4)
-                    Image(systemName: "chevron.down")
-                        .font(.caption2)
+                TextField("Search \(selectedAgentName)'s tickets by title or ID", text: $ticketQuery)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("Search \(selectedAgentName)'s Workbench tickets")
+                    .onSubmit { showingTicketSearch = true }
+
+                Button("Results (\(matchingWorkbenchTickets.count))") {
+                    showingTicketSearch = true
                 }
-                .frame(minWidth: 190, idealWidth: 250, maxWidth: 320)
+                .buttonStyle(.bordered)
+                .popover(isPresented: $showingTicketSearch, arrowEdge: .bottom) {
+                    ticketSearchPopover
+                }
             }
-            .buttonStyle(.bordered)
-            .help("Search this agent's loaded tickets by title or ID")
-            .popover(isPresented: $showingTicketSearch, arrowEdge: .bottom) {
-                ticketSearchPopover
-            }
-
-            hostIndicator
-
-            if model.isLoadingWorkbench || model.isSubmittingWorkbench {
-                ProgressView()
-                    .controlSize(.small)
-            }
-
-            Button {
-                Task { await model.refreshWorkbench() }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-            .buttonStyle(.borderless)
-            .disabled(!model.connectionState.isReady || model.isLoadingWorkbench)
-            .help("Refresh Workbench")
+            .font(.caption)
         }
         .padding(.horizontal, 16)
-        .frame(height: 58)
+        .padding(.vertical, 10)
         .background(OrcaPalette.backgroundSecondary)
+    }
+
+    private var selectedAgentName: String {
+        model.agents.first(where: { $0.id == model.selectedAgentID })?.name ?? "this agent"
     }
 
     private var matchingWorkbenchTickets: [WorkbenchTicketSummary] {
@@ -105,11 +103,11 @@ struct EngineeringWorkbenchView: View {
 
     private var ticketSearchPopover: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Find a ticket")
+            Text("\(selectedAgentName)'s Workbench tickets")
                 .font(.headline)
-            TextField("Search title or ticket ID", text: $ticketQuery)
-                .textFieldStyle(.roundedBorder)
-                .accessibilityLabel("Search Workbench tickets")
+            Text("This list is scoped to the selected agent. Changing agents keeps your search.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             if model.selectedWorkbenchTicketID != nil {
                 Button {
                     model.selectWorkbenchTicket(nil)
@@ -124,7 +122,9 @@ struct EngineeringWorkbenchView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 4) {
                     if matchingWorkbenchTickets.isEmpty {
-                        Text(model.workbenchTickets.isEmpty ? "No tickets loaded for this agent." : "No matching tickets.")
+                        Text(model.workbenchTickets.isEmpty
+                             ? "No Workbench tickets loaded for \(selectedAgentName)."
+                             : "No matching tickets for \(selectedAgentName).")
                             .foregroundStyle(.secondary)
                             .padding(8)
                     } else {
@@ -234,12 +234,13 @@ struct EngineeringWorkbenchView: View {
         @Bindable var model = model
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
-                Picker("Workspace", selection: $model.workbenchRootID) {
+                Picker("Project folder", selection: $model.workbenchRootID) {
                     ForEach(model.workbenchContract?.roots ?? []) { root in
                         Text(root.label).tag(root.id)
                     }
                 }
                 .frame(width: 180)
+                .help("Choose where file, diff, test, and terminal actions run. This does not filter tickets.")
 
                 if [.workspace, .files, .diff, .terminal].contains(model.selectedWorkbenchPane) {
                     TextField("Relative path", text: $model.workbenchRelativePath)
@@ -249,6 +250,13 @@ struct EngineeringWorkbenchView: View {
                 }
 
                 Spacer()
+            }
+
+            if let root = model.selectedWorkbenchRoot {
+                Text("Project folder: \(root.description) Tickets are selected separately above.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
             }
 
             switch model.selectedWorkbenchPane {
@@ -382,8 +390,6 @@ struct EngineeringWorkbenchView: View {
                     model.selectWorkMode(.team)
                 } else {
                     model.selectWorkbenchAgent(selection)
-                    showingTicketSearch = false
-                    ticketQuery = ""
                 }
             }
         )

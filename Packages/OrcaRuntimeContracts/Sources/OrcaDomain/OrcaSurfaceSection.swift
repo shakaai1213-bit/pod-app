@@ -18,7 +18,7 @@ public enum OrcaSurfaceSection: String, CaseIterable, Identifiable, Codable, Sen
     public var title: String {
         switch self {
         case .waitingOnCaptain: return "Waiting on Tony"
-        case .overview: return "Overview"
+        case .overview: return "Home"
         case .conversations: return "Conversations"
         case .work: return "Work"
         case .workbench: return "Workbench"
@@ -34,7 +34,7 @@ public enum OrcaSurfaceSection: String, CaseIterable, Identifiable, Codable, Sen
     public var subtitle: String {
         switch self {
         case .waitingOnCaptain: return "Decisions and tickets needing you"
-        case .overview: return "Operating picture"
+        case .overview: return "Your ORCA day"
         case .conversations: return "Named-agent channels"
         case .work: return "Boards, projects, tickets, tasks, and approvals"
         case .workbench: return "Files, diffs, tests, workers, and evidence"

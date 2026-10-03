@@ -144,6 +144,11 @@ struct ConsoleSectionView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                homeFocusPanel
+
+                Text("Explore ORCA")
+                    .font(.headline)
+
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 14)], spacing: 14) {
                     overviewCard(
                         title: "Captain's Desk",
@@ -192,6 +197,31 @@ struct ConsoleSectionView: View {
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private var homeFocusPanel: some View {
+        let attention = model.selectedSnapshot.metrics.first(where: { $0.id == "attention" })?.value ?? "—"
+        let health = model.selectedSnapshot.metrics.first(where: { $0.id == "agent-health" })?.value ?? "Unknown"
+        let platform = model.selectedSnapshot.metrics.first(where: { $0.id == "startup" })?.value ?? "Unknown"
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("Today's focus", systemImage: "sparkle")
+                    .font(.headline)
+                Spacer()
+                Button("Open Waiting on Tony") { model.selectWorkMode(.captain) }
+                    .buttonStyle(.borderless)
+            }
+            HStack(spacing: 16) {
+                Label("\(attention) waiting on you", systemImage: "checkmark.seal")
+                Label("Crew: \(health)", systemImage: "person.3")
+                Label("Platform: \(platform)", systemImage: "server.rack")
+            }
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+        }
+        .padding(16)
+        .background(OrcaPalette.backgroundSecondary, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(OrcaPalette.border))
     }
 
     private func overviewCard(
